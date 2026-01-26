@@ -24,7 +24,7 @@ class Config:
     chunk_overlap: int = 200  # tokens
     
     # Concurrency Configuration
-    max_concurrent_videos: int = 3
+    max_concurrent_videos: int = 1
     
     # Output Configuration
     default_output_dir: Path = Path("./output")

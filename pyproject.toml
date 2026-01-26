@@ -1,12 +1,12 @@
 [project]
 name = "yt-study"
-version = "0.1.1"
+version = "0.1.2"
 description = "Convert YouTube videos into AI-powered study notes with chapter support"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
 authors = [
-    {name = "whoisjayd", email = "email@example.com"}
+    {name = "whoisjayd", email = "contactjaydeepsolanki@gmail.com"}
 ]
 keywords = ["youtube", "study", "notes", "ai", "llm", "education", "transcript"]
 classifiers = [

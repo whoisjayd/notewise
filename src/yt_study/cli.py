@@ -17,11 +17,24 @@ logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Setup logging
-logging.basicConfig(
-    level=logging.WARNING,  # Only show warnings and errors
-    format="%(message)s",
-    handlers=[RichHandler(rich_tracebacks=True, show_time=False)]
-)
+# Setup logging
+log_dir = Path.home() / ".yt-study" / "logs"
+log_dir.mkdir(parents=True, exist_ok=True)
+log_file = log_dir / "yt-study.log"
+
+root_logger = logging.getLogger()
+root_logger.setLevel(logging.INFO)  # Capture INFO and above globally
+
+# Console Handler: Warning+, Clean output
+console_handler = RichHandler(rich_tracebacks=False, show_time=False)
+console_handler.setLevel(logging.WARNING)
+root_logger.addHandler(console_handler)
+
+# File Handler: Debug+, Detailed format
+file_handler = logging.FileHandler(log_file, encoding='utf-8')
+file_handler.setLevel(logging.DEBUG)
+file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+root_logger.addHandler(file_handler)
 
 app = typer.Typer(
     name="yt-study",

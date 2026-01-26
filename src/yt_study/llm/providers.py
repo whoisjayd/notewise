@@ -87,7 +87,19 @@ class LLMProvider:
             
             response = completion(**kwargs)
             
-            return response.choices[0].message.content
+            content = response.choices[0].message.content.strip()
+            
+            # Clean up wrapping code blocks (common in some LLMs)
+            # e.g., ```markdown ... ``` or ``` ... ```
+            if content.startswith("```") and content.endswith("```"):
+                lines = content.splitlines()
+                if len(lines) >= 2:
+                    # Check if first line is a fence
+                    if lines[0].strip().startswith("```"):
+                        # Strip first and last lines
+                        content = "\n".join(lines[1:-1]).strip()
+            
+            return content
             
         except Exception as e:
             logger.error(f"LLM generation failed: {e}")

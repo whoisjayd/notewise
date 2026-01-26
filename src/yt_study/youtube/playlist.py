@@ -17,44 +17,50 @@ class PlaylistError(Exception):
 
 async def extract_playlist_videos(playlist_id: str) -> List[str]:
     """
-    Extract all video IDs from a YouTube playlist.
-    
-    Args:
-        playlist_id: YouTube playlist ID
-        
-    Returns:
-        List of video IDs
-        
-    Raises:
-        PlaylistError: If playlist cannot be accessed
+    Extract all video IDs from a YouTube playlist with retry logic.
     """
-    try:
-        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-        playlist = Playlist(playlist_url)
-        
-        # Access playlist title to trigger loading
+    import asyncio
+    
+    max_retries = 3
+    last_error = None
+    
+    for attempt in range(max_retries):
         try:
-            title = playlist.title
-            console.print(f"[cyan]Found playlist:[/cyan] {title}")
-        except Exception:
-            title = "Unknown Playlist"
-            console.print(f"[yellow]Warning: Could not fetch playlist title[/yellow]")
-        
-        video_ids = []
-        
-        # Extract video IDs from URLs
-        for url in playlist.video_urls:
-            # Extract ID from URL
-            if "v=" in url:
-                video_id = url.split("v=")[1].split("&")[0]
-                video_ids.append(video_id)
-        
-        if not video_ids:
-            raise PlaylistError(f"No videos found in playlist: {playlist_id}")
-        
-        console.print(f"[green]Found {len(video_ids)} videos in playlist[/green]")
-        return video_ids
-        
-    except Exception as e:
-        logger.error(f"Failed to extract playlist videos: {e}")
-        raise PlaylistError(f"Could not access playlist {playlist_id}: {str(e)}")
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            playlist = Playlist(playlist_url)
+            
+            # Access playlist title to trigger loading
+            try:
+                title = playlist.title
+                if attempt == 0:
+                     console.print(f"[cyan]Found playlist Check:[/cyan] {title}")
+            except Exception:
+                title = "Unknown Playlist"
+                logger.warning(f"Could not fetch playlist title on attempt {attempt+1}")
+            
+            video_ids = []
+            
+            # Extract video IDs from URLs (waits for internal generator)
+            for url in playlist.video_urls:
+                if "v=" in url:
+                    video_id = url.split("v=")[1].split("&")[0]
+                    video_ids.append(video_id)
+            
+            if not video_ids:
+                # If pytubefix found no videos, it might be a transient page load error
+                # unless checking logic confirms it's empty.
+                # We raise to trigger retry.
+                raise ValueError(f"No videos found in playlist (Attempt {attempt+1}/{max_retries})")
+            
+            console.print(f"[green]Found {len(video_ids)} videos in playlist[/green]")
+            return video_ids
+            
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Playlist extraction attempt {attempt+1} failed: {e}")
+            if attempt < max_retries - 1:
+                console.print(f"[yellow]⚠ Failed to extract playlist videos, retrying ({attempt+1}/{max_retries})...[/yellow]")
+                await asyncio.sleep(2) # Wait before retry
+    
+    logger.error(f"Failed to extract playlist videos after {max_retries} attempts: {last_error}")
+    raise PlaylistError(f"Could not access playlist {playlist_id}: {str(last_error)}")

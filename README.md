@@ -18,7 +18,7 @@
 - **🧩 Smart Chunking**:  Robustly handles transcripts of any length (even 20k+ tokens) without losing context.
 - **🌍 Auto-Translation**: Processes videos in any language (e.g., Hindi, Spanish) and generates notes in **English**.
 - **💻 SQL & Code Preservation**: Specifically tuned to preserve code blocks, SQL schemas, and technical syntax.
-- **⚡ Async Pipeline**: Process playlists concurrently for maximum speed.
+- **⚡ Robust Pipeline**: Process playlists sequentially with automatic retries for maximum reliability.
 
 ---
 
