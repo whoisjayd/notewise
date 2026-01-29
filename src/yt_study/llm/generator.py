@@ -51,7 +51,7 @@ class StudyMaterialGenerator:
         if token_count <= config.chunk_size:
             return [transcript]
         
-        console.print(f"[cyan]📊 Transcript: {token_count:,} tokens, chunking...[/cyan]")
+        logger.info(f"Transcript: {token_count:,} tokens, chunking...")
         
         chunks = []
         
