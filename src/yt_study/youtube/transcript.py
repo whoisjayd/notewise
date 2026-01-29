@@ -142,8 +142,12 @@ async def fetch_transcript(
         except (TranscriptsDisabled, VideoUnavailable) as e:
             # Fatal errors, do not retry
             logger.error(f"Transcript unavailable for {video_id}: {e}")
-            raise TranscriptError(f"Transcripts are disabled or video is unavailable: {video_id}")
+            raise TranscriptError(f"Transcripts are disabled or video is unavailable: {video_id}") from e
             
+        except (TranscriptError, NoTranscriptFound) as e:
+            # Already handled or strictly not found, do not retry
+            raise
+
         except Exception as e:
             if attempt < retries - 1:
                 wait_time = 2 ** attempt

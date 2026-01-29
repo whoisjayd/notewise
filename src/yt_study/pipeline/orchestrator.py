@@ -220,13 +220,18 @@ class PipelineOrchestrator:
         
         # Pre-fetch titles concurrently
         from ..youtube.metadata import get_video_title
-        console.print(f"[cyan]📋 Fetching titles for {len(video_ids)} videos...[/cyan]")
+        
+        TITLE_FETCH_CONCURRENCY = 10
+        console.print(f"[cyan]📋 Fetching titles for {len(video_ids)} videos (max {TITLE_FETCH_CONCURRENCY} at a time)...[/cyan]")
+        
+        title_semaphore = asyncio.Semaphore(TITLE_FETCH_CONCURRENCY)
         
         async def fetch_title_safe(vid):
-            try:
-                return await asyncio.to_thread(get_video_title, vid)
-            except Exception:
-                return vid
+            async with title_semaphore:
+                try:
+                    return await asyncio.to_thread(get_video_title, vid)
+                except Exception:
+                    return vid
                 
         titles = await asyncio.gather(*(fetch_title_safe(vid) for vid in video_ids))
         video_titles = dict(zip(video_ids, titles))
@@ -269,9 +274,15 @@ class PipelineOrchestrator:
                 tasks.append(process_wrapper())
             
             # Execute all tasks concurrently (limited by semaphore inside process_video)
-            results = await asyncio.gather(*tasks)
+            results = await asyncio.gather(*tasks, return_exceptions=True)
             
-        success_count = sum(1 for r in results if r)
+        success_count = 0
+        for r in results:
+            if isinstance(r, Exception):
+                logger.error(f"Playlist task failed with exception: {r}")
+            elif r is True:
+                success_count += 1
+                
         return success_count
     
     async def run(self, url: str) -> None:
