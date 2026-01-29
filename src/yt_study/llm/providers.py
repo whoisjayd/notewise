@@ -4,7 +4,7 @@ import logging
 import os
 from typing import Optional
 
-from litellm import completion
+from litellm import acompletion
 from rich.console import Console
 
 console = Console()
@@ -86,7 +86,7 @@ class LLMProvider:
             if max_tokens:
                 kwargs["max_tokens"] = max_tokens
             
-            response = completion(**kwargs)
+            response = await acompletion(**kwargs)
             
             content = response.choices[0].message.content.strip()
             
