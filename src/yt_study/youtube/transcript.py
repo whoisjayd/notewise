@@ -77,59 +77,77 @@ async def fetch_transcript(
     
     for attempt in range(retries):
         try:
-            ytt_api = YouTubeTranscriptApi()
-            
-            # List all available transcripts
-            transcript_list = ytt_api.list(video_id)
-            
-            # Try to find manually created transcript first
-            try:
-                transcript = transcript_list.find_manually_created_transcript(languages)
-                logger.info(f"Found manual transcript: {transcript.language}")
-            except NoTranscriptFound:
-                # Try auto-generated
+            # Wrap blocking YouTubeTranscriptApi calls in a thread
+            # This is critical to prevent blocking the asyncio event loop during concurrency
+            def _fetch_sync():
+                ytt_api = YouTubeTranscriptApi()
+                
+                # List all available transcripts
+                transcript_list = ytt_api.list(video_id)
+                
+                # Try to find manually created transcript first
                 try:
-                    transcript = transcript_list.find_generated_transcript(languages)
-                    logger.info(f"Using auto-generated transcript: {transcript.language}")
+                    transcript = transcript_list.find_manually_created_transcript(languages)
+                    found_msg = f"Found manual transcript: {transcript.language}"
                 except NoTranscriptFound:
-                    # Try any manual transcript
+                    # Try auto-generated
                     try:
-                        transcript = transcript_list.find_manually_created_transcript(
-                            [t.language_code for t in transcript_list]
-                        )
-                        logger.info(f"Using manual transcript in {transcript.language}")
+                        transcript = transcript_list.find_generated_transcript(languages)
+                        found_msg = f"Using auto-generated transcript: {transcript.language}"
                     except NoTranscriptFound:
-                        # Last resort: try to get any available transcript and translate to English
-                        available = list(transcript_list)
-                        if not available:
-                            raise TranscriptError(f"No transcripts available for video {video_id}")
-                        
-                        first_available = available[0]
-                        
-                        # Try to translate to English if not English already
-                        if 'en' in languages and first_available.language_code != 'en':
-                            if first_available.is_translatable:
-                                transcript = first_available.translate('en')
-                                logger.info(f"Translated {first_available.language} → English")
+                        # Try any manual transcript
+                        try:
+                            transcript = transcript_list.find_manually_created_transcript(
+                                [t.language_code for t in transcript_list]
+                            )
+                            found_msg = f"Using manual transcript in {transcript.language}"
+                        except NoTranscriptFound:
+                            # Last resort: try to get any available transcript and translate to English
+                            available = list(transcript_list)
+                            if not available:
+                                raise TranscriptError(f"No transcripts available for video {video_id}")
+                            
+                            first_available = available[0]
+                            
+                            # Try to translate to English if not English already
+                            if 'en' in languages and first_available.language_code != 'en':
+                                if first_available.is_translatable:
+                                    transcript = first_available.translate('en')
+                                    found_msg = f"Translated {first_available.language} → English"
+                                else:
+                                    transcript = first_available
+                                    found_msg = f"Using {transcript.language} (translation not available)"
                             else:
                                 transcript = first_available
-                                logger.warning(f"Using {transcript.language} (translation not available)")
-                        else:
-                            transcript = first_available
-                            logger.warning(f"Using {transcript.language}")
-            
-            # Fetch the actual transcript data
-            raw_transcript = transcript.fetch()
+                                found_msg = f"Using {transcript.language}"
+                
+                # Fetch the actual transcript data
+                raw_transcript = transcript.fetch()
+                return raw_transcript, transcript, found_msg
+
+            # Execute sync logic in thread
+            raw_transcript, transcript, log_msg = await asyncio.to_thread(_fetch_sync)
+            logger.info(log_msg)
             
             # Convert to our format
-            segments = [
-                TranscriptSegment(
-                    text=segment.text,
-                    start=segment.start,
-                    duration=segment.duration
-                )
-                for segment in raw_transcript
-            ]
+            # raw_transcript is a list of dicts: {'text': '...', 'start': 0.0, 'duration': 0.0}
+            segments = []
+            for segment in raw_transcript:
+                # Handle both dict and object access just in case
+                if isinstance(segment, dict):
+                    text = segment.get('text', '')
+                    start = segment.get('start', 0.0)
+                    duration = segment.get('duration', 0.0)
+                else:
+                    text = getattr(segment, 'text', '')
+                    start = getattr(segment, 'start', 0.0)
+                    duration = getattr(segment, 'duration', 0.0)
+                    
+                segments.append(TranscriptSegment(
+                    text=text,
+                    start=start,
+                    duration=duration
+                ))
             
             return VideoTranscript(
                 video_id=video_id,
@@ -156,6 +174,9 @@ async def fetch_transcript(
             else:
                 logger.error(f"Failed to fetch transcript for {video_id}: {e}")
                 raise TranscriptError(f"Could not fetch transcript: {str(e)}")
+    
+    # Should be unreachable due to raise in loop, but for type safety:
+    raise TranscriptError(f"Failed to fetch transcript for {video_id}")
 
 
 def split_transcript_by_chapters(
