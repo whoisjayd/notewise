@@ -191,7 +191,13 @@ class PipelineOrchestrator:
                     if progress and local_task_id is not None:
                         progress.update(local_task_id, description=f"[cyan]🤖 {title_display}... (Generating)[/cyan]")
                     
-                    notes = await self.generator.generate_study_notes(transcript_text, video_title=video_title)
+                    # Pass progress and local_task_id to generator
+                    notes = await self.generator.generate_study_notes(
+                        transcript_text, 
+                        video_title=video_title,
+                        progress=progress,
+                        task_id=local_task_id
+                    )
                     
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(notes, encoding='utf-8')
