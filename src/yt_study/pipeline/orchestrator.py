@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from rich.console import Console
-from rich.progress import Progress, TaskID, TextColumn, BarColumn, TimeRemainingColumn
+from rich.progress import Progress, TaskID, TextColumn, BarColumn, TimeRemainingColumn, SpinnerColumn
 
 from ..config import config
 from ..llm.generator import StudyMaterialGenerator
