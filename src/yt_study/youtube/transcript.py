@@ -85,19 +85,19 @@ async def fetch_transcript(
             # Try to find manually created transcript first
             try:
                 transcript = transcript_list.find_manually_created_transcript(languages)
-                console.print(f"[green]✓[/green] Found manual transcript: {transcript.language}")
+                logger.info(f"Found manual transcript: {transcript.language}")
             except NoTranscriptFound:
                 # Try auto-generated
                 try:
                     transcript = transcript_list.find_generated_transcript(languages)
-                    console.print(f"[yellow]⚠[/yellow] Using auto-generated transcript: {transcript.language}")
+                    logger.info(f"Using auto-generated transcript: {transcript.language}")
                 except NoTranscriptFound:
                     # Try any manual transcript
                     try:
                         transcript = transcript_list.find_manually_created_transcript(
                             [t.language_code for t in transcript_list]
                         )
-                        console.print(f"[yellow]⚠[/yellow] Using manual transcript in {transcript.language}")
+                        logger.info(f"Using manual transcript in {transcript.language}")
                     except NoTranscriptFound:
                         # Last resort: try to get any available transcript and translate to English
                         available = list(transcript_list)
@@ -110,13 +110,13 @@ async def fetch_transcript(
                         if 'en' in languages and first_available.language_code != 'en':
                             if first_available.is_translatable:
                                 transcript = first_available.translate('en')
-                                console.print(f"[cyan]ℹ[/cyan] Translated {first_available.language} → English")
+                                logger.info(f"Translated {first_available.language} → English")
                             else:
                                 transcript = first_available
-                                console.print(f"[yellow]⚠[/yellow] Using {transcript.language} (translation not available)")
+                                logger.warning(f"Using {transcript.language} (translation not available)")
                         else:
                             transcript = first_available
-                            console.print(f"[yellow]⚠[/yellow] Using {transcript.language}")
+                            logger.warning(f"Using {transcript.language}")
             
             # Fetch the actual transcript data
             raw_transcript = transcript.fetch()
@@ -151,7 +151,7 @@ async def fetch_transcript(
         except Exception as e:
             if attempt < retries - 1:
                 wait_time = 2 ** attempt
-                console.print(f"[yellow]⚠ Transcript fetch failed ({str(e)}), retrying in {wait_time}s...[/yellow]")
+                logger.warning(f"Transcript fetch failed ({str(e)}), retrying in {wait_time}s...")
                 await asyncio.sleep(wait_time)
             else:
                 logger.error(f"Failed to fetch transcript for {video_id}: {e}")

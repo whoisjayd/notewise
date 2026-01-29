@@ -114,9 +114,9 @@ class PipelineOrchestrator:
                     total=None
                 )
             
-            # If we are in a playlist worker, ensure the task is visible
-            if is_playlist and progress and task_id is not None:
-                progress.update(task_id, visible=True)
+            # Note: We do NOT force visibility update here anymore as the Live table handles it differently
+            # if is_playlist and progress and task_id is not None:
+            #     progress.update(task_id, visible=True)
 
             try:
                 # Fetch dictionary metadata
@@ -181,11 +181,7 @@ class PipelineOrchestrator:
                     if progress and local_task_id is not None:
                          progress.update(local_task_id, description=f"[green]✓ {title_display} (Done)[/green]", completed=True)
                          if is_playlist:
-                             # Just clear the description, keep bar for next job if worker
-                             if task_id is not None:
-                                 progress.update(local_task_id, description=f"[dim]Worker Idle[/dim]")
-                             else:
-                                 progress.update(local_task_id, visible=False)
+                             pass
                     else:
                         if not is_playlist:
                             console.print(f"[green]✓[/green] {video_title} ({len(chapters)} chapters)")
@@ -215,10 +211,7 @@ class PipelineOrchestrator:
                     if progress and local_task_id is not None:
                          progress.update(local_task_id, description=f"[green]✓ {title_display} (Done)[/green]", completed=True)
                          if is_playlist:
-                             if task_id is not None:
-                                 progress.update(local_task_id, description=f"[dim]Worker Idle[/dim]")
-                             else:
-                                 progress.update(local_task_id, visible=False)
+                             pass
                     else:
                          # No print here for playlist as worker handles it
                          if not is_playlist:
@@ -262,15 +255,48 @@ class PipelineOrchestrator:
         
         console.print(f"\n[cyan]⚡ Processing {len(video_ids)} videos (max {config.max_concurrent_videos} concurrent)[/cyan]\n")
         
-        # Worker Queue Implementation to maintain clean UI
+        # Global Progress (Overall)
+        overall_progress = Progress(
+            TextColumn("[bold blue]{task.description}"),
+            BarColumn(),
+            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+            TextColumn("{task.completed}/{task.total}"),
+        )
+        overall_task = overall_progress.add_task("Total Progress", total=len(video_ids))
+        
+        # Worker Progress Bars (One per concurrency slot)
+        # We use a separate Progress instance for workers to render them differently
+        worker_progress = Progress(
+            TextColumn("[bold cyan]Worker {task.fields[worker_id]}"),
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+        )
+        
+        worker_tasks = []
+        for i in range(config.max_concurrent_videos):
+            # Initialize workers as Idle
+            tid = worker_progress.add_task("[dim]Idle[/dim]", worker_id=i+1)
+            worker_tasks.append(tid)
+            
+        # Layout Table
+        from rich.live import Live
+        from rich.table import Table
+        from rich.panel import Panel
+
+        def create_layout():
+            table = Table.grid(expand=True)
+            table.add_row(Panel(overall_progress, title="Playlist Processing", border_style="green"))
+            table.add_row(Panel(worker_progress, title="Active Workers", border_style="blue"))
+            return table
+
+        success_count = 0
+        
+        # Worker Queue Implementation
         queue = asyncio.Queue()
         for vid in video_ids:
             queue.put_nowait(vid)
             
-        success_count = 0
-        
-        # Simple logging worker without extra bars
-        async def worker(worker_id: int):
+        async def worker(worker_id: int, task_id: TaskID):
             nonlocal success_count
             while not queue.empty():
                 try:
@@ -282,48 +308,43 @@ class PipelineOrchestrator:
                 safe_title = sanitize_filename(title)
                 output_path = output_folder / f"{safe_title}.md"
                 
-                # Update main bar description to show activity
-                progress.update(main_task, description=f"[bold]Playlist Progress[/bold] (Processing: {title[:30]}...)")
+                # Callback to update the specific worker bar text
+                # We need a progress-like interface for process_video to update status
+                # But process_video expects a `Progress` object.
+                # We can't easily pass `worker_progress` because process_video tries to add tasks or update them differently.
+                # Solution: We manually update the worker bar here before/after, 
+                # and maybe pass `worker_progress` with `task_id` if process_video supports it.
+                # Yes, process_video supports `progress` and `task_id`.
+                
+                worker_progress.update(task_id, description=f"[yellow]{title[:30]}...[/yellow]")
                 
                 try:
-                    # Log start
-                    console.print(f"[cyan]▶ Started:[/cyan] {title[:60]}...")
-                    
                     result = await self.process_video(
                         video_id,
                         output_path,
-                        progress=None, # DO NOT pass progress, let it run quietly or use internal logs
-                        task_id=None,
+                        progress=worker_progress, # Pass the worker progress group
+                        task_id=task_id,          # Pass the specific worker task ID
                         video_title=title,
                         is_playlist=True
                     )
                     
                     if result:
                         success_count += 1
-                        console.print(f"[green]✓ Completed:[/green] {title[:60]}")
-                    else:
-                        console.print(f"[red]✗ Failed:[/red] {title[:60]}")
                         
                 except Exception as e:
                     logger.error(f"Worker {worker_id} failed on {video_id}: {e}")
-                    console.print(f"[red]✗ Error:[/red] {title[:60]}: {e}")
+                    worker_progress.update(task_id, description=f"[red]Error: {e}[/red]")
+                    await asyncio.sleep(2) # Show error for a bit
                 finally:
                     queue.task_done()
-                    progress.advance(main_task)
+                    overall_progress.advance(overall_task)
             
-        with Progress(
-            SpinnerColumn(),
-            BarColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            TimeRemainingColumn(),
-            console=console
-        ) as progress:
-            
-            main_task = progress.add_task(f"[bold]Playlist Progress[/bold]", total=len(video_ids))
-            
-            # Start workers
-            workers = [worker(i) for i in range(config.max_concurrent_videos)]
-            
+            # Worker done
+            worker_progress.update(task_id, description="[dim]Idle[/dim]")
+
+        # Run everything under one Live display
+        with Live(create_layout(), refresh_per_second=10, console=console) as live:
+            workers = [worker(i, worker_tasks[i]) for i in range(config.max_concurrent_videos)]
             await asyncio.gather(*workers)
             
         return success_count

@@ -144,7 +144,7 @@ class StudyMaterialGenerator:
             chunk_text = '. '.join(current_chunk) + '.'
             chunks.append(chunk_text)
         
-        console.print(f"[green]✓ Created {len(chunks)} chunks[/green]")
+        logger.info(f"Created {len(chunks)} chunks")
         return chunks
     
     async def generate_study_notes(
@@ -182,7 +182,7 @@ class StudyMaterialGenerator:
                 
         # Single chunk - generate directly
         if len(chunks) == 1:
-            update_status(f"Generating study notes for {video_title}...")
+            update_status(f"Generating notes for {video_title}...")
             
             # If no progress passed, use local spinner
             if not progress:
@@ -209,7 +209,7 @@ class StudyMaterialGenerator:
             return notes
         
         # Multiple chunks - generate for each, then combine
-        update_status(f"Generating notes for {len(chunks)} chunks...")
+        # We don't print here to avoid UI breakage, status update handles it
         
         chunk_notes = []
         
@@ -221,6 +221,7 @@ class StudyMaterialGenerator:
                 TextColumn("[progress.description]{task.description}"),
                 console=console
             ) as local_progress:
+                console.print(f"[cyan]Generating notes for {len(chunks)} chunks...[/cyan]")
                 task = local_progress.add_task(
                     description=f"Processing chunks...",
                     total=len(chunks)
@@ -238,9 +239,14 @@ class StudyMaterialGenerator:
                     local_progress.advance(task)
         else:
             # Use existing progress (just update description)
+            update_status(f"Generating notes for {len(chunks)} chunks...")
             for i, chunk in enumerate(chunks, 1):
                 if task_id is not None:
-                    progress.update(task_id, description=f"[cyan]Generating notes for chunk {i}/{len(chunks)}...[/cyan]")
+                    # Provide detailed status: Title + Chunk info
+                    # We need title here. Ideally passed or available.
+                    # We used video_title in args.
+                    short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
+                    progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: Chunk {i}/{len(chunks)} (Generating)")
                 
                 note = await self.provider.generate(
                     system_prompt=SYSTEM_PROMPT,
@@ -252,6 +258,7 @@ class StudyMaterialGenerator:
         
         # Combine all chunk notes using AI
         if not progress:
+             console.print(f"[cyan]Combining {len(chunk_notes)} chunk notes...[/cyan]")
              with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -302,7 +309,8 @@ class StudyMaterialGenerator:
         # Helper to update progress or print to console
         def update_status(description: str):
             if progress and task_id is not None:
-                progress.update(task_id, description=description)
+                short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
+                progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: {description}")
             else:
                 console.print(f"[cyan]{description}[/cyan]")
 
@@ -311,6 +319,7 @@ class StudyMaterialGenerator:
         chapter_notes = {}
         
         if not progress:
+            console.print(f"[cyan]📚 Generating notes for {len(chapter_transcripts)} chapters...[/cyan]")
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
@@ -334,7 +343,8 @@ class StudyMaterialGenerator:
         else:
              for i, (chapter_title, chapter_text) in enumerate(chapter_transcripts.items(), 1):
                 if task_id is not None:
-                    progress.update(task_id, description=f"[cyan]Chapter {i}/{len(chapter_transcripts)}: {chapter_title[:30]}...[/cyan]")
+                    short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
+                    progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: Chapter {i}/{len(chapter_transcripts)} (Generating)")
                 
                 notes = await self.provider.generate(
                     system_prompt=CHAPTER_SYSTEM_PROMPT,
@@ -347,6 +357,7 @@ class StudyMaterialGenerator:
         
         # Combine all chapter notes
         if not progress:
+            console.print(f"[cyan]Combining chapter notes...[/cyan]")
             with Progress(
                 SpinnerColumn(),
                 TextColumn("[progress.description]{task.description}"),
