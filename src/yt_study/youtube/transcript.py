@@ -1,5 +1,6 @@
 """Transcript fetching with multi-language support."""
 
+import asyncio
 import logging
 from dataclasses import dataclass
 from typing import List, Optional
@@ -50,7 +51,7 @@ async def fetch_transcript(
     languages: Optional[List[str]] = None
 ) -> VideoTranscript:
     """
-    Fetch transcript for a YouTube video with language fallback.
+    Fetch transcript for a YouTube video with language fallback and retry logic.
     
     Priority:
     1. Manual transcript in preferred language
@@ -72,75 +73,89 @@ async def fetch_transcript(
     if languages is None:
         languages = ['en']
     
-    try:
-        ytt_api = YouTubeTranscriptApi()
-        
-        # List all available transcripts
-        transcript_list = ytt_api.list(video_id)
-        
-        # Try to find manually created transcript first
+    retries = 3
+    
+    for attempt in range(retries):
         try:
-            transcript = transcript_list.find_manually_created_transcript(languages)
-            console.print(f"[green]✓[/green] Found manual transcript: {transcript.language}")
-        except NoTranscriptFound:
-            # Try auto-generated
+            ytt_api = YouTubeTranscriptApi()
+            
+            # List all available transcripts
+            transcript_list = ytt_api.list(video_id)
+            
+            # Try to find manually created transcript first
             try:
-                transcript = transcript_list.find_generated_transcript(languages)
-                console.print(f"[yellow]⚠[/yellow] Using auto-generated transcript: {transcript.language}")
+                transcript = transcript_list.find_manually_created_transcript(languages)
+                logger.info(f"Found manual transcript: {transcript.language}")
             except NoTranscriptFound:
-                # Try any manual transcript
+                # Try auto-generated
                 try:
-                    transcript = transcript_list.find_manually_created_transcript(
-                        [t.language_code for t in transcript_list]
-                    )
-                    console.print(f"[yellow]⚠[/yellow] Using manual transcript in {transcript.language}")
+                    transcript = transcript_list.find_generated_transcript(languages)
+                    logger.info(f"Using auto-generated transcript: {transcript.language}")
                 except NoTranscriptFound:
-                    # Last resort: try to get any available transcript and translate to English
-                    available = list(transcript_list)
-                    if not available:
-                        raise TranscriptError(f"No transcripts available for video {video_id}")
-                    
-                    first_available = available[0]
-                    
-                    # Try to translate to English if not English already
-                    if 'en' in languages and first_available.language_code != 'en':
-                        if first_available.is_translatable:
-                            transcript = first_available.translate('en')
-                            console.print(f"[cyan]ℹ[/cyan] Translated {first_available.language} → English")
+                    # Try any manual transcript
+                    try:
+                        transcript = transcript_list.find_manually_created_transcript(
+                            [t.language_code for t in transcript_list]
+                        )
+                        logger.info(f"Using manual transcript in {transcript.language}")
+                    except NoTranscriptFound:
+                        # Last resort: try to get any available transcript and translate to English
+                        available = list(transcript_list)
+                        if not available:
+                            raise TranscriptError(f"No transcripts available for video {video_id}")
+                        
+                        first_available = available[0]
+                        
+                        # Try to translate to English if not English already
+                        if 'en' in languages and first_available.language_code != 'en':
+                            if first_available.is_translatable:
+                                transcript = first_available.translate('en')
+                                logger.info(f"Translated {first_available.language} → English")
+                            else:
+                                transcript = first_available
+                                logger.warning(f"Using {transcript.language} (translation not available)")
                         else:
                             transcript = first_available
-                            console.print(f"[yellow]⚠[/yellow] Using {transcript.language} (translation not available)")
-                    else:
-                        transcript = first_available
-                        console.print(f"[yellow]⚠[/yellow] Using {transcript.language}")
-        
-        # Fetch the actual transcript data
-        raw_transcript = transcript.fetch()
-        
-        # Convert to our format
-        segments = [
-            TranscriptSegment(
-                text=segment.text,
-                start=segment.start,
-                duration=segment.duration
+                            logger.warning(f"Using {transcript.language}")
+            
+            # Fetch the actual transcript data
+            raw_transcript = transcript.fetch()
+            
+            # Convert to our format
+            segments = [
+                TranscriptSegment(
+                    text=segment.text,
+                    start=segment.start,
+                    duration=segment.duration
+                )
+                for segment in raw_transcript
+            ]
+            
+            return VideoTranscript(
+                video_id=video_id,
+                segments=segments,
+                language=transcript.language,
+                language_code=transcript.language_code,
+                is_generated=transcript.is_generated
             )
-            for segment in raw_transcript
-        ]
-        
-        return VideoTranscript(
-            video_id=video_id,
-            segments=segments,
-            language=transcript.language,
-            language_code=transcript.language_code,
-            is_generated=transcript.is_generated
-        )
-        
-    except (TranscriptsDisabled, VideoUnavailable) as e:
-        logger.error(f"Transcript unavailable for {video_id}: {e}")
-        raise TranscriptError(f"Transcripts are disabled or video is unavailable: {video_id}")
-    except Exception as e:
-        logger.error(f"Failed to fetch transcript for {video_id}: {e}")
-        raise TranscriptError(f"Could not fetch transcript: {str(e)}")
+            
+        except (TranscriptsDisabled, VideoUnavailable) as e:
+            # Fatal errors, do not retry
+            logger.error(f"Transcript unavailable for {video_id}: {e}")
+            raise TranscriptError(f"Transcripts are disabled or video is unavailable: {video_id}") from e
+            
+        except (TranscriptError, NoTranscriptFound) as e:
+            # Already handled or strictly not found, do not retry
+            raise
+
+        except Exception as e:
+            if attempt < retries - 1:
+                wait_time = 2 ** attempt
+                logger.warning(f"Transcript fetch failed ({str(e)}), retrying in {wait_time}s...")
+                await asyncio.sleep(wait_time)
+            else:
+                logger.error(f"Failed to fetch transcript for {video_id}: {e}")
+                raise TranscriptError(f"Could not fetch transcript: {str(e)}")
 
 
 def split_transcript_by_chapters(
