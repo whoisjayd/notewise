@@ -17,7 +17,6 @@ logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Setup logging
-# Setup logging
 log_dir = Path.home() / ".yt-study" / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "yt-study.log"
@@ -120,8 +119,35 @@ def process(
             languages=language or config.default_languages
         )
         
+        async def run_processing():
+            """Determine if input is URL or file and run pipeline."""
+            input_path = Path(url)
+            
+            # Check if input is an existing file (Batch Mode)
+            if input_path.exists() and input_path.is_file():
+                console.print(f"[cyan]📂 Batch mode: Reading URLs from {input_path}[/cyan]")
+                try:
+                    with open(input_path, 'r', encoding='utf-8') as f:
+                        urls = [line.strip() for line in f if line.strip() and not line.startswith('#')]
+                except Exception as e:
+                    console.print(f"[red]Error reading batch file: {e}[/red]")
+                    return
+
+                console.print(f"[dim]Found {len(urls)} URLs[/dim]\n")
+                
+                for i, batch_url in enumerate(urls, 1):
+                    console.print(f"[bold cyan]--------------------------------------------------[/bold cyan]")
+                    console.print(f"[bold]Batch Item {i}/{len(urls)}:[/bold] {batch_url}")
+                    try:
+                        await orchestrator.run(batch_url)
+                    except Exception as e:
+                        console.print(f"[red]✗ Batch item failed: {e}[/red]")
+            else:
+                # Single URL Mode
+                await orchestrator.run(url)
+        
         # Run pipeline
-        asyncio.run(orchestrator.run(url))
+        asyncio.run(run_processing())
         
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Interrupted by user[/yellow]")

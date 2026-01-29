@@ -1,9 +1,12 @@
 """Configuration management for yt-study."""
 
+import logging
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, List
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -30,7 +33,20 @@ class Config:
     default_output_dir: Path = Path("./output")
     
     # Transcript Configuration
-    default_languages: list[str] = None
+    default_languages: List[str] = field(default_factory=lambda: ["en"])
+
+    # Security: Allowed keys for environment injection
+    ALLOWED_KEYS = {
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
+        "XAI_API_KEY",
+        "MISTRAL_API_KEY",
+        "DEFAULT_MODEL",
+        "OUTPUT_DIR",
+        "MAX_CONCURRENT_VIDEOS",
+    }
     
     def __post_init__(self):
         """Load configuration from user config file and environment variables."""
@@ -46,13 +62,13 @@ class Config:
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY") or self.mistral_api_key
         
         # Load default model and output dir from config
-        if os.getenv("DEFAULT_MODEL"):
-            self.default_model = os.getenv("DEFAULT_MODEL")
-        if os.getenv("OUTPUT_DIR"):
-            self.default_output_dir = Path(os.getenv("OUTPUT_DIR"))
-        
-        if self.default_languages is None:
-            self.default_languages = ["en"]
+        env_model = os.getenv("DEFAULT_MODEL")
+        if env_model:
+            self.default_model = env_model
+            
+        env_output = os.getenv("OUTPUT_DIR")
+        if env_output:
+            self.default_output_dir = Path(env_output)
     
     def _load_from_user_config(self):
         """Load configuration from user's config file."""
@@ -70,9 +86,13 @@ class Config:
                         key = key.strip()
                         value = value.strip()
                         
-                        # Set in environment for other libraries
-                        if key not in os.environ:
-                            os.environ[key] = value
+                        if key in self.ALLOWED_KEYS:
+                            # Set in environment for other libraries
+                            if key not in os.environ:
+                                os.environ[key] = value
+                        else:
+                            logger.warning(f"Ignoring unauthorized config key: {key}")
+                            
         except Exception:
             pass  # Silently fail if config file is corrupted
     
