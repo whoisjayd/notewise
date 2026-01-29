@@ -1,9 +1,9 @@
 """Study material generator with chunking and combining logic."""
 
 import logging
-import tiktoken
 from typing import List
 
+from litellm import token_counter
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
@@ -31,11 +31,10 @@ class StudyMaterialGenerator:
             provider: LLM provider instance
         """
         self.provider = provider
-        self.tokenizer = tiktoken.get_encoding("cl100k_base")  # GPT-4 tokenizer
         
     def _count_tokens(self, text: str) -> int:
-        """Count tokens in text."""
-        return len(self.tokenizer.encode(text))
+        """Count tokens in text using model-specific tokenizer."""
+        return token_counter(model=self.provider.model, text=text)
     
     def _chunk_transcript(self, transcript: str) -> List[str]:
         """

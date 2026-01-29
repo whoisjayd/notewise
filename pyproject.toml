@@ -29,7 +29,6 @@ dependencies = [
     "typer>=0.21.1",
     "rich>=13.9.4",
     "aiohttp>=3.11.11",
-    "tiktoken>=0.8.0",
 ]
 
 [project.optional-dependencies]

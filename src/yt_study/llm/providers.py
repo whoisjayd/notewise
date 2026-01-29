@@ -80,6 +80,7 @@ class LLMProvider:
                 "model": self.model,
                 "messages": messages,
                 "temperature": temperature,
+                "num_retries": 3,
             }
             
             if max_tokens:

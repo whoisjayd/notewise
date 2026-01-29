@@ -218,43 +218,61 @@ class PipelineOrchestrator:
         """Process playlist with concurrent dynamic progress bars."""
         video_ids = await extract_playlist_videos(playlist_id)
         
-        # Pre-fetch titles
+        # Pre-fetch titles concurrently
         from ..youtube.metadata import get_video_title
-        console.print(f"[cyan]📋 Fetching titles...[/cyan]")
-        video_titles = {}
-        # We can fetch titles concurrently too, but let's keep it simple or use a quick gather
-        # Actually doing it sequentially is slow for 22 videos.
-        # Let's verify we need titles upfront. Or just lazy fetch. 
-        # Lazy fetch is better for speed.
+        console.print(f"[cyan]📋 Fetching titles for {len(video_ids)} videos...[/cyan]")
+        
+        async def fetch_title_safe(vid):
+            try:
+                return await asyncio.to_thread(get_video_title, vid)
+            except Exception:
+                return vid
+                
+        titles = await asyncio.gather(*(fetch_title_safe(vid) for vid in video_ids))
+        video_titles = dict(zip(video_ids, titles))
         
         output_folder = self.output_dir / sanitize_filename(playlist_name)
         output_folder.mkdir(parents=True, exist_ok=True)
         
         console.print(f"\n[cyan]⚡ Processing {len(video_ids)} videos (max {config.max_concurrent_videos} concurrent)[/cyan]\n")
         
-        # Sequential Processing loop
-        success_count = 0
+        tasks = []
         
-        for i, video_id in enumerate(video_ids, 1):
-            title = video_titles.get(video_id, video_id)
-            safe_title = sanitize_filename(title)
-            output_path = output_folder / f"{safe_title}.md"
+        with Progress(
+            SpinnerColumn(),
+            BarColumn(),
+            TextColumn("[progress.description]{task.description}"),
+            TimeRemainingColumn(),
+            console=console
+        ) as progress:
             
-            console.print(f"\n[bold cyan]Processing video {i}/{len(video_ids)}:[/bold cyan] {title}")
+            main_task = progress.add_task(f"[bold]Playlist Progress[/bold]", total=len(video_ids))
             
-            # Process sequentially
-            # We pass is_playlist=True but NO progress object, so it won't try to nest
-            success = await self.process_video(
-                video_id,
-                output_path,
-                progress=None, 
-                task_id=None, 
-                video_title=title,
-                is_playlist=True
-            )
+            for i, video_id in enumerate(video_ids, 1):
+                title = video_titles.get(video_id, video_id)
+                safe_title = sanitize_filename(title)
+                output_path = output_folder / f"{safe_title}.md"
+                
+                # Wrapper to advance main progress bar
+                async def process_wrapper(vid=video_id, path=output_path, t=title):
+                    res = await self.process_video(
+                        vid,
+                        path,
+                        progress=progress,
+                        task_id=None, # process_video will create a new task
+                        video_title=t,
+                        is_playlist=True
+                    )
+                    progress.advance(main_task)
+                    return res
+                
+                tasks.append(process_wrapper())
             
-            if success:
-                success_count += 1
+            # Execute all tasks concurrently (limited by semaphore inside process_video)
+            results = await asyncio.gather(*tasks)
+            
+        success_count = sum(1 for r in results if r)
+        return success_count
     
     async def run(self, url: str) -> None:
         """
@@ -274,6 +292,10 @@ class PipelineOrchestrator:
         parsed = parse_youtube_url(url)
         
         if parsed.url_type == 'video':
+            if not parsed.video_id:
+                console.print("[red]Error: Video ID could not be extracted[/red]")
+                return
+
             # Single video: output/VideoTitle/VideoTitle.md
             from ..youtube.metadata import get_video_title
             video_title = get_video_title(parsed.video_id)
@@ -292,6 +314,10 @@ class PipelineOrchestrator:
                 console.print(f"\n[red]✗ Pipeline failed[/red]")
                 
         elif parsed.url_type == 'playlist':
+            if not parsed.playlist_id:
+                console.print("[red]Error: Playlist ID could not be extracted[/red]")
+                return
+
             # Playlist: output/PlaylistName/VideoTitle.md
             from ..youtube.metadata import get_playlist_info
             playlist_title, _ = get_playlist_info(parsed.playlist_id)
