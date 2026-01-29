@@ -176,75 +176,52 @@ class StudyMaterialGenerator:
         # Helper to update progress or print to console
         def update_status(description: str):
             if progress and task_id is not None:
-                progress.update(task_id, description=description)
+                # Update the worker status text directly. 
+                # Note: This relies on the worker_progress using the "{task.description}" column for status.
+                # In PipelineDashboard, we map description updates to the status column area.
+                short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
+                progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: {description}")
             else:
-                console.print(f"[cyan]{description}[/cyan]")
-                
+                # Fallback for CLI mode without dashboard
+                logger.info(f"{video_title}: {description}")
+
         # Single chunk - generate directly
         if len(chunks) == 1:
-            update_status(f"Generating notes for {video_title}...")
+            update_status(f"Generating notes...")
             
             # If no progress passed, use local spinner
             if not progress:
-                with Progress(
-                    SpinnerColumn(),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=console
-                ) as local_progress:
-                    local_progress.add_task(description="Generating notes...", total=None)
-                    
-                    notes = await self.provider.generate(
-                        system_prompt=SYSTEM_PROMPT,
-                        user_prompt=get_single_pass_prompt(transcript)
-                    )
-            else:
-                # Use passed progress
-                notes = await self.provider.generate(
-                    system_prompt=SYSTEM_PROMPT,
-                    user_prompt=get_single_pass_prompt(transcript)
-                )
+                # Just use logger, don't create new Progress to avoid interference
+                pass 
+            
+            notes = await self.provider.generate(
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=get_single_pass_prompt(transcript)
+            )
             
             if not progress:
-                console.print(f"[green]✓ Generated study notes[/green]")
+                logger.info(f"Generated notes for {video_title}")
             return notes
         
         # Multiple chunks - generate for each, then combine
-        # We don't print here to avoid UI breakage, status update handles it
+        update_status(f"Generating notes for {len(chunks)} chunks...")
         
         chunk_notes = []
         
         # Prepare iteration logic
         if not progress:
-            # Use local progress
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console
-            ) as local_progress:
-                console.print(f"[cyan]Generating notes for {len(chunks)} chunks...[/cyan]")
-                task = local_progress.add_task(
-                    description=f"Processing chunks...",
-                    total=len(chunks)
+            # Use local logging instead of Progress bar to be safe
+            for i, chunk in enumerate(chunks, 1):
+                logger.info(f"Processing chunk {i}/{len(chunks)} for {video_title}...")
+                note = await self.provider.generate(
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=get_chunk_prompt(chunk)
                 )
-                
-                for i, chunk in enumerate(chunks, 1):
-                    local_progress.update(task, description=f"Generating notes for chunk {i}/{len(chunks)}...")
-                    
-                    note = await self.provider.generate(
-                        system_prompt=SYSTEM_PROMPT,
-                        user_prompt=get_chunk_prompt(chunk)
-                    )
-                    
-                    chunk_notes.append(note)
-                    local_progress.advance(task)
+                chunk_notes.append(note)
         else:
-            # Use existing progress (just update description)
-            update_status(f"Generating notes for {len(chunks)} chunks...")
+            # Use existing progress
             for i, chunk in enumerate(chunks, 1):
                 if task_id is not None:
-                    # Provide detailed status: Title + Chunk info
-                    # We need title here. Ideally passed or available.
-                    # We used video_title in args.
                     short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
                     progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: Chunk {i}/{len(chunks)} (Generating)")
                 
@@ -256,28 +233,13 @@ class StudyMaterialGenerator:
         
         update_status(f"Combining {len(chunk_notes)} chunk notes...")
         
-        # Combine all chunk notes using AI
-        if not progress:
-             console.print(f"[cyan]Combining {len(chunk_notes)} chunk notes...[/cyan]")
-             with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console
-            ) as local_progress:
-                local_progress.add_task(description="Combining into final document...", total=None)
-                
-                final_notes = await self.provider.generate(
-                    system_prompt=SYSTEM_PROMPT,
-                    user_prompt=get_combine_prompt(chunk_notes)
-                )
-        else:
-            final_notes = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_combine_prompt(chunk_notes)
-            )
+        final_notes = await self.provider.generate(
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=get_combine_prompt(chunk_notes)
+        )
         
         if not progress:
-            console.print(f"[green]✓ Generated complete study notes[/green]")
+            logger.info(f"Completed notes for {video_title}")
             
         return final_notes
     
@@ -312,34 +274,21 @@ class StudyMaterialGenerator:
                 short_title = (video_title[:20] + "...") if len(video_title) > 20 else video_title
                 progress.update(task_id, description=f"[yellow]{short_title}[/yellow]: {description}")
             else:
-                console.print(f"[cyan]{description}[/cyan]")
+                logger.info(f"{video_title}: {description}")
 
         update_status(f"Generating notes for {len(chapter_transcripts)} chapters...")
         
         chapter_notes = {}
         
         if not progress:
-            console.print(f"[cyan]📚 Generating notes for {len(chapter_transcripts)} chapters...[/cyan]")
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console
-            ) as local_progress:
-                task = local_progress.add_task(
-                    description="Processing chapters...",
-                    total=len(chapter_transcripts)
+            # Local logging
+            for i, (chapter_title, chapter_text) in enumerate(chapter_transcripts.items(), 1):
+                logger.info(f"Processing chapter {i}/{len(chapter_transcripts)}: {chapter_title}...")
+                notes = await self.provider.generate(
+                    system_prompt=CHAPTER_SYSTEM_PROMPT,
+                    user_prompt=get_chapter_prompt(chapter_title, chapter_text)
                 )
-                
-                for i, (chapter_title, chapter_text) in enumerate(chapter_transcripts.items(), 1):
-                    local_progress.update(task, description=f"Chapter {i}/{len(chapter_transcripts)}: {chapter_title[:30]}...")
-                    
-                    notes = await self.provider.generate(
-                        system_prompt=CHAPTER_SYSTEM_PROMPT,
-                        user_prompt=get_chapter_prompt(chapter_title, chapter_text)
-                    )
-                    
-                    chapter_notes[chapter_title] = notes
-                    local_progress.advance(task)
+                chapter_notes[chapter_title] = notes
         else:
              for i, (chapter_title, chapter_text) in enumerate(chapter_transcripts.items(), 1):
                 if task_id is not None:
@@ -355,27 +304,12 @@ class StudyMaterialGenerator:
 
         update_status(f"Combining chapter notes...")
         
-        # Combine all chapter notes
-        if not progress:
-            console.print(f"[cyan]Combining chapter notes...[/cyan]")
-            with Progress(
-                SpinnerColumn(),
-                TextColumn("[progress.description]{task.description}"),
-                console=console
-            ) as local_progress:
-                local_progress.add_task(description="Creating final document...", total=None)
-                
-                final_notes = await self.provider.generate(
-                    system_prompt=CHAPTER_SYSTEM_PROMPT,
-                    user_prompt=get_combine_chapters_prompt(chapter_notes)
-                )
-        else:
-            final_notes = await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_combine_chapters_prompt(chapter_notes)
-            )
+        final_notes = await self.provider.generate(
+            system_prompt=CHAPTER_SYSTEM_PROMPT,
+            user_prompt=get_combine_chapters_prompt(chapter_notes)
+        )
         
         if not progress:
-            console.print(f"[green]✓ Generated chapter-based study notes[/green]")
+            logger.info(f"Completed chapter-based notes for {video_title}")
             
         return final_notes

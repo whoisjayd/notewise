@@ -17,7 +17,6 @@ logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Setup logging
-# Setup logging
 log_dir = Path.home() / ".yt-study" / "logs"
 log_dir.mkdir(parents=True, exist_ok=True)
 log_file = log_dir / "yt-study.log"

@@ -33,7 +33,7 @@ async def extract_playlist_videos(playlist_id: str) -> List[str]:
             try:
                 title = playlist.title
                 if attempt == 0:
-                     console.print(f"[cyan]Found playlist Check:[/cyan] {title}")
+                     logger.info(f"Found playlist: {title}")
             except Exception:
                 title = "Unknown Playlist"
                 logger.warning(f"Could not fetch playlist title on attempt {attempt+1}")
@@ -52,14 +52,14 @@ async def extract_playlist_videos(playlist_id: str) -> List[str]:
                 # We raise to trigger retry.
                 raise ValueError(f"No videos found in playlist (Attempt {attempt+1}/{max_retries})")
             
-            console.print(f"[green]Found {len(video_ids)} videos in playlist[/green]")
+            logger.info(f"Found {len(video_ids)} videos in playlist")
             return video_ids
             
         except Exception as e:
             last_error = e
             logger.warning(f"Playlist extraction attempt {attempt+1} failed: {e}")
             if attempt < max_retries - 1:
-                console.print(f"[yellow]⚠ Failed to extract playlist videos, retrying ({attempt+1}/{max_retries})...[/yellow]")
+                logger.warning(f"Failed to extract playlist videos, retrying ({attempt+1}/{max_retries})...")
                 await asyncio.sleep(2) # Wait before retry
     
     logger.error(f"Failed to extract playlist videos after {max_retries} attempts: {last_error}")

@@ -40,14 +40,23 @@ def get_video_chapters(video_id: str) -> list[VideoChapter]:
             chapter_data = yt.chapters
             
             for i, chapter in enumerate(chapter_data):
-                start_time = chapter.start_seconds if hasattr(chapter, 'start_seconds') else chapter['start_seconds']
-                title = chapter.title if hasattr(chapter, 'title') else chapter.get('title', f'Chapter {i+1}')
+                # Handle pytubefix chapter object structure
+                # Sometimes it's a dict, sometimes an object
+                if isinstance(chapter, dict):
+                    start_time = chapter.get('start_seconds', 0)
+                    title = chapter.get('title', f'Chapter {i+1}')
+                else:
+                    start_time = getattr(chapter, 'start_seconds', 0)
+                    title = getattr(chapter, 'title', f'Chapter {i+1}')
                 
                 # Calculate end time (start of next chapter or None for last)
                 end_time = None
                 if i < len(chapter_data) - 1:
                     next_chapter = chapter_data[i + 1]
-                    end_time = next_chapter.start_seconds if hasattr(next_chapter, 'start_seconds') else next_chapter['start_seconds']
+                    if isinstance(next_chapter, dict):
+                        end_time = next_chapter.get('start_seconds')
+                    else:
+                        end_time = getattr(next_chapter, 'start_seconds', None)
                 
                 chapters.append(VideoChapter(
                     title=title,

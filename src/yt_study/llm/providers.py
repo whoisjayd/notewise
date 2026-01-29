@@ -45,8 +45,8 @@ class LLMProvider:
         ]
         
         if not any(api_keys):
-            console.print("[yellow]Warning: No API keys found in environment[/yellow]")
-            logger.warning("No LLM API keys configured")
+            logger.warning("No LLM API keys configured in environment")
+            # We don't print here to avoid UI breakage during import or init
     
     async def generate(
         self,

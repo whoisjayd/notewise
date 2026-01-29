@@ -228,15 +228,22 @@ class PipelineOrchestrator:
                     console.print(f"[red]✗ {video_title or video_id}[/red]: {str(e)}")
                 return False
 
-    async def process_playlist(self, playlist_id: str, playlist_name: str = "playlist") -> int:
-        """Process playlist with concurrent dynamic progress bars."""
-        video_ids = await extract_playlist_videos(playlist_id)
+    async def _process_with_dashboard(
+        self, 
+        video_ids: List[str], 
+        playlist_name: str = "Queue", 
+        is_single_video: bool = False
+    ) -> int:
+        """Process a list of videos using the Advanced Dashboard UI."""
+        from rich.live import Live
+        from rich.progress import TaskID
+        from ..youtube.metadata import get_video_title
+        from ..ui.dashboard import PipelineDashboard
         
         # Pre-fetch titles concurrently
-        from ..youtube.metadata import get_video_title
-        
         TITLE_FETCH_CONCURRENCY = 10
-        console.print(f"[cyan]📋 Fetching titles for {len(video_ids)} videos (max {TITLE_FETCH_CONCURRENCY} at a time)...[/cyan]")
+        if not is_single_video:
+            console.print(f"[cyan]📋 Fetching titles for {len(video_ids)} videos (max {TITLE_FETCH_CONCURRENCY} at a time)...[/cyan]")
         
         title_semaphore = asyncio.Semaphore(TITLE_FETCH_CONCURRENCY)
         
@@ -250,44 +257,24 @@ class PipelineOrchestrator:
         titles = await asyncio.gather(*(fetch_title_safe(vid) for vid in video_ids))
         video_titles = dict(zip(video_ids, titles))
         
-        output_folder = self.output_dir / sanitize_filename(playlist_name)
-        output_folder.mkdir(parents=True, exist_ok=True)
+        # Determine base output folder
+        if is_single_video:
+             # For single video, subfolders are handled in worker
+             base_folder = self.output_dir
+        else:
+             base_folder = self.output_dir / sanitize_filename(playlist_name)
+             base_folder.mkdir(parents=True, exist_ok=True)
         
-        console.print(f"\n[cyan]⚡ Processing {len(video_ids)} videos (max {config.max_concurrent_videos} concurrent)[/cyan]\n")
+        if not is_single_video:
+            console.print(f"\n[cyan]⚡ Processing {len(video_ids)} videos (max {config.max_concurrent_videos} concurrent)[/cyan]\n")
         
-        # Global Progress (Overall)
-        overall_progress = Progress(
-            TextColumn("[bold blue]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TextColumn("{task.completed}/{task.total}"),
+        # Initialize Dashboard
+        dashboard = PipelineDashboard(
+            total_videos=len(video_ids),
+            concurrency=config.max_concurrent_videos,
+            playlist_name=playlist_name,
+            model_name=self.model
         )
-        overall_task = overall_progress.add_task("Total Progress", total=len(video_ids))
-        
-        # Worker Progress Bars (One per concurrency slot)
-        # We use a separate Progress instance for workers to render them differently
-        worker_progress = Progress(
-            TextColumn("[bold cyan]Worker {task.fields[worker_id]}"),
-            SpinnerColumn(),
-            TextColumn("{task.description}"),
-        )
-        
-        worker_tasks = []
-        for i in range(config.max_concurrent_videos):
-            # Initialize workers as Idle
-            tid = worker_progress.add_task("[dim]Idle[/dim]", worker_id=i+1)
-            worker_tasks.append(tid)
-            
-        # Layout Table
-        from rich.live import Live
-        from rich.table import Table
-        from rich.panel import Panel
-
-        def create_layout():
-            table = Table.grid(expand=True)
-            table.add_row(Panel(overall_progress, title="Playlist Processing", border_style="green"))
-            table.add_row(Panel(worker_progress, title="Active Workers", border_style="blue"))
-            return table
 
         success_count = 0
         
@@ -296,7 +283,7 @@ class PipelineOrchestrator:
         for vid in video_ids:
             queue.put_nowait(vid)
             
-        async def worker(worker_id: int, task_id: TaskID):
+        async def worker(worker_idx: int, task_id: TaskID):
             nonlocal success_count
             while not queue.empty():
                 try:
@@ -306,48 +293,70 @@ class PipelineOrchestrator:
                 
                 title = video_titles.get(video_id, video_id)
                 safe_title = sanitize_filename(title)
-                output_path = output_folder / f"{safe_title}.md"
                 
-                # Callback to update the specific worker bar text
-                # We need a progress-like interface for process_video to update status
-                # But process_video expects a `Progress` object.
-                # We can't easily pass `worker_progress` because process_video tries to add tasks or update them differently.
-                # Solution: We manually update the worker bar here before/after, 
-                # and maybe pass `worker_progress` with `task_id` if process_video supports it.
-                # Yes, process_video supports `progress` and `task_id`.
+                if is_single_video:
+                    video_folder = base_folder / safe_title
+                    output_path = video_folder / f"{safe_title}.md"
+                else:
+                    output_path = base_folder / f"{safe_title}.md"
                 
-                worker_progress.update(task_id, description=f"[yellow]{title[:30]}...[/yellow]")
+                # Update status
+                dashboard.update_worker(worker_idx, f"[yellow]{title[:30]}...[/yellow]")
                 
                 try:
+                    # Pass the worker_progress object from dashboard
+                    # We rely on generator updating 'description' which we mapped to 'status' text
                     result = await self.process_video(
                         video_id,
                         output_path,
-                        progress=worker_progress, # Pass the worker progress group
-                        task_id=task_id,          # Pass the specific worker task ID
+                        progress=dashboard.worker_progress, 
+                        task_id=task_id,          
                         video_title=title,
                         is_playlist=True
                     )
                     
                     if result:
                         success_count += 1
+                        dashboard.add_completion(title)
                         
                 except Exception as e:
-                    logger.error(f"Worker {worker_id} failed on {video_id}: {e}")
-                    worker_progress.update(task_id, description=f"[red]Error: {e}[/red]")
-                    await asyncio.sleep(2) # Show error for a bit
+                    logger.error(f"Worker {worker_idx} failed on {video_id}: {e}")
+                    dashboard.update_worker(worker_idx, f"[red]Error: {e}[/red]")
+                    await asyncio.sleep(2) 
                 finally:
                     queue.task_done()
-                    overall_progress.advance(overall_task)
+                    # Dashboard advances overall task automatically in add_completion, 
+                    # but if failed we might need to advance it too or track failures?
+                    # The current dashboard.add_completion advances progress. 
+                    # If failed, we should probably still advance "processed" count?
+                    # For now, let's only advance on success or we need a fail counter.
+                    # Or just advance anyway to show progress.
+                    dashboard.overall_progress.advance(dashboard.overall_task)
             
             # Worker done
-            worker_progress.update(task_id, description="[dim]Idle[/dim]")
+            dashboard.update_worker(worker_idx, "[dim]Idle[/dim]")
 
-        # Run everything under one Live display
-        with Live(create_layout(), refresh_per_second=10, console=console) as live:
-            workers = [worker(i, worker_tasks[i]) for i in range(config.max_concurrent_videos)]
+        # Run Live Display with manual refresh loop
+        # screen=True enables alternate screen mode (like htop), preventing scroll artifacts
+        with Live(dashboard, refresh_per_second=10, console=console, screen=True) as live:
+            
+            # Since Dashboard implements __rich__, passing it to Live works automatically.
+            # However, if we need specific update logic not triggered by progress bars, we can loop.
+            # Progress bars auto-refresh via Live.
+            
+            workers = [
+                asyncio.create_task(worker(i, dashboard.worker_tasks[i])) 
+                for i in range(config.max_concurrent_videos)
+            ]
+            
             await asyncio.gather(*workers)
             
         return success_count
+
+    async def process_playlist(self, playlist_id: str, playlist_name: str = "playlist") -> int:
+        """Process playlist with concurrent dynamic progress bars."""
+        video_ids = await extract_playlist_videos(playlist_id)
+        return await self._process_with_dashboard(video_ids, playlist_name)
     
     async def run(self, url: str) -> None:
         """
@@ -371,19 +380,17 @@ class PipelineOrchestrator:
                 console.print("[red]Error: Video ID could not be extracted[/red]")
                 return
 
-            # Single video: output/VideoTitle/VideoTitle.md
+            # Use Dashboard for single video too for consistent UI
             from ..youtube.metadata import get_video_title
-            video_title = get_video_title(parsed.video_id)
             
-            console.print(f"[cyan]📹 Video:[/cyan] {video_title}\n")
+            # We fetch title here for logging, but _process_with_dashboard will re-fetch efficiently
+            # or we can pass it if we refactor. 
+            # For simplicity, let _process_with_dashboard handle everything.
             
-            safe_title = sanitize_filename(video_title)
-            output_folder = self.output_dir / safe_title
-            output_path = output_folder / f"{safe_title}.md"
+            # We need to pass [video_id] list
+            success_count = await self._process_with_dashboard([parsed.video_id], playlist_name="Single Video", is_single_video=True)
             
-            success = await self.process_video(parsed.video_id, output_path, video_title=video_title, is_playlist=False)
-            
-            if success:
+            if success_count > 0:
                 console.print(f"\n[green]✓ Pipeline completed successfully![/green]")
             else:
                 console.print(f"\n[red]✗ Pipeline failed[/red]")
