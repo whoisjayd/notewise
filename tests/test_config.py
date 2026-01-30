@@ -12,6 +12,7 @@ class TestConfig:
         # Ensure env doesn't interfere
         monkeypatch.delenv("DEFAULT_MODEL", raising=False)
         monkeypatch.delenv("OUTPUT_DIR", raising=False)
+        monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
         
         # Prevent loading from real user config file
         with patch.object(Config, '_load_from_user_config'):
@@ -30,17 +31,21 @@ class TestConfig:
             assert cfg.gemini_api_key == "env_key"
             assert cfg.default_model == "gpt-4o"
 
-    def test_load_from_file(self, tmp_path):
+    def test_load_from_file(self, tmp_path, monkeypatch):
         """Test loading from config file."""
+        # Clear env vars that might interfere
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
+
         # We want to test _load_from_user_config logic here, so we DON'T mock it.
         # Instead we mock Path.home to point to a temp dir.
-        
+    
         with patch("pathlib.Path.home", return_value=tmp_path):
             config_dir = tmp_path / ".yt-study"
             config_dir.mkdir()
             config_file = config_dir / "config.env"
             config_file.write_text("OPENAI_API_KEY=file_key\nMAX_CONCURRENT_VIDEOS=10")
-            
+    
             cfg = Config()
             assert cfg.openai_api_key == "file_key"
             # Config sets os.environ, so we check that too or the attribute
