@@ -5,6 +5,7 @@ on:
     branches: [ main ]
   pull_request:
     branches: [ main ]
+  workflow_call:  # Make this workflow reusable
 
 # Cancel in-progress jobs for new commits on same branch
 concurrency:
