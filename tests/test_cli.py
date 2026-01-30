@@ -83,11 +83,13 @@ def test_process_batch_file_error(mock_config_exists, mock_orchestrator, tmp_pat
     batch_file = tmp_path / "restricted.txt"
     batch_file.touch()
     
-    # Simulate read error
-    with patch("builtins.open", side_effect=IOError("Access denied")):
+    # Simulate read error by patching Path.read_text directly
+    with patch("pathlib.Path.read_text", side_effect=IOError("Access denied")):
         result = runner.invoke(app, ["process", str(batch_file)])
     
-    assert result.exit_code == 0
+    assert result.exit_code == 0 # It returns early, exit code 0 usually unless exception propagates
+    # Wait, cli.py does return, so exit code 0 is correct for Typer unless we raise Exit.
+    # Checks stdout
     assert "Error reading batch file" in result.stdout
 
 def test_process_missing_config():
