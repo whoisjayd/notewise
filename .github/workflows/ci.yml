@@ -6,18 +6,55 @@ on:
   pull_request:
     branches: [ main ]
 
+# Cancel in-progress jobs for new commits on same branch
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# Restrict permissions by default
+permissions:
+  contents: read
+
 jobs:
-  test:
+  lint:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
+      with:
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    - name: Set up Python 3.12
+      run: uv python install 3.12
+
+    - name: Install dependencies
+      run: uv sync --all-extras --dev
+
+    - name: Run Ruff (Linting)
+      run: uv run ruff check src tests
+
+    - name: Run Mypy (Type Checking)
+      run: uv run mypy src
+
+  test:
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
     strategy:
+      fail-fast: false
       matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
         python-version: ["3.10", "3.11", "3.12"]
 
     steps:
     - uses: actions/checkout@v4
     
     - name: Install uv
-      uses: astral-sh/setup-uv@v2
+      uses: astral-sh/setup-uv@v5
       with:
         enable-cache: true
         cache-dependency-glob: "uv.lock"
@@ -26,9 +63,13 @@ jobs:
       run: uv python install ${{ matrix.python-version }}
 
     - name: Install dependencies
-      run: |
-        uv sync --all-extras --dev
+      run: uv sync --all-extras --dev
 
-    - name: Run tests
-      run: |
-        uv run pytest
+    - name: Run tests with coverage
+      run: uv run pytest --cov=src/yt_study --cov-report=xml
+
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        slug: whoisjayd/yt-study

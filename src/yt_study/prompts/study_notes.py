@@ -42,7 +42,7 @@ Requirements:
 5. **Detailed & Comprehensive**: The final document must be as detailed as the input segments combined.
 6. Maintain consistent formatting and structure (##, ###).
 7. Do NOT add a table of contents.
-8. **Example clean output:** "# Title\n\n## Section 1..."
+8. **Example clean output:** "# Title\\n\\n## Section 1..."
 
 Create study notes that are comprehensive, well-organized, and easy to review."""
 

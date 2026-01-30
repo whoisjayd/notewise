@@ -4,14 +4,18 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List
+from typing import Optional, List, Set
 
 logger = logging.getLogger(__name__)
 
 
 @dataclass
 class Config:
-    """Global configuration for the application."""
+    """
+    Global configuration for the application.
+    
+    Manages loading settings from environment variables and config files.
+    """
     
     # LLM Configuration
     default_model: str = "gemini/gemini-2.0-flash"
@@ -36,7 +40,7 @@ class Config:
     default_languages: List[str] = field(default_factory=lambda: ["en"])
 
     # Security: Allowed keys for environment injection
-    ALLOWED_KEYS = {
+    ALLOWED_KEYS: Set[str] = field(default_factory=lambda: {
         "GEMINI_API_KEY",
         "OPENAI_API_KEY",
         "ANTHROPIC_API_KEY",
@@ -46,7 +50,7 @@ class Config:
         "DEFAULT_MODEL",
         "OUTPUT_DIR",
         "MAX_CONCURRENT_VIDEOS",
-    }
+    })
     
     def __post_init__(self):
         """Load configuration from user config file and environment variables."""
@@ -69,6 +73,15 @@ class Config:
         env_output = os.getenv("OUTPUT_DIR")
         if env_output:
             self.default_output_dir = Path(env_output)
+
+        env_concurrency = os.getenv("MAX_CONCURRENT_VIDEOS")
+        if env_concurrency:
+            try:
+                self.max_concurrent_videos = int(env_concurrency)
+            except ValueError:
+                logger.warning(f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. Using default {self.max_concurrent_videos}")
+
+        self._sync_env_vars()
     
     def _load_from_user_config(self):
         """Load configuration from user's config file."""
@@ -78,41 +91,72 @@ class Config:
             return
         
         try:
-            with open(config_path, 'r') as f:
+            with open(config_path, 'r', encoding='utf-8') as f:
                 for line in f:
                     line = line.strip()
-                    if line and not line.startswith('#') and '=' in line:
+                    if not line or line.startswith('#'):
+                        continue
+                        
+                    if '=' in line:
                         key, value = line.split('=', 1)
                         key = key.strip()
                         value = value.strip()
                         
+                        # Remove quotes if present
+                        if (value.startswith('"') and value.endswith('"')) or \
+                           (value.startswith("'") and value.endswith("'")):
+                            value = value[1:-1]
+                        
                         if key in self.ALLOWED_KEYS:
-                            # Set in environment for other libraries
+                            # Pre-populate env for consistency
                             if key not in os.environ:
                                 os.environ[key] = value
                         else:
                             logger.warning(f"Ignoring unauthorized config key: {key}")
                             
-        except Exception:
-            pass  # Silently fail if config file is corrupted
+        except Exception as e:
+            logger.warning(f"Failed to load config file: {e}")
+            pass
+
+    def _sync_env_vars(self):
+        """Sync class attributes back to os.environ for libraries that expect them."""
+        if self.gemini_api_key:
+            os.environ["GEMINI_API_KEY"] = self.gemini_api_key
+        if self.openai_api_key:
+            os.environ["OPENAI_API_KEY"] = self.openai_api_key
+        if self.anthropic_api_key:
+            os.environ["ANTHROPIC_API_KEY"] = self.anthropic_api_key
+        if self.groq_api_key:
+            os.environ["GROQ_API_KEY"] = self.groq_api_key
+        if self.xai_api_key:
+            os.environ["XAI_API_KEY"] = self.xai_api_key
+        if self.mistral_api_key:
+            os.environ["MISTRAL_API_KEY"] = self.mistral_api_key
     
-    def get_api_key_for_model(self, model: str) -> Optional[str]:
-        """Get the appropriate API key for a given model."""
+    def get_api_key_name_for_model(self, model: str) -> Optional[str]:
+        """Get the environment variable name for the API key required by a model."""
         model_lower = model.lower()
         
         if "gemini" in model_lower or "vertex" in model_lower:
-            return self.gemini_api_key
+            return "GEMINI_API_KEY"
         elif "gpt" in model_lower or "openai" in model_lower:
-            return self.openai_api_key
+            return "OPENAI_API_KEY"
         elif "claude" in model_lower or "anthropic" in model_lower:
-            return self.anthropic_api_key
+            return "ANTHROPIC_API_KEY"
         elif "groq" in model_lower:
-            return self.groq_api_key
+            return "GROQ_API_KEY"
         elif "grok" in model_lower or "xai" in model_lower:
-            return self.xai_api_key
+            return "XAI_API_KEY"
         elif "mistral" in model_lower:
-            return self.mistral_api_key
+            return "MISTRAL_API_KEY"
         
+        return None
+
+    def get_api_key_for_model(self, model: str) -> Optional[str]:
+        """Get the appropriate API key value for a given model."""
+        var_name = self.get_api_key_name_for_model(model)
+        if var_name:
+            return os.environ.get(var_name)
         return None
 
 
