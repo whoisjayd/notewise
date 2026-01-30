@@ -64,12 +64,12 @@ yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
 
 ## Documentation
 
-Full documentation is available in the [`docs/`](docs/) directory.
+Full documentation is available in the [`wiki/`](wiki/) directory.
 
--   [**Installation Guide**](docs/installation.md)
--   [**Configuration & Models**](docs/configuration.md)
--   [**Usage & CLI Options**](docs/usage.md)
--   [**Architecture**](docs/architecture.md)
+-   [**Installation Guide**](wiki/Installation.md)
+-   [**Configuration & Models**](wiki/Configuration.md)
+-   [**Usage & CLI Options**](wiki/Usage.md)
+-   [**Architecture**](wiki/Architecture.md)
 
 ---
 

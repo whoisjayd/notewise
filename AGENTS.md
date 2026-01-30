@@ -12,6 +12,7 @@ Python CLI tool converting YouTube videos/playlists into AI-powered study notes.
 
 ```
 yt-study/
+├── wiki/               # Documentation (submodule)
 ├── src/yt_study/           # Main package
 │   ├── cli.py              # Entry point (Typer app)
 │   ├── config.py           # Config dataclass + env loading
