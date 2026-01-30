@@ -3,7 +3,7 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional, Dict
 
 from rich.console import Console
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -11,7 +11,11 @@ from youtube_transcript_api._errors import (
     NoTranscriptFound,
     TranscriptsDisabled,
     VideoUnavailable,
+    IpBlocked,
+    RequestBlocked,
 )
+
+from .metadata import VideoChapter
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -19,7 +23,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class TranscriptSegment:
-    """A segment of transcript text with timing."""
+    """
+    A segment of transcript text with timing.
+    
+    Attributes:
+        text: The spoken text.
+        start: Start time in seconds.
+        duration: Duration of the segment in seconds.
+    """
     
     text: str
     start: float
@@ -28,7 +39,16 @@ class TranscriptSegment:
 
 @dataclass
 class VideoTranscript:
-    """Complete transcript for a video."""
+    """
+    Complete transcript for a video.
+    
+    Attributes:
+        video_id: The YouTube video ID.
+        segments: List of transcript segments.
+        language: Language name (e.g., 'English').
+        language_code: Language code (e.g., 'en').
+        is_generated: Whether the transcript is auto-generated.
+    """
     
     video_id: str
     segments: List[TranscriptSegment]
@@ -43,6 +63,11 @@ class VideoTranscript:
 
 class TranscriptError(Exception):
     """Exception raised for transcript-related errors."""
+    pass
+
+
+class YouTubeIPBlockError(TranscriptError):
+    """Exception raised when YouTube blocks IP."""
     pass
 
 
@@ -61,14 +86,14 @@ async def fetch_transcript(
     5. Translated transcript to English
     
     Args:
-        video_id: YouTube video ID
-        languages: Preferred language codes (e.g., ['en', 'hi']). Defaults to ['en']
+        video_id: YouTube video ID.
+        languages: Preferred language codes (e.g., ['en', 'hi']). Defaults to ['en'].
         
     Returns:
-        VideoTranscript object
+        VideoTranscript object.
         
     Raises:
-        TranscriptError: If no transcript is available
+        TranscriptError: If no transcript is available.
     """
     if languages is None:
         languages = ['en']
@@ -79,82 +104,38 @@ async def fetch_transcript(
         try:
             # Wrap blocking YouTubeTranscriptApi calls in a thread
             # This is critical to prevent blocking the asyncio event loop during concurrency
-            def _fetch_sync():
-                ytt_api = YouTubeTranscriptApi()
-                
-                # List all available transcripts
-                transcript_list = ytt_api.list(video_id)
-                
-                # Try to find manually created transcript first
-                try:
-                    transcript = transcript_list.find_manually_created_transcript(languages)
-                    found_msg = f"Found manual transcript: {transcript.language}"
-                except NoTranscriptFound:
-                    # Try auto-generated
-                    try:
-                        transcript = transcript_list.find_generated_transcript(languages)
-                        found_msg = f"Using auto-generated transcript: {transcript.language}"
-                    except NoTranscriptFound:
-                        # Try any manual transcript
-                        try:
-                            transcript = transcript_list.find_manually_created_transcript(
-                                [t.language_code for t in transcript_list]
-                            )
-                            found_msg = f"Using manual transcript in {transcript.language}"
-                        except NoTranscriptFound:
-                            # Last resort: try to get any available transcript and translate to English
-                            available = list(transcript_list)
-                            if not available:
-                                raise TranscriptError(f"No transcripts available for video {video_id}")
-                            
-                            first_available = available[0]
-                            
-                            # Try to translate to English if not English already
-                            if 'en' in languages and first_available.language_code != 'en':
-                                if first_available.is_translatable:
-                                    transcript = first_available.translate('en')
-                                    found_msg = f"Translated {first_available.language} → English"
-                                else:
-                                    transcript = first_available
-                                    found_msg = f"Using {transcript.language} (translation not available)"
-                            else:
-                                transcript = first_available
-                                found_msg = f"Using {transcript.language}"
-                
-                # Fetch the actual transcript data
-                raw_transcript = transcript.fetch()
-                return raw_transcript, transcript, found_msg
-
-            # Execute sync logic in thread
-            raw_transcript, transcript, log_msg = await asyncio.to_thread(_fetch_sync)
+            raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
+                _fetch_sync, video_id, languages
+            )
+            
             logger.info(log_msg)
             
             # Convert to our format
-            # raw_transcript is a list of dicts: {'text': '...', 'start': 0.0, 'duration': 0.0}
             segments = []
             for segment in raw_transcript:
-                # Handle both dict and object access just in case
+                # Handle both dict (standard) and object (FetchedTranscriptSnippet) formats
                 if isinstance(segment, dict):
                     text = segment.get('text', '')
                     start = segment.get('start', 0.0)
                     duration = segment.get('duration', 0.0)
                 else:
+                    # Fallback for object-based returns
                     text = getattr(segment, 'text', '')
                     start = getattr(segment, 'start', 0.0)
                     duration = getattr(segment, 'duration', 0.0)
-                    
+                
                 segments.append(TranscriptSegment(
                     text=text,
-                    start=start,
-                    duration=duration
+                    start=float(start),
+                    duration=float(duration)
                 ))
             
             return VideoTranscript(
                 video_id=video_id,
                 segments=segments,
-                language=transcript.language,
-                language_code=transcript.language_code,
-                is_generated=transcript.is_generated
+                language=transcript_meta.language,
+                language_code=transcript_meta.language_code,
+                is_generated=transcript_meta.is_generated
             )
             
         except (TranscriptsDisabled, VideoUnavailable) as e:
@@ -162,11 +143,27 @@ async def fetch_transcript(
             logger.error(f"Transcript unavailable for {video_id}: {e}")
             raise TranscriptError(f"Transcripts are disabled or video is unavailable: {video_id}") from e
             
-        except (TranscriptError, NoTranscriptFound) as e:
+        except (TranscriptError, NoTranscriptFound):
             # Already handled or strictly not found, do not retry
             raise
+            
+        except (IpBlocked, RequestBlocked) as e:
+            # Specifically handle IP blocking
+            logger.error(f"YouTube IP Block detected for {video_id}")
+            raise YouTubeIPBlockError(
+                "YouTube is blocking requests from your IP. "
+                "Please try using a VPN, proxies, or wait a while."
+            ) from e
 
         except Exception as e:
+            err_str = str(e)
+            if "blocking requests from your IP" in err_str:
+                 logger.error(f"YouTube IP Block detected for {video_id}: {e}")
+                 raise YouTubeIPBlockError(
+                    "YouTube is blocking requests from your IP. "
+                    "Please try using a VPN, proxies, or wait a while."
+                ) from e
+
             if attempt < retries - 1:
                 wait_time = 2 ** attempt
                 logger.warning(f"Transcript fetch failed ({str(e)}), retrying in {wait_time}s...")
@@ -175,26 +172,93 @@ async def fetch_transcript(
                 logger.error(f"Failed to fetch transcript for {video_id}: {e}")
                 raise TranscriptError(f"Could not fetch transcript: {str(e)}")
     
-    # Should be unreachable due to raise in loop, but for type safety:
+    # Should be unreachable due to raise in loop
     raise TranscriptError(f"Failed to fetch transcript for {video_id}")
+
+
+def _fetch_sync(video_id: str, languages: List[str]):
+    """Blocking helper to interact with YouTubeTranscriptApi."""
+    ytt_api = YouTubeTranscriptApi()
+    
+    # List all available transcripts
+    # This list call can fail with TranscriptsDisabled or VideoUnavailable
+    transcript_list = ytt_api.list(video_id)  # type: ignore
+    
+    transcript = None
+    found_msg = ""
+    
+    # Strategy 1: Find manual transcript in preferred language
+    try:
+        transcript = transcript_list.find_manually_created_transcript(languages)
+        found_msg = f"Found manual transcript: {transcript.language}"
+    except NoTranscriptFound:
+        pass
+        
+    # Strategy 2: Try auto-generated in preferred language
+    if not transcript:
+        try:
+            transcript = transcript_list.find_generated_transcript(languages)
+            found_msg = f"Using auto-generated transcript: {transcript.language}"
+        except NoTranscriptFound:
+            pass
+
+    # Strategy 3: Try any manual transcript
+    if not transcript:
+        try:
+            # Get all language codes available
+            all_codes = [t.language_code for t in transcript_list]
+            transcript = transcript_list.find_manually_created_transcript(all_codes)
+            found_msg = f"Using manual transcript in {transcript.language}"
+        except NoTranscriptFound:
+            pass
+            
+    # Strategy 4: Last resort - try any available transcript and translate if needed
+    if not transcript:
+        try:
+            # list(transcript_list) returns iterable of Transcript objects
+            available = list(transcript_list)
+            if not available:
+                raise NoTranscriptFound(video_id, languages, [])
+            
+            first_available = available[0]
+            
+            # Try to translate to English if not English already and requested
+            if 'en' in languages and first_available.language_code != 'en':
+                if first_available.is_translatable:
+                    transcript = first_available.translate('en')
+                    found_msg = f"Translated {first_available.language} -> English"
+                else:
+                    transcript = first_available
+                    found_msg = f"Using {transcript.language} (translation not available)"
+            else:
+                transcript = first_available
+                found_msg = f"Using {transcript.language}"
+                
+        except Exception as e:
+            # If we really can't find anything
+            if isinstance(e, NoTranscriptFound):
+                 raise
+            raise TranscriptError(f"No usable transcript found: {e}")
+
+    # Fetch the actual transcript data
+    raw_transcript = transcript.fetch()
+    return raw_transcript, transcript, found_msg
 
 
 def split_transcript_by_chapters(
     transcript: VideoTranscript,
-    chapters: List
-) -> dict[str, str]:
+    chapters: List[VideoChapter]
+) -> Dict[str, str]:
     """
     Split a video transcript by chapters.
     
     Args:
-        transcript: VideoTranscript object
-        chapters: List of VideoChapter objects
+        transcript: VideoTranscript object.
+        chapters: List of VideoChapter objects.
         
     Returns:
-        Dictionary mapping chapter titles to their transcript text
+        Dictionary mapping chapter titles to their transcript text.
     """
-    from ..youtube.metadata import VideoChapter
-    
     chapter_transcripts = {}
     
     for chapter in chapters:
@@ -203,9 +267,8 @@ def split_transcript_by_chapters(
         
         for segment in transcript.segments:
             segment_start = segment.start
-            segment_end = segment.start + segment.duration
             
-            # Check if segment overlaps with chapter time range
+            # Check if segment start is within chapter range
             if chapter.end_seconds is None:
                 # Last chapter - include everything after start
                 if segment_start >= chapter.start_seconds:
