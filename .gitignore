@@ -9,3 +9,7 @@ wheels/
 # Virtual environments
 .venv
 .env
+.opencode/
+*cache*
+nul
+.coverage
