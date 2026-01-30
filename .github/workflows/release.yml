@@ -9,8 +9,15 @@ permissions:
   contents: read
 
 jobs:
+  # Run CI pipeline first
+  ci:
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
   build-n-publish:
     name: Build and publish to PyPI
+    needs: ci  # Must pass CI first
     runs-on: ubuntu-latest
     permissions:
       contents: write  # For creating GitHub Release
