@@ -1,6 +1,8 @@
 """
 Dashboard UI component for pipeline visualization.
-Handles the rendering of progress bars, worker status, and completion logs.
+
+Handles the rendering of progress bars, worker status, and completion logs
+using Rich's Live display capabilities.
 """
 
 from collections import deque
@@ -25,32 +27,42 @@ from rich.markup import escape
 class PipelineDashboard:
     """
     Manages the TUI dashboard state and rendering.
-    
-    Attributes:
-        total_videos (int): Total number of videos to process.
-        concurrency (int): Number of concurrent workers.
-        playlist_name (str): Name of the playlist or video context.
-        model_name (str): Name of the LLM model being used.
+
+    Provides a visual overview of:
+    - Overall playlist progress
+    - Individual worker threads status
+    - Recent completions
+    - Failures
     """
 
     def __init__(
-        self, 
-        total_videos: int, 
-        concurrency: int, 
-        playlist_name: str, 
+        self,
+        total_videos: int,
+        concurrency: int,
+        playlist_name: str,
         model_name: str
     ):
+        """
+        Initialize the dashboard.
+
+        Args:
+            total_videos: Total number of items to process.
+            concurrency: Number of parallel workers.
+            playlist_name: Name of the current batch/playlist.
+            model_name: The LLM model in use.
+        """
         self.playlist_name = playlist_name
         self.model_name = model_name
         self.recent_completions: Deque[str] = deque(maxlen=3)
-        
+        self.recent_failures: Deque[str] = deque(maxlen=3)
+
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
             TextColumn("[bold blue]Total Progress"),
             BarColumn(
-                bar_width=40, 
-                style="black", 
-                complete_style="green", 
+                bar_width=40,
+                style="black",
+                complete_style="green",
                 finished_style="green"
             ),
             TextColumn("[bold green]{task.percentage:>3.0f}%"),
@@ -60,8 +72,9 @@ class PipelineDashboard:
             TimeElapsedColumn(),
             expand=True
         )
-        self.overall_task = self.overall_progress.add_task("", total=total_videos)
-        
+        self.overall_task = self.overall_progress.add_task(
+            "", total=total_videos)
+
         # 2. Worker Progress Bars
         self.worker_progress = Progress(
             TextColumn("[bold cyan]{task.fields[label]}[/bold cyan]"),
@@ -69,31 +82,69 @@ class PipelineDashboard:
             TextColumn("{task.description}"),
             expand=True
         )
-        
+
         self.worker_tasks: List[TaskID] = []
         for i in range(concurrency):
             prefix = "└──" if i == concurrency - 1 else "├──"
             tid = self.worker_progress.add_task(
-                "[dim]Idle[/dim]", 
-                label=f"{prefix} Worker {i+1}", 
+                "[dim]Idle[/dim]",
+                label=f"{prefix} Worker {i+1}",
                 worker_id=i+1
             )
             self.worker_tasks.append(tid)
 
     def update_worker(self, index: int, status: str, style: str = ""):
-        """Update a specific worker's status text."""
+        """
+        Update a specific worker's status text.
+
+        Args:
+            index: Worker index (0-based).
+            status: New status text.
+            style: Optional Rich style tag to wrap the text.
+        """
         if 0 <= index < len(self.worker_tasks):
             task_id = self.worker_tasks[index]
             description = f"[{style}]{status}[/{style}]" if style else status
             self.worker_progress.update(task_id, description=description)
 
     def add_completion(self, title: str):
-        """Register a completed video."""
+        """
+        Register a completed video and advance progress.
+
+        Args:
+            title: Title of the completed video.
+        """
         self.recent_completions.appendleft(title)
         self.overall_progress.advance(self.overall_task)
 
+    def add_failure(self, title: str):
+        """
+        Register a failed video.
+
+        Args:
+            title: Title of the failed video.
+        """
+        self.recent_failures.appendleft(title)
+        # We assume failures still count towards "processing done" so we advance the bar.
+        self.overall_progress.advance(self.overall_task)
+
+    def update_overall_status(self, description: str):
+        """
+        Update the description of the overall progress bar.
+
+        Args:
+            description: New description text.
+        """
+        self.overall_progress.update(
+            self.overall_task, description=description)
+
     def __rich__(self) -> RenderableType:
-        """Render the dashboard interface."""
+        """
+        Render the dashboard interface.
+        
+        Returns:
+            A Rich Renderable (Panel containing Group).
+        """
         # Header Section
         header = Table.grid(expand=True)
         header.add_column(ratio=1)
@@ -105,31 +156,64 @@ class PipelineDashboard:
         
         # Recent Completions Section
         completed_table = Table.grid(expand=True, padding=(0, 1))
+        
+        has_activity = False
+        
         if self.recent_completions:
+            has_activity = True
             for title in self.recent_completions:
-                # Truncate long titles for display
-                display_title = title[:60] + "..." if len(title) > 60 else title
+                display_title = title[:60] + \
+                    "..." if len(title) > 60 else title
                 safe_title = escape(display_title)
-                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
-        else:
-            completed_table.add_row("[dim italic]No videos completed yet...[/]")
+                completed_table.add_row(
+                    f"[green]✓[/green] [dim]{safe_title}[/]")
+        
+        if self.recent_failures:
+            has_activity = True
+            for title in self.recent_failures:
+                display_title = title[:60] + \
+                    "..." if len(title) > 60 else title
+                safe_title = escape(display_title)
+                completed_table.add_row(f"[red]✗[/red] [dim]{safe_title}[/]")
+                
+        if not has_activity:
+            completed_table.add_row(
+                "[dim italic]No videos completed yet...[/]")
 
         # Compose Layout Group
-        body = Group(
+        # Only show worker progress if there are multiple tasks (not single video)
+        # OR if we want to show it anyway. The user requested hiding idle workers.
+        # But for simplicity, let's keep it consistent: always show tasks section, but maybe cleaner.
+        
+        elements = [
             header,
             Rule(style="dim"),
             self.overall_progress,
             Rule(style="dim"),
-            Text("⚡ Active Tasks", style="bold white"),
-            self.worker_progress,
-            Rule(style="dim"),
-            Text("✅ Recent Completions", style="bold white"),
+        ]
+        
+        # Only add active tasks section if there are workers
+        if self.worker_tasks:
+            elements.extend([
+                Text("⚡ Active Tasks", style="bold white"),
+                self.worker_progress,
+                Rule(style="dim"),
+            ])
+            
+        elements.extend([
+            Text("✅ Recent Activity", style="bold white"),
             completed_table
-        )
+        ])
+        
+        # Type casting for Group
+        # Elements are mixed types (Table, Rule, Progress, Text) which satisfy RenderableType
+        # but mypy struggles with the list inference
+        
+        body = Group(*elements)  # type: ignore
         
         return Panel(
             body,
-            title="[bold cyan]yt-study Pipeline[/bold cyan]",
+            title="[bold cyan]🎓 YouTube Study Material Pipeline[/bold cyan]",
             border_style="cyan",
             padding=(0, 1)
         )

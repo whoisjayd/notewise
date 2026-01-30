@@ -1,7 +1,5 @@
 """Prompt templates for chapter-based study material generation."""
 
-from .study_notes import SYSTEM_PROMPT
-
 # Prompt for generating notes from a single chapter
 CHAPTER_GENERATION_PROMPT = """Create an in-depth, detailed study guide for this specific chapter:
 
