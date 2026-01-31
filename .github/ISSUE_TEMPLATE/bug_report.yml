@@ -1,0 +1,33 @@
+name: Bug Report
+description: Create a report to help us improve
+title: "[Bug]: "
+labels: ["type:bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to fill out this bug report!
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction Steps
+      description: How do we reproduce this bug?
+      placeholder: |
+        1. Run '...'
+        2. See error...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: What version of yt-study are you running?
+      placeholder: v0.1.0
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Log Output
+      description: Please paste any relevant logs.
+      render: shell

@@ -2,10 +2,10 @@
 
 import asyncio
 import logging
-from typing import List
 
-from pytubefix import Playlist  # type: ignore
+from pytubefix import Playlist
 from rich.console import Console
+
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -17,7 +17,7 @@ class PlaylistError(Exception):
     pass
 
 
-async def extract_playlist_videos(playlist_id: str) -> List[str]:
+async def extract_playlist_videos(playlist_id: str) -> list[str]:
     """
     Extract all video IDs from a YouTube playlist with retry logic.
 
@@ -64,7 +64,7 @@ async def extract_playlist_videos(playlist_id: str) -> List[str]:
     raise PlaylistError(f"Could not access playlist {playlist_id}: {str(last_error)}")
 
 
-def _extract_sync(playlist_id: str, attempt: int) -> List[str]:
+def _extract_sync(playlist_id: str, attempt: int) -> list[str]:
     """Blocking helper to extract videos using pytubefix."""
     playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
     playlist = Playlist(playlist_url)

@@ -4,7 +4,7 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, List, Set
+
 
 logger = logging.getLogger(__name__)
 
@@ -19,12 +19,12 @@ class Config:
 
     # LLM Configuration
     default_model: str = "gemini/gemini-2.0-flash"
-    gemini_api_key: Optional[str] = None
-    openai_api_key: Optional[str] = None
-    anthropic_api_key: Optional[str] = None
-    groq_api_key: Optional[str] = None
-    xai_api_key: Optional[str] = None
-    mistral_api_key: Optional[str] = None
+    gemini_api_key: str | None = None
+    openai_api_key: str | None = None
+    anthropic_api_key: str | None = None
+    groq_api_key: str | None = None
+    xai_api_key: str | None = None
+    mistral_api_key: str | None = None
 
     # Chunking Configuration
     chunk_size: int = 4000  # tokens
@@ -37,10 +37,10 @@ class Config:
     default_output_dir: Path = Path("./output")
 
     # Transcript Configuration
-    default_languages: List[str] = field(default_factory=lambda: ["en"])
+    default_languages: list[str] = field(default_factory=lambda: ["en"])
 
     # Security: Allowed keys for environment injection
-    ALLOWED_KEYS: Set[str] = field(
+    ALLOWED_KEYS: set[str] = field(
         default_factory=lambda: {
             "GEMINI_API_KEY",
             "OPENAI_API_KEY",
@@ -54,7 +54,7 @@ class Config:
         }
     )
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Load configuration from user config file and environment variables."""
         # First, try to load from user config file
         self._load_from_user_config()
@@ -84,12 +84,13 @@ class Config:
                 self.max_concurrent_videos = int(env_concurrency)
             except ValueError:
                 logger.warning(
-                    f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. Using default {self.max_concurrent_videos}"
+                    f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. "
+                    f"Using default {self.max_concurrent_videos}"
                 )
 
         self._sync_env_vars()
 
-    def _load_from_user_config(self):
+    def _load_from_user_config(self) -> None:
         """Load configuration from user's config file."""
         config_path = Path.home() / ".yt-study" / "config.env"
 
@@ -97,7 +98,7 @@ class Config:
             return
 
         try:
-            with open(config_path, "r", encoding="utf-8") as f:
+            with config_path.open(encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
                     if not line or line.startswith("#"):
@@ -125,7 +126,7 @@ class Config:
             logger.warning(f"Failed to load config file: {e}")
             pass
 
-    def _sync_env_vars(self):
+    def _sync_env_vars(self) -> None:
         """Sync class attributes back to os.environ for libraries that expect them."""
         if self.gemini_api_key:
             os.environ["GEMINI_API_KEY"] = self.gemini_api_key
@@ -140,7 +141,7 @@ class Config:
         if self.mistral_api_key:
             os.environ["MISTRAL_API_KEY"] = self.mistral_api_key
 
-    def get_api_key_name_for_model(self, model: str) -> Optional[str]:
+    def get_api_key_name_for_model(self, model: str) -> str | None:
         """Get the environment variable name for the API key required by a model."""
         model_lower = model.lower()
 
@@ -159,7 +160,7 @@ class Config:
 
         return None
 
-    def get_api_key_for_model(self, model: str) -> Optional[str]:
+    def get_api_key_for_model(self, model: str) -> str | None:
         """Get the appropriate API key value for a given model."""
         var_name = self.get_api_key_name_for_model(model)
         if var_name:

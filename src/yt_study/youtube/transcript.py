@@ -3,19 +3,20 @@
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import List, Optional, Dict
+from typing import Any
 
 from rich.console import Console
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
+    IpBlocked,
     NoTranscriptFound,
+    RequestBlocked,
     TranscriptsDisabled,
     VideoUnavailable,
-    IpBlocked,
-    RequestBlocked,
 )
 
 from .metadata import VideoChapter
+
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -51,7 +52,7 @@ class VideoTranscript:
     """
 
     video_id: str
-    segments: List[TranscriptSegment]
+    segments: list[TranscriptSegment]
     language: str
     language_code: str
     is_generated: bool
@@ -74,7 +75,7 @@ class YouTubeIPBlockError(TranscriptError):
 
 
 async def fetch_transcript(
-    video_id: str, languages: Optional[List[str]] = None
+    video_id: str, languages: list[str] | None = None
 ) -> VideoTranscript:
     """
     Fetch transcript for a YouTube video with language fallback and retry logic.
@@ -104,7 +105,8 @@ async def fetch_transcript(
     for attempt in range(retries):
         try:
             # Wrap blocking YouTubeTranscriptApi calls in a thread
-            # This is critical to prevent blocking the asyncio event loop during concurrency
+            # This is critical to prevent blocking the asyncio event loop
+            # during concurrency
             raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
                 _fetch_sync, video_id, languages
             )
@@ -114,7 +116,8 @@ async def fetch_transcript(
             # Convert to our format
             segments = []
             for segment in raw_transcript:
-                # Handle both dict (standard) and object (FetchedTranscriptSnippet) formats
+                # Handle both dict (standard) and object
+                # (FetchedTranscriptSnippet) formats
                 if isinstance(segment, dict):
                     text = segment.get("text", "")
                     start = segment.get("start", 0.0)
@@ -175,19 +178,19 @@ async def fetch_transcript(
                 await asyncio.sleep(wait_time)
             else:
                 logger.error(f"Failed to fetch transcript for {video_id}: {e}")
-                raise TranscriptError(f"Could not fetch transcript: {str(e)}")
+                raise TranscriptError(f"Could not fetch transcript: {str(e)}") from e
 
     # Should be unreachable due to raise in loop
     raise TranscriptError(f"Failed to fetch transcript for {video_id}")
 
 
-def _fetch_sync(video_id: str, languages: List[str]):
+def _fetch_sync(video_id: str, languages: list[str]) -> tuple[Any, Any, str]:
     """Blocking helper to interact with YouTubeTranscriptApi."""
     ytt_api = YouTubeTranscriptApi()
 
     # List all available transcripts
     # This list call can fail with TranscriptsDisabled or VideoUnavailable
-    transcript_list = ytt_api.list(video_id)  # type: ignore
+    transcript_list = ytt_api.list(video_id)
 
     transcript = None
     found_msg = ""
@@ -245,7 +248,7 @@ def _fetch_sync(video_id: str, languages: List[str]):
             # If we really can't find anything
             if isinstance(e, NoTranscriptFound):
                 raise
-            raise TranscriptError(f"No usable transcript found: {e}")
+            raise TranscriptError(f"No usable transcript found: {e}") from e
 
     # Fetch the actual transcript data
     raw_transcript = transcript.fetch()
@@ -253,8 +256,8 @@ def _fetch_sync(video_id: str, languages: List[str]):
 
 
 def split_transcript_by_chapters(
-    transcript: VideoTranscript, chapters: List[VideoChapter]
-) -> Dict[str, str]:
+    transcript: VideoTranscript, chapters: list[VideoChapter]
+) -> dict[str, str]:
     """
     Split a video transcript by chapters.
 

@@ -1,14 +1,16 @@
 """Tests for LLM provider integration."""
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
-from yt_study.llm.providers import LLMProvider, LLMGenerationError, get_provider
+
+from yt_study.llm.providers import LLMGenerationError, LLMProvider, get_provider
 
 
 class TestLLMProvider:
     """Test LLMProvider class."""
 
-    def test_init_validation(self, mock_config):
+    def test_init_validation(self, mock_config):  # noqa: ARG002
         """Test initialization validates config."""
         # Should verify key existence (via logging or just passing)
         # Config fixture sets dummy keys, so this should pass

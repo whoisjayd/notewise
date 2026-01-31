@@ -2,7 +2,6 @@
 
 import re
 from dataclasses import dataclass
-from typing import Optional
 from urllib.parse import parse_qs, urlparse
 
 
@@ -18,11 +17,11 @@ class ParsedURL:
     """
 
     url_type: str  # 'video' or 'playlist'
-    video_id: Optional[str] = None
-    playlist_id: Optional[str] = None
+    video_id: str | None = None
+    playlist_id: str | None = None
 
 
-def extract_video_id(url: str) -> Optional[str]:
+def extract_video_id(url: str) -> str | None:
     """
     Extract video ID from various YouTube URL formats.
 
@@ -55,7 +54,7 @@ def extract_video_id(url: str) -> Optional[str]:
     return None
 
 
-def extract_playlist_id(url: str) -> Optional[str]:
+def extract_playlist_id(url: str) -> str | None:
     """
     Extract playlist ID from YouTube playlist URL.
 

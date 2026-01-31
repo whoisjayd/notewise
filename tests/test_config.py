@@ -2,6 +2,7 @@
 
 import os
 from unittest.mock import patch
+
 from yt_study.config import Config
 
 
@@ -58,7 +59,8 @@ class TestConfig:
         cfg.gemini_api_key = "gem_key"
         cfg.openai_api_key = "oa_key"
 
-        # We need to sync these to os.environ because get_api_key_for_model reads from os.environ
+        # We need to sync these to os.environ because
+        # get_api_key_for_model reads from os.environ
         with patch.dict(
             os.environ, {"GEMINI_API_KEY": "gem_key", "OPENAI_API_KEY": "oa_key"}
         ):

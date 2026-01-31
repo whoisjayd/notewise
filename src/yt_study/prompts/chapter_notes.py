@@ -1,7 +1,8 @@
 """Prompt templates for chapter-based study material generation."""
 
 # Prompt for generating notes from a single chapter
-CHAPTER_GENERATION_PROMPT = """Create an in-depth, detailed study guide for this specific chapter:
+CHAPTER_GENERATION_PROMPT = """
+Create an in-depth, detailed study guide for this specific chapter:
 
 Chapter Title: {chapter_title}
 
@@ -21,7 +22,9 @@ Requirements:
 
 
 # Prompt for combining chapter notes
-COMBINE_CHAPTER_NOTES_PROMPT = """You have generated study notes for different chapters of the same video. Combine these chapter notes into a single, well-organized study document.
+COMBINE_CHAPTER_NOTES_PROMPT = """
+You have generated study notes for different chapters of the same video.
+Combine these chapter notes into a single, well-organized study document.
 
 Video chapters and notes:
 {chapter_notes}

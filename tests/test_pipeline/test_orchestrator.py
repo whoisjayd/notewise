@@ -1,7 +1,8 @@
 """Tests for pipeline orchestrator."""
 
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from yt_study.pipeline.orchestrator import PipelineOrchestrator, sanitize_filename
 
@@ -124,7 +125,8 @@ class TestPipelineOrchestrator:
             # Verify folder creation
             expected_folder = orchestrator.output_dir / "Long Video"
             assert expected_folder.exists()
-            # Verify individual chapter file created (mock provider returns default text)
+            # Verify individual chapter file created (mock provider returns
+            # default text)
             assert (expected_folder / "01_Ch1.md").exists()
 
     @pytest.mark.asyncio

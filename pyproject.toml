@@ -41,6 +41,8 @@ dev = [
     "pytest-mock>=3.14.0",
     "ruff>=0.14.14",
     "mypy>=1.19.1",
+    "types-requests",
+    "types-setuptools",
 ]
 
 [project.scripts]
@@ -49,6 +51,51 @@ yt-study = "yt_study.cli:app"
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.ruff]
+line-length = 88
+target-version = "py310"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes
+    "B",   # flake8-bugbear
+    "I",   # isort
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "PTH", # flake8-use-pathlib
+    "SIM", # flake8-simplify
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+# Configure import sorting behavior
+known-first-party = ["yt_study"]
+force-single-line = false
+lines-after-imports = 2
+section-order = [
+    "future",
+    "standard-library",
+    "third-party",
+    "first-party",
+    "local-folder"
+]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+check_untyped_defs = true
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -61,7 +108,7 @@ python_functions = "test_*"
 [tool.coverage.run]
 source = ["src/yt_study"]
 omit = ["*/tests/*", "*/__pycache__/*"]
-concurrency = ["thread"]  
+concurrency = ["thread"]
 
 [tool.coverage.report]
 exclude_lines = [

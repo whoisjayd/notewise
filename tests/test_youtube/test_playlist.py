@@ -1,8 +1,10 @@
 """Tests for playlist processing."""
 
-import pytest
 from unittest.mock import MagicMock, PropertyMock
-from yt_study.youtube.playlist import extract_playlist_videos, PlaylistError
+
+import pytest
+
+from yt_study.youtube.playlist import PlaylistError, extract_playlist_videos
 
 
 class TestPlaylistExtraction:

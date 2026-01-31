@@ -1,15 +1,17 @@
 """Tests for the setup wizard."""
 
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
+
 from yt_study.setup_wizard import (
-    load_config,
-    save_config,
-    get_available_models,
-    select_provider,
-    select_model,
     get_api_key,
+    get_available_models,
+    load_config,
     run_setup_wizard,
+    save_config,
+    select_model,
+    select_provider,
 )
+
 
 # Mock config content
 MOCK_CONFIG_CONTENT = """
@@ -25,7 +27,7 @@ class TestConfigIO:
         """Test loading config when file exists."""
         with (
             patch("pathlib.Path.exists", return_value=True),
-            patch("builtins.open", mock_open(read_data=MOCK_CONFIG_CONTENT)),
+            patch("pathlib.Path.open", mock_open(read_data=MOCK_CONFIG_CONTENT)),
         ):
             config = load_config()
             assert config["GEMINI_API_KEY"] == "old_gemini_key"
@@ -42,7 +44,8 @@ class TestConfigIO:
         with (
             patch("pathlib.Path.exists", return_value=True),
             patch(
-                "builtins.open", mock_open(read_data="junk data without equals sign")
+                "pathlib.Path.open",
+                mock_open(read_data="junk data without equals sign"),
             ),
         ):
             config = load_config()
@@ -50,12 +53,15 @@ class TestConfigIO:
 
     def test_save_config(self):
         """Test saving configuration merges with existing."""
+        from pathlib import Path
+
+        mock_path = Path("dummy_path")
         with (
             patch(
                 "yt_study.setup_wizard.load_config", return_value={"OLD_KEY": "old_val"}
             ),
-            patch("builtins.open", mock_open()) as mock_file,
-            patch("yt_study.setup_wizard.get_config_path", return_value="dummy_path"),
+            patch("pathlib.Path.open", mock_open()) as mock_file,
+            patch("yt_study.setup_wizard.get_config_path", return_value=mock_path),
         ):
             new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
             save_config(new_config)
@@ -104,7 +110,8 @@ class TestModelFetching:
             # and return the fallback list.
             models = get_available_models()
 
-            # Verify we got the fallback list (check for 'gemini' and specific structure)
+            # Verify we got the fallback list (check for 'gemini' and
+            # specific structure)
             assert "gemini" in models
             assert len(models["gemini"]) > 0
             # Fallback list has "gemini/gemini-1.5-flash"
@@ -133,7 +140,8 @@ class TestInteractiveFlow:
         """Test provider selection."""
         # Mock Prompt.ask to return '1' (first in list)
         # Note: dict ordering is insertion ordered in modern python.
-        # The function sorts providers_list based on keys in PROVIDER_CONFIG order check.
+        # The function sorts providers_list based on keys in
+        # PROVIDER_CONFIG order check.
         # PROVIDER_CONFIG is defined in module. "gemini" is usually first.
 
         # Let's patch PROVIDER_CONFIG to have deterministic order for test
@@ -154,7 +162,8 @@ class TestInteractiveFlow:
         # Create list of 25 models
         models = {"p1": [f"model-{i}" for i in range(25)]}
 
-        # Sequence of inputs: 'n' (next page), 'p' (prev page), '1' (select first model 'model-0')
+        # Sequence of inputs: 'n' (next page), 'p' (prev page), '1'
+        # (select first model 'model-0')
         inputs = ["n", "p", "1"]
 
         with (
