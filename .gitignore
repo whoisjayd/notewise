@@ -13,3 +13,6 @@ wheels/
 *cache*
 nul
 .coverage
+drafts/
+.omc
+.claude

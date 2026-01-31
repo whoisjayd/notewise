@@ -4,6 +4,7 @@ import pytest
 from unittest.mock import patch, MagicMock
 from yt_study.llm.providers import LLMProvider, LLMGenerationError, get_provider
 
+
 class TestLLMProvider:
     """Test LLMProvider class."""
 
@@ -22,19 +23,19 @@ class TestLLMProvider:
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
             mock_acompletion.return_value = mock_response
-            
+
             provider = LLMProvider("gpt-4o")
             result = await provider.generate("sys", "user")
-            
+
             assert result == "Generated content"
             mock_acompletion.assert_called_once()
-            
+
             # Verify args passed to litellm
             args, kwargs = mock_acompletion.call_args
             assert kwargs["model"] == "gpt-4o"
             assert kwargs["messages"] == [
                 {"role": "system", "content": "sys"},
-                {"role": "user", "content": "user"}
+                {"role": "user", "content": "user"},
             ]
 
     @pytest.mark.asyncio
@@ -43,12 +44,14 @@ class TestLLMProvider:
         with patch("yt_study.llm.providers.acompletion") as mock_acompletion:
             mock_response = MagicMock()
             # LLM returns content wrapped in ```markdown ... ```
-            mock_response.choices[0].message.content = "```markdown\n# Title\nContent\n```"
+            mock_response.choices[
+                0
+            ].message.content = "```markdown\n# Title\nContent\n```"
             mock_acompletion.return_value = mock_response
-            
+
             provider = LLMProvider("gpt-4o")
             result = await provider.generate("sys", "user")
-            
+
             assert result == "# Title\nContent"
 
     @pytest.mark.asyncio
@@ -56,9 +59,9 @@ class TestLLMProvider:
         """Test generation failure raises custom exception."""
         with patch("yt_study.llm.providers.acompletion") as mock_acompletion:
             mock_acompletion.side_effect = Exception("API Error")
-            
+
             provider = LLMProvider("gpt-4o")
-            
+
             with pytest.raises(LLMGenerationError, match="Failed to generate"):
                 await provider.generate("sys", "user")
 

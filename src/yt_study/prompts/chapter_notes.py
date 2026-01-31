@@ -40,15 +40,13 @@ Requirements:
 def get_chapter_prompt(chapter_title: str, transcript_chunk: str) -> str:
     """Generate prompt for a chapter."""
     return CHAPTER_GENERATION_PROMPT.format(
-        chapter_title=chapter_title,
-        transcript_chunk=transcript_chunk
+        chapter_title=chapter_title, transcript_chunk=transcript_chunk
     )
 
 
 def get_combine_chapters_prompt(chapter_notes: dict[str, str]) -> str:
     """Generate prompt for combining chapter notes."""
-    combined = "\n\n".join([
-        f"## {title}\n\n{notes}"
-        for title, notes in chapter_notes.items()
-    ])
+    combined = "\n\n".join(
+        [f"## {title}\n\n{notes}" for title, notes in chapter_notes.items()]
+    )
     return COMBINE_CHAPTER_NOTES_PROMPT.format(chapter_notes=combined)

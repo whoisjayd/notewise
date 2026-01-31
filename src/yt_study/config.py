@@ -13,10 +13,10 @@ logger = logging.getLogger(__name__)
 class Config:
     """
     Global configuration for the application.
-    
+
     Manages loading settings from environment variables and config files.
     """
-    
+
     # LLM Configuration
     default_model: str = "gemini/gemini-2.0-flash"
     gemini_api_key: Optional[str] = None
@@ -25,51 +25,55 @@ class Config:
     groq_api_key: Optional[str] = None
     xai_api_key: Optional[str] = None
     mistral_api_key: Optional[str] = None
-    
-    # Chunking Configuration  
+
+    # Chunking Configuration
     chunk_size: int = 4000  # tokens
     chunk_overlap: int = 200  # tokens
-    
+
     # Concurrency Configuration
     max_concurrent_videos: int = 5
-    
+
     # Output Configuration
     default_output_dir: Path = Path("./output")
-    
+
     # Transcript Configuration
     default_languages: List[str] = field(default_factory=lambda: ["en"])
 
     # Security: Allowed keys for environment injection
-    ALLOWED_KEYS: Set[str] = field(default_factory=lambda: {
-        "GEMINI_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GROQ_API_KEY",
-        "XAI_API_KEY",
-        "MISTRAL_API_KEY",
-        "DEFAULT_MODEL",
-        "OUTPUT_DIR",
-        "MAX_CONCURRENT_VIDEOS",
-    })
-    
+    ALLOWED_KEYS: Set[str] = field(
+        default_factory=lambda: {
+            "GEMINI_API_KEY",
+            "OPENAI_API_KEY",
+            "ANTHROPIC_API_KEY",
+            "GROQ_API_KEY",
+            "XAI_API_KEY",
+            "MISTRAL_API_KEY",
+            "DEFAULT_MODEL",
+            "OUTPUT_DIR",
+            "MAX_CONCURRENT_VIDEOS",
+        }
+    )
+
     def __post_init__(self):
         """Load configuration from user config file and environment variables."""
         # First, try to load from user config file
         self._load_from_user_config()
-        
+
         # Then load/override with environment variables
         self.gemini_api_key = os.getenv("GEMINI_API_KEY") or self.gemini_api_key
         self.openai_api_key = os.getenv("OPENAI_API_KEY") or self.openai_api_key
-        self.anthropic_api_key = os.getenv("ANTHROPIC_API_KEY") or self.anthropic_api_key
+        self.anthropic_api_key = (
+            os.getenv("ANTHROPIC_API_KEY") or self.anthropic_api_key
+        )
         self.groq_api_key = os.getenv("GROQ_API_KEY") or self.groq_api_key
         self.xai_api_key = os.getenv("XAI_API_KEY") or self.xai_api_key
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY") or self.mistral_api_key
-        
+
         # Load default model and output dir from config
         env_model = os.getenv("DEFAULT_MODEL")
         if env_model:
             self.default_model = env_model
-            
+
         env_output = os.getenv("OUTPUT_DIR")
         if env_output:
             self.default_output_dir = Path(env_output)
@@ -79,41 +83,44 @@ class Config:
             try:
                 self.max_concurrent_videos = int(env_concurrency)
             except ValueError:
-                logger.warning(f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. Using default {self.max_concurrent_videos}")
+                logger.warning(
+                    f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. Using default {self.max_concurrent_videos}"
+                )
 
         self._sync_env_vars()
-    
+
     def _load_from_user_config(self):
         """Load configuration from user's config file."""
         config_path = Path.home() / ".yt-study" / "config.env"
-        
+
         if not config_path.exists():
             return
-        
+
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
+            with open(config_path, "r", encoding="utf-8") as f:
                 for line in f:
                     line = line.strip()
-                    if not line or line.startswith('#'):
+                    if not line or line.startswith("#"):
                         continue
-                        
-                    if '=' in line:
-                        key, value = line.split('=', 1)
+
+                    if "=" in line:
+                        key, value = line.split("=", 1)
                         key = key.strip()
                         value = value.strip()
-                        
+
                         # Remove quotes if present
-                        if (value.startswith('"') and value.endswith('"')) or \
-                           (value.startswith("'") and value.endswith("'")):
+                        if (value.startswith('"') and value.endswith('"')) or (
+                            value.startswith("'") and value.endswith("'")
+                        ):
                             value = value[1:-1]
-                        
+
                         if key in self.ALLOWED_KEYS:
                             # Pre-populate env for consistency
                             if key not in os.environ:
                                 os.environ[key] = value
                         else:
                             logger.warning(f"Ignoring unauthorized config key: {key}")
-                            
+
         except Exception as e:
             logger.warning(f"Failed to load config file: {e}")
             pass
@@ -132,11 +139,11 @@ class Config:
             os.environ["XAI_API_KEY"] = self.xai_api_key
         if self.mistral_api_key:
             os.environ["MISTRAL_API_KEY"] = self.mistral_api_key
-    
+
     def get_api_key_name_for_model(self, model: str) -> Optional[str]:
         """Get the environment variable name for the API key required by a model."""
         model_lower = model.lower()
-        
+
         if "gemini" in model_lower or "vertex" in model_lower:
             return "GEMINI_API_KEY"
         elif "gpt" in model_lower or "openai" in model_lower:
@@ -149,7 +156,7 @@ class Config:
             return "XAI_API_KEY"
         elif "mistral" in model_lower:
             return "MISTRAL_API_KEY"
-        
+
         return None
 
     def get_api_key_for_model(self, model: str) -> Optional[str]:

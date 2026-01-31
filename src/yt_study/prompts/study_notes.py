@@ -69,10 +69,9 @@ def get_chunk_prompt(transcript_chunk: str) -> str:
 
 def get_combine_prompt(chunk_notes: list[str]) -> str:
     """Generate prompt for combining chunk notes."""
-    combined = "\n\n---\n\n".join([
-        f"## Segment {i+1}\n\n{note}"
-        for i, note in enumerate(chunk_notes)
-    ])
+    combined = "\n\n---\n\n".join(
+        [f"## Segment {i + 1}\n\n{note}" for i, note in enumerate(chunk_notes)]
+    )
     return COMBINE_CHUNKS_PROMPT.format(chunk_notes=combined)
 
 

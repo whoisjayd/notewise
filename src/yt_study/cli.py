@@ -23,7 +23,7 @@ try:
     log_dir.mkdir(parents=True, exist_ok=True)
 except Exception:
     # Fallback if home is not writable
-    log_dir = Path.cwd() / "logs" 
+    log_dir = Path.cwd() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
 # Use timestamped log file for session isolation
@@ -40,9 +40,11 @@ root_logger.addHandler(console_handler)
 
 # File Handler: Debug+, Detailed format
 try:
-    file_handler = logging.FileHandler(log_file, encoding='utf-8')
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
-    file_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    file_handler.setFormatter(
+        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+    )
     root_logger.addHandler(file_handler)
 except Exception:
     pass
@@ -65,13 +67,16 @@ def check_config_exists() -> bool:
 
 def ensure_setup() -> None:
     """
-    Ensure setup wizard has been run. 
+    Ensure setup wizard has been run.
     Triggers setup if config is missing.
     """
     if not check_config_exists():
-        console.print("\n[yellow]⚠ No configuration found. Running setup wizard...[/yellow]\n")
+        console.print(
+            "\n[yellow]⚠ No configuration found. Running setup wizard...[/yellow]\n"
+        )
         try:
             from .setup_wizard import run_setup_wizard
+
             run_setup_wizard(force=False)
         except ImportError:
             console.print("[red]Critical: Could not import setup wizard.[/red]")
@@ -84,38 +89,41 @@ def process(
         str,
         typer.Argument(
             help="YouTube video or playlist URL, or path to a text file containing URLs.",
-            show_default=False
-        )
+            show_default=False,
+        ),
     ],
     model: Annotated[
         Optional[str],
         typer.Option(
-            "--model", "-m",
-            help="LLM model (overrides config). Example: [green]gpt-4o[/green] or [green]gemini/gemini-2.0-flash[/green]"
-        )
+            "--model",
+            "-m",
+            help="LLM model (overrides config). Example: [green]gpt-4o[/green] or [green]gemini/gemini-2.0-flash[/green]",
+        ),
     ] = None,
     output: Annotated[
         Optional[Path],
         typer.Option(
-            "--output", "-o",
+            "--output",
+            "-o",
             help="Output directory (overrides config).",
             exists=False,
             file_okay=False,
             dir_okay=True,
             resolve_path=True,
-        )
+        ),
     ] = None,
     language: Annotated[
         Optional[List[str]],
         typer.Option(
-            "--language", "-l",
-            help="Preferred transcript languages (e.g., [green]en[/green], [green]hi[/green])."
-        )
+            "--language",
+            "-l",
+            help="Preferred transcript languages (e.g., [green]en[/green], [green]hi[/green]).",
+        ),
     ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
-    
+
     Supports:
     \b
     1. Single Video URL
@@ -130,41 +138,43 @@ def process(
     """
     # Ensure configuration exists
     ensure_setup()
-    
+
     try:
         # Lazy import for faster CLI startup
         from .config import config
         from .pipeline.orchestrator import PipelineOrchestrator
-        
+
         # Use config values as defaults, allow CLI overrides
         selected_model = model or config.default_model
         selected_output = output or config.default_output_dir
         selected_languages = language or config.default_languages
-        
+
         # Create orchestrator
         orchestrator = PipelineOrchestrator(
             model=selected_model,
             output_dir=selected_output,
-            languages=selected_languages
+            languages=selected_languages,
         )
-        
+
         async def run_processing():
             """Determine if input is URL or file and run pipeline."""
             input_path = Path(url)
-            
+
             # Check if input is an existing file (Batch Mode)
             if input_path.exists() and input_path.is_file():
                 # Removed redundant panel print here since dashboard handles UI
                 try:
                     # Robust encoding handling and line splitting
-                    content = input_path.read_text(encoding='utf-8')
+                    content = input_path.read_text(encoding="utf-8")
                     urls = [
-                        line.strip() 
-                        for line in content.splitlines() 
-                        if line.strip() and not line.strip().startswith('#')
+                        line.strip()
+                        for line in content.splitlines()
+                        if line.strip() and not line.strip().startswith("#")
                     ]
                 except Exception as e:
-                    console.print(f"[bold red]❌ Error reading batch file:[/bold red] {e}")
+                    console.print(
+                        f"[bold red]❌ Error reading batch file:[/bold red] {e}"
+                    )
                     return
 
                 if not urls:
@@ -172,7 +182,7 @@ def process(
                     return
 
                 # Removed: console.print(f"[dim]Found {len(urls)} URLs[/dim]\n")
-                
+
                 for i, batch_url in enumerate(urls, 1):
                     # Keep this rule as it separates batch items distinctly
                     console.rule(f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]")
@@ -184,20 +194,20 @@ def process(
             else:
                 # Single URL Mode (Orchestrator handles Video vs Playlist detection)
                 await orchestrator.run(url)
-        
+
         # Run pipeline
         asyncio.run(run_processing())
-        
+
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
         raise typer.Exit(code=1)
     except Exception as e:
         # Import Panel locally
         from rich.panel import Panel
-        console.print(Panel(
-            f"[bold red]Fatal Error[/bold red]\n{str(e)}",
-            border_style="red"
-        ))
+
+        console.print(
+            Panel(f"[bold red]Fatal Error[/bold red]\n{str(e)}", border_style="red")
+        )
         logging.exception("Fatal error in CLI process")
         raise typer.Exit(code=1)
 
@@ -206,7 +216,7 @@ def process(
 def main(ctx: typer.Context):
     """
     [bold cyan]yt-study[/bold cyan]: AI-Powered Video Study Notes Generator.
-    
+
     Convert YouTube content into structured Markdown notes.
     """
     # Only show help if no subcommand is being invoked
@@ -218,16 +228,19 @@ def main(ctx: typer.Context):
 def setup(
     force: Annotated[
         bool,
-        typer.Option("--force", "-f", help="Force reconfiguration even if config exists.")
-    ] = False
+        typer.Option(
+            "--force", "-f", help="Force reconfiguration even if config exists."
+        ),
+    ] = False,
 ):
     """
     Configure API keys and preferences interactively.
-    
+
     Runs a wizard to generate the [bold]~/.yt-study/config.env[/bold] file.
     """
     try:
         from .setup_wizard import run_setup_wizard
+
         run_setup_wizard(force=force)
     except ImportError:
         console.print("[red]Setup wizard module missing.[/red]")
@@ -238,14 +251,18 @@ def setup(
 def config_path():
     """Show the path to the configuration file."""
     config_file = Path.home() / ".yt-study" / "config.env"
-    
+
     if config_file.exists():
         console.print(f"\n[cyan]Configuration file:[/cyan] {config_file}")
         console.print("\n[dim]To edit: Open the file above in a text editor[/dim]")
-        console.print("[dim]To reconfigure: Run[/dim] [cyan]yt-study setup --force[/cyan]\n")
+        console.print(
+            "[dim]To reconfigure: Run[/dim] [cyan]yt-study setup --force[/cyan]\n"
+        )
     else:
         console.print("\n[yellow]No configuration found.[/yellow]")
-        console.print("[dim]Run[/dim] [cyan]yt-study setup[/cyan] [dim]to create one.[/dim]\n")
+        console.print(
+            "[dim]Run[/dim] [cyan]yt-study setup[/cyan] [dim]to create one.[/dim]\n"
+        )
 
 
 @app.command()
@@ -253,10 +270,11 @@ def version():
     """Show version information."""
     try:
         from . import __version__
+
         ver = __version__
     except ImportError:
         ver = "dev"
-        
+
     console.print(f"[cyan]yt-study[/cyan] version [green]{ver}[/green]")
 
 
