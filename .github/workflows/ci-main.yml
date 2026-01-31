@@ -4,8 +4,9 @@ on:
   push:
     branches: [main]
   schedule:
-    - cron: '0 0 * * 0' # Weekly
+    - cron: "0 0 * * 0" # Weekly
   workflow_dispatch:
+  workflow_call:
 
 jobs:
   quality-gate:
