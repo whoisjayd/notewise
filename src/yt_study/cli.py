@@ -3,14 +3,14 @@
 import asyncio
 import logging
 import os
+from datetime import datetime
 from pathlib import Path
-from typing import List, Optional
+from typing import Annotated
 
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
-from typing_extensions import Annotated
-from datetime import datetime
+
 
 # Suppress LiteLLM verbose logging early
 os.environ["LITELLM_LOG"] = "ERROR"
@@ -51,7 +51,10 @@ except Exception:
 
 app = typer.Typer(
     name="yt-study",
-    help="🎓 Convert YouTube videos and playlists into comprehensive study materials using AI.",
+    help=(
+        "🎓 Convert YouTube videos and playlists into comprehensive "
+        "study materials using AI."
+    ),
     add_completion=True,
     rich_markup_mode="rich",
 )
@@ -78,9 +81,9 @@ def ensure_setup() -> None:
             from .setup_wizard import run_setup_wizard
 
             run_setup_wizard(force=False)
-        except ImportError:
+        except ImportError as e:
             console.print("[red]Critical: Could not import setup wizard.[/red]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(code=1) from e
 
 
 @app.command()
@@ -88,20 +91,26 @@ def process(
     url: Annotated[
         str,
         typer.Argument(
-            help="YouTube video or playlist URL, or path to a text file containing URLs.",
+            help=(
+                "YouTube video or playlist URL, or path to a text file "
+                "containing URLs."
+            ),
             show_default=False,
         ),
     ],
     model: Annotated[
-        Optional[str],
+        str | None,
         typer.Option(
             "--model",
             "-m",
-            help="LLM model (overrides config). Example: [green]gpt-4o[/green] or [green]gemini/gemini-2.0-flash[/green]",
+            help=(
+                "LLM model (overrides config). Example: [green]gpt-4o[/green] "
+                "or [green]gemini/gemini-2.0-flash[/green]"
+            ),
         ),
     ] = None,
     output: Annotated[
-        Optional[Path],
+        Path | None,
         typer.Option(
             "--output",
             "-o",
@@ -113,11 +122,14 @@ def process(
         ),
     ] = None,
     language: Annotated[
-        Optional[List[str]],
+        list[str] | None,
         typer.Option(
             "--language",
             "-l",
-            help="Preferred transcript languages (e.g., [green]en[/green], [green]hi[/green]).",
+            help=(
+                "Preferred transcript languages "
+                "(e.g., [green]en[/green], [green]hi[/green])."
+            ),
         ),
     ] = None,
 ) -> None:
@@ -156,7 +168,7 @@ def process(
             languages=selected_languages,
         )
 
-        async def run_processing():
+        async def run_processing() -> None:
             """Determine if input is URL or file and run pipeline."""
             input_path = Path(url)
 
@@ -200,7 +212,7 @@ def process(
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from None
     except Exception as e:
         # Import Panel locally
         from rich.panel import Panel
@@ -209,11 +221,11 @@ def process(
             Panel(f"[bold red]Fatal Error[/bold red]\n{str(e)}", border_style="red")
         )
         logging.exception("Fatal error in CLI process")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.callback(invoke_without_command=True)
-def main(ctx: typer.Context):
+def main(ctx: typer.Context) -> None:
     """
     [bold cyan]yt-study[/bold cyan]: AI-Powered Video Study Notes Generator.
 
@@ -232,7 +244,7 @@ def setup(
             "--force", "-f", help="Force reconfiguration even if config exists."
         ),
     ] = False,
-):
+) -> None:
     """
     Configure API keys and preferences interactively.
 
@@ -242,13 +254,13 @@ def setup(
         from .setup_wizard import run_setup_wizard
 
         run_setup_wizard(force=force)
-    except ImportError:
+    except ImportError as e:
         console.print("[red]Setup wizard module missing.[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(code=1) from e
 
 
 @app.command()
-def config_path():
+def config_path() -> None:
     """Show the path to the configuration file."""
     config_file = Path.home() / ".yt-study" / "config.env"
 
@@ -266,7 +278,7 @@ def config_path():
 
 
 @app.command()
-def version():
+def version() -> None:
     """Show version information."""
     try:
         from . import __version__

@@ -1,0 +1,17 @@
+name: Security Vulnerability
+description: Report a security vulnerability
+title: "[Security]: "
+labels: ["type:security", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Please do not report sensitive security vulnerabilities publicly.**
+        See [SECURITY.md](../../SECURITY.md) for instructions on how to report privately.
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: A broad description of the issue (sanitize sensitive info).
+    validations:
+      required: true

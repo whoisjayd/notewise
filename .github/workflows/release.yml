@@ -9,15 +9,15 @@ permissions:
   contents: read
 
 jobs:
-  # Run CI pipeline first
-  ci:
-    uses: ./.github/workflows/ci.yml
+  # Run Full Validation pipeline first
+  validate:
+    uses: ./.github/workflows/ci-main.yml
     permissions:
       contents: read
 
   build-n-publish:
     name: Build and publish to PyPI
-    needs: ci  # Must pass CI first
+    needs: validate  # Must pass validation first
     runs-on: ubuntu-latest
     permissions:
       contents: write  # For creating GitHub Release
@@ -25,17 +25,13 @@ jobs:
       attestations: write # For artifact attestation
 
     steps:
-    - uses: actions/checkout@v6
-    
-    - name: Install uv
-      uses: astral-sh/setup-uv@v7
+    - uses: actions/checkout@v4
 
-    - name: Set up Python
-      run: uv python install 3.10
+    - name: Install uv
+      uses: astral-sh/setup-uv@v5
 
     - name: Build package
-      run: |
-        uv build
+      run: uv build
 
     - name: Attest Build Artifacts
       uses: actions/attest-build-provenance@v3
@@ -45,7 +41,8 @@ jobs:
     - name: Publish to PyPI
       uses: pypa/gh-action-pypi-publish@release/v1
       with:
-        user: __token__
+        # Use OIDC trusted publishing by default (preferred)
+        # Fallback to token if configured (handled by action logic if env var set)
         password: ${{ secrets.PYPI_API_TOKEN }}
 
     - name: Create GitHub Release

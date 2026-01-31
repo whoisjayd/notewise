@@ -1,15 +1,18 @@
 """Tests for CLI entry point."""
 
+from unittest.mock import AsyncMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock
 from typer.testing import CliRunner
+
 from yt_study.cli import app
+
 
 runner = CliRunner()
 
 
 @pytest.fixture
-def mock_orchestrator():
+def mock_orchestrator():  # noqa: ARG001
     # Patch where PipelineOrchestrator is defined
     with patch("yt_study.pipeline.orchestrator.PipelineOrchestrator") as mock:
         instance = mock.return_value
@@ -18,7 +21,7 @@ def mock_orchestrator():
 
 
 @pytest.fixture
-def mock_config_exists():
+def mock_config_exists():  # noqa: ARG001
     with patch("yt_study.cli.check_config_exists", return_value=True):
         yield
 
@@ -36,12 +39,13 @@ def test_version_import_error():
         # Mocking import error for specific attribute is tricky with sys.modules
         # simpler to patch the import statement inside cli.py if possible,
         # or just assume the fallback logic works if __version__ is missing.
-        # Let's try patching builtins.__import__ specifically for that module? Too complex.
+        # Let's try patching builtins.__import__ specifically for that
+        # module? Too complex.
         # Just manually call the function? No, tested via runner.
         pass
 
 
-def test_config_path_exists(mock_config_exists):
+def test_config_path_exists(mock_config_exists):  # noqa: ARG001
     """Test config-path command when config exists."""
     with patch("pathlib.Path.exists", return_value=True):
         result = runner.invoke(app, ["config-path"])
@@ -57,7 +61,7 @@ def test_config_path_missing():
         assert "No configuration found" in result.stdout
 
 
-def test_process_url_success(mock_config_exists, mock_orchestrator):
+def test_process_url_success(mock_config_exists, mock_orchestrator):  # noqa: ARG001
     """Test processing a simple URL."""
     result = runner.invoke(app, ["process", "https://youtube.com/watch?v=123"])
 
@@ -65,7 +69,7 @@ def test_process_url_success(mock_config_exists, mock_orchestrator):
     mock_orchestrator.run.assert_awaited()
 
 
-def test_process_batch_file(mock_config_exists, mock_orchestrator, tmp_path):
+def test_process_batch_file(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
     """Test processing a batch file."""
     batch_file = tmp_path / "urls.txt"
     batch_file.write_text("https://yt.com/v1\nhttps://yt.com/v2")
@@ -76,7 +80,7 @@ def test_process_batch_file(mock_config_exists, mock_orchestrator, tmp_path):
     assert mock_orchestrator.run.await_count == 2
 
 
-def test_process_batch_file_empty(mock_config_exists, mock_orchestrator, tmp_path):
+def test_process_batch_file_empty(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
     """Test processing an empty batch file."""
     batch_file = tmp_path / "empty.txt"
     batch_file.write_text("")
@@ -88,19 +92,20 @@ def test_process_batch_file_empty(mock_config_exists, mock_orchestrator, tmp_pat
     mock_orchestrator.run.assert_not_awaited()
 
 
-def test_process_batch_file_error(mock_config_exists, mock_orchestrator, tmp_path):
+def test_process_batch_file_error(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
     """Test error reading batch file."""
     batch_file = tmp_path / "restricted.txt"
     batch_file.touch()
 
     # Simulate read error by patching Path.read_text directly
-    with patch("pathlib.Path.read_text", side_effect=IOError("Access denied")):
+    with patch("pathlib.Path.read_text", side_effect=OSError("Access denied")):
         result = runner.invoke(app, ["process", str(batch_file)])
 
     assert (
         result.exit_code == 0
     )  # It returns early, exit code 0 usually unless exception propagates
-    # Wait, cli.py does return, so exit code 0 is correct for Typer unless we raise Exit.
+    # Wait, cli.py does return, so exit code 0 is correct for Typer
+    # unless we raise Exit.
     # Checks stdout
     assert "Error reading batch file" in result.stdout
 
@@ -115,7 +120,7 @@ def test_process_missing_config():
         mock_setup.assert_called_once()
 
 
-def test_process_keyboard_interrupt(mock_config_exists, mock_orchestrator):
+def test_process_keyboard_interrupt(mock_config_exists, mock_orchestrator):  # noqa: ARG001
     """Test handling of KeyboardInterrupt."""
     mock_orchestrator.run.side_effect = KeyboardInterrupt()
 
@@ -128,7 +133,7 @@ def test_process_keyboard_interrupt(mock_config_exists, mock_orchestrator):
     assert "Process interrupted by user" in result.stdout
 
 
-def test_process_general_exception(mock_config_exists, mock_orchestrator):
+def test_process_general_exception(mock_config_exists, mock_orchestrator):  # noqa: ARG001
     """Test handling of general exceptions."""
     mock_orchestrator.run.side_effect = Exception("Boom")
 

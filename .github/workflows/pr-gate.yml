@@ -1,0 +1,41 @@
+name: PR Gate (Strict)
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev
+
+      - name: Enforce Formatting
+        run: uv run ruff format --check .
+
+      - name: Linting
+        run: uv run ruff check .
+
+      - name: Type Checking
+        run: uv run mypy src
+
+      - name: Unit Tests
+        run: uv run python -m pytest

@@ -2,10 +2,11 @@
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, List, Any
+from typing import Any
 
-from pytubefix import YouTube, Playlist  # type: ignore
+from pytubefix import Playlist, YouTube
 from rich.console import Console
+
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -24,10 +25,10 @@ class VideoChapter:
 
     title: str
     start_seconds: int
-    end_seconds: Optional[int] = None
+    end_seconds: int | None = None
 
 
-def get_video_chapters(video_id: str) -> List[VideoChapter]:
+def get_video_chapters(video_id: str) -> list[VideoChapter]:
     """
     Get chapters from a YouTube video.
 
@@ -46,7 +47,7 @@ def get_video_chapters(video_id: str) -> List[VideoChapter]:
         # Access chapters if available
         # pytubefix properties trigger network calls
         if hasattr(yt, "chapters") and yt.chapters:
-            chapters: List[VideoChapter] = []
+            chapters: list[VideoChapter] = []
             chapter_data = yt.chapters
 
             for i, chapter in enumerate(chapter_data):

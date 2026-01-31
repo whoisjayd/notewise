@@ -6,9 +6,9 @@ using Rich's Live display capabilities.
 """
 
 from collections import deque
-from typing import List, Deque
 
 from rich.console import Group, RenderableType
+from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import (
     BarColumn,
@@ -21,7 +21,6 @@ from rich.progress import (
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
-from rich.markup import escape
 
 
 class PipelineDashboard:
@@ -49,8 +48,8 @@ class PipelineDashboard:
         """
         self.playlist_name = playlist_name
         self.model_name = model_name
-        self.recent_completions: Deque[str] = deque(maxlen=3)
-        self.recent_failures: Deque[str] = deque(maxlen=3)
+        self.recent_completions: deque[str] = deque(maxlen=3)
+        self.recent_failures: deque[str] = deque(maxlen=3)
 
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
@@ -78,7 +77,7 @@ class PipelineDashboard:
             expand=True,
         )
 
-        self.worker_tasks: List[TaskID] = []
+        self.worker_tasks: list[TaskID] = []
         for i in range(concurrency):
             prefix = "└──" if i == concurrency - 1 else "├──"
             tid = self.worker_progress.add_task(
@@ -86,7 +85,7 @@ class PipelineDashboard:
             )
             self.worker_tasks.append(tid)
 
-    def update_worker(self, index: int, status: str, style: str = ""):
+    def update_worker(self, index: int, status: str, style: str = "") -> None:
         """
         Update a specific worker's status text.
 
@@ -100,7 +99,7 @@ class PipelineDashboard:
             description = f"[{style}]{status}[/{style}]" if style else status
             self.worker_progress.update(task_id, description=description)
 
-    def add_completion(self, title: str):
+    def add_completion(self, title: str) -> None:
         """
         Register a completed video and advance progress.
 
@@ -110,7 +109,7 @@ class PipelineDashboard:
         self.recent_completions.appendleft(title)
         self.overall_progress.advance(self.overall_task)
 
-    def add_failure(self, title: str):
+    def add_failure(self, title: str) -> None:
         """
         Register a failed video.
 
@@ -118,10 +117,11 @@ class PipelineDashboard:
             title: Title of the failed video.
         """
         self.recent_failures.appendleft(title)
-        # We assume failures still count towards "processing done" so we advance the bar.
+        # We assume failures still count towards "processing done" so we
+        # advance the bar.
         self.overall_progress.advance(self.overall_task)
 
-    def update_overall_status(self, description: str):
+    def update_overall_status(self, description: str) -> None:
         """
         Update the description of the overall progress bar.
 
@@ -142,7 +142,8 @@ class PipelineDashboard:
         header.add_column(ratio=1)
         header.add_column(justify="right")
         header.add_row(
-            f"[bold white]📑 Playlist:[/bold white] [bold yellow]{self.playlist_name}[/]",
+            f"[bold white]📑 Playlist:[/bold white] "
+            f"[bold yellow]{self.playlist_name}[/]",
             f"[dim]🤖 {self.model_name}[/dim]",
         )
 
@@ -169,9 +170,10 @@ class PipelineDashboard:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
 
         # Compose Layout Group
-        # Only show worker progress if there are multiple tasks (not single video)
-        # OR if we want to show it anyway. The user requested hiding idle workers.
-        # But for simplicity, let's keep it consistent: always show tasks section, but maybe cleaner.
+        # Only show worker progress if there are multiple tasks (not single
+        # video). OR if we want to show it anyway. The user requested hiding
+        # idle workers. But for simplicity, let's keep it consistent: always
+        # show tasks section, but maybe cleaner.
 
         elements = [
             header,
@@ -195,7 +197,8 @@ class PipelineDashboard:
         )
 
         # Type casting for Group
-        # Elements are mixed types (Table, Rule, Progress, Text) which satisfy RenderableType
+        # Elements are mixed types (Table, Rule, Progress, Text) which
+        # satisfy RenderableType
         # but mypy struggles with the list inference
 
         body = Group(*elements)  # type: ignore

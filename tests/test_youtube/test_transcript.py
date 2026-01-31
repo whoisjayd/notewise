@@ -1,16 +1,17 @@
 """Tests for transcript fetching and processing."""
 
-import pytest
 from unittest.mock import MagicMock
+
+import pytest
 from youtube_transcript_api._errors import NoTranscriptFound, VideoUnavailable
 
+from yt_study.youtube.metadata import VideoChapter
 from yt_study.youtube.transcript import (
+    TranscriptError,
+    VideoTranscript,
     fetch_transcript,
     split_transcript_by_chapters,
-    VideoTranscript,
-    TranscriptError,
 )
-from yt_study.youtube.metadata import VideoChapter
 
 
 class TestFetchTranscript:

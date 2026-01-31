@@ -4,34 +4,35 @@ import asyncio
 import logging
 import re
 from pathlib import Path
-from typing import List, Optional
 
 from rich.console import Console
-from rich.table import Table
 from rich.live import Live
-from rich.progress import Progress, TaskID
 from rich.panel import Panel
+from rich.progress import Progress, TaskID
+from rich.table import Table
 
 from ..config import config
 from ..llm.generator import StudyMaterialGenerator
 from ..llm.providers import get_provider
-from ..youtube.parser import parse_youtube_url
-from ..youtube.playlist import extract_playlist_videos
-from ..youtube.transcript import (
-    fetch_transcript,
-    split_transcript_by_chapters,
-    YouTubeIPBlockError,
-)
-from ..youtube.metadata import (
-    get_video_title,
-    get_video_duration,
-    get_video_chapters,
-    get_playlist_info,
-)
 from ..prompts.chapter_notes import get_chapter_prompt
 
 # Use main system prompt for chapters too
 from ..prompts.study_notes import SYSTEM_PROMPT as CHAPTER_SYSTEM_PROMPT
+from ..ui.dashboard import PipelineDashboard
+from ..youtube.metadata import (
+    get_playlist_info,
+    get_video_chapters,
+    get_video_duration,
+    get_video_title,
+)
+from ..youtube.parser import parse_youtube_url
+from ..youtube.playlist import extract_playlist_videos
+from ..youtube.transcript import (
+    YouTubeIPBlockError,
+    fetch_transcript,
+    split_transcript_by_chapters,
+)
+
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -66,8 +67,8 @@ class PipelineOrchestrator:
     def __init__(
         self,
         model: str = "gemini/gemini-2.0-flash",
-        output_dir: Optional[Path] = None,
-        languages: Optional[List[str]] = None,
+        output_dir: Path | None = None,
+        languages: list[str] | None = None,
     ):
         """
         Initialize orchestrator.
@@ -104,7 +105,8 @@ class PipelineOrchestrator:
                     f"[yellow]Expected environment variable: {key_name}[/yellow]"
                 )
                 console.print(
-                    "[dim]Please check your .env file or run:[/dim] [cyan]yt-study setup[/cyan]\n"
+                    "[dim]Please check your .env file or run:[/dim] "
+                    "[cyan]yt-study setup[/cyan]\n"
                 )
                 return False
 
@@ -114,9 +116,9 @@ class PipelineOrchestrator:
         self,
         video_id: str,
         output_path: Path,
-        progress: Optional[Progress] = None,
-        task_id: Optional[TaskID] = None,
-        video_title: Optional[str] = None,
+        progress: Progress | None = None,
+        task_id: TaskID | None = None,
+        video_title: str | None = None,
         is_playlist: bool = False,
     ) -> bool:
         """
@@ -136,7 +138,8 @@ class PipelineOrchestrator:
         async with self.semaphore:
             local_task_id = task_id
 
-            # If standalone (not part of worker pool), create a specific bar if requested
+            # If standalone (not part of worker pool), create a specific
+            # bar if requested
             if is_playlist and progress and task_id is None:
                 display_title = (video_title or video_id)[:30]
                 local_task_id = progress.add_task(
@@ -169,13 +172,17 @@ class PipelineOrchestrator:
 
                 # 3. Determine Generation Strategy
                 # Use chapters if video is long (>1h) and chapters exist
-                use_chapters = duration > 3600 and len(chapters) > 0 and not is_playlist
+                use_chapters = (
+                    duration > 3600 and len(chapters) > 0 and not is_playlist
+                )
 
                 if use_chapters:
                     if progress and local_task_id is not None:
                         progress.update(
                             local_task_id,
-                            description=f"[cyan]📖 {title_display}... (Chapters)[/cyan]",
+                            description=(
+                                f"[cyan]📖 {title_display}... (Chapters)[/cyan]"
+                            ),
                         )
                     # else block removed as redundant
 
@@ -190,7 +197,8 @@ class PipelineOrchestrator:
                     output_folder.mkdir(parents=True, exist_ok=True)
 
                     # Generate chapter notes
-                    # Fix: Iterate here and call generator for each chapter to save individually
+                    # Fix: Iterate here and call generator for each chapter
+                    # to save individually
 
                     for i, (chap_title, chap_text) in enumerate(
                         chapter_transcripts.items(), 1
@@ -199,7 +207,10 @@ class PipelineOrchestrator:
                         if progress and local_task_id is not None:
                             progress.update(
                                 local_task_id,
-                                description=f"[cyan]🤖 {title_display}... ({status_msg})[/cyan]",
+                                description=(
+                                    f"[cyan]🤖 {title_display}... "
+                                    f"({status_msg})[/cyan]"
+                                ),
                             )
 
                         notes = await self.generator.provider.generate(
@@ -228,7 +239,9 @@ class PipelineOrchestrator:
                     if progress and local_task_id is not None:
                         progress.update(
                             local_task_id,
-                            description=f"[cyan]🤖 {title_display}... (Generating)[/cyan]",
+                            description=(
+                                f"[cyan]🤖 {title_display}... (Generating)[/cyan]"
+                            ),
                         )
 
                     notes = await self.generator.generate_study_notes(
@@ -254,13 +267,16 @@ class PipelineOrchestrator:
                 logger.error(f"Failed to process {video_id}: {e}")
 
                 err_msg = str(e)
-                if isinstance(e, YouTubeIPBlockError) or "blocking requests" in err_msg:
+                if isinstance(e, YouTubeIPBlockError) or (
+                    "blocking requests" in err_msg
+                ):
                     err_display = "[bold red]IP BLOCKED[/bold red]"
                     console.print(
                         Panel(
                             "[bold red]🚫 YouTube IP Block Detected[/bold red]\n\n"
                             "YouTube is limiting requests from your IP address.\n"
-                            "[yellow]➤ Recommendation:[/yellow] Use a VPN or wait ~1 hour.",
+                            "[yellow]➤ Recommendation:[/yellow] Use a VPN or "
+                            "wait ~1 hour.",
                             border_style="red",
                         )
                     )
@@ -270,7 +286,10 @@ class PipelineOrchestrator:
                 if progress and local_task_id is not None:
                     progress.update(
                         local_task_id,
-                        description=f"[red]✗ {(video_title or video_id)[:20]}... {err_display}[/red]",
+                        description=(
+                            f"[red]✗ {(video_title or video_id)[:20]}... "
+                            f"{err_display}[/red]"
+                        ),
                         visible=True,
                     )
 
@@ -278,7 +297,7 @@ class PipelineOrchestrator:
 
     async def _process_with_dashboard(
         self,
-        video_ids: List[str],
+        video_ids: list[str],
         playlist_name: str = "Queue",
         is_single_video: bool = False,
     ) -> int:
@@ -286,7 +305,8 @@ class PipelineOrchestrator:
         from ..ui.dashboard import PipelineDashboard
 
         # Initialize Dashboard FIRST to capture all output
-        # Adjust concurrency display: if total_videos < max_concurrency, only show needed workers
+        # Adjust concurrency display: if total_videos < max_concurrency,
+        # only show needed workers
         actual_concurrency = min(len(video_ids), config.max_concurrent_videos)
 
         dashboard = PipelineDashboard(
@@ -311,7 +331,7 @@ class PipelineOrchestrator:
 
             title_semaphore = asyncio.Semaphore(TITLE_FETCH_CONCURRENCY)
 
-            async def fetch_title_safe(vid):
+            async def fetch_title_safe(vid: str) -> str:
                 async with title_semaphore:
                     try:
                         return await asyncio.to_thread(get_video_title, vid)
@@ -320,7 +340,7 @@ class PipelineOrchestrator:
 
             # Fetch titles
             titles = await asyncio.gather(*(fetch_title_safe(vid) for vid in video_ids))
-            video_titles = dict(zip(video_ids, titles))
+            video_titles = dict(zip(video_ids, titles, strict=True))
 
             # --- Phase 2: Processing ---
             if not is_single_video:
@@ -338,7 +358,7 @@ class PipelineOrchestrator:
             for vid in video_ids:
                 queue.put_nowait(vid)
 
-            async def worker(worker_idx: int, task_id: TaskID):
+            async def worker(worker_idx: int, task_id: TaskID) -> None:
                 nonlocal success_count
                 while not queue.empty():
                     try:
@@ -401,7 +421,7 @@ class PipelineOrchestrator:
 
         return success_count
 
-    def _print_summary(self, dashboard):
+    def _print_summary(self, dashboard: "PipelineDashboard") -> None:
         """Print a summary table of the run."""
         if not dashboard.recent_completions and not dashboard.recent_failures:
             return
@@ -428,7 +448,9 @@ class PipelineOrchestrator:
         console.print("\n")
         console.print(summary_table)
         console.print(
-            f"\n[bold]Total Completed:[/bold] {dashboard.overall_progress.tasks[0].completed}/{dashboard.overall_progress.tasks[0].total}"
+            f"\n[bold]Total Completed:[/bold] "
+            f"{dashboard.overall_progress.tasks[0].completed}/"
+            f"{dashboard.overall_progress.tasks[0].total}"
         )
         console.print("[dim]Check logs for detailed error reports.[/dim]\n")
 
@@ -474,9 +496,10 @@ class PipelineOrchestrator:
                     )
                     return
 
-                # Fetch basic playlist info first - handled in dashboard now if needed or kept minimal
-                # Actually, playlist title fetching is useful to show BEFORE starting but
-                # _process_with_dashboard fetches metadata anyway.
+                # Fetch basic playlist info first - handled in dashboard now
+                # if needed or kept minimal. Actually, playlist title fetching
+                # is useful to show BEFORE starting but _process_with_dashboard
+                # fetches metadata anyway.
                 # However, to pass playlist_name to dashboard, we might want it.
                 # But waiting for title can be slow.
                 # Let's let the dashboard handle titles for videos.
@@ -486,12 +509,14 @@ class PipelineOrchestrator:
                 # Let's just use ID as name initially or fetch it quickly.
                 # The original code did fetch it.
 
-                # To reduce redundancy, we remove the print statement "Playlist: ..."
+                # To reduce redundancy, we remove the print statement
+                # "Playlist: ..."
                 playlist_title, _ = await asyncio.to_thread(
                     get_playlist_info, parsed.playlist_id
                 )
 
-                # Removed redundant print: console.print(f"[cyan]📑 Playlist:[/cyan] {playlist_title}\n")
+                # Removed redundant print:
+                # console.print(f"[cyan]📑 Playlist:[/cyan] {playlist_title}\n")
 
                 await self.process_playlist(parsed.playlist_id, playlist_title)
 

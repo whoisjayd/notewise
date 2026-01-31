@@ -2,12 +2,13 @@
 
 import logging
 import os
-from typing import Optional, Dict, Any
+from typing import Any
 
 from litellm import acompletion
 from rich.console import Console
 
 from ..config import config
+
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -47,12 +48,13 @@ class LLMProvider:
         if key_name:
             if not os.getenv(key_name):
                 logger.warning(
-                    f"API Key for model '{self.model}' ({key_name}) not found in environment. "
-                    "Generation may fail."
+                    f"API Key for model '{self.model}' ({key_name}) not found "
+                    "in environment. Generation may fail."
                 )
         else:
             # If we can't map the model to a specific key (unknown provider),
-            # we assume the user knows what they are doing or it doesn't need one (e.g. ollama)
+            # we assume the user knows what they are doing or it doesn't need
+            # one (e.g. ollama)
             logger.debug(f"No specific API key mapping found for model: {self.model}")
 
     async def generate(
@@ -60,7 +62,7 @@ class LLMProvider:
         system_prompt: str,
         user_prompt: str,
         temperature: float = 0.7,
-        max_tokens: Optional[int] = None,
+        max_tokens: int | None = None,
     ) -> str:
         """
         Generate text using the configured LLM.
@@ -83,11 +85,12 @@ class LLMProvider:
                 {"role": "user", "content": user_prompt},
             ]
 
-            kwargs: Dict[str, Any] = {
+            kwargs: dict[str, Any] = {
                 "model": self.model,
                 "messages": messages,
                 "temperature": temperature,
-                "num_retries": 3,  # LiteLLM handles exponential backoff for RateLimitError
+                # LiteLLM handles exponential backoff for RateLimitError
+                "num_retries": 3,
             }
 
             if max_tokens:
@@ -123,16 +126,15 @@ class LLMProvider:
         if content.startswith("```"):
             lines = content.splitlines()
             # Need at least fence start, content, fence end
-            if len(lines) >= 2:
+            if len(lines) >= 2 and lines[0].strip().startswith("```"):
                 # If the first line is just a fence (with optional language), remove it
-                if lines[0].strip().startswith("```"):
-                    # Check if the last line is also a fence
-                    if lines[-1].strip() == "```":
-                        return "\n".join(lines[1:-1]).strip()
-                    # Sometimes LLMs stop abruptly or formatting is weird;
-                    # if it starts with fence, we strip the first line.
-                    # If it ends with fence, strip that too.
-                    return "\n".join(lines[1:]).strip().removesuffix("```").strip()
+                # Check if the last line is also a fence
+                if lines[-1].strip() == "```":
+                    return "\n".join(lines[1:-1]).strip()
+                # Sometimes LLMs stop abruptly or formatting is weird;
+                # if it starts with fence, we strip the first line.
+                # If it ends with fence, strip that too.
+                return "\n".join(lines[1:]).strip().removesuffix("```").strip()
 
         return content
 
