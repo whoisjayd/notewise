@@ -172,9 +172,7 @@ class PipelineOrchestrator:
 
                 # 3. Determine Generation Strategy
                 # Use chapters if video is long (>1h) and chapters exist
-                use_chapters = (
-                    duration > 3600 and len(chapters) > 0 and not is_playlist
-                )
+                use_chapters = duration > 3600 and len(chapters) > 0 and not is_playlist
 
                 if use_chapters:
                     if progress and local_task_id is not None:
@@ -208,8 +206,7 @@ class PipelineOrchestrator:
                             progress.update(
                                 local_task_id,
                                 description=(
-                                    f"[cyan]🤖 {title_display}... "
-                                    f"({status_msg})[/cyan]"
+                                    f"[cyan]🤖 {title_display}... ({status_msg})[/cyan]"
                                 ),
                             )
 

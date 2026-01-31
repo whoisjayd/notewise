@@ -92,8 +92,7 @@ def process(
         str,
         typer.Argument(
             help=(
-                "YouTube video or playlist URL, or path to a text file "
-                "containing URLs."
+                "YouTube video or playlist URL, or path to a text file containing URLs."
             ),
             show_default=False,
         ),
