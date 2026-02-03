@@ -183,8 +183,12 @@ def process(
         selected_model = model or config.default_model
         selected_output = output or config.default_output_dir
         selected_languages = language or config.default_languages
-        selected_temperature = temperature or config.temperature
-        selected_max_tokens = max_tokens or config.max_tokens
+        selected_temperature = (
+            temperature if temperature is not None else config.temperature
+        )
+        selected_max_tokens = (
+            max_tokens if max_tokens is not None else config.max_tokens
+        )
 
         # Create orchestrator
         orchestrator = PipelineOrchestrator(

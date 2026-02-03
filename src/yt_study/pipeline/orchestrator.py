@@ -83,8 +83,10 @@ class PipelineOrchestrator:
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
         self.languages = languages or config.default_languages
-        self.temperature = temperature or config.temperature
-        self.max_tokens = max_tokens or config.max_tokens
+        self.temperature = (
+            temperature if temperature is not None else config.temperature
+        )
+        self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
         self.provider = get_provider(model)
         self.generator = StudyMaterialGenerator(
             self.provider,
