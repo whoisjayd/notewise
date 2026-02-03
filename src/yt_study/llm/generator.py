@@ -34,14 +34,23 @@ class StudyMaterialGenerator:
     Handles token counting, text chunking, and recursive summarization/generation.
     """
 
-    def __init__(self, provider: LLMProvider):
+    def __init__(
+        self,
+        provider: LLMProvider,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ):
         """
         Initialize generator.
 
         Args:
             provider: LLM provider instance.
+            temperature: LLM response temperature.
+            max_tokens: Maximum tokens for LLM responses.
         """
         self.provider = provider
+        self.temperature = temperature
+        self.max_tokens = max_tokens
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
@@ -205,6 +214,8 @@ class StudyMaterialGenerator:
             notes = await self.provider.generate(
                 system_prompt=SYSTEM_PROMPT,
                 user_prompt=get_single_pass_prompt(transcript),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
             )
 
             if not progress:
@@ -226,7 +237,10 @@ class StudyMaterialGenerator:
             self._update_status(progress, task_id, video_title, msg)
 
             note = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT, user_prompt=get_chunk_prompt(chunk)
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=get_chunk_prompt(chunk),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
             )
             chunk_notes.append(note)
 
@@ -238,7 +252,10 @@ class StudyMaterialGenerator:
         )
 
         final_notes = await self.provider.generate(
-            system_prompt=SYSTEM_PROMPT, user_prompt=get_combine_prompt(chunk_notes)
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=get_combine_prompt(chunk_notes),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
 
         if not progress:
@@ -293,6 +310,8 @@ class StudyMaterialGenerator:
             notes = await self.provider.generate(
                 system_prompt=CHAPTER_SYSTEM_PROMPT,
                 user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
             )
             chapter_notes[chapter_title] = notes
 
@@ -303,6 +322,8 @@ class StudyMaterialGenerator:
         final_notes = await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
             user_prompt=get_combine_chapters_prompt(chapter_notes),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
 
         if not progress:

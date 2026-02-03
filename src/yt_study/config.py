@@ -26,6 +26,10 @@ class Config:
     xai_api_key: str | None = None
     mistral_api_key: str | None = None
 
+    # LLM Generation Parameters
+    temperature: float = 0.7
+    max_tokens: int | None = None
+
     # Chunking Configuration
     chunk_size: int = 4000  # tokens
     chunk_overlap: int = 200  # tokens
@@ -51,6 +55,8 @@ class Config:
             "DEFAULT_MODEL",
             "OUTPUT_DIR",
             "MAX_CONCURRENT_VIDEOS",
+            "TEMPERATURE",
+            "MAX_TOKENS",
         }
     )
 
@@ -86,6 +92,44 @@ class Config:
                 logger.warning(
                     f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. "
                     f"Using default {self.max_concurrent_videos}"
+                )
+
+        env_temperature = os.getenv("TEMPERATURE")
+        if env_temperature:
+            try:
+                temp_value = float(env_temperature)
+                if not (0 <= temp_value <= 1):
+                    logger.warning(
+                        f"TEMPERATURE out of range [0, 1]: {env_temperature}. "
+                        f"Using default {self.temperature}"
+                    )
+
+                else:
+                    self.temperature = temp_value
+            except ValueError:
+                logger.warning(
+                    f"Invalid TEMPERATURE value: {env_temperature}. "
+                    f"Using default {self.temperature}"
+                )
+
+        env_max_tokens = os.getenv("MAX_TOKENS")
+        if env_max_tokens:
+            try:
+                # self.max_tokens = int(env_max_tokens)
+                max_tokens_value = int(env_max_tokens)
+                if max_tokens_value < 1:
+                    logger.warning(
+                        f"MAX_TOKENS must be >= 1: {env_max_tokens}. "
+                        f"Setting to None (default)"
+                    )
+
+                else:
+                    self.max_tokens = max_tokens_value
+
+            except ValueError:
+                logger.warning(
+                    f"Invalid MAX_TOKENS value: {env_max_tokens}. "
+                    f"Setting to None (default)"
                 )
 
         self._sync_env_vars()
