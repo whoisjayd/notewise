@@ -115,14 +115,10 @@ class Config:
             try:
                 self.max_tokens = int(env_max_tokens)
                 if self.max_tokens < 1:
-                    logger.warning(
-                        f"MAX_TOKENS must be >= 1: {env_max_tokens}. "  
-                    )
-                    
+                    logger.warning(f"MAX_TOKENS must be >= 1: {env_max_tokens}. ")
+
             except ValueError:
-                logger.warning(
-                    f"Invalid MAX_TOKENS value: {env_max_tokens}. "
-                )
+                logger.warning(f"Invalid MAX_TOKENS value: {env_max_tokens}. ")
 
         self._sync_env_vars()
 

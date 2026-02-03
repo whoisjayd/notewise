@@ -223,6 +223,3 @@ def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_orches
     assert call_kwargs["temperature"] == 0.8
     assert call_kwargs["max_tokens"] == 3000
     mock_orchestrator.return_value.run.assert_awaited()
-
-
-

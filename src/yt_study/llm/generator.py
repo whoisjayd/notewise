@@ -34,9 +34,12 @@ class StudyMaterialGenerator:
     Handles token counting, text chunking, and recursive summarization/generation.
     """
 
-    def __init__(self, provider: LLMProvider, 
-                 temperature: float = 0.7,
-                 max_tokens: int | None = None):
+    def __init__(
+        self,
+        provider: LLMProvider,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+    ):
         """
         Initialize generator.
 
@@ -234,7 +237,8 @@ class StudyMaterialGenerator:
             self._update_status(progress, task_id, video_title, msg)
 
             note = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT, user_prompt=get_chunk_prompt(chunk),
+                system_prompt=SYSTEM_PROMPT,
+                user_prompt=get_chunk_prompt(chunk),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
@@ -248,7 +252,8 @@ class StudyMaterialGenerator:
         )
 
         final_notes = await self.provider.generate(
-            system_prompt=SYSTEM_PROMPT, user_prompt=get_combine_prompt(chunk_notes),
+            system_prompt=SYSTEM_PROMPT,
+            user_prompt=get_combine_prompt(chunk_notes),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
