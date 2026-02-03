@@ -14,10 +14,6 @@ from rich.table import Table
 from ..config import config
 from ..llm.generator import StudyMaterialGenerator
 from ..llm.providers import get_provider
-from ..prompts.chapter_notes import get_chapter_prompt
-
-# Use main system prompt for chapters too
-from ..prompts.study_notes import SYSTEM_PROMPT as CHAPTER_SYSTEM_PROMPT
 from ..ui.dashboard import PipelineDashboard
 from ..youtube.metadata import (
     get_playlist_info,
@@ -69,7 +65,7 @@ class PipelineOrchestrator:
         model: str = "gemini/gemini-2.0-flash",
         output_dir: Path | None = None,
         languages: list[str] | None = None,
-        temperature: float = 0.7,
+        temperature: float | None = None,
         max_tokens: int | None = None,
     ):
         """
@@ -79,6 +75,8 @@ class PipelineOrchestrator:
             model: LLM model string.
             output_dir: Output directory path.
             languages: Preferred transcript languages.
+            temperature: LLM temperature (defaults to config.temperature).
+            max_tokens: Max tokens (defaults to config.max_tokens).
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -220,11 +218,9 @@ class PipelineOrchestrator:
                                 ),
                             )
 
-                        notes = await self.generator.provider.generate(
-                            system_prompt=CHAPTER_SYSTEM_PROMPT,
-                            user_prompt=get_chapter_prompt(chap_title, chap_text),
-                            temperature=self.temperature,
-                            max_tokens=self.max_tokens,
+                        notes = await self.generator.generate_single_chapter_notes(
+                            chapter_title=chap_title,
+                            chapter_text=chap_text,
                         )
 
                         # Save individual chapter

@@ -101,7 +101,7 @@ class Config:
                 if not (0 <= temp_value <= 1):
                     logger.warning(
                         f"TEMPERATURE out of range [0, 1]: {env_temperature}. "
-                        f"Using default {self.temperature}"
+                        f"Using default 0.7"
                     )
 
                 else:
@@ -109,7 +109,7 @@ class Config:
             except ValueError:
                 logger.warning(
                     f"Invalid TEMPERATURE value: {env_temperature}. "
-                    f"Using default {self.temperature}"
+                    f"Using default 0.7"
                 )
 
         env_max_tokens = os.getenv("MAX_TOKENS")

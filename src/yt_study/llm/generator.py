@@ -263,6 +263,29 @@ class StudyMaterialGenerator:
 
         return final_notes
 
+    async def generate_single_chapter_notes(
+        self,
+        chapter_title: str,
+        chapter_text: str,
+    ) -> str:
+        """
+        Generate study notes for a single chapter.
+
+        Args:
+            chapter_title: Title of the chapter.
+            chapter_text: Transcript text for the chapter.
+
+        Returns:
+            Study notes for the chapter.
+        """
+        notes = await self.provider.generate(
+            system_prompt=CHAPTER_SYSTEM_PROMPT,
+            user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+        return notes
+
     async def generate_chapter_based_notes(
         self,
         chapter_transcripts: dict[str, str],
