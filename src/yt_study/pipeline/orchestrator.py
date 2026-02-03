@@ -392,7 +392,7 @@ class PipelineOrchestrator:
                             progress=dashboard.worker_progress,
                             task_id=task_id,
                             video_title=title,
-                            is_playlist=True,
+                            is_playlist=not is_single_video,
                         )
 
                         if result:

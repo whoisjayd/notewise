@@ -28,7 +28,7 @@ class TestPipelineOrchestrator:
             # Mock the generator inside
             orch.generator = MagicMock()
             orch.generator.generate_study_notes = AsyncMock(return_value="# Notes")
-            orch.generator.generate_chapter_based_notes = AsyncMock(
+            orch.generator.generate_single_chapter_notes = AsyncMock(
                 return_value="# Chapter Notes"
             )
             orch.generator.provider = (

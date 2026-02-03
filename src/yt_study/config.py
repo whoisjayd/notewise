@@ -108,8 +108,7 @@ class Config:
                     self.temperature = temp_value
             except ValueError:
                 logger.warning(
-                    f"Invalid TEMPERATURE value: {env_temperature}. "
-                    f"Using default 0.7"
+                    f"Invalid TEMPERATURE value: {env_temperature}. Using default 0.7"
                 )
 
         env_max_tokens = os.getenv("MAX_TOKENS")
