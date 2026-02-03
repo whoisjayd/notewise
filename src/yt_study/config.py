@@ -97,13 +97,15 @@ class Config:
         env_temperature = os.getenv("TEMPERATURE")
         if env_temperature:
             try:
-                self.temperature = float(env_temperature)
-                if not (0 <= self.temperature <= 1):
+                temp_value = float(env_temperature)
+                if not (0 <= temp_value <= 1):
                     logger.warning(
                         f"TEMPERATURE out of range [0, 1]: {env_temperature}. "
                         f"Using default {self.temperature}"
                     )
-                    self.temperature = 0.7
+
+                else:
+                    self.temperature = temp_value
             except ValueError:
                 logger.warning(
                     f"Invalid TEMPERATURE value: {env_temperature}. "
@@ -113,13 +115,22 @@ class Config:
         env_max_tokens = os.getenv("MAX_TOKENS")
         if env_max_tokens:
             try:
-                self.max_tokens = int(env_max_tokens)
-                if self.max_tokens < 1:
-                    logger.warning(f"MAX_TOKENS must be >= 1: {env_max_tokens}. ")
-                    self.max_tokens = None
+                # self.max_tokens = int(env_max_tokens)
+                max_tokens_value = int(env_max_tokens)
+                if max_tokens_value < 1:
+                    logger.warning(
+                        f"MAX_TOKENS must be >= 1: {env_max_tokens}. "
+                        f"Setting to None (default)"
+                    )
+
+                else:
+                    self.max_tokens = max_tokens_value
 
             except ValueError:
-                logger.warning(f"Invalid MAX_TOKENS value: {env_max_tokens}. ")
+                logger.warning(
+                    f"Invalid MAX_TOKENS value: {env_max_tokens}. "
+                    f"Setting to None (default)"
+                )
 
         self._sync_env_vars()
 

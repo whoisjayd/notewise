@@ -153,6 +153,7 @@ def process(
                 "Maximum tokens for LLM responses (overrides config). "
                 "Adjust based on model limits. (None for model default)"
             ),
+            min=1,
         ),
     ] = None,
 ) -> None:

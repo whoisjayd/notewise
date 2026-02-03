@@ -67,3 +67,48 @@ class TestConfig:
             assert cfg.get_api_key_for_model("gemini/pro") == "gem_key"
             assert cfg.get_api_key_for_model("gpt-4") == "oa_key"
             assert cfg.get_api_key_for_model("unknown") is None
+
+    def test_temperature_out_of_range(self, monkeypatch):
+        """TEMPERATURE > 1 falls back to 0.7."""
+        monkeypatch.delenv("TEMPERATURE", raising=False)
+        monkeypatch.setenv("TEMPERATURE", "1.5")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.temperature == 0.7
+
+    def test_temperature_negative(self, monkeypatch):
+        """TEMPERATURE < 0 falls back to 0.7."""
+        monkeypatch.delenv("TEMPERATURE", raising=False)
+        monkeypatch.setenv("TEMPERATURE", "-0.5")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.temperature == 0.7
+
+    def test_temperature_invalid_string(self, monkeypatch):
+        """TEMPERATURE='abc' falls back to 0.7."""
+        monkeypatch.delenv("TEMPERATURE", raising=False)
+        monkeypatch.setenv("TEMPERATURE", "abc")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.temperature == 0.7
+
+    def test_max_tokens_negative(self, monkeypatch):
+        """MAX_TOKENS < 1 falls back to None."""
+        monkeypatch.delenv("MAX_TOKENS", raising=False)
+        monkeypatch.setenv("MAX_TOKENS", "-100")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.max_tokens is None
+
+    def test_max_tokens_invalid_string(self, monkeypatch):
+        """MAX_TOKENS='xyz' falls back to None."""
+        monkeypatch.delenv("MAX_TOKENS", raising=False)
+        monkeypatch.setenv("MAX_TOKENS", "xyz")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.max_tokens is None
