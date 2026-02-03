@@ -6,7 +6,7 @@ First off, thanks for taking the time to contribute! 🎉
 
 ## 🛠 Development Setup
 
-We use **[uv](https://github.com/astral-sh/uv)** for fast dependency management.
+We use **[uv](https://github.com/astral-sh/uv)** for fast dependency management and **Makefile** for streamlined development workflows.
 
 ### 1. Clone the repository
 ```bash
@@ -16,7 +16,10 @@ cd yt-study
 
 ### 2. Install dependencies
 ```bash
-# This creates a virtualenv and installs dependencies
+# Install the package with development dependencies
+make install-dev
+
+# Or manually with uv
 uv sync
 ```
 
@@ -35,22 +38,53 @@ source .venv/bin/activate
 
 We strictly enforce type safety and linting. **All checks must pass** before a PR can be merged.
 
-### Run Tests
+### Quick Commands (Using Makefile)
+
 ```bash
 # Run all tests
-uv run pytest
+make test
 
-# Run with coverage report
-uv run pytest --cov=src/yt_study
+# Run tests with coverage report
+make test-cov
+
+# Format code
+make format
+
+# Run linter
+make lint
+
+# Run type checker
+make type-check
+
+# Run all checks (format + lint + type-check)
+make check
+
+# Run everything (format + lint + type-check + test)
+make all
 ```
 
-### Run Linters
+### Manual Commands (Without Makefile)
+
 ```bash
+# Run all tests
+uv run python -m pytest
+
+# Run with coverage report
+uv run python -m pytest --cov=src/yt_study
+
 # Ruff (Linting)
-uv run ruff check src tests
+ruff check src tests --fix
+
+# Ruff (Formatting)
+ruff format src tests
 
 # Mypy (Type Checking)
-uv run mypy src
+mypy src/yt_study
+```
+
+### View All Available Commands
+```bash
+make help
 ```
 
 ---
@@ -59,9 +93,23 @@ uv run mypy src
 
 1.  **Fork** the repository and create your branch from `main`.
 2.  **Add Tests** for any new functionality or bug fix. Coverage should not decrease.
-3.  **Ensure Code Quality**: Run `ruff` and `mypy` locally.
-4.  **Format Code**: We follow standard Python formatting practices.
+3.  **Ensure Code Quality**: Run `make check` locally before pushing.
+4.  **Run Tests**: Ensure `make test` passes with all 99+ tests.
 5.  **Descriptive Commits**: Use clear commit messages (e.g., `feat: add mistral support`, `fix: retry logic for playlists`).
+
+### Before Submitting Your PR
+
+Run this single command to verify everything passes:
+
+```bash
+make all
+```
+
+This will:
+- Format your code
+- Run the linter
+- Type-check your code
+- Run all tests
 
 ### Directory Structure
 

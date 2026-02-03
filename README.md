@@ -92,6 +92,18 @@ We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for deta
 
 We abide by our [Code of Conduct](CODE_OF_CONDUCT.md) and [Governance](GOVERNANCE.md) policies.
 
+### Quick Start for Contributors
+
+```bash
+# Clone and setup
+git clone https://github.com/whoisjayd/yt-study.git
+cd yt-study
+make install-dev
+
+# Run all checks before submitting PR
+make all
+```
+
 ### Entry Points
 - **Good First Issues**: Check our [Issues page](https://github.com/whoisjayd/yt-study/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for beginner-friendly tasks.
 - **Discussions**: Join the conversation in GitHub Discussions.
