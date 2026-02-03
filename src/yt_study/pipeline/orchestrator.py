@@ -69,6 +69,8 @@ class PipelineOrchestrator:
         model: str = "gemini/gemini-2.0-flash",
         output_dir: Path | None = None,
         languages: list[str] | None = None,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
     ):
         """
         Initialize orchestrator.
@@ -81,8 +83,14 @@ class PipelineOrchestrator:
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
         self.languages = languages or config.default_languages
+        self.temperature = temperature or config.temperature
+        self.max_tokens = max_tokens or config.max_tokens
         self.provider = get_provider(model)
-        self.generator = StudyMaterialGenerator(self.provider)
+        self.generator = StudyMaterialGenerator(
+            self.provider,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
 
     def validate_provider(self) -> bool:
@@ -213,6 +221,8 @@ class PipelineOrchestrator:
                         notes = await self.generator.provider.generate(
                             system_prompt=CHAPTER_SYSTEM_PROMPT,
                             user_prompt=get_chapter_prompt(chap_title, chap_text),
+                            temperature=self.temperature,
+                            max_tokens=self.max_tokens,
                         )
 
                         # Save individual chapter

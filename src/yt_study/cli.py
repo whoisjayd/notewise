@@ -131,6 +131,30 @@ def process(
             ),
         ),
     ] = None,
+    temperature: Annotated[
+        float | None,
+        typer.Option(
+            "--temperature",
+            "-t",
+            help=(
+                "LLM response temperature (overrides config). "
+                "Range: 0.0 to 1.0 (default = 0.7)"
+            ),
+            min=0.0,
+            max=1.0,
+        ),
+    ] = None,
+    max_tokens: Annotated[
+        int | None,
+        typer.Option(
+            "--max-tokens",
+            "-k",
+            help=(
+                "Maximum tokens for LLM responses (overrides config). "
+                "Adjust based on model limits. (None for model default)"
+            ),
+        ),
+    ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -159,12 +183,16 @@ def process(
         selected_model = model or config.default_model
         selected_output = output or config.default_output_dir
         selected_languages = language or config.default_languages
+        selected_temperature = temperature or config.temperature
+        selected_max_tokens = max_tokens or config.max_tokens
 
         # Create orchestrator
         orchestrator = PipelineOrchestrator(
             model=selected_model,
             output_dir=selected_output,
             languages=selected_languages,
+            temperature=selected_temperature,
+            max_tokens=selected_max_tokens,
         )
 
         async def run_processing() -> None:

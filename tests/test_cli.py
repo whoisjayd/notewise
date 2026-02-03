@@ -17,7 +17,7 @@ def mock_orchestrator():  # noqa: ARG001
     with patch("yt_study.pipeline.orchestrator.PipelineOrchestrator") as mock:
         instance = mock.return_value
         instance.run = AsyncMock()
-        yield instance
+        yield mock
 
 
 @pytest.fixture
@@ -66,7 +66,7 @@ def test_process_url_success(mock_config_exists, mock_orchestrator):  # noqa: AR
     result = runner.invoke(app, ["process", "https://youtube.com/watch?v=123"])
 
     assert result.exit_code == 0
-    mock_orchestrator.run.assert_awaited()
+    mock_orchestrator.return_value.run.assert_awaited()
 
 
 def test_process_batch_file(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
@@ -77,7 +77,7 @@ def test_process_batch_file(mock_config_exists, mock_orchestrator, tmp_path):  #
     result = runner.invoke(app, ["process", str(batch_file)])
 
     assert result.exit_code == 0
-    assert mock_orchestrator.run.await_count == 2
+    assert mock_orchestrator.return_value.run.await_count == 2
 
 
 def test_process_batch_file_empty(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
@@ -89,7 +89,7 @@ def test_process_batch_file_empty(mock_config_exists, mock_orchestrator, tmp_pat
 
     assert result.exit_code == 0
     assert "Batch file is empty" in result.stdout
-    mock_orchestrator.run.assert_not_awaited()
+    mock_orchestrator.return_value.run.assert_not_awaited()
 
 
 def test_process_batch_file_error(mock_config_exists, mock_orchestrator, tmp_path):  # noqa: ARG001
@@ -122,7 +122,7 @@ def test_process_missing_config():
 
 def test_process_keyboard_interrupt(mock_config_exists, mock_orchestrator):  # noqa: ARG001
     """Test handling of KeyboardInterrupt."""
-    mock_orchestrator.run.side_effect = KeyboardInterrupt()
+    mock_orchestrator.return_value.run.side_effect = KeyboardInterrupt()
 
     result = runner.invoke(app, ["process", "url"])
 
@@ -135,7 +135,7 @@ def test_process_keyboard_interrupt(mock_config_exists, mock_orchestrator):  # n
 
 def test_process_general_exception(mock_config_exists, mock_orchestrator):  # noqa: ARG001
     """Test handling of general exceptions."""
-    mock_orchestrator.run.side_effect = Exception("Boom")
+    mock_orchestrator.return_value.run.side_effect = Exception("Boom")
 
     result = runner.invoke(app, ["process", "url"])
 
@@ -176,3 +176,53 @@ def test_callback_help():
     result = runner.invoke(app)
     assert result.exit_code == 0
     assert "Usage" in result.stdout
+
+
+def test_process_with_temperature_flag(mock_config_exists, mock_orchestrator):  # noqa: ARG001
+    """Test processing with custom temperature parameter."""
+    result = runner.invoke(
+        app,
+        ["process", "https://youtube.com/watch?v=123", "--temperature", "0.5"],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_orchestrator.call_args[1]
+    assert call_kwargs["temperature"] == 0.5
+    mock_orchestrator.return_value.run.assert_awaited()
+
+
+def test_process_with_max_tokens_flag(mock_config_exists, mock_orchestrator):  # noqa: ARG001
+    """Test processing with custom max_tokens parameter."""
+    result = runner.invoke(
+        app,
+        ["process", "https://youtube.com/watch?v=123", "--max-tokens", "2000"],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_orchestrator.call_args[1]
+    assert call_kwargs["max_tokens"] == 2000
+    mock_orchestrator.return_value.run.assert_awaited()
+
+
+def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_orchestrator):  # noqa: ARG001
+    """Test processing with both temperature and max_tokens parameters."""
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            "https://youtube.com/watch?v=123",
+            "--temperature",
+            "0.8",
+            "--max-tokens",
+            "3000",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_orchestrator.call_args[1]
+    assert call_kwargs["temperature"] == 0.8
+    assert call_kwargs["max_tokens"] == 3000
+    mock_orchestrator.return_value.run.assert_awaited()
+
+
+
