@@ -1,27 +1,34 @@
 # Area Labels
 area:cli:
-- src/yt_study/cli.py
-- src/yt_study/ui/**
+	changed-files:
+		- src/yt_study/cli.py
+		- src/yt_study/ui/**
 
 area:core:
-- src/yt_study/pipeline/**
-- src/yt_study/config.py
+	changed-files:
+		- src/yt_study/pipeline/**
+		- src/yt_study/config.py
 
 area:llm:
-- src/yt_study/llm/**
-- src/yt_study/prompts/**
+	changed-files:
+		- src/yt_study/llm/**
+		- src/yt_study/prompts/**
 
 area:youtube:
-- src/yt_study/youtube/**
+	changed-files:
+		- src/yt_study/youtube/**
 
 area:docs:
-- docs/**
-- wiki/**
-- '*.md'
+	changed-files:
+		- docs/**
+		- wiki/**
+		- '*.md'
 
 area:tests:
-- tests/**
+	changed-files:
+		- tests/**
 
 area:devops:
-- .github/**
-- Dockerfile
+	changed-files:
+		- .github/**
+		- Dockerfile
