@@ -325,17 +325,47 @@ class StudyMaterialGenerator:
             msg = f"Chapter {i}/{total_chapters}: {chapter_title[:20]}..."
             self._update_status(progress, task_id, video_title, msg)
 
-            # If a chapter is huge, we might need recursive chunking here too.
-            # For now, we assume chapters are reasonably sized or the model
-            # can handle ~100k context. Future improvement: Check token
-            # count of chapter_text and recurse if needed.
+            # If a chapter is huge, perform recursive chunking
+            token_count = self._count_tokens(chapter_text)
+            if token_count > config.chunk_size:
+                logger.info(
+                    f"Chapter '{chapter_title}' too long ({token_count:,} tokens), chunking..."
+                )
+                chunks = self._chunk_transcript(chapter_text)
+                chunk_notes = []
 
-            notes = await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
-            )
+                for j, chunk in enumerate(chunks, 1):
+                    chunk_msg = f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
+                    self._update_status(progress, task_id, video_title, chunk_msg)
+
+                    note = await self.provider.generate(
+                        system_prompt=CHAPTER_SYSTEM_PROMPT,
+                        user_prompt=get_chapter_prompt(chapter_title, chunk),
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                    )
+                    chunk_notes.append(note)
+
+                # Combine chunks of this specific chapter
+                self._update_status(
+                    progress,
+                    task_id,
+                    video_title,
+                    f"Combining chunks for chapter: {chapter_title[:20]}...",
+                )
+                notes = await self.provider.generate(
+                    system_prompt=CHAPTER_SYSTEM_PROMPT,
+                    user_prompt=get_combine_prompt(chunk_notes),
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+            else:
+                notes = await self.provider.generate(
+                    system_prompt=CHAPTER_SYSTEM_PROMPT,
+                    user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
             chapter_notes[chapter_title] = notes
 
         self._update_status(

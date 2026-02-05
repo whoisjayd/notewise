@@ -114,11 +114,24 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_generate_chapter_notes(self, generator):
-        """Test generating chapter-based notes."""
-        chapters = {"Intro": "Intro text", "Body": "Body text"}
+    async def test_generate_chapter_notes_oversized(self, generator):
+        """Test generating chapter-based notes with an oversized chapter."""
+        chapters = {"Oversized": "A" * 1000}
+        orig_size = config.chunk_size
+        config.chunk_size = 100 # Force chunking
 
-        await generator.generate_chapter_based_notes(chapters)
+        try:
+            with patch("yt_study.llm.generator.token_counter") as mock_tc:
+                # Mock token counter to return a high value
+                mock_tc.return_value = 500
 
-        # Calls: 1 per chapter (2) + 1 combine = 3
-        assert generator.provider.generate.call_count == 3
+                # We need to mock _chunk_transcript to return multiple chunks
+                with patch.object(generator, "_chunk_transcript", return_value=["Part 1", "Part 2"]):
+                    await generator.generate_chapter_based_notes(chapters)
+
+                    # Calls for "Oversized" chapter:
+                    # 1 per chunk (2) + 1 combine for this chapter = 3
+                    # + 1 final combine for all chapters = 4 total calls
+                    assert generator.provider.generate.call_count == 4
+        finally:
+            config.chunk_size = orig_size
