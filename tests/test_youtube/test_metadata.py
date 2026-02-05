@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, PropertyMock
 
-from yt_study.youtube.metadata import (
+from yt_study.core.youtube.metadata import (
     get_playlist_info,
     get_video_chapters,
     get_video_duration,

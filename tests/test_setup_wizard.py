@@ -1,8 +1,12 @@
 """Tests for the setup wizard."""
 
+import json
 from unittest.mock import mock_open, patch
 
 from yt_study.setup_wizard import (
+    _get_cache_path,
+    _load_models_from_cache,
+    _save_models_to_cache,
     get_api_key,
     get_available_models,
     load_config,
@@ -105,7 +109,11 @@ class TestModelFetching:
     def test_get_available_models_failure(self):
         """Test fallback when litellm fails."""
         # Simulate import error or exception accessing model_list
-        with patch.dict("sys.modules", {"litellm": None}):
+        # Also ensure cache is empty so fallback is triggered
+        with (
+            patch("yt_study.setup_wizard._load_models_from_cache", return_value=None),
+            patch.dict("sys.modules", {"litellm": None}),
+        ):
             # We expect the function to catch the ImportError/ModuleNotFoundError
             # and return the fallback list.
             models = get_available_models()
@@ -131,6 +139,68 @@ class TestModelFetching:
 
         # Let's skip complex import mocking and assume fallback works if we can't fetch.
         pass
+
+
+class TestModelCaching:
+    """Test model list caching logic."""
+
+    def test_get_cache_path(self):
+        """Test cache path generation."""
+        path = _get_cache_path()
+        assert "cache" in str(path)
+        assert "models.json" in str(path)
+
+    def test_load_models_from_cache_not_exists(self):
+        """Test loading from non-existent cache."""
+        with patch("pathlib.Path.exists", return_value=False):
+            assert _load_models_from_cache() is None
+
+    def test_load_models_from_cache_stale(self):
+        """Test loading from stale cache (version mismatch)."""
+        cache_data = {"version": "0.0.0", "models": {"gemini": ["model1"]}}
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.open", mock_open(read_data=json.dumps(cache_data))),
+            patch("yt_study.setup_wizard.__version__", "0.1.0"),
+        ):
+            assert _load_models_from_cache() is None
+
+    def test_load_models_from_cache_fresh(self):
+        """Test loading from fresh cache (version matches)."""
+        version = "0.1.0"
+        models = {"gemini": ["model1"]}
+        cache_data = {"version": version, "models": models}
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.open", mock_open(read_data=json.dumps(cache_data))),
+            patch("yt_study.setup_wizard.__version__", version),
+        ):
+            assert _load_models_from_cache() == models
+
+    def test_save_models_to_cache(self):
+        """Test saving models to cache."""
+        models = {"gemini": ["model1"]}
+        with patch("pathlib.Path.open", mock_open()) as mock_file:
+            _save_models_to_cache(models)
+            mock_file().write.assert_called()
+            # Verify json.dump was called (it calls write)
+            written = "".join(call.args[0] for call in mock_file().write.call_args_list)
+            assert "gemini" in written
+            assert "model1" in written
+
+    def test_get_available_models_uses_cache(self):
+        """Test that get_available_models uses cache if available."""
+        cache_data = {"cached": ["model"]}
+        with (
+            patch(
+                "yt_study.setup_wizard._load_models_from_cache", return_value=cache_data
+            ),
+            patch("litellm.model_list", create=True) as mock_model_list,
+        ):
+            result = get_available_models()
+            assert result == cache_data
+            # model_list should not be accessed if cache hits
+            assert not mock_model_list.called
 
 
 class TestInteractiveFlow:

@@ -115,9 +115,12 @@ This will:
 
 - `src/yt_study/`: Source code
     - `cli.py`: Entry point (Typer app)
-    - `pipeline/`: Core orchestration logic
-    - `llm/`: LLM integration (LiteLLM wrapper)
-    - `youtube/`: YouTube data extraction logic
+    - `pipeline/`: High-level orchestration logic
+    - `core/`: Foundational modules
+        - `llm/`: LLM integration (LiteLLM wrapper)
+        - `youtube/`: YouTube data extraction logic
+        - `events.py`: Event-driven communication
+        - `telemetry.py`: Usage and error tracking
     - `ui/`: Rich TUI components
 - `tests/`: Test suite (mirrors source structure)
 

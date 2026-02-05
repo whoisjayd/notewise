@@ -42,6 +42,7 @@ class TestPipelineOrchestrator:
             orch.generator.provider = (
                 mock_llm_provider  # needed for direct calls in chapter loop
             )
+            orch.generator.event_emitter = MagicMock()
             return orch
 
     def test_validate_provider_missing_key(self, orchestrator, monkeypatch):
@@ -128,7 +129,9 @@ class TestPipelineOrchestrator:
             video_folder = orchestrator.output_dir / video_slug
             output_path = video_folder / f"{video_slug}.md"
 
-            success = await orchestrator.process_video(video_id, output_path, video_title=video_title)
+            success = await orchestrator.process_video(
+                video_id, output_path, video_title=video_title
+            )
 
             assert success is True
             # Verify folder creation

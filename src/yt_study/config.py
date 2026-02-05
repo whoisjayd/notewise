@@ -1,12 +1,13 @@
 """Configuration management for yt-study."""
 
-import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+import structlog
 
-logger = logging.getLogger(__name__)
+
+logger = structlog.get_logger(__name__)
 
 
 @dataclass

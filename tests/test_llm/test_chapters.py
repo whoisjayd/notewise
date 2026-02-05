@@ -5,8 +5,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yt_study.llm.chapters import SyntheticChapterEngine
-from yt_study.youtube.transcript import TranscriptSegment, VideoTranscript
+from yt_study.core.llm.chapters import SyntheticChapterEngine
+from yt_study.core.youtube.transcript import TranscriptSegment, VideoTranscript
 
 
 class TestSyntheticChapterEngine:
@@ -37,10 +37,12 @@ class TestSyntheticChapterEngine:
     @pytest.mark.asyncio
     async def test_generate_chapters_success(self, engine, mock_provider, transcript):
         """Test successful chapter generation and parsing."""
-        mock_response = json.dumps([
-            {"timestamp": "00:00", "title": "Intro"},
-            {"timestamp": "01:00", "title": "Main Topic"}
-        ])
+        mock_response = json.dumps(
+            [
+                {"timestamp": "00:00", "title": "Intro"},
+                {"timestamp": "01:00", "title": "Main Topic"},
+            ]
+        )
         mock_provider.generate = AsyncMock(return_value=mock_response)
 
         chapters = await engine.generate_chapters(transcript)
@@ -54,9 +56,14 @@ class TestSyntheticChapterEngine:
         assert chapters[1].end_seconds is None
 
     @pytest.mark.asyncio
-    async def test_generate_chapters_with_markdown(self, engine, mock_provider, transcript):
+    async def test_generate_chapters_with_markdown(
+        self, engine, mock_provider, transcript
+    ):
         """Test parsing when LLM wraps JSON in markdown blocks."""
-        mock_response = "Here is the JSON:\n```json\n[\n  {\"timestamp\": \"00:00\", \"title\": \"Intro\"}\n]\n```"
+        mock_response = (
+            "Here is the JSON:\n```json\n"
+            '[\n  {"timestamp": "00:00", "title": "Intro"}\n]\n```'
+        )
         mock_provider.generate = AsyncMock(return_value=mock_response)
 
         chapters = await engine.generate_chapters(transcript)
@@ -66,11 +73,11 @@ class TestSyntheticChapterEngine:
         assert chapters[0].start_seconds == 0
 
     @pytest.mark.asyncio
-    async def test_generate_chapters_missing_start(self, engine, mock_provider, transcript):
+    async def test_generate_chapters_missing_start(
+        self, engine, mock_provider, transcript
+    ):
         """Test that an 'Introduction' is added if first chapter doesn't start at 0."""
-        mock_response = json.dumps([
-            {"timestamp": "02:00", "title": "Late Start"}
-        ])
+        mock_response = json.dumps([{"timestamp": "02:00", "title": "Late Start"}])
         mock_provider.generate = AsyncMock(return_value=mock_response)
 
         chapters = await engine.generate_chapters(transcript)

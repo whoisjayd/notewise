@@ -1,18 +1,21 @@
 """Synthetic chapter engine to identify sections in unchaptered videos."""
 
 import json
-import logging
 import re
 from typing import TYPE_CHECKING
 
-from ..prompts.chapters import SYSTEM_PROMPT, get_chapter_generation_prompt
+import structlog
+
+from ...prompts.chapters import SYSTEM_PROMPT, get_chapter_generation_prompt
 from ..youtube.metadata import VideoChapter
 
-if TYPE_CHECKING:
-    from ..llm.providers import LLMProvider
-    from ..youtube.transcript import VideoTranscript
 
-logger = logging.getLogger(__name__)
+if TYPE_CHECKING:
+    from ..youtube.transcript import VideoTranscript
+    from .providers import LLMProvider
+
+logger = structlog.get_logger(__name__)
+
 
 class SyntheticChapterEngine:
     """
@@ -34,11 +37,13 @@ class SyntheticChapterEngine:
             pass
         return 0
 
-    async def generate_chapters(self, transcript: "VideoTranscript") -> list[VideoChapter]:
+    async def generate_chapters(
+        self, transcript: "VideoTranscript"
+    ) -> list[VideoChapter]:
         """
         Analyze transcript and generate synthetic chapters.
         """
-        logger.info(f"Generating synthetic chapters for video {transcript.video_id}")
+        logger.info("Generating synthetic chapters", video_id=transcript.video_id)
 
         # We use timestamped text to help LLM identify boundaries
         text = transcript.to_timestamped_text()
@@ -50,7 +55,7 @@ class SyntheticChapterEngine:
         response = await self.provider.generate(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=prompt,
-            temperature=0.1, # Low temperature for structural consistency
+            temperature=0.1,  # Low temperature for structural consistency
         )
 
         try:
@@ -63,14 +68,11 @@ class SyntheticChapterEngine:
 
             chapters = []
             for i, entry in enumerate(data):
-                title = entry.get("title", f"Section {i+1}")
+                title = entry.get("title", f"Section {i + 1}")
                 start_ts = entry.get("timestamp", "00:00")
                 start_seconds = self._parse_timestamp(start_ts)
 
-                chapters.append(VideoChapter(
-                    title=title,
-                    start_seconds=start_seconds
-                ))
+                chapters.append(VideoChapter(title=title, start_seconds=start_seconds))
 
             if not chapters:
                 return []
@@ -84,10 +86,10 @@ class SyntheticChapterEngine:
 
             # Calculate end times
             for i in range(len(chapters) - 1):
-                chapters[i].end_seconds = chapters[i+1].start_seconds
+                chapters[i].end_seconds = chapters[i + 1].start_seconds
 
             return chapters
 
         except (json.JSONDecodeError, Exception) as e:
-            logger.error(f"Failed to parse synthetic chapters: {e}")
+            logger.error("Failed to parse synthetic chapters", error=str(e))
             return []

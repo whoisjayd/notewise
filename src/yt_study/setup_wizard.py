@@ -1,15 +1,20 @@
 """Configuration wizard for yt-study."""
 
+import json
 from pathlib import Path
 from typing import Any
 
+import structlog
 from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from yt_study import __version__
+
 
 console = Console()
+logger = structlog.get_logger(__name__)
 
 
 # API key configuration for different providers
@@ -72,6 +77,51 @@ def get_config_path() -> Path:
     return config_dir / "config.env"
 
 
+def _get_cache_path() -> Path:
+    """Get path to models cache file."""
+    return Path.home() / ".yt-study" / "cache" / "models.json"
+
+
+def _load_models_from_cache() -> dict[str, list[str]] | None:
+    """Load models from cache if version matches."""
+    try:
+        cache_path = _get_cache_path()
+        if not cache_path.exists():
+            return None
+
+        with cache_path.open("r", encoding="utf-8") as f:
+            cache_data = json.load(f)
+
+        # Check if version matches
+        if cache_data.get("version") != __version__:
+            logger.debug(
+                "Cache version mismatch",
+                cached_version=cache_data.get("version"),
+                current_version=__version__,
+            )
+            return None
+
+        models_data = cache_data.get("models")
+        if isinstance(models_data, dict):
+            return models_data
+        return None
+    except Exception as e:
+        logger.debug("Failed to load models cache", error=str(e))
+        return None
+
+
+def _save_models_to_cache(models: dict[str, list[str]]) -> None:
+    """Save models to cache with current version."""
+    try:
+        cache_path = _get_cache_path()
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        cache_data = {"version": __version__, "models": models}
+        with cache_path.open("w", encoding="utf-8") as f:
+            json.dump(cache_data, f, indent=2)
+    except Exception as e:
+        logger.debug("Failed to save models cache", error=str(e))
+
+
 def load_config() -> dict[str, str]:
     """Load existing configuration."""
     config_path = get_config_path()
@@ -127,6 +177,11 @@ def save_config(new_config: dict[str, str]) -> None:
 
 def get_available_models() -> dict[str, list[str]]:
     """Fetch available models from LiteLLM."""
+    # Try loading from cache first
+    cached_models = _load_models_from_cache()
+    if cached_models:
+        return cached_models
+
     try:
         # Lazy import to avoid slow startup if not running setup
         from litellm import model_list
@@ -152,6 +207,10 @@ def get_available_models() -> dict[str, list[str]]:
         # Sort models within each provider
         for provider in provider_models:
             provider_models[provider] = sorted(set(provider_models[provider]))
+
+        # Save to cache
+        if provider_models:
+            _save_models_to_cache(provider_models)
 
         return provider_models
 

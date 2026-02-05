@@ -1,9 +1,9 @@
 """Main pipeline orchestrator with concurrent processing."""
 
 import asyncio
-import logging
 from pathlib import Path
 
+import structlog
 from aiolimiter import AsyncLimiter
 from rich.console import Console
 from rich.live import Live
@@ -12,28 +12,29 @@ from rich.progress import Progress, TaskID
 from rich.table import Table
 
 from ..config import config
-from ..llm.chapters import SyntheticChapterEngine
-from ..llm.generator import StudyMaterialGenerator
-from ..llm.providers import get_provider
-from ..ui.dashboard import PipelineDashboard
-from ..utils import get_video_slug, sanitize_filename
-from ..youtube.metadata import (
+from ..core.events import Event, EventEmitter, EventType
+from ..core.llm.chapters import SyntheticChapterEngine
+from ..core.llm.generator import StudyMaterialGenerator
+from ..core.llm.providers import get_provider
+from ..core.youtube.metadata import (
     get_playlist_info,
     get_video_chapters,
     get_video_duration,
     get_video_title,
 )
-from ..youtube.parser import parse_youtube_url
-from ..youtube.playlist import extract_playlist_videos
-from ..youtube.transcript import (
+from ..core.youtube.parser import parse_youtube_url
+from ..core.youtube.playlist import extract_playlist_videos
+from ..core.youtube.transcript import (
     YouTubeIPBlockError,
     fetch_transcript,
     split_transcript_by_chapters,
 )
+from ..ui.dashboard import PipelineDashboard
+from ..utils import get_video_slug, sanitize_filename
 
 
 console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PipelineOrchestrator:
@@ -149,15 +150,42 @@ class PipelineOrchestrator:
         Returns:
             True on success, False on failure.
         """
+        # Create a temporary event emitter to bridge the decoupled generator
+        # back to the Rich UI for now.
+        event_emitter = EventEmitter()
+
+        def handle_event(event: Event) -> None:
+            if (
+                event.type == EventType.PROGRESS_UPDATE
+                and progress
+                and local_task_id is not None
+            ):
+                msg = event.data.get("message", "")
+                v_title = event.data.get("video_title", video_id)
+                short_title = (v_title[:20] + "...") if len(v_title) > 20 else v_title
+                progress.update(
+                    local_task_id, description=f"[yellow]{short_title}[/yellow]: {msg}"
+                )
+
+        event_emitter.subscribe(handle_event)
+        self.generator.event_emitter = event_emitter
+
         async with self.semaphore:
             local_task_id = task_id
 
             # Check if output already exists (Checkpointing)
-            if not self.force and output_path.exists() and output_path.stat().st_size > 0:
+            if (
+                not self.force
+                and output_path.exists()
+                and output_path.stat().st_size > 0
+            ):
                 if progress and local_task_id is not None:
+                    description = (
+                        f"[green]✓ {video_title or video_id} (Skipped)[/green]"
+                    )
                     progress.update(
                         local_task_id,
-                        description=f"[green]✓ {video_title or video_id} (Skipped)[/green]",
+                        description=description,
                         completed=True,
                     )
                 else:
@@ -186,7 +214,9 @@ class PipelineOrchestrator:
                 async with self.rate_limiter:
                     duration, chapters = await asyncio.gather(
                         asyncio.to_thread(get_video_duration, video_id),
-                        asyncio.to_thread(get_video_chapters, video_id) if self.use_chapters else asyncio.sleep(0, result=[]),
+                        asyncio.to_thread(get_video_chapters, video_id)
+                        if self.use_chapters
+                        else asyncio.sleep(0, result=[]),
                     )
 
                 title_display = (video_title or video_id)[:40]
@@ -204,15 +234,24 @@ class PipelineOrchestrator:
                 # 2.5 Generate Synthetic Chapters if needed
                 if not chapters and not is_playlist and self.use_synthetic_chapters:
                     if progress and local_task_id is not None:
+                        description = (
+                            f"[cyan]📖 {title_display}... (Auto-Chapters)[/cyan]"
+                        )
                         progress.update(
                             local_task_id,
-                            description=f"[cyan]📖 {title_display}... (Auto-Chapters)[/cyan]",
+                            description=description,
                         )
 
                     # Generate synthetic chapters
-                    chapters = await self.chapter_engine.generate_chapters(transcript_obj)
+                    chapters = await self.chapter_engine.generate_chapters(
+                        transcript_obj
+                    )
                     if chapters:
-                        logger.info(f"Generated {len(chapters)} synthetic chapters for {video_id}")
+                        logger.info(
+                            "Generated %d synthetic chapters for %s",
+                            len(chapters),
+                            video_id,
+                        )
                     else:
                         logger.info(f"No synthetic chapters generated for {video_id}")
 
@@ -220,7 +259,9 @@ class PipelineOrchestrator:
                 if self.export_transcript:
                     raw_text = transcript_obj.to_text()
                     safe_title = sanitize_filename(video_title)
-                    transcript_path = output_path.parent / f"{safe_title}_transcript.txt"
+                    transcript_path = (
+                        output_path.parent / f"{safe_title}_transcript.txt"
+                    )
                     transcript_path.parent.mkdir(parents=True, exist_ok=True)
                     transcript_path.write_text(raw_text, encoding="utf-8")
                     logger.info(f"Exported raw transcript to {transcript_path}")
@@ -275,7 +316,8 @@ class PipelineOrchestrator:
                         chapter_file = chapters_folder / f"{i:02d}_{safe_chapter}.md"
                         chapter_file.write_text(notes, encoding="utf-8")
 
-                    # Final notes for chapter-based approach - currently it combines them
+                    # Final notes for chapter-based approach
+                    # currently it combines them
                     # We might want to update generate_chapter_based_notes too, but
                     # for now we'll just fix the single-file fallback below.
                     # Actually, the logic above just saves files and returns True.
@@ -285,8 +327,6 @@ class PipelineOrchestrator:
                     final_notes = await self.generator.generate_chapter_based_notes(
                         chapter_transcripts,
                         video_title=video_title,
-                        progress=progress,
-                        task_id=local_task_id,
                         video_id=video_id,
                     )
                     output_path.write_text(final_notes, encoding="utf-8")
@@ -313,8 +353,6 @@ class PipelineOrchestrator:
                     notes = await self.generator.generate_study_notes(
                         transcript_obj.to_timestamped_text(),
                         video_title=title_display,
-                        progress=progress,
-                        task_id=local_task_id,
                         video_id=video_id,
                         output_dir=video_folder,
                         chapters=chapters,

@@ -1,14 +1,14 @@
 """Playlist video extraction using pytubefix."""
 
 import asyncio
-import logging
 
+import structlog
 from pytubefix import Playlist
 from rich.console import Console
 
 
 console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class PlaylistError(Exception):
@@ -47,19 +47,25 @@ async def extract_playlist_videos(playlist_id: str) -> list[str]:
                     f"No videos found in playlist (Attempt {attempt + 1}/{max_retries})"
                 )
 
-            logger.info(f"Found {len(video_ids)} videos in playlist")
+            logger.info("Found videos in playlist", count=len(video_ids))
             return video_ids
 
         except Exception as e:
             last_error = e
-            logger.warning(f"Playlist extraction attempt {attempt + 1} failed: {e}")
+            logger.warning(
+                "Playlist extraction attempt failed",
+                attempt=attempt + 1,
+                error=str(e),
+            )
             if attempt < max_retries - 1:
                 wait_time = 2**attempt  # Exponential backoff
-                logger.warning(f"Retrying in {wait_time}s...")
+                logger.warning("Retrying playlist extraction", wait_time=wait_time)
                 await asyncio.sleep(wait_time)
 
     logger.error(
-        f"Failed to extract playlist videos after {max_retries} attempts: {last_error}"
+        "Failed to extract playlist videos",
+        max_retries=max_retries,
+        error=str(last_error),
     )
     raise PlaylistError(f"Could not access playlist {playlist_id}: {str(last_error)}")
 
@@ -73,10 +79,10 @@ def _extract_sync(playlist_id: str, attempt: int) -> list[str]:
     try:
         title = playlist.title
         if attempt == 0:
-            logger.info(f"Found playlist: {title}")
+            logger.info("Found playlist", title=title)
     except Exception:
         # Title fetch might fail but video extraction might still work
-        logger.warning(f"Could not fetch playlist title on attempt {attempt + 1}")
+        logger.warning("Could not fetch playlist title", attempt=attempt + 1)
 
     video_ids = []
 

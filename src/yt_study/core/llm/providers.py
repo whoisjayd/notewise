@@ -1,17 +1,15 @@
 """LLM provider configuration using LiteLLM."""
 
-import logging
 import os
 from typing import Any
 
+import structlog
 from litellm import acompletion
-from rich.console import Console
 
-from ..config import config
+from ...config import config
 
 
-console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class LLMGenerationError(Exception):
@@ -107,7 +105,7 @@ class LLMProvider:
             return self._clean_content(content)
 
         except Exception as e:
-            logger.error(f"LLM generation failed with {self.model}: {e}", exc_info=True)
+            logger.error("LLM generation failed", model=self.model, error=str(e))
             raise LLMGenerationError(
                 f"Failed to generate with {self.model}: {str(e)}"
             ) from e

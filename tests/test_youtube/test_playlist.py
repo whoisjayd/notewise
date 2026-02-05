@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, PropertyMock
 
 import pytest
 
-from yt_study.youtube.playlist import PlaylistError, extract_playlist_videos
+from yt_study.core.youtube.playlist import PlaylistError, extract_playlist_videos
 
 
 class TestPlaylistExtraction:

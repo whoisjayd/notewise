@@ -1,10 +1,10 @@
 """Transcript fetching with multi-language support."""
 
 import asyncio
-import logging
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
 from rich.console import Console
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
@@ -19,7 +19,7 @@ from .metadata import VideoChapter
 
 
 console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -157,7 +157,7 @@ async def fetch_transcript(
 
         except (TranscriptsDisabled, VideoUnavailable) as e:
             # Fatal errors, do not retry
-            logger.error(f"Transcript unavailable for {video_id}: {e}")
+            logger.error("Transcript unavailable", video_id=video_id, error=str(e))
             raise TranscriptError(
                 f"Transcripts are disabled or video is unavailable: {video_id}"
             ) from e
@@ -168,7 +168,7 @@ async def fetch_transcript(
 
         except (IpBlocked, RequestBlocked) as e:
             # Specifically handle IP blocking
-            logger.error(f"YouTube IP Block detected for {video_id}")
+            logger.error("YouTube IP Block detected", video_id=video_id)
             raise YouTubeIPBlockError(
                 "YouTube is blocking requests from your IP. "
                 "Please try using a VPN, proxies, or wait a while."
@@ -177,7 +177,11 @@ async def fetch_transcript(
         except Exception as e:
             err_str = str(e)
             if "blocking requests from your IP" in err_str:
-                logger.error(f"YouTube IP Block detected for {video_id}: {e}")
+                logger.error(
+                    "YouTube IP Block detected",
+                    video_id=video_id,
+                    error=str(e),
+                )
                 raise YouTubeIPBlockError(
                     "YouTube is blocking requests from your IP. "
                     "Please try using a VPN, proxies, or wait a while."
@@ -186,11 +190,18 @@ async def fetch_transcript(
             if attempt < retries - 1:
                 wait_time = 2**attempt
                 logger.warning(
-                    f"Transcript fetch failed ({str(e)}), retrying in {wait_time}s..."
+                    "Transcript fetch failed, retrying",
+                    video_id=video_id,
+                    error=str(e),
+                    wait_time=wait_time,
                 )
                 await asyncio.sleep(wait_time)
             else:
-                logger.error(f"Failed to fetch transcript for {video_id}: {e}")
+                logger.error(
+                    "Failed to fetch transcript",
+                    video_id=video_id,
+                    error=str(e),
+                )
                 raise TranscriptError(f"Could not fetch transcript: {str(e)}") from e
 
     # Should be unreachable due to raise in loop

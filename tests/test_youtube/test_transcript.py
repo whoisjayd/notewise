@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 import pytest
 from youtube_transcript_api._errors import NoTranscriptFound, VideoUnavailable
 
-from yt_study.youtube.metadata import VideoChapter
-from yt_study.youtube.transcript import (
+from yt_study.core.youtube.metadata import VideoChapter
+from yt_study.core.youtube.transcript import (
     TranscriptError,
     VideoTranscript,
     fetch_transcript,
@@ -21,7 +21,7 @@ class TestFetchTranscript:
     def mock_transcript_api_instance(self, mocker):
         """Mock the YouTubeTranscriptApi class and its instance."""
         # Patch the class
-        mock_cls = mocker.patch("yt_study.youtube.transcript.YouTubeTranscriptApi")
+        mock_cls = mocker.patch("yt_study.core.youtube.transcript.YouTubeTranscriptApi")
         # The instance returned by constructor
         mock_instance = mock_cls.return_value
         return mock_instance

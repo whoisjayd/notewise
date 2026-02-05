@@ -1,26 +1,27 @@
 """Study material generator with chunking and combining logic."""
 
 from __future__ import annotations
-import logging
+
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING
-import aiofiles
 
+import aiofiles
+import structlog
 from litellm import token_counter
 
-if TYPE_CHECKING:
-    from ..youtube.transcript import VideoTranscript
-    from ..youtube.metadata import VideoChapter
-from rich.console import Console
-from rich.progress import Progress, TaskID
 
-from ..config import config
-from ..prompts.chapter_notes import (
+if TYPE_CHECKING:
+    from ..events import EventEmitter
+    from ..youtube.metadata import VideoChapter
+    from ..youtube.transcript import VideoTranscript
+
+from ...config import config
+from ...prompts.chapter_notes import (
     get_chapter_prompt,
     get_combine_chapters_prompt,
 )
-from ..prompts.study_notes import (
+from ...prompts.study_notes import (
     SYSTEM_PROMPT,
     get_chunk_prompt,
     get_combine_prompt,
@@ -32,8 +33,7 @@ from .providers import LLMProvider
 # Re-use system prompt for now
 CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
-console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 class StudyMaterialGenerator:
@@ -50,6 +50,7 @@ class StudyMaterialGenerator:
         max_tokens: int | None = None,
         chunk_size: int | None = None,
         chunk_overlap: int | None = None,
+        event_emitter: EventEmitter | None = None,
     ):
         """
         Initialize generator.
@@ -60,12 +61,14 @@ class StudyMaterialGenerator:
             max_tokens: Maximum tokens for LLM responses.
             chunk_size: Optional token chunk size override.
             chunk_overlap: Optional token chunk overlap override.
+            event_emitter: Optional event emitter for progress reporting.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.chunk_size = chunk_size or config.chunk_size
         self.chunk_overlap = chunk_overlap or config.chunk_overlap
+        self.event_emitter = event_emitter
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
@@ -81,8 +84,8 @@ class StudyMaterialGenerator:
     def _chunk_transcript(
         self,
         transcript: str,
-        chapters: list["VideoChapter"] | None = None,
-        transcript_obj: "VideoTranscript" | None = None,
+        chapters: list[VideoChapter] | None = None,
+        transcript_obj: VideoTranscript | None = None,
     ) -> list[str]:
         """
         Split transcript into chunks with overlap.
@@ -105,17 +108,21 @@ class StudyMaterialGenerator:
         if chapters and transcript_obj:
             from ..youtube.transcript import split_transcript_by_chapters
 
-            logger.info(f"Performing chapter-aware chunking with {len(chapters)} chapters")
+            logger.info(
+                f"Performing chapter-aware chunking with {len(chapters)} chapters"
+            )
 
             # Check if input transcript has timestamps to preserve them
-            include_timestamps = "[" in transcript and ":" in transcript and "]" in transcript
+            include_timestamps = (
+                "[" in transcript and ":" in transcript and "]" in transcript
+            )
 
             chapter_data = split_transcript_by_chapters(
                 transcript_obj, chapters, include_timestamps=include_timestamps
             )
 
             all_chunks = []
-            for chap_title, chap_text in chapter_data.items():
+            for _chap_title, chap_text in chapter_data.items():
                 if not chap_text.strip():
                     continue
 
@@ -218,20 +225,13 @@ class StudyMaterialGenerator:
 
     def _update_status(
         self,
-        progress: Progress | None,
-        task_id: TaskID | None,
         video_title: str,
         message: str,
+        video_id: str | None = None,
     ) -> None:
-        """Safe helper to update progress bar or log message."""
-        if progress and task_id is not None:
-            short_title = (
-                (video_title[:20] + "...") if len(video_title) > 20 else video_title
-            )
-            # We assume the layout uses 'description' for the status text
-            progress.update(
-                task_id, description=f"[yellow]{short_title}[/yellow]: {message}"
-            )
+        """Safe helper to emit progress event or log message."""
+        if self.event_emitter:
+            self.event_emitter.emit_progress(video_id, message, video_title=video_title)
         else:
             logger.info(f"{video_title}: {message}")
 
@@ -239,12 +239,10 @@ class StudyMaterialGenerator:
         self,
         transcript: str,
         video_title: str = "Video",
-        progress: Progress | None = None,
-        task_id: TaskID | None = None,
         video_id: str | None = None,
         output_dir: Path | None = None,
-        chapters: list["VideoChapter"] | None = None,
-        transcript_obj: "VideoTranscript" | None = None,
+        chapters: list[VideoChapter] | None = None,
+        transcript_obj: VideoTranscript | None = None,
     ) -> str:
         """
         Generate study notes from transcript.
@@ -252,8 +250,6 @@ class StudyMaterialGenerator:
         Args:
             transcript: Full video transcript text.
             video_title: Video title for progress display.
-            progress: Optional existing progress bar instance.
-            task_id: Optional task ID for updating progress.
             video_id: YouTube video ID for generating timestamp links.
             output_dir: Optional directory to save intermediate chunks.
             chapters: Optional list of video chapters for better chunking.
@@ -268,7 +264,7 @@ class StudyMaterialGenerator:
 
         # Single chunk - generate directly
         if len(chunks) == 1:
-            self._update_status(progress, task_id, video_title, "Generating notes...")
+            self._update_status(video_title, "Generating notes...", video_id=video_id)
 
             notes = await self.provider.generate(
                 system_prompt=SYSTEM_PROMPT,
@@ -280,16 +276,13 @@ class StudyMaterialGenerator:
             if video_id:
                 notes = self._post_process_timestamps(notes, video_id)
 
-            if not progress:
-                logger.info(f"Generated notes for {video_title}")
             return notes
 
         # Multiple chunks - generate for each, then combine
         self._update_status(
-            progress,
-            task_id,
             video_title,
             f"Generating notes for {len(chunks)} chunks...",
+            video_id=video_id,
         )
 
         chunk_notes = []
@@ -300,7 +293,7 @@ class StudyMaterialGenerator:
 
         for i, chunk in enumerate(chunks, 1):
             msg = f"Chunk {i}/{len(chunks)} (Generating)"
-            self._update_status(progress, task_id, video_title, msg)
+            self._update_status(video_title, msg, video_id=video_id)
 
             note = await self.provider.generate(
                 system_prompt=SYSTEM_PROMPT,
@@ -331,10 +324,9 @@ class StudyMaterialGenerator:
             chunk_notes.append(note)
 
         self._update_status(
-            progress,
-            task_id,
             video_title,
             f"Combining {len(chunk_notes)} chunk notes...",
+            video_id=video_id,
         )
 
         final_notes = await self.provider.generate(
@@ -347,9 +339,6 @@ class StudyMaterialGenerator:
         if video_id:
             final_notes = self._post_process_timestamps(final_notes, video_id)
 
-        if not progress:
-            logger.info(f"Completed notes for {video_title}")
-
         return final_notes
 
     def _post_process_timestamps(self, text: str, video_id: str) -> str:
@@ -358,7 +347,7 @@ class StudyMaterialGenerator:
         """
         import re
 
-        def replace_timestamp(match):
+        def replace_timestamp(match: re.Match[str]) -> str:
             ts_str = match.group(1)
             parts = ts_str.split(":")
             if len(parts) == 2:
@@ -409,8 +398,6 @@ class StudyMaterialGenerator:
         self,
         chapter_transcripts: dict[str, str],
         video_title: str = "Video",
-        progress: Progress | None = None,
-        task_id: TaskID | None = None,
         video_id: str | None = None,
     ) -> str:
         """
@@ -419,22 +406,15 @@ class StudyMaterialGenerator:
         Args:
             chapter_transcripts: Dictionary mapping chapter titles to transcript text.
             video_title: Video title for display.
-            progress: Optional existing progress bar instance.
-            task_id: Optional task ID for updating progress.
             video_id: YouTube video ID for generating timestamp links.
 
         Returns:
             Complete study notes organized by chapters.
         """
-        # Imports are already at top-level or can be moved up, but let's
-        # fix the specific issue. Previously we did lazy import inside
-        # function which caused issues
-
         self._update_status(
-            progress,
-            task_id,
             video_title,
             f"Generating notes for {len(chapter_transcripts)} chapters...",
+            video_id=video_id,
         )
 
         chapter_notes = {}
@@ -444,20 +424,21 @@ class StudyMaterialGenerator:
             chapter_transcripts.items(), 1
         ):
             msg = f"Chapter {i}/{total_chapters}: {chapter_title[:20]}..."
-            self._update_status(progress, task_id, video_title, msg)
+            self._update_status(video_title, msg, video_id=video_id)
 
             # If a chapter is huge, perform recursive chunking
             token_count = self._count_tokens(chapter_text)
-            if token_count > config.chunk_size:
+            if token_count > self.chunk_size:
                 logger.info(
-                    f"Chapter '{chapter_title}' too long ({token_count:,} tokens), chunking..."
+                    f"Chapter '{chapter_title}' too long "
+                    f"({token_count:,} tokens), chunking..."
                 )
                 chunks = self._chunk_transcript(chapter_text)
                 chunk_notes = []
 
                 for j, chunk in enumerate(chunks, 1):
                     chunk_msg = f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
-                    self._update_status(progress, task_id, video_title, chunk_msg)
+                    self._update_status(video_title, chunk_msg, video_id=video_id)
 
                     note = await self.provider.generate(
                         system_prompt=CHAPTER_SYSTEM_PROMPT,
@@ -469,10 +450,9 @@ class StudyMaterialGenerator:
 
                 # Combine chunks of this specific chapter
                 self._update_status(
-                    progress,
-                    task_id,
                     video_title,
                     f"Combining chunks for chapter: {chapter_title[:20]}...",
+                    video_id=video_id,
                 )
                 notes = await self.provider.generate(
                     system_prompt=CHAPTER_SYSTEM_PROMPT,
@@ -494,7 +474,7 @@ class StudyMaterialGenerator:
             chapter_notes[chapter_title] = notes
 
         self._update_status(
-            progress, task_id, video_title, "Combining chapter notes..."
+            video_title, "Combining chapter notes...", video_id=video_id
         )
 
         final_notes = await self.provider.generate(
@@ -506,8 +486,5 @@ class StudyMaterialGenerator:
 
         if video_id:
             final_notes = self._post_process_timestamps(final_notes, video_id)
-
-        if not progress:
-            logger.info(f"Completed chapter-based notes for {video_title}")
 
         return final_notes

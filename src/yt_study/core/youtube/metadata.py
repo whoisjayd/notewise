@@ -1,15 +1,15 @@
 """Video metadata extraction using pytubefix."""
 
-import logging
 from dataclasses import dataclass
 from typing import Any
 
+import structlog
 from pytubefix import Playlist, YouTube
 from rich.console import Console
 
 
 console = Console()
-logger = logging.getLogger(__name__)
+logger = structlog.get_logger(__name__)
 
 
 @dataclass
@@ -72,7 +72,7 @@ def get_video_chapters(video_id: str) -> list[VideoChapter]:
             return chapters
 
     except Exception as e:
-        logger.debug(f"Could not fetch chapters for {video_id}: {e}")
+        logger.debug("Could not fetch chapters", video_id=video_id, error=str(e))
 
     return []
 
@@ -98,7 +98,7 @@ def get_video_title(video_id: str) -> str:
             return str(title)
 
     except Exception as e:
-        logger.warning(f"Could not fetch title for {video_id}: {e}")
+        logger.warning("Could not fetch title", video_id=video_id, error=str(e))
 
     # Fallback to video ID
     return video_id
@@ -121,7 +121,7 @@ def get_video_duration(video_id: str) -> int:
         yt = YouTube(url)
         return int(yt.length)
     except Exception as e:
-        logger.warning(f"Could not fetch duration for {video_id}: {e}")
+        logger.warning("Could not fetch duration", video_id=video_id, error=str(e))
         return 0
 
 
@@ -152,7 +152,11 @@ def get_playlist_info(playlist_id: str) -> tuple[str, int]:
         return str(title), count
 
     except Exception as e:
-        logger.warning(f"Could not fetch playlist info: {e}")
+        logger.warning(
+            "Could not fetch playlist info",
+            playlist_id=playlist_id,
+            error=str(e),
+        )
         return f"playlist_{playlist_id}", 0
 
 
