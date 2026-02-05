@@ -172,6 +172,36 @@ def process(
             help="Export raw transcript to a separate text file.",
         ),
     ] = False,
+    no_chapters: Annotated[
+        bool,
+        typer.Option(
+            "--no-chapters",
+            help="Disable use of YouTube chapters.",
+        ),
+    ] = False,
+    no_synthetic: Annotated[
+        bool,
+        typer.Option(
+            "--no-synthetic",
+            help="Disable generation of synthetic chapters if native ones are missing.",
+        ),
+    ] = False,
+    chunk_size: Annotated[
+        int | None,
+        typer.Option(
+            "--chunk-size",
+            help="Token chunk size for processing (overrides config).",
+            min=100,
+        ),
+    ] = None,
+    chunk_overlap: Annotated[
+        int | None,
+        typer.Option(
+            "--chunk-overlap",
+            help="Token chunk overlap (overrides config).",
+            min=0,
+        ),
+    ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -216,6 +246,10 @@ def process(
             max_tokens=selected_max_tokens,
             force=force,
             export_transcript=export_transcript,
+            use_chapters=not no_chapters,
+            use_synthetic_chapters=not no_synthetic,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
         )
 
         async def run_processing() -> None:

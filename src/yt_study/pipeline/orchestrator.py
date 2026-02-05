@@ -2,11 +2,9 @@
 
 import asyncio
 import logging
-import re
 from pathlib import Path
 
 from aiolimiter import AsyncLimiter
-from pathvalidate import sanitize_filename as strict_sanitize
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -14,9 +12,11 @@ from rich.progress import Progress, TaskID
 from rich.table import Table
 
 from ..config import config
+from ..llm.chapters import SyntheticChapterEngine
 from ..llm.generator import StudyMaterialGenerator
 from ..llm.providers import get_provider
 from ..ui.dashboard import PipelineDashboard
+from ..utils import get_video_slug, sanitize_filename
 from ..youtube.metadata import (
     get_playlist_info,
     get_video_chapters,
@@ -36,29 +36,6 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
-def sanitize_filename(name: str) -> str:
-    """
-    Sanitize a string to be used as a filename.
-    Respects OS constraints (Windows reserved names, length, etc.).
-
-    Args:
-        name: Raw filename string.
-
-    Returns:
-        Sanitized string safe for file systems.
-    """
-    # Use pathvalidate for robust cross-platform sanitization
-    sanitized = strict_sanitize(name, replacement_text="_")
-
-    # Replace multiple spaces with single space
-    sanitized = re.sub(r"\s+", " ", sanitized)
-
-    # Trim and limit length (pathvalidate handles length but we keep a conservative limit)
-    sanitized = sanitized.strip()[:100]
-
-    return sanitized if sanitized else "untitled"
-
-
 class PipelineOrchestrator:
     """
     Orchestrates the end-to-end pipeline for video processing.
@@ -75,6 +52,10 @@ class PipelineOrchestrator:
         max_tokens: int | None = None,
         force: bool = False,
         export_transcript: bool = False,
+        use_chapters: bool = True,
+        use_synthetic_chapters: bool = True,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         """
         Initialize orchestrator.
@@ -87,6 +68,10 @@ class PipelineOrchestrator:
             max_tokens: Max tokens (defaults to config.max_tokens).
             force: Force re-processing even if output exists.
             export_transcript: Whether to export raw transcript.
+            use_chapters: Whether to use native YouTube chapters.
+            use_synthetic_chapters: Whether to generate synthetic chapters if missing.
+            chunk_size: Token chunk size override.
+            chunk_overlap: Token chunk overlap override.
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -97,12 +82,20 @@ class PipelineOrchestrator:
         self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
         self.force = force
         self.export_transcript = export_transcript
+        self.use_chapters = use_chapters
+        self.use_synthetic_chapters = use_synthetic_chapters
+        self.chunk_size = chunk_size or config.chunk_size
+        self.chunk_overlap = chunk_overlap or config.chunk_overlap
+
         self.provider = get_provider(model)
         self.generator = StudyMaterialGenerator(
             self.provider,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
         )
+        self.chapter_engine = SyntheticChapterEngine(self.provider)
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.rate_limiter = AsyncLimiter(config.youtube_requests_per_minute, 60)
 
@@ -193,7 +186,7 @@ class PipelineOrchestrator:
                 async with self.rate_limiter:
                     duration, chapters = await asyncio.gather(
                         asyncio.to_thread(get_video_duration, video_id),
-                        asyncio.to_thread(get_video_chapters, video_id),
+                        asyncio.to_thread(get_video_chapters, video_id) if self.use_chapters else asyncio.sleep(0, result=[]),
                     )
 
                 title_display = (video_title or video_id)[:40]
@@ -208,6 +201,21 @@ class PipelineOrchestrator:
                 async with self.rate_limiter:
                     transcript_obj = await fetch_transcript(video_id, self.languages)
 
+                # 2.5 Generate Synthetic Chapters if needed
+                if not chapters and not is_playlist and self.use_synthetic_chapters:
+                    if progress and local_task_id is not None:
+                        progress.update(
+                            local_task_id,
+                            description=f"[cyan]📖 {title_display}... (Auto-Chapters)[/cyan]",
+                        )
+
+                    # Generate synthetic chapters
+                    chapters = await self.chapter_engine.generate_chapters(transcript_obj)
+                    if chapters:
+                        logger.info(f"Generated {len(chapters)} synthetic chapters for {video_id}")
+                    else:
+                        logger.info(f"No synthetic chapters generated for {video_id}")
+
                 # Export Raw Transcript if requested
                 if self.export_transcript:
                     raw_text = transcript_obj.to_text()
@@ -221,6 +229,10 @@ class PipelineOrchestrator:
                 # Use chapters if video is long (>1h) and chapters exist
                 use_chapters = duration > 3600 and len(chapters) > 0 and not is_playlist
 
+                # Base output folder is the parent of the final MD file
+                video_folder = output_path.parent
+                video_folder.mkdir(parents=True, exist_ok=True)
+
                 if use_chapters:
                     if progress and local_task_id is not None:
                         progress.update(
@@ -229,7 +241,6 @@ class PipelineOrchestrator:
                                 f"[cyan]📖 {title_display}... (Chapters)[/cyan]"
                             ),
                         )
-                    # else block removed as redundant
 
                     # Split transcript
                     chapter_transcripts = split_transcript_by_chapters(
@@ -237,14 +248,10 @@ class PipelineOrchestrator:
                     )
 
                     # Create folder for chapter notes
-                    safe_title = sanitize_filename(video_title)
-                    output_folder = self.output_dir / safe_title
-                    output_folder.mkdir(parents=True, exist_ok=True)
+                    chapters_folder = video_folder / "chapters"
+                    chapters_folder.mkdir(parents=True, exist_ok=True)
 
                     # Generate chapter notes
-                    # Fix: Iterate here and call generator for each chapter
-                    # to save individually
-
                     for i, (chap_title, chap_text) in enumerate(
                         chapter_transcripts.items(), 1
                     ):
@@ -265,8 +272,24 @@ class PipelineOrchestrator:
 
                         # Save individual chapter
                         safe_chapter = sanitize_filename(chap_title)
-                        chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
+                        chapter_file = chapters_folder / f"{i:02d}_{safe_chapter}.md"
                         chapter_file.write_text(notes, encoding="utf-8")
+
+                    # Final notes for chapter-based approach - currently it combines them
+                    # We might want to update generate_chapter_based_notes too, but
+                    # for now we'll just fix the single-file fallback below.
+                    # Actually, the logic above just saves files and returns True.
+                    # We need a way to create the combined file too.
+
+                    # Generate the combined file
+                    final_notes = await self.generator.generate_chapter_based_notes(
+                        chapter_transcripts,
+                        video_title=video_title,
+                        progress=progress,
+                        task_id=local_task_id,
+                        video_id=video_id,
+                    )
+                    output_path.write_text(final_notes, encoding="utf-8")
 
                     if progress and local_task_id is not None:
                         progress.update(
@@ -278,9 +301,7 @@ class PipelineOrchestrator:
                     return True
 
                 else:
-                    # Single file generation
-                    transcript_text = transcript_obj.to_text()
-
+                    # Single file/Chunked generation
                     if progress and local_task_id is not None:
                         progress.update(
                             local_task_id,
@@ -295,9 +316,11 @@ class PipelineOrchestrator:
                         progress=progress,
                         task_id=local_task_id,
                         video_id=video_id,
+                        output_dir=video_folder,
+                        chapters=chapters,
+                        transcript_obj=transcript_obj,
                     )
 
-                    output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(notes, encoding="utf-8")
 
                     if progress and local_task_id is not None:
@@ -348,7 +371,6 @@ class PipelineOrchestrator:
         is_single_video: bool = False,
     ) -> int:
         """Process a list of videos using the Advanced Dashboard UI."""
-        from ..ui.dashboard import PipelineDashboard
 
         # Initialize Dashboard FIRST to capture all output
         # Adjust concurrency display: if total_videos < max_concurrency,
@@ -413,13 +435,12 @@ class PipelineOrchestrator:
                         break
 
                     title = video_titles.get(video_id, video_id)
-                    safe_title = sanitize_filename(title)
+                    video_slug = get_video_slug(title, video_id)
 
-                    if is_single_video:
-                        video_folder = base_folder / safe_title
-                        output_path = video_folder / f"{safe_title}.md"
-                    else:
-                        output_path = base_folder / f"{safe_title}.md"
+                    # New structure: output_dir / video_slug / ...
+                    video_folder = base_folder / video_slug
+                    video_folder.mkdir(parents=True, exist_ok=True)
+                    output_path = video_folder / f"{video_slug}.md"
 
                     # Update status
                     dashboard.update_worker(

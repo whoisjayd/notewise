@@ -36,6 +36,9 @@ class TestPipelineOrchestrator:
             orch.generator.generate_single_chapter_notes = AsyncMock(
                 return_value="# Chapter Notes"
             )
+            orch.generator.generate_chapter_based_notes = AsyncMock(
+                return_value="# Combined Chapter Notes"
+            )
             orch.generator.provider = (
                 mock_llm_provider  # needed for direct calls in chapter loop
             )
@@ -120,19 +123,21 @@ class TestPipelineOrchestrator:
             mock_fetch.return_value = mock_transcript
 
             video_id = "vid123"
-            output_path = (
-                orchestrator.output_dir / "ignored.md"
-            )  # Folder structure used instead
+            video_title = "Long Video"
+            video_slug = f"{video_title}_{video_id}"
+            video_folder = orchestrator.output_dir / video_slug
+            output_path = video_folder / f"{video_slug}.md"
 
-            success = await orchestrator.process_video(video_id, output_path)
+            success = await orchestrator.process_video(video_id, output_path, video_title=video_title)
 
             assert success is True
             # Verify folder creation
-            expected_folder = orchestrator.output_dir / "Long Video"
-            assert expected_folder.exists()
+            assert video_folder.exists()
             # Verify individual chapter file created (mock provider returns
             # default text)
-            assert (expected_folder / "01_Ch1.md").exists()
+            assert (video_folder / "chapters" / "01_Ch1.md").exists()
+            assert output_path.exists()
+            assert output_path.read_text(encoding="utf-8") == "# Combined Chapter Notes"
 
     @pytest.mark.asyncio
     async def test_process_video_checkpointing(self, orchestrator):

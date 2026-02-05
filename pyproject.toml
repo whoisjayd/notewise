@@ -30,6 +30,7 @@ dependencies = [
     "rich>=13.9.4",
     "aiohttp>=3.11.11",
     "aiolimiter>=1.1.0",
+    "aiofiles>=23.2.1",
     "pathvalidate>=3.2.1",
 ]
 

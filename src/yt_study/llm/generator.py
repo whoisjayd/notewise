@@ -1,8 +1,17 @@
 """Study material generator with chunking and combining logic."""
 
+from __future__ import annotations
 import logging
+import json
+from pathlib import Path
+from typing import TYPE_CHECKING
+import aiofiles
 
 from litellm import token_counter
+
+if TYPE_CHECKING:
+    from ..youtube.transcript import VideoTranscript
+    from ..youtube.metadata import VideoChapter
 from rich.console import Console
 from rich.progress import Progress, TaskID
 
@@ -39,6 +48,8 @@ class StudyMaterialGenerator:
         provider: LLMProvider,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        chunk_size: int | None = None,
+        chunk_overlap: int | None = None,
     ):
         """
         Initialize generator.
@@ -47,10 +58,14 @@ class StudyMaterialGenerator:
             provider: LLM provider instance.
             temperature: LLM response temperature.
             max_tokens: Maximum tokens for LLM responses.
+            chunk_size: Optional token chunk size override.
+            chunk_overlap: Optional token chunk overlap override.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.chunk_size = chunk_size or config.chunk_size
+        self.chunk_overlap = chunk_overlap or config.chunk_overlap
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
@@ -63,25 +78,59 @@ class StudyMaterialGenerator:
             # Fallback estimation if tokenizer fails (approx 4 chars per token)
             return len(text) // 4
 
-    def _chunk_transcript(self, transcript: str) -> list[str]:
+    def _chunk_transcript(
+        self,
+        transcript: str,
+        chapters: list["VideoChapter"] | None = None,
+        transcript_obj: "VideoTranscript" | None = None,
+    ) -> list[str]:
         """
         Split transcript into chunks with overlap.
 
         Uses recursive chunking strategy:
+        - If chapters are provided, chunks are aligned with chapter boundaries.
         - Target size: Defined in config (default 4000 tokens)
         - Overlap: Defined in config (default 200 tokens)
-        - Priority: Sentence boundaries > Newlines > Words > Hard char limit
+        - Priority: Chapters > Sentence boundaries > Newlines > Words > Hard char limit
 
         Args:
             transcript: The full transcript text.
+            chapters: Optional list of video chapters.
+            transcript_obj: Optional VideoTranscript object for chapter splitting.
 
         Returns:
             List of text chunks.
         """
+        # Chapter-aware chunking
+        if chapters and transcript_obj:
+            from ..youtube.transcript import split_transcript_by_chapters
+
+            logger.info(f"Performing chapter-aware chunking with {len(chapters)} chapters")
+
+            # Check if input transcript has timestamps to preserve them
+            include_timestamps = "[" in transcript and ":" in transcript and "]" in transcript
+
+            chapter_data = split_transcript_by_chapters(
+                transcript_obj, chapters, include_timestamps=include_timestamps
+            )
+
+            all_chunks = []
+            for chap_title, chap_text in chapter_data.items():
+                if not chap_text.strip():
+                    continue
+
+                # For each chapter, if it's too big, chunk it using standard logic
+                # Pass chapters=None to avoid recursion
+                chap_chunks = self._chunk_transcript(chap_text)
+                all_chunks.extend(chap_chunks)
+
+            if all_chunks:
+                return all_chunks
+
         token_count = self._count_tokens(transcript)
 
         # Fast path: Return single chunk if within limits
-        if token_count <= config.chunk_size:
+        if token_count <= self.chunk_size:
             return [transcript]
 
         logger.info(
@@ -94,7 +143,7 @@ class StudyMaterialGenerator:
         sentences = transcript.split(". ")
 
         # Strategy 2: Split by newlines if sentences fail
-        if len(sentences) < 2 and token_count > config.chunk_size:
+        if len(sentences) < 2 and token_count > self.chunk_size:
             sentences = transcript.split("\n")
 
         # Strategy 3: Split by spaces if newlines fail
@@ -116,7 +165,7 @@ class StudyMaterialGenerator:
             term_tokens = self._count_tokens(term)
 
             # Handle edge case: Single sentence/segment is larger than chunk_size
-            if term_tokens > config.chunk_size:
+            if term_tokens > self.chunk_size:
                 # 1. Flush current buffer
                 if current_chunk:
                     chunks.append(" ".join(current_chunk))
@@ -125,14 +174,14 @@ class StudyMaterialGenerator:
 
                 # 2. Hard split the massive segment
                 # Estimate char limit based on token size (conservative 3 chars/token)
-                char_limit = config.chunk_size * 3
+                char_limit = self.chunk_size * 3
                 for i in range(0, len(sentence), char_limit):
                     sub_part = sentence[i : i + char_limit]
                     chunks.append(sub_part)
                 continue
 
             # Standard accumulation
-            if current_tokens + term_tokens > config.chunk_size:
+            if current_tokens + term_tokens > self.chunk_size:
                 # Chunk is full. Commit it.
                 if current_chunk:
                     chunks.append(" ".join(current_chunk))
@@ -144,7 +193,7 @@ class StudyMaterialGenerator:
                     # Take sentences from the end of current_chunk until overlap limit
                     for prev_sent in reversed(current_chunk):
                         prev_tokens = self._count_tokens(prev_sent)
-                        if overlap_tokens + prev_tokens <= config.chunk_overlap:
+                        if overlap_tokens + prev_tokens <= self.chunk_overlap:
                             overlap_chunk.insert(0, prev_sent)
                             overlap_tokens += prev_tokens
                         else:
@@ -193,6 +242,9 @@ class StudyMaterialGenerator:
         progress: Progress | None = None,
         task_id: TaskID | None = None,
         video_id: str | None = None,
+        output_dir: Path | None = None,
+        chapters: list["VideoChapter"] | None = None,
+        transcript_obj: "VideoTranscript" | None = None,
     ) -> str:
         """
         Generate study notes from transcript.
@@ -203,11 +255,16 @@ class StudyMaterialGenerator:
             progress: Optional existing progress bar instance.
             task_id: Optional task ID for updating progress.
             video_id: YouTube video ID for generating timestamp links.
+            output_dir: Optional directory to save intermediate chunks.
+            chapters: Optional list of video chapters for better chunking.
+            transcript_obj: Optional VideoTranscript object for chapter splitting.
 
         Returns:
             Complete study notes in Markdown format.
         """
-        chunks = self._chunk_transcript(transcript)
+        chunks = self._chunk_transcript(
+            transcript, chapters=chapters, transcript_obj=transcript_obj
+        )
 
         # Single chunk - generate directly
         if len(chunks) == 1:
@@ -236,6 +293,10 @@ class StudyMaterialGenerator:
         )
 
         chunk_notes = []
+        chunks_folder = None
+        if output_dir:
+            chunks_folder = output_dir / "chunks"
+            chunks_folder.mkdir(parents=True, exist_ok=True)
 
         for i, chunk in enumerate(chunks, 1):
             msg = f"Chunk {i}/{len(chunks)} (Generating)"
@@ -247,6 +308,26 @@ class StudyMaterialGenerator:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
+
+            if video_id:
+                note = self._post_process_timestamps(note, video_id)
+
+            # Save individual chunk note if output_dir provided
+            if chunks_folder:
+                chunk_file = chunks_folder / f"{i:02d}_chunk.md"
+                metadata = {
+                    "video_id": video_id,
+                    "chunk_index": i,
+                    "total_chunks": len(chunks),
+                    "video_title": video_title,
+                }
+                frontmatter = "---\n"
+                frontmatter += json.dumps(metadata, indent=2) + "\n"
+                frontmatter += "---\n\n"
+
+                async with aiofiles.open(chunk_file, "w", encoding="utf-8") as f:
+                    await f.write(frontmatter + note)
+
             chunk_notes.append(note)
 
         self._update_status(
