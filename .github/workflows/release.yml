@@ -41,14 +41,17 @@ jobs:
       - name: Install dependencies
         run: |
           uv sync --group dev
-          uv pip install pyinstaller
+          uv pip install . pyinstaller
       - name: Build executable
         shell: bash
         run: |
+          # Create a launcher to avoid relative import issues in cli.py
+          echo "from yt_study.cli import app; import sys; sys.exit(app())" > launcher.py
           pyinstaller --onefile --name yt-study \
             --collect-all litellm \
             --collect-all pydantic \
-            src/yt_study/cli.py
+            --paths src \
+            launcher.py
       - name: Rename and Prepare Artifacts
         shell: bash
         run: |
@@ -64,5 +67,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: dist/release/*
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
