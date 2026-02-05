@@ -3,13 +3,18 @@
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Any
 
+import structlog
 import typer
 from rich.console import Console
 from rich.logging import RichHandler
+from rich.table import Table
+
+from .core.telemetry import telemetry
 
 
 # Suppress LiteLLM verbose logging early
@@ -17,42 +22,70 @@ os.environ["LITELLM_LOG"] = "ERROR"
 logging.getLogger("LiteLLM").setLevel(logging.ERROR)
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
-# Setup logging
+# Setup logging directories
 log_dir = Path.home() / ".yt-study" / "logs"
 try:
     log_dir.mkdir(parents=True, exist_ok=True)
 except Exception:
-    # Fallback if home is not writable
     log_dir = Path.cwd() / "logs"
     log_dir.mkdir(parents=True, exist_ok=True)
 
-# Use timestamped log file for session isolation
+# Log files
 timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-log_file = log_dir / f"yt-study-{timestamp}.log"
+log_file_json = log_dir / "yt-study.jsonl"
 
-root_logger = logging.getLogger()
-root_logger.setLevel(logging.INFO)
 
-# Console Handler: Warning+, Clean output
-console_handler = RichHandler(rich_tracebacks=False, show_time=False, show_path=False)
-console_handler.setLevel(logging.WARNING)
-root_logger.addHandler(console_handler)
+# Configure structlog
+def configure_logging() -> None:
+    shared_processors: list[Any] = [
+        structlog.contextvars.merge_contextvars,
+        structlog.processors.add_log_level,
+        structlog.processors.TimeStamper(fmt="iso"),
+    ]
 
-# File Handler: Debug+, Detailed format
-try:
-    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    structlog.configure(
+        processors=shared_processors
+        + [
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            structlog.make_filtering_bound_logger(logging.INFO),
+            (
+                structlog.dev.ConsoleRenderer()
+                if sys.stderr.isatty()
+                else structlog.processors.JSONRenderer()
+            ),
+        ],
+        context_class=dict,
+        logger_factory=structlog.PrintLoggerFactory(),
+        wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
+        cache_logger_on_first_use=True,
+    )
+
+    # Standard logging bridge
+    logging.basicConfig(
+        format="%(message)s",
+        level=logging.WARNING,
+        handlers=[RichHandler(rich_tracebacks=True, show_time=False, show_path=False)],
+    )
+
+    # File handler for JSON logs
+    file_handler = logging.FileHandler(log_file_json, encoding="utf-8")
     file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(
-        logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+        structlog.stdlib.ProcessorFormatter(
+            processor=structlog.processors.JSONRenderer(),
+        )
     )
-    root_logger.addHandler(file_handler)
-except Exception:
-    pass
+    logging.getLogger().addHandler(file_handler)
+
+
+configure_logging()
+logger = structlog.get_logger(__name__)
 
 app = typer.Typer(
     name="yt-study",
     help=(
-        "🎓 Convert YouTube videos and playlists into comprehensive "
+        "Convert YouTube videos and playlists into comprehensive "
         "study materials using AI."
     ),
     add_completion=True,
@@ -218,94 +251,100 @@ def process(
       [cyan]yt-study process "URL" -m gpt-4o[/cyan]
       [cyan]yt-study process batch_urls.txt -o ./course-notes[/cyan]
     """
-    # Ensure configuration exists
-    ensure_setup()
+    with telemetry.track_command("process"):
+        # Ensure configuration exists
+        ensure_setup()
 
-    try:
-        # Lazy import for faster CLI startup
-        from .config import config
-        from .pipeline.orchestrator import PipelineOrchestrator
+        try:
+            # Lazy import for faster CLI startup
+            from .config import config
+            from .pipeline.orchestrator import PipelineOrchestrator
 
-        # Use config values as defaults, allow CLI overrides
-        selected_model = model or config.default_model
-        selected_output = output or config.default_output_dir
-        selected_languages = language or config.default_languages
-        selected_temperature = (
-            temperature if temperature is not None else config.temperature
-        )
-        selected_max_tokens = (
-            max_tokens if max_tokens is not None else config.max_tokens
-        )
+            # Use config values as defaults, allow CLI overrides
+            selected_model = model or config.default_model
+            selected_output = output or config.default_output_dir
+            selected_languages = language or config.default_languages
+            selected_temperature = (
+                temperature if temperature is not None else config.temperature
+            )
+            selected_max_tokens = (
+                max_tokens if max_tokens is not None else config.max_tokens
+            )
 
-        # Create orchestrator
-        orchestrator = PipelineOrchestrator(
-            model=selected_model,
-            output_dir=selected_output,
-            languages=selected_languages,
-            temperature=selected_temperature,
-            max_tokens=selected_max_tokens,
-            force=force,
-            export_transcript=export_transcript,
-            use_chapters=not no_chapters,
-            use_synthetic_chapters=not no_synthetic,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
+            # Create orchestrator
+            orchestrator = PipelineOrchestrator(
+                model=selected_model,
+                output_dir=selected_output,
+                languages=selected_languages,
+                temperature=selected_temperature,
+                max_tokens=selected_max_tokens,
+                force=force,
+                export_transcript=export_transcript,
+                use_chapters=not no_chapters,
+                use_synthetic_chapters=not no_synthetic,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
 
-        async def run_processing() -> None:
-            """Determine if input is URL or file and run pipeline."""
-            input_path = Path(url)
+            async def run_processing() -> None:
+                """Determine if input is URL or file and run pipeline."""
+                input_path = Path(url)
 
-            # Check if input is an existing file (Batch Mode)
-            if input_path.exists() and input_path.is_file():
-                # Removed redundant panel print here since dashboard handles UI
-                try:
-                    # Robust encoding handling and line splitting
-                    content = input_path.read_text(encoding="utf-8")
-                    urls = [
-                        line.strip()
-                        for line in content.splitlines()
-                        if line.strip() and not line.strip().startswith("#")
-                    ]
-                except Exception as e:
-                    console.print(
-                        f"[bold red]❌ Error reading batch file:[/bold red] {e}"
-                    )
-                    return
-
-                if not urls:
-                    console.print("[yellow]⚠ Batch file is empty.[/yellow]")
-                    return
-
-                # Removed: console.print(f"[dim]Found {len(urls)} URLs[/dim]\n")
-
-                for i, batch_url in enumerate(urls, 1):
-                    # Keep this rule as it separates batch items distinctly
-                    console.rule(f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]")
-                    # Removed redundant URL print as dashboard shows title/status
+                # Check if input is an existing file (Batch Mode)
+                if input_path.exists() and input_path.is_file():
+                    # Removed redundant panel print here since dashboard handles UI
                     try:
-                        await orchestrator.run(batch_url)
+                        # Robust encoding handling and line splitting
+                        content = input_path.read_text(encoding="utf-8")
+                        urls = [
+                            line.strip()
+                            for line in content.splitlines()
+                            if line.strip() and not line.strip().startswith("#")
+                        ]
                     except Exception as e:
-                        console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
-            else:
-                # Single URL Mode (Orchestrator handles Video vs Playlist detection)
-                await orchestrator.run(url)
+                        console.print(
+                            f"[bold red]❌ Error reading batch file:[/bold red] {e}"
+                        )
+                        return
 
-        # Run pipeline
-        asyncio.run(run_processing())
+                    if not urls:
+                        console.print("[yellow]⚠ Batch file is empty.[/yellow]")
+                        return
 
-    except KeyboardInterrupt:
-        console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
-        raise typer.Exit(code=1) from None
-    except Exception as e:
-        # Import Panel locally
-        from rich.panel import Panel
+                    # Removed: console.print(f"[dim]Found {len(urls)} URLs[/dim]\n")
 
-        console.print(
-            Panel(f"[bold red]Fatal Error[/bold red]\n{str(e)}", border_style="red")
-        )
-        logging.exception("Fatal error in CLI process")
-        raise typer.Exit(code=1) from e
+                    for i, batch_url in enumerate(urls, 1):
+                        # Keep this rule as it separates batch items distinctly
+                        description = (
+                            f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]"
+                        )
+                        console.rule(description)
+                        # Removed redundant URL print as dashboard shows title/status
+                        try:
+                            await orchestrator.run(batch_url)
+                        except Exception as e:
+                            console.print(
+                                f"[bold red]❌ Batch item failed:[/bold red] {e}"
+                            )
+                else:
+                    # Single URL Mode (Orchestrator handles Video vs Playlist detection)
+                    await orchestrator.run(url)
+
+            # Run pipeline
+            asyncio.run(run_processing())
+
+        except KeyboardInterrupt:
+            console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
+            raise typer.Exit(code=1) from None
+        except Exception as e:
+            # Import Panel locally
+            from rich.panel import Panel
+
+            console.print(
+                Panel(f"[bold red]Fatal Error[/bold red]\n{str(e)}", border_style="red")
+            )
+            logger.exception("Fatal error in CLI process", error=str(e))
+            raise typer.Exit(code=1) from e
 
 
 @app.callback(invoke_without_command=True)
@@ -334,44 +373,141 @@ def setup(
 
     Runs a wizard to generate the [bold]~/.yt-study/config.env[/bold] file.
     """
-    try:
-        from .setup_wizard import run_setup_wizard
+    with telemetry.track_command("setup"):
+        try:
+            from .setup_wizard import run_setup_wizard
 
-        run_setup_wizard(force=force)
-    except ImportError as e:
-        console.print("[red]Setup wizard module missing.[/red]")
-        raise typer.Exit(code=1) from e
+            run_setup_wizard(force=force)
+        except ImportError as e:
+            console.print("[red]Setup wizard module missing.[/red]")
+            raise typer.Exit(code=1) from e
 
 
 @app.command()
 def config_path() -> None:
     """Show the path to the configuration file."""
-    config_file = Path.home() / ".yt-study" / "config.env"
+    with telemetry.track_command("config_path"):
+        config_file = Path.home() / ".yt-study" / "config.env"
 
-    if config_file.exists():
-        console.print(f"\n[cyan]Configuration file:[/cyan] {config_file}")
-        console.print("\n[dim]To edit: Open the file above in a text editor[/dim]")
-        console.print(
-            "[dim]To reconfigure: Run[/dim] [cyan]yt-study setup --force[/cyan]\n"
-        )
-    else:
-        console.print("\n[yellow]No configuration found.[/yellow]")
-        console.print(
-            "[dim]Run[/dim] [cyan]yt-study setup[/cyan] [dim]to create one.[/dim]\n"
-        )
+        if config_file.exists():
+            console.print(f"\n[cyan]Configuration file:[/cyan] {config_file}")
+            console.print("\n[dim]To edit: Open the file above in a text editor[/dim]")
+            console.print(
+                "[dim]To reconfigure: Run[/dim] [cyan]yt-study setup --force[/cyan]\n"
+            )
+        else:
+            console.print("\n[yellow]No configuration found.[/yellow]")
+            console.print(
+                "[dim]Run[/dim] [cyan]yt-study setup[/cyan] [dim]to create one.[/dim]\n"
+            )
 
 
 @app.command()
 def version() -> None:
     """Show version information."""
-    try:
-        from . import __version__
+    with telemetry.track_command("version"):
+        try:
+            from . import __version__
 
-        ver = __version__
-    except ImportError:
-        ver = "dev"
+            ver = __version__
+        except ImportError:
+            ver = "dev"
 
-    console.print(f"[cyan]yt-study[/cyan] version [green]{ver}[/green]")
+        console.print(f"[cyan]yt-study[/cyan] version [green]{ver}[/green]")
+
+
+@app.command()
+def serve(
+    port: Annotated[
+        int,
+        typer.Option(
+            "--port",
+            "-p",
+            help="Port to run the visualizer on.",
+            min=1,
+            max=65535,
+        ),
+    ] = 8080,
+    host: Annotated[
+        str,
+        typer.Option(
+            "--host",
+            "-H",
+            help="Host to run the visualizer on.",
+        ),
+    ] = "0.0.0.0",
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output directory to scan for projects.",
+            exists=True,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+        ),
+    ] = None,
+) -> None:
+    """
+    Launch the web-based study material visualizer.
+
+    Scans the output directory and provides an interactive UI to browse
+    notes and watch videos with synced timestamps.
+    """
+    with telemetry.track_command("serve"):
+        try:
+            from .config import config
+            from .ui.web import start_web_ui
+
+            selected_output = output or config.default_output_dir
+
+            console.print(f"\n[bold cyan]🚀 Launching Visualizer[/bold cyan]")
+            console.print(f"[dim]Output directory:[/dim] [green]{selected_output}[/green]")
+            console.print(f"[dim]URL:[/dim] [bold blue]http://{host}:{port}[/bold blue]\n")
+
+            start_web_ui(port=port, host=host, output_dir=selected_output)
+        except Exception as e:
+            console.print(f"[red]Error starting visualizer:[/red] {e}")
+            raise typer.Exit(code=1) from e
+
+
+@app.command(name="telemetry")
+def telemetry_cmd(
+    stats: Annotated[
+        bool,
+        typer.Option(
+            "--stats",
+            help="Show usage statistics.",
+        ),
+    ] = True,
+) -> None:
+    """
+    Manage application telemetry.
+    """
+    if stats:
+        data = telemetry.get_stats()
+
+        table = Table(title="Application Usage Statistics")
+        table.add_column("Command", style="cyan")
+        table.add_column("Starts", style="magenta")
+        table.add_column("Successes", style="green")
+        table.add_column("Fails", style="red")
+
+        for cmd, counts in data["commands"].items():
+            table.add_row(
+                cmd,
+                str(counts["starts"]),
+                str(counts["successes"]),
+                str(counts["fails"]),
+            )
+
+        console.print(table)
+        total = data["total_commands"]
+        success = data["success_count"]
+        rate = (success / total * 100) if total > 0 else 0
+        console.print(f"\n[dim]Total commands run:[/dim] [bold]{total}[/bold]")
+        console.print(f"[dim]Overall success rate:[/dim] [bold]{rate:.1f}%[/bold]")
 
 
 if __name__ == "__main__":

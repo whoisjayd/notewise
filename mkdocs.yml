@@ -52,5 +52,5 @@ nav:
     - Architecture: Architecture.md
     - FAQ: FAQ.md
   - Contributing:
-    - Guide: docs/CONTRIBUTING.md
-    - Code of Conduct: docs/CODE_OF_CONDUCT.md
+    - Guide: CONTRIBUTING.md
+    - Code of Conduct: CODE_OF_CONDUCT.md
