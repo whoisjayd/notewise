@@ -417,6 +417,33 @@ def version() -> None:
 
 
 @app.command()
+def update() -> None:
+    """Check for updates and show upgrade instructions."""
+    with telemetry.track_command("update"):
+        from .core.updates import is_update_available, is_frozen
+        from . import __version__
+
+        console.print("[cyan]Checking for updates...[/cyan]")
+        available, latest = is_update_available()
+
+        if available:
+            console.print(f"\n[yellow]A new version of yt-study is available: [green]{latest}[/green] (current: {__version__})[/yellow]")
+
+            if is_frozen():
+                console.print("\n[bold]Download the new version from GitHub Releases:[/bold]")
+                console.print("[blue]https://github.com/jayss/yt-study/releases[/blue]\n")
+            else:
+                console.print("\n[bold]Run one of the following to upgrade:[/bold]")
+                console.print("  [cyan]uv tool upgrade yt-study[/cyan]")
+                console.print("  [dim]or[/dim]")
+                console.print("  [cyan]pip install --upgrade yt-study[/cyan]\n")
+        elif latest:
+            console.print(f"\n[green]You are on the latest version ({__version__}).[/green]\n")
+        else:
+            console.print("\n[red]Could not check for updates. Please check your internet connection.[/red]\n")
+
+
+@app.command()
 def serve(
     port: Annotated[
         int,
