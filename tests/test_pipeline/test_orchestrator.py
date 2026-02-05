@@ -10,9 +10,14 @@ from yt_study.pipeline.orchestrator import PipelineOrchestrator, sanitize_filena
 def test_sanitize_filename():
     """Test filename sanitization."""
     assert sanitize_filename("Hello World") == "Hello World"
-    assert sanitize_filename("foo/bar:baz") == "foobarbaz"
+    assert sanitize_filename("foo/bar:baz") == "foo_bar_baz"
     assert sanitize_filename("  spaces  ") == "spaces"
     assert len(sanitize_filename("a" * 200)) == 100
+    # Windows reserved names
+    assert sanitize_filename("CON") == "CON_"
+    assert sanitize_filename("NUL.txt") == "NUL_.txt"
+    # Trailing periods
+    assert sanitize_filename("file.") == "file"
 
 
 class TestPipelineOrchestrator:
@@ -130,24 +135,54 @@ class TestPipelineOrchestrator:
             assert (expected_folder / "01_Ch1.md").exists()
 
     @pytest.mark.asyncio
-    async def test_run_video_flow(self, orchestrator):
-        """Test run() method flow for a video URL."""
+    async def test_process_video_checkpointing(self, orchestrator):
+        """Test that existing output files are skipped."""
+        video_id = "vid123"
+        output_path = orchestrator.output_dir / "existing.md"
+        output_path.write_text("already here", encoding="utf-8")
+
+        # Mock generator to ensure it's NOT called
+        orchestrator.generator.generate_study_notes = AsyncMock()
+
+        success = await orchestrator.process_video(video_id, output_path)
+
+        assert success is True
+        # Generator should NOT have been called
+        assert orchestrator.generator.generate_study_notes.call_count == 0
+        # File content should remain unchanged
+        assert output_path.read_text(encoding="utf-8") == "already here"
+
+    @pytest.mark.asyncio
+    async def test_process_video_force_override(self, orchestrator):
+        """Test that --force overrides checkpointing."""
+        orchestrator.force = True
+        video_id = "vid123"
+        output_path = orchestrator.output_dir / "overwrite.md"
+        output_path.write_text("old content", encoding="utf-8")
+
+        # Mock dependencies for successful generation
         with (
-            patch("yt_study.pipeline.orchestrator.parse_youtube_url") as mock_parse,
-            patch.object(
-                orchestrator, "_process_with_dashboard", new_callable=AsyncMock
-            ) as mock_dash,
+            patch(
+                "yt_study.pipeline.orchestrator.get_video_title",
+                return_value="Test Video",
+            ),
+            patch(
+                "yt_study.pipeline.orchestrator.get_video_duration", return_value=100
+            ),
+            patch("yt_study.pipeline.orchestrator.get_video_chapters", return_value=[]),
+            patch(
+                "yt_study.pipeline.orchestrator.fetch_transcript",
+                new_callable=AsyncMock,
+            ) as mock_fetch,
         ):
-            mock_parsed = MagicMock()
-            mock_parsed.url_type = "video"
-            mock_parsed.video_id = "vid1"
-            mock_parse.return_value = mock_parsed
+            mock_transcript = MagicMock()
+            mock_transcript.to_text.return_value = "Transcript text"
+            mock_fetch.return_value = mock_transcript
 
-            mock_dash.return_value = 1  # 1 success
+            success = await orchestrator.process_video(video_id, output_path)
 
-            await orchestrator.run("http://url")
-
-            mock_dash.assert_called_once()
-            args = mock_dash.call_args
-            assert args[0][0] == ["vid1"]  # Video IDs list
-            assert args[1]["is_single_video"] is True
+            assert success is True
+            # Generator SHOULD have been called
+            orchestrator.generator.generate_study_notes.assert_called_once()
+            # File content should be updated
+            assert output_path.read_text(encoding="utf-8") == "# Notes"

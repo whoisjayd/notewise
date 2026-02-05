@@ -5,6 +5,8 @@ import logging
 import re
 from pathlib import Path
 
+from aiolimiter import AsyncLimiter
+from pathvalidate import sanitize_filename as strict_sanitize
 from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
@@ -37,6 +39,7 @@ logger = logging.getLogger(__name__)
 def sanitize_filename(name: str) -> str:
     """
     Sanitize a string to be used as a filename.
+    Respects OS constraints (Windows reserved names, length, etc.).
 
     Args:
         name: Raw filename string.
@@ -44,13 +47,16 @@ def sanitize_filename(name: str) -> str:
     Returns:
         Sanitized string safe for file systems.
     """
-    # Remove or replace invalid characters
-    name = re.sub(r'[<>:"/\\|?*]', "", name)
+    # Use pathvalidate for robust cross-platform sanitization
+    sanitized = strict_sanitize(name, replacement_text="_")
+
     # Replace multiple spaces with single space
-    name = re.sub(r"\s+", " ", name)
-    # Trim and limit length
-    name = name.strip()[:100]
-    return name if name else "untitled"
+    sanitized = re.sub(r"\s+", " ", sanitized)
+
+    # Trim and limit length (pathvalidate handles length but we keep a conservative limit)
+    sanitized = sanitized.strip()[:100]
+
+    return sanitized if sanitized else "untitled"
 
 
 class PipelineOrchestrator:
@@ -67,6 +73,8 @@ class PipelineOrchestrator:
         languages: list[str] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        force: bool = False,
+        export_transcript: bool = False,
     ):
         """
         Initialize orchestrator.
@@ -77,6 +85,8 @@ class PipelineOrchestrator:
             languages: Preferred transcript languages.
             temperature: LLM temperature (defaults to config.temperature).
             max_tokens: Max tokens (defaults to config.max_tokens).
+            force: Force re-processing even if output exists.
+            export_transcript: Whether to export raw transcript.
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -85,6 +95,8 @@ class PipelineOrchestrator:
             temperature if temperature is not None else config.temperature
         )
         self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
+        self.force = force
+        self.export_transcript = export_transcript
         self.provider = get_provider(model)
         self.generator = StudyMaterialGenerator(
             self.provider,
@@ -92,6 +104,7 @@ class PipelineOrchestrator:
             max_tokens=self.max_tokens,
         )
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
+        self.rate_limiter = AsyncLimiter(config.youtube_requests_per_minute, 60)
 
     def validate_provider(self) -> bool:
         """
@@ -146,6 +159,18 @@ class PipelineOrchestrator:
         async with self.semaphore:
             local_task_id = task_id
 
+            # Check if output already exists (Checkpointing)
+            if not self.force and output_path.exists() and output_path.stat().st_size > 0:
+                if progress and local_task_id is not None:
+                    progress.update(
+                        local_task_id,
+                        description=f"[green]✓ {video_title or video_id} (Skipped)[/green]",
+                        completed=True,
+                    )
+                else:
+                    logger.info(f"Skipping {video_id} - Output exists at {output_path}")
+                return True
+
             # If standalone (not part of worker pool), create a specific
             # bar if requested
             if is_playlist and progress and task_id is None:
@@ -158,14 +183,18 @@ class PipelineOrchestrator:
             try:
                 # 1. Fetch Metadata
                 if not video_title:
-                    # Run in thread to avoid blocking
-                    video_title = await asyncio.to_thread(get_video_title, video_id)
+                    # Apply rate limit
+                    async with self.rate_limiter:
+                        # Run in thread to avoid blocking
+                        video_title = await asyncio.to_thread(get_video_title, video_id)
 
                 # Fetch duration and chapters concurrently
-                duration, chapters = await asyncio.gather(
-                    asyncio.to_thread(get_video_duration, video_id),
-                    asyncio.to_thread(get_video_chapters, video_id),
-                )
+                # Apply rate limit for these too
+                async with self.rate_limiter:
+                    duration, chapters = await asyncio.gather(
+                        asyncio.to_thread(get_video_duration, video_id),
+                        asyncio.to_thread(get_video_chapters, video_id),
+                    )
 
                 title_display = (video_title or video_id)[:40]
 
@@ -176,7 +205,17 @@ class PipelineOrchestrator:
                     )
 
                 # 2. Fetch Transcript
-                transcript_obj = await fetch_transcript(video_id, self.languages)
+                async with self.rate_limiter:
+                    transcript_obj = await fetch_transcript(video_id, self.languages)
+
+                # Export Raw Transcript if requested
+                if self.export_transcript:
+                    raw_text = transcript_obj.to_text()
+                    safe_title = sanitize_filename(video_title)
+                    transcript_path = output_path.parent / f"{safe_title}_transcript.txt"
+                    transcript_path.parent.mkdir(parents=True, exist_ok=True)
+                    transcript_path.write_text(raw_text, encoding="utf-8")
+                    logger.info(f"Exported raw transcript to {transcript_path}")
 
                 # 3. Determine Generation Strategy
                 # Use chapters if video is long (>1h) and chapters exist

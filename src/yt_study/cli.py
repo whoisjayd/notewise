@@ -156,6 +156,22 @@ def process(
             min=1,
         ),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-f",
+            help="Force re-processing even if output already exists.",
+        ),
+    ] = False,
+    export_transcript: Annotated[
+        bool,
+        typer.Option(
+            "--export-transcript",
+            "--raw",
+            help="Export raw transcript to a separate text file.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -198,6 +214,8 @@ def process(
             languages=selected_languages,
             temperature=selected_temperature,
             max_tokens=selected_max_tokens,
+            force=force,
+            export_transcript=export_transcript,
         )
 
         async def run_processing() -> None:
