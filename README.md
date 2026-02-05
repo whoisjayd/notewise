@@ -35,8 +35,10 @@
 -   **Model Flexibility**: Use **Gemini**, **ChatGPT**, **Claude**, or **Groq** and **Many More** via a unified interface.
 -   **Chapter Intelligence**: Automatically splits long videos (>1hr) into separate, detailed chapter notes.
 -   **Synthetic Chapter Engine**: Automatically identifies logical sections using AI for videos lacking native YouTube chapters.
+-   **Output Organization**: Structured directory for each video (`output/{slug}/`), containing combined notes, individual chapters, and raw chunks with metadata.
+-   **Advanced Control**: Fine-tune processing with flags like `--no-chapters`, `--no-synthetic`, `--chunk-size`, `--chunk-overlap`, `--temperature`, and `--max-tokens`.
+-   **Export Raw Transcripts**: Optionally save the raw YouTube transcript using the `--export-transcript` flag.
 -   **Chapter-Aware Chunking**: Ensures study notes are coherent by respecting chapter boundaries during processing.
--   **Structured Outputs**: Organizes notes into dedicated folders with unique slugs (`{title}_{video_id}`), preserving intermediate chunk data.
 -   **Deep Context**: Processes massive transcripts (100k+ tokens) without summarization loss using recursive chunking.
 -   **Robust Batch Processing**: Handle playlists or URL lists with a rich TUI dashboard.
 -   **IP Block Handling**: Gracefully detects YouTube rate limits and pauses/alerts without crashing.
