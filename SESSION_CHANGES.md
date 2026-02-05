@@ -1,73 +1,85 @@
 # Session Changes Report (v0.1.8 -> v0.1.9)
 
 ## Overview: The "Production-Ready" Mission
-This session focused on transitioning `yt-study` from a functional prototype to a robust, library-grade tool. The primary mission was to implement a "production-ready" architecture that emphasizes decoupling, scalability, and observability.
+This session successfully transitioned `yt-study` from a functional prototype to a robust, library-grade tool. The primary focus was on implementing a "production-ready" architecture emphasizing decoupling, observability, and a streamlined developer experience.
 
-Key accomplishments include a complete core refactor, a sophisticated event-driven pipeline, and significant enhancements to the LLM generation engine for handled edge cases like oversized chapters and unchaptered videos.
+Key accomplishments include a complete core refactor, an event-driven processing pipeline, a web-based visualization layer, and a fully automated CI/CD suite.
+
+---
 
 ## 1. Architectural Evolution
 
-### Core Refactor & Decoupling
-The codebase has been reorganized into a modular structure to facilitate testing and library usage:
-- **`yt_study.core`**: Contains the foundational logic (LLM, YouTube, Telemetry, Events).
-- **`yt_study.pipeline`**: Manages the high-level orchestration of tasks.
-- **`yt_study.ui`**: Encapsulates the Rich-based dashboard and CLI presentation logic.
-
-**Rationale**: By separating the "how" (core logic) from the "what" (pipeline) and the "where" (UI), we've made the system more maintainable and prepared it for potential alternative interfaces (e.g., a web API).
+### Core Refactor & API Layer
+The codebase was reorganized into a modular hierarchy to support both CLI and programmatic usage:
+- **`yt_study.core`**: Foundational logic (LLM providers, YouTube interaction, Telemetry, Updates).
+- **`yt_study.pipeline`**: High-level orchestration and concurrent processing logic.
+- **`yt_study.ui`**: CLI presentation (Rich dashboard) and Web UI (NiceGUI).
+- **`yt_study.api`**: New high-level API entry point for integration into other Python projects.
 
 ### Event-Driven Communication
-Introduced a robust `EventEmitter` system in `src/yt_study/core/events.py`.
-- **Features**: Asynchronous progress reporting, status updates, and error emission.
-- **Implementation**: Uses a `Protocol`-based handler system to allow decoupled components (like the LLM generator) to report progress back to the UI without direct dependencies.
+Introduced a robust `EventEmitter` system (`src/yt_study/core/events.py`):
+- **Decoupling**: Allows core logic (like LLM generation) to report progress without being tied to a specific UI implementation.
+- **Asynchrony**: Fully supports `asyncio` for non-blocking status updates and error emission.
+
+---
 
 ## 2. New Features & Capabilities
 
 ### Synthetic Chapter Engine
 Videos lacking native YouTube chapters now receive AI-generated "Synthetic Chapters" via the `SyntheticChapterEngine`.
-- **Logic**: Analyzes timestamped transcripts to identify logical section boundaries.
-- **Impact**: Enables structured notes even for older or less-organized educational content.
+- **Contextual Analysis**: Analyzes timestamped transcripts to identify logical section boundaries.
+- **Improved Structure**: Ensures all processed videos benefit from a structured, chapter-based note format.
 
-### Enhanced LLM Pipeline
-The `StudyMaterialGenerator` received major upgrades:
-- **Chapter-Aware Chunking**: Chunks are now aligned with chapter boundaries to preserve context.
-- **Recursive Chunking**: Automatically handles oversized chapters by sub-chunking them if they exceed the model's context window.
-- **Per-Chunk Saving**: Intermediate chunk notes and individual chapter files are saved to `output_dir/chunks/` and `output_dir/chapters/`, enabling manual review and recovery.
-- **Interactive Timestamps**: A new post-processing step converts `[MM:SS]` text into clickable YouTube links.
+### Web Visualizer (`serve`)
+Launched a web-based study material visualizer built with NiceGUI.
+- **Usage**: Run `yt-study serve` to launch.
+- **Features**: Interactive project browser, synced video-to-note timestamps, and a responsive reading interface.
 
-### Advanced CLI & Orchestration
-The `PipelineOrchestrator` now manages complex workflows with:
-- **Playlist Checkpointing**: Automatically skips videos that have already been processed, allowing for interrupted runs to resume.
-- **Transcript Export**: Optional `--export-transcript` flag to save raw transcripts alongside study notes.
-- **Advanced Dashboard**: A multi-worker Rich Live dashboard that tracks concurrent video processing in real-time.
+### LLM Pipeline Enhancements
+- **Recursive Chunking**: Automatically handles oversized chapters by sub-chunking them to fit within model context limits.
+- **Interactive Timestamps**: A post-processing layer converts `[MM:SS]` text into clickable YouTube links.
+- **Per-Chunk Persistence**: Intermediate notes and individual chapter files are now saved to `output/`, enabling recovery and granular review.
 
-## 3. Robustness & Reliability
-
-### Rate Limiting & Retries
-- Integrated `aiolimiter` to manage YouTube API/transcript requests, preventing IP bans during large playlist processing.
-- Implementation of `YouTubeIPBlockError` detection with user-friendly recovery instructions.
-
-### Sanitization & Safety
-- **Filename Sanitization**: Uses `pathvalidate` to ensure video titles are safe for all filesystems.
-- **Input Validation**: Strict validation of API keys and configuration parameters at startup.
-
-## 4. Developer Experience & Observability
-
-### Telemetry & Logging
-- **Local Telemetry**: A new `Telemetry` module tracks command success rates, durations, and stack traces locally (`~/.yt-study/telemetry/`).
-- **Structured Logging**: Migrated to `structlog` for machine-readable, high-context logs.
-
-### Quality Gates
-- **Linting & Typing**: Integrated `ruff` for fast linting/formatting and `mypy` for strict static type checking.
-- **CI Readiness**: Updated `pyproject.toml` with comprehensive dependency groups and tool configurations.
+### Update Checker (`update`)
+Added a self-update notification system.
+- **Usage**: `yt-study update` checks PyPI for the latest version.
+- **Frozen Binary Support**: Correctly identifies and provides instructions for users running PyInstaller-built executables.
 
 ---
 
-## Technical Summary of Changes
-- **Files Modified**: 21
-- **New LOC**: ~938
-- **Refactored LOC**: ~181
+## 3. DevOps & Quality Engineering
+
+### CI/CD Automation
+Implemented a comprehensive GitHub Actions suite (`release.yml`):
+- **Cross-Platform Builds**: Automated generation of standalone executables for Linux, Windows, and macOS.
+- **PyPI Publishing**: Automated package distribution to the Python Package Index.
+- **Integrity**: Automatic generation of `SHA256SUMS.txt` for all release artifacts.
+
+### Quality Gates & Linting
+- **Ruff & Mypy**: Integrated into `pyproject.toml` for high-performance linting and strict static type checking.
+- **Pre-commit**: Established hooks to ensure code quality before every commit.
+
+---
+
+## 4. Robustness & Observability
+
+### Telemetry & Structured Logging
+- **Local Telemetry**: A new module tracks command success rates and durations locally (`~/.yt-study/telemetry/`).
+- **Structured Logging**: Migrated to `structlog` for machine-readable, high-context JSON logs.
+
+### Reliability Enhancements
+- **Rate Limiting**: Integrated `aiolimiter` to respect YouTube API bounds and prevent IP blocks.
+- **Playlist Checkpointing**: The orchestrator now skips already-processed videos, allowing interrupted jobs to resume seamlessly.
+- **Sanitization**: Uses `pathvalidate` for robust cross-platform filename safety.
+
+---
+
+## Technical Summary
+- **Files Modified**: 28
+- **New LOC**: ~1,450
 - **Version**: Bumped to `v0.1.9`
+- **Documentation**: Finalized MkDocs material theme setup and fixed character encoding issues in legacy docs.
 
-**Rationale for v0.1.9**: This version represents the completion of the architectural foundation required for 1.0.0. The focus now shifts to UX refinements and community feedback.
-
+---
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
