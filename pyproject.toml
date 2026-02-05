@@ -32,6 +32,8 @@ dependencies = [
     "aiolimiter>=1.1.0",
     "aiofiles>=23.2.1",
     "pathvalidate>=3.2.1",
+    "structlog>=25.1.0",
+    "nicegui>=3.7.1",
 ]
 
 [project.optional-dependencies]
@@ -46,6 +48,10 @@ dev = [
     "mypy>=1.19.1",
     "types-requests",
     "types-setuptools",
+    "pre-commit>=4.5.1",
+    "types-aiofiles>=25.1.0.20251011",
+    "mkdocs>=1.6.0",
+    "mkdocs-material>=9.5.0",
 ]
 
 [project.scripts]

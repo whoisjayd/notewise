@@ -1,131 +1,83 @@
 # 🎓 yt-study
 
-[![PyPI version](https://badge.fury.io/py/yt-study.svg)](https://badge.fury.io/py/yt-study)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
-[![CI Status](https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml/badge.svg)](https://github.com/whoisjayd/yt-study/actions)
-[![Code Coverage](https://codecov.io/gh/whoisjayd/yt-study/branch/main/graph/badge.svg?token=CODECOV_TOKEN)](https://codecov.io/gh/whoisjayd/yt-study)
-[![Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff)
-[![Mypy](https://img.shields.io/badge/mypy-checked-blue)](https://mypy-lang.org/)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/whoisjayd/yt-study/main/docs/assets/logo.png" alt="yt-study logo" width="200">
+</p>
 
-> **Automated, AI-powered study notes from YouTube videos.**
+<p align="center">
+  <b>Automated, AI-powered study notes from YouTube videos.</b>
+</p>
 
-`yt-study` is a command-line tool that transforms video content into structured, academic-quality Markdown notes. It handles transcripts, detects chapters, and preserves technical details like code snippets and SQL queries using state-of-the-art LLMs.
-
-### 🛡️ Badges Explained
-- **CI Status**: Shows if our full validation suite is passing on the `main` branch.
-- **Code Coverage**: Indicates the percentage of code covered by tests (we aim for >90%).
-- **Ruff/Mypy**: Certifies that the code adheres to strict linting and type-checking standards.
-
----
-
-## 🏗 Architecture Overview
-
-`yt-study` is built as a modular pipeline:
-1.  **CLI Layer** (`src/yt_study/cli.py`): Entry point using Typer and Rich for TUI.
-2.  **Orchestrator** (`src/yt_study/pipeline/`): Manages async workers, rate limiting, and progress state.
-3.  **YouTube Provider** (`src/yt_study/youtube/`): Handles transcript fetching (with cookie auth) and metadata extraction.
-4.  **LLM Provider** (`src/yt_study/llm/`): Interfaces with Gemini, ChatGPT, Claude, etc., via LiteLLM.
-5.  **Data Layer** (`src/yt_study/db.py`): SQLite backend for caching and metrics (coming in v0.2.0).
+<p align="center">
+  <a href="https://badge.fury.io/py/yt-study"><img src="https://badge.fury.io/py/yt-study.svg" alt="PyPI version"></a>
+  <a href="https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml"><img src="https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml/badge.svg" alt="CI Status"></a>
+  <a href="https://codecov.io/gh/whoisjayd/yt-study"><img src="https://codecov.io/gh/whoisjayd/yt-study/branch/main/graph/badge.svg?token=CODECOV_TOKEN" alt="Code Coverage"></a>
+  <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
+  <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
+</p>
 
 ---
 
-## ✨ Features
+`yt-study` is a powerful command-line tool that transforms YouTube video content into structured, academic-quality Markdown notes. It handles transcripts, detects logical chapters, and preserves technical details like code snippets and mathematical formulas using state-of-the-art LLMs.
 
--   **Model Flexibility**: Use **Gemini**, **ChatGPT**, **Claude**, or **Groq** and **Many More** via a unified interface.
--   **Chapter Intelligence**: Automatically splits long videos (>1hr) into separate, detailed chapter notes.
--   **Synthetic Chapter Engine**: Automatically identifies logical sections using AI for videos lacking native YouTube chapters.
--   **Output Organization**: Structured directory for each video (`output/{slug}/`), containing combined notes, individual chapters, and raw chunks with metadata.
--   **Advanced Control**: Fine-tune processing with flags like `--no-chapters`, `--no-synthetic`, `--chunk-size`, `--chunk-overlap`, `--temperature`, and `--max-tokens`.
--   **Export Raw Transcripts**: Optionally save the raw YouTube transcript using the `--export-transcript` flag.
--   **Chapter-Aware Chunking**: Ensures study notes are coherent by respecting chapter boundaries during processing.
--   **Deep Context**: Processes massive transcripts (100k+ tokens) without summarization loss using recursive chunking.
--   **Robust Batch Processing**: Handle playlists or URL lists with a rich TUI dashboard.
--   **IP Block Handling**: Gracefully detects YouTube rate limits and pauses/alerts without crashing.
--   **Developer Ready**: Fully type-checked (Mypy), linted (Ruff), and tested.
+## ✨ Key Features
 
----
+| Feature | Description |
+| :--- | :--- |
+| 🤖 **Multi-Model Support** | Seamlessly use Gemini, Claude, GPT-4, or Groq via LiteLLM. |
+| 🧠 **Smart Chaptering** | Automatically detects logical sections for videos without native chapters. |
+| 📝 **Academic Quality** | Generates detailed notes with code blocks, tables, and structured summaries. |
+| 📂 **Organized Output** | Creates a clean directory structure for each video and playlist. |
+| ⚡ **Parallel Processing** | Handles large playlists efficiently with configurable concurrency. |
+| 🛠 **Developer Friendly** | Fully type-checked, tested, and easy to extend. |
 
 ## 🚀 Quick Start
 
 ### 1. Installation
 
-Requires Python 3.10 or higher.
-
 ```bash
 pip install yt-study
 ```
 
-### 2. Configure
+### 2. Initialization
 
-Run the interactive wizard to set up your LLM provider and API keys.
+Run the setup wizard to configure your preferred LLM provider and API keys:
 
 ```bash
 yt-study setup
 ```
 
-### 3. Run
+### 3. Generate Notes
 
-Generate notes for a single video:
-
-```bash
-yt-study process "https://youtube.com/watch?v=VIDEO_ID"
-```
-
-Or an entire playlist:
+Transform any video into structured notes instantly:
 
 ```bash
-yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
+# Process a single video
+yt-study process "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# Process an entire playlist
+yt-study process "https://www.youtube.com/playlist?list=PL..."
 ```
 
----
+## 📖 Documentation
 
-## ⚙️ Configuration
+For full installation guides, CLI reference, and advanced configuration, visit our documentation:
 
-Full configuration options are detailed in [wiki/Configuration.md](wiki/Configuration.md).
-
-Key environment variables:
-- `GEMINI_API_KEY`, `OPENAI_API_KEY`, etc. for LLM access.
-- `MAX_CONCURRENT_VIDEOS`: Control parallel worker count (default: 5).
-
----
+👉 **[https://whoisjayd.github.io/yt-study/](https://whoisjayd.github.io/yt-study/)**
 
 ## 🤝 Contributing
 
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for details on setting up the development environment.
+Contributions are welcome! Whether it's a bug report, feature request, or a pull request, we appreciate your help in making `yt-study` better.
 
-We abide by our [Code of Conduct](CODE_OF_CONDUCT.md) and [Governance](GOVERNANCE.md) policies.
+1. Clone the repo: `git clone https://github.com/whoisjayd/yt-study.git`
+2. Install dev dependencies: `make install-dev`
+3. Run checks: `make all`
 
-### Quick Start for Contributors
-
-```bash
-# Clone and setup
-git clone https://github.com/whoisjayd/yt-study.git
-cd yt-study
-make install-dev
-
-# Run all checks before submitting PR
-make all
-```
-
-### Entry Points
-- **Good First Issues**: Check our [Issues page](https://github.com/whoisjayd/yt-study/issues?q=is%3Aissue+is%3Aopen+label%3A%22good+first+issue%22) for beginner-friendly tasks.
-- **Discussions**: Join the conversation in GitHub Discussions.
+Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ---
 
-## 🛣️ Roadmap
-
-See [Issues](https://github.com/whoisjayd/yt-study/issues) for the full backlog.
-
----
-
-## 🔒 Security
-
-For vulnerability reporting, please refer to [SECURITY.md](SECURITY.md).
-
----
-
-## License
-
-MIT © [Jaydeep Solanki](https://github.com/whoisjayd)
+<p align="center">
+  Built with ❤️ by <a href="https://github.com/whoisjayd">Jaydeep Solanki</a>
+</p>

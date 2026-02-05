@@ -1,0 +1,56 @@
+site_name: yt-study
+site_description: Convert YouTube videos into AI-powered study notes with chapter support
+site_author: whoisjayd
+site_url: https://whoisjayd.github.io/yt-study/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+
+nav:
+  - Home: index.md
+  - Getting Started:
+    - Installation: Installation.md
+    - Usage: Usage.md
+  - Configuration: Configuration.md
+  - Reference:
+    - Architecture: Architecture.md
+    - FAQ: FAQ.md
+  - Contributing:
+    - Guide: docs/CONTRIBUTING.md
+    - Code of Conduct: docs/CODE_OF_CONDUCT.md
