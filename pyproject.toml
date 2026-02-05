@@ -29,6 +29,8 @@ dependencies = [
     "typer>=0.21.1",
     "rich>=13.9.4",
     "aiohttp>=3.11.11",
+    "aiolimiter>=1.1.0",
+    "pathvalidate>=3.2.1",
 ]
 
 [project.optional-dependencies]

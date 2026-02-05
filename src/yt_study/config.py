@@ -36,6 +36,7 @@ class Config:
 
     # Concurrency Configuration
     max_concurrent_videos: int = 5
+    youtube_requests_per_minute: int = 10
 
     # Output Configuration
     default_output_dir: Path = Path("./output")
@@ -55,6 +56,7 @@ class Config:
             "DEFAULT_MODEL",
             "OUTPUT_DIR",
             "MAX_CONCURRENT_VIDEOS",
+            "YOUTUBE_REQUESTS_PER_MINUTE",
             "TEMPERATURE",
             "MAX_TOKENS",
         }
@@ -92,6 +94,16 @@ class Config:
                 logger.warning(
                     f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. "
                     f"Using default {self.max_concurrent_videos}"
+                )
+
+        env_rate_limit = os.getenv("YOUTUBE_REQUESTS_PER_MINUTE")
+        if env_rate_limit:
+            try:
+                self.youtube_requests_per_minute = int(env_rate_limit)
+            except ValueError:
+                logger.warning(
+                    f"Invalid YOUTUBE_REQUESTS_PER_MINUTE value: {env_rate_limit}. "
+                    f"Using default {self.youtube_requests_per_minute}"
                 )
 
         env_temperature = os.getenv("TEMPERATURE")
