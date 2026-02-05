@@ -37,9 +37,12 @@ Requirements:
 5. **Logical Structure**: Use deep hierarchy (##, ###, ####) to organize
    related concepts.
 6. **Key Terminology**: Highlight and define technical terms or important vocabulary.
-7. **Pure Markdown**: No HTML, no table of contents.
-8. **Clean Start**: Start directly with the content headers, no conversational filler.
-9. **Language**: English."""
+7. **Timestamps**: The transcript includes [MM:SS] timestamps. Use these to
+   periodically link to specific points in the video for key concepts.
+   Format: `[MM:SS]` text within the notes.
+8. **Pure Markdown**: No HTML, no table of contents.
+9. **Clean Start**: Start directly with the content headers, no conversational filler.
+10. **Language**: English."""
 
 # Prompt for combining multiple chunk notes into final document
 COMBINE_CHUNKS_PROMPT = """
@@ -80,11 +83,14 @@ Requirements:
    to organize topics.
 4. **Examples & Context**: Retain all illustrative examples and context
    provided in the video.
-5. **No Summarization**: Do not summarize brief points; expand them for full
+5. **Timestamps**: The transcript includes [MM:SS] timestamps. Use these to
+   link to specific points in the video for key concepts.
+   Format: `[MM:SS]` text within the notes.
+6. **No Summarization**: Do not summarize brief points; expand them for full
    understanding.
-6. Pure Markdown format (no HTML, no table of contents).
-7. English language output.
-8. **Clean Start**: Start directly with the first header (e.g. # Video
+7. Pure Markdown format (no HTML, no table of contents).
+8. English language output.
+9. **Clean Start**: Start directly with the first header (e.g. # Video
    Title), no filler."""
 
 

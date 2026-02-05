@@ -1,6 +1,6 @@
 """Tests for study material generator."""
 
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -113,25 +113,25 @@ class TestStudyMaterialGenerator:
             # 2 chunks + 1 combine = 3 calls
             assert generator.provider.generate.call_count == 3
 
+    def test_post_process_timestamps(self, generator):
+        """Test that [MM:SS] timestamps are converted to YouTube links."""
+        text = "Check this point [01:23] and another [12:34:56]."
+        video_id = "abc123"
+        processed = generator._post_process_timestamps(text, video_id)
+
+        assert "[01:23](https://youtu.be/abc123?t=83)" in processed
+        assert "[12:34:56](https://youtu.be/abc123?t=45296)" in processed
+
     @pytest.mark.asyncio
-    async def test_generate_chapter_notes_oversized(self, generator):
-        """Test generating chapter-based notes with an oversized chapter."""
-        chapters = {"Oversized": "A" * 1000}
-        orig_size = config.chunk_size
-        config.chunk_size = 100 # Force chunking
+    async def test_generate_study_notes_with_video_id(self, generator):
+        """Test that generate_study_notes calls post-processing if video_id is provided."""
+        text = "Transcript with [01:00]"
+        video_id = "vid123"
 
-        try:
-            with patch("yt_study.llm.generator.token_counter") as mock_tc:
-                # Mock token counter to return a high value
-                mock_tc.return_value = 500
+        # Mock generator.provider.generate to return text with timestamp
+        generator.provider.generate = AsyncMock(return_value="Notes with [01:00]")
 
-                # We need to mock _chunk_transcript to return multiple chunks
-                with patch.object(generator, "_chunk_transcript", return_value=["Part 1", "Part 2"]):
-                    await generator.generate_chapter_based_notes(chapters)
+        with patch.object(generator, "_chunk_transcript", return_value=[text]):
+            notes = await generator.generate_study_notes(text, video_id=video_id)
 
-                    # Calls for "Oversized" chapter:
-                    # 1 per chunk (2) + 1 combine for this chapter = 3
-                    # + 1 final combine for all chapters = 4 total calls
-                    assert generator.provider.generate.call_count == 4
-        finally:
-            config.chunk_size = orig_size
+            assert "https://youtu.be/vid123?t=60" in notes

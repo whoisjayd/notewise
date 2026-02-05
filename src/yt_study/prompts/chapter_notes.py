@@ -15,10 +15,13 @@ Requirements:
 3. **Clarify Concepts**: Explain "why" and "how" for every concept, not just "what".
 4. **Examples**: Preserve all examples and use them to illustrate technical points.
 5. **Structure**: Use deeply nested headers (###, ####) to break down complex ideas.
-6. Pure Markdown format.
-7. English language.
-8. **DO NOT include any opening or closing conversational text.**
-9. **Start directly with the first header (e.g., # Chapter Title)**"""
+6. **Timestamps**: The transcript includes [MM:SS] timestamps. Use these to
+   periodically link to specific points in the video for key concepts.
+   Format: `[MM:SS]` text within the notes.
+7. Pure Markdown format.
+8. English language.
+9. **DO NOT include any opening or closing conversational text.**
+10. **Start directly with the first header (e.g., # Chapter Title)**"""
 
 
 # Prompt for combining chapter notes

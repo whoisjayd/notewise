@@ -192,6 +192,7 @@ class StudyMaterialGenerator:
         video_title: str = "Video",
         progress: Progress | None = None,
         task_id: TaskID | None = None,
+        video_id: str | None = None,
     ) -> str:
         """
         Generate study notes from transcript.
@@ -201,6 +202,7 @@ class StudyMaterialGenerator:
             video_title: Video title for progress display.
             progress: Optional existing progress bar instance.
             task_id: Optional task ID for updating progress.
+            video_id: YouTube video ID for generating timestamp links.
 
         Returns:
             Complete study notes in Markdown format.
@@ -217,6 +219,9 @@ class StudyMaterialGenerator:
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
+
+            if video_id:
+                notes = self._post_process_timestamps(notes, video_id)
 
             if not progress:
                 logger.info(f"Generated notes for {video_title}")
@@ -258,15 +263,43 @@ class StudyMaterialGenerator:
             max_tokens=self.max_tokens,
         )
 
+        if video_id:
+            final_notes = self._post_process_timestamps(final_notes, video_id)
+
         if not progress:
             logger.info(f"Completed notes for {video_title}")
 
         return final_notes
 
+    def _post_process_timestamps(self, text: str, video_id: str) -> str:
+        """
+        Convert [MM:SS] strings in the text into clickable YouTube links.
+        """
+        import re
+
+        def replace_timestamp(match):
+            ts_str = match.group(1)
+            parts = ts_str.split(":")
+            if len(parts) == 2:
+                minutes, seconds = map(int, parts)
+                total_seconds = minutes * 60 + seconds
+            elif len(parts) == 3:
+                hours, minutes, seconds = map(int, parts)
+                total_seconds = hours * 3600 + minutes * 60 + seconds
+            else:
+                return match.group(0)
+
+            return f"[{ts_str}](https://youtu.be/{video_id}?t={total_seconds})"
+
+        # Match [MM:SS] or [HH:MM:SS]
+        pattern = r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]"
+        return re.sub(pattern, replace_timestamp, text)
+
     async def generate_single_chapter_notes(
         self,
         chapter_title: str,
         chapter_text: str,
+        video_id: str | None = None,
     ) -> str:
         """
         Generate study notes for a single chapter.
@@ -274,6 +307,7 @@ class StudyMaterialGenerator:
         Args:
             chapter_title: Title of the chapter.
             chapter_text: Transcript text for the chapter.
+            video_id: Optional video ID for timestamps.
 
         Returns:
             Study notes for the chapter.
@@ -284,6 +318,10 @@ class StudyMaterialGenerator:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+
+        if video_id:
+            notes = self._post_process_timestamps(notes, video_id)
+
         return notes
 
     async def generate_chapter_based_notes(
@@ -292,6 +330,7 @@ class StudyMaterialGenerator:
         video_title: str = "Video",
         progress: Progress | None = None,
         task_id: TaskID | None = None,
+        video_id: str | None = None,
     ) -> str:
         """
         Generate study notes using chapter-based approach.
@@ -301,6 +340,7 @@ class StudyMaterialGenerator:
             video_title: Video title for display.
             progress: Optional existing progress bar instance.
             task_id: Optional task ID for updating progress.
+            video_id: YouTube video ID for generating timestamp links.
 
         Returns:
             Complete study notes organized by chapters.
@@ -366,6 +406,10 @@ class StudyMaterialGenerator:
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
                 )
+
+            if video_id:
+                notes = self._post_process_timestamps(notes, video_id)
+
             chapter_notes[chapter_title] = notes
 
         self._update_status(
@@ -378,6 +422,9 @@ class StudyMaterialGenerator:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+
+        if video_id:
+            final_notes = self._post_process_timestamps(final_notes, video_id)
 
         if not progress:
             logger.info(f"Completed chapter-based notes for {video_title}")

@@ -61,6 +61,19 @@ class VideoTranscript:
         """Convert transcript segments to continuous text."""
         return " ".join(segment.text for segment in self.segments)
 
+    def to_timestamped_text(self) -> str:
+        """
+        Convert transcript segments to text with embedded [MM:SS] timestamps.
+        Used to help LLM generate timestamped links.
+        """
+        lines = []
+        for segment in self.segments:
+            minutes = int(segment.start // 60)
+            seconds = int(segment.start % 60)
+            timestamp = f"[{minutes:02d}:{seconds:02d}]"
+            lines.append(f"{timestamp} {segment.text}")
+        return "\n".join(lines)
+
 
 class TranscriptError(Exception):
     """Exception raised for transcript-related errors."""
@@ -256,7 +269,9 @@ def _fetch_sync(video_id: str, languages: list[str]) -> tuple[Any, Any, str]:
 
 
 def split_transcript_by_chapters(
-    transcript: VideoTranscript, chapters: list[VideoChapter]
+    transcript: VideoTranscript,
+    chapters: list[VideoChapter],
+    include_timestamps: bool = False,
 ) -> dict[str, str]:
     """
     Split a video transcript by chapters.
@@ -264,6 +279,7 @@ def split_transcript_by_chapters(
     Args:
         transcript: VideoTranscript object.
         chapters: List of VideoChapter objects.
+        include_timestamps: Whether to include [MM:SS] timestamps in the text.
 
     Returns:
         Dictionary mapping chapter titles to their transcript text.
@@ -281,17 +297,27 @@ def split_transcript_by_chapters(
             if chapter.end_seconds is None:
                 # Last chapter - include everything after start
                 if segment_start >= chapter.start_seconds:
-                    chapter_segments.append(segment.text)
+                    chapter_segments.append(segment)
             else:
                 # Middle chapters - include if in range
                 if (
                     segment_start >= chapter.start_seconds
                     and segment_start < chapter.end_seconds
                 ):
-                    chapter_segments.append(segment.text)
+                    chapter_segments.append(segment)
 
         # Combine segments for this chapter
-        chapter_text = " ".join(chapter_segments)
+        if include_timestamps:
+            lines = []
+            for s in chapter_segments:
+                minutes = int(s.start // 60)
+                seconds = int(s.start % 60)
+                timestamp = f"[{minutes:02d}:{seconds:02d}]"
+                lines.append(f"{timestamp} {s.text}")
+            chapter_text = "\n".join(lines)
+        else:
+            chapter_text = " ".join(s.text for s in chapter_segments)
+
         chapter_transcripts[chapter.title] = chapter_text
 
     return chapter_transcripts

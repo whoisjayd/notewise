@@ -233,7 +233,7 @@ class PipelineOrchestrator:
 
                     # Split transcript
                     chapter_transcripts = split_transcript_by_chapters(
-                        transcript_obj, chapters
+                        transcript_obj, chapters, include_timestamps=True
                     )
 
                     # Create folder for chapter notes
@@ -260,6 +260,7 @@ class PipelineOrchestrator:
                         notes = await self.generator.generate_single_chapter_notes(
                             chapter_title=chap_title,
                             chapter_text=chap_text,
+                            video_id=video_id,
                         )
 
                         # Save individual chapter
@@ -289,10 +290,11 @@ class PipelineOrchestrator:
                         )
 
                     notes = await self.generator.generate_study_notes(
-                        transcript_text,
+                        transcript_obj.to_timestamped_text(),
                         video_title=title_display,
                         progress=progress,
                         task_id=local_task_id,
+                        video_id=video_id,
                     )
 
                     output_path.parent.mkdir(parents=True, exist_ok=True)
