@@ -65,28 +65,28 @@ def test_updates_empty_json():
 
 def test_web_visualizer_empty_dir(tmp_path):
     viz = WebVisualizer(tmp_path)
-    assert viz.projects == []
+    assert viz.tree_data == []
 
 def test_web_visualizer_corrupted_md(tmp_path):
     project_dir = tmp_path / "test_123"
     project_dir.mkdir()
+    # New UI looks for {item.name}.md or chapters/
     md_file = project_dir / "test_123.md"
     md_file.write_bytes(b"\xff\xfe\xfd") # Corrupted bytes
 
     viz = WebVisualizer(tmp_path)
-    # The scan should find it (it only checks existence for list)
-    assert len(viz.projects) == 1
+    # The scan should find it as a standalone video
+    assert len(viz.tree_data) == 1
+    assert viz.tree_data[0]["label"] == "Videos"
+    assert len(viz.tree_data[0]["children"]) == 1
 
-    # Reading it might fail or return weird stuff depending on encoding
-    # select_project reads it
-    mock_content_area = MagicMock()
-    viz.content_area = mock_content_area
+    # Mock UI components
+    viz.markdown_view = MagicMock()
+    viz.title_label = MagicMock()
+    viz.editor_container = MagicMock()
+    viz.edit_btn = MagicMock()
 
-    # Should handle encoding error or similar
-    with patch("yt_study.ui.web.ui"):
-        try:
-            viz.select_project(viz.projects[0])
-        except UnicodeDecodeError:
-            pytest.fail("select_project should handle corrupted files gracefully if possible")
-        except Exception:
-            pass # We want to see if it crashes the app
+    # Should handle encoding error gracefully via try-except
+    with patch("yt_study.ui.web.ui") as mock_ui:
+        viz.load_content(md_file, "123")
+        mock_ui.notify.assert_called()
