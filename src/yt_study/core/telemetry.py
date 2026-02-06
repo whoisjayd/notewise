@@ -23,6 +23,14 @@ POSTHOG_API_KEY = "phc_84al8IgA5g3ATbomr3VB7sDXsgdlp9gT3J9njqpbUj7"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
 SENSITIVE_KEYS = {"api_key", "token", "password", "secret", "credential", "key"}
+ALLOWLISTED_KEYS = {
+    "prompt_tokens",
+    "completion_tokens",
+    "total_tokens",
+    "temperature",
+    "duration",
+    "timestamp",
+}
 
 
 def redact_pii(data: Any) -> Any:
@@ -34,11 +42,17 @@ def redact_pii(data: Any) -> Any:
     - Sensitive keys in dictionaries
     - Potential API keys in strings
     """
+    # Skip redaction for metrics and numbers
+    if isinstance(data, (int, float, bool)) or data is None:
+        return data
+
     if isinstance(data, dict):
         return {
             k: (
                 "<REDACTED>"
-                if any(s in k.lower() for s in SENSITIVE_KEYS)
+                if k.lower() not in ALLOWLISTED_KEYS
+                and any(s in k.lower() for s in SENSITIVE_KEYS)
+                and not isinstance(v, (int, float, bool))
                 else redact_pii(v)
             )
             for k, v in data.items()
