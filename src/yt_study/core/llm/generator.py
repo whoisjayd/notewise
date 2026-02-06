@@ -10,13 +10,14 @@ import aiofiles
 import structlog
 from litellm import token_counter
 
+from ..telemetry import telemetry
+from ...config import config
 
 if TYPE_CHECKING:
     from ..events import EventEmitter
     from ..youtube.metadata import VideoChapter
     from ..youtube.transcript import VideoTranscript
 
-from ...config import config
 from ...prompts.chapter_notes import (
     get_chapter_prompt,
     get_combine_chapters_prompt,
@@ -258,88 +259,108 @@ class StudyMaterialGenerator:
         Returns:
             Complete study notes in Markdown format.
         """
-        chunks = self._chunk_transcript(
-            transcript, chapters=chapters, transcript_obj=transcript_obj
+        telemetry.capture_event(
+            "study_notes_generation_start",
+            {
+                "video_id": video_id,
+                "has_chapters": chapters is not None,
+                "transcript_length": len(transcript),
+            },
         )
+        try:
+            chunks = self._chunk_transcript(
+                transcript, chapters=chapters, transcript_obj=transcript_obj
+            )
 
-        # Single chunk - generate directly
-        if len(chunks) == 1:
-            self._update_status(video_title, "Generating notes...", video_id=video_id)
+            # Single chunk - generate directly
+            if len(chunks) == 1:
+                self._update_status(video_title, "Generating notes...", video_id=video_id)
 
-            notes = await self.provider.generate(
+                notes = await self.provider.generate(
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=get_single_pass_prompt(transcript),
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+
+                if video_id:
+                    notes = self._post_process_timestamps(notes, video_id)
+
+                telemetry.capture_event(
+                    "study_notes_generation_success",
+                    {"video_id": video_id, "chunks": 1},
+                )
+                return notes
+
+            # Multiple chunks - generate for each, then combine
+            self._update_status(
+                video_title,
+                f"Generating notes for {len(chunks)} chunks...",
+                video_id=video_id,
+            )
+
+            chunk_notes = []
+            chunks_folder = None
+            if output_dir:
+                chunks_folder = output_dir / "chunks"
+                chunks_folder.mkdir(parents=True, exist_ok=True)
+
+            for i, chunk in enumerate(chunks, 1):
+                msg = f"Chunk {i}/{len(chunks)} (Generating)"
+                self._update_status(video_title, msg, video_id=video_id)
+
+                note = await self.provider.generate(
+                    system_prompt=SYSTEM_PROMPT,
+                    user_prompt=get_chunk_prompt(chunk),
+                    temperature=self.temperature,
+                    max_tokens=self.max_tokens,
+                )
+
+                if video_id:
+                    note = self._post_process_timestamps(note, video_id)
+
+                # Save individual chunk note if output_dir provided
+                if chunks_folder:
+                    chunk_file = chunks_folder / f"{i:02d}_chunk.md"
+                    metadata = {
+                        "video_id": video_id,
+                        "chunk_index": i,
+                        "total_chunks": len(chunks),
+                        "video_title": video_title,
+                    }
+                    frontmatter = "---\n"
+                    frontmatter += json.dumps(metadata, indent=2) + "\n"
+                    frontmatter += "---\n\n"
+
+                    async with aiofiles.open(chunk_file, "w", encoding="utf-8") as f:
+                        await f.write(frontmatter + note)
+
+                chunk_notes.append(note)
+
+            self._update_status(
+                video_title,
+                f"Combining {len(chunk_notes)} chunk notes...",
+                video_id=video_id,
+            )
+
+            final_notes = await self.provider.generate(
                 system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_single_pass_prompt(transcript),
+                user_prompt=get_combine_prompt(chunk_notes),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
             )
 
             if video_id:
-                notes = self._post_process_timestamps(notes, video_id)
+                final_notes = self._post_process_timestamps(final_notes, video_id)
 
-            return notes
-
-        # Multiple chunks - generate for each, then combine
-        self._update_status(
-            video_title,
-            f"Generating notes for {len(chunks)} chunks...",
-            video_id=video_id,
-        )
-
-        chunk_notes = []
-        chunks_folder = None
-        if output_dir:
-            chunks_folder = output_dir / "chunks"
-            chunks_folder.mkdir(parents=True, exist_ok=True)
-
-        for i, chunk in enumerate(chunks, 1):
-            msg = f"Chunk {i}/{len(chunks)} (Generating)"
-            self._update_status(video_title, msg, video_id=video_id)
-
-            note = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_chunk_prompt(chunk),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            telemetry.capture_event(
+                "study_notes_generation_success",
+                {"video_id": video_id, "chunks": len(chunks)},
             )
-
-            if video_id:
-                note = self._post_process_timestamps(note, video_id)
-
-            # Save individual chunk note if output_dir provided
-            if chunks_folder:
-                chunk_file = chunks_folder / f"{i:02d}_chunk.md"
-                metadata = {
-                    "video_id": video_id,
-                    "chunk_index": i,
-                    "total_chunks": len(chunks),
-                    "video_title": video_title,
-                }
-                frontmatter = "---\n"
-                frontmatter += json.dumps(metadata, indent=2) + "\n"
-                frontmatter += "---\n\n"
-
-                async with aiofiles.open(chunk_file, "w", encoding="utf-8") as f:
-                    await f.write(frontmatter + note)
-
-            chunk_notes.append(note)
-
-        self._update_status(
-            video_title,
-            f"Combining {len(chunk_notes)} chunk notes...",
-            video_id=video_id,
-        )
-
-        final_notes = await self.provider.generate(
-            system_prompt=SYSTEM_PROMPT,
-            user_prompt=get_combine_prompt(chunk_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
-
-        if video_id:
-            final_notes = self._post_process_timestamps(final_notes, video_id)
-
-        return final_notes
+            return final_notes
+        except Exception as e:
+            telemetry.capture_exception(e, {"video_id": video_id, "task": "study_notes"})
+            raise
 
     def _post_process_timestamps(self, text: str, video_id: str) -> str:
         """
@@ -411,80 +432,95 @@ class StudyMaterialGenerator:
         Returns:
             Complete study notes organized by chapters.
         """
-        self._update_status(
-            video_title,
-            f"Generating notes for {len(chapter_transcripts)} chapters...",
-            video_id=video_id,
+        telemetry.capture_event(
+            "chapter_notes_generation_start",
+            {
+                "video_id": video_id,
+                "chapter_count": len(chapter_transcripts),
+            },
         )
+        try:
+            self._update_status(
+                video_title,
+                f"Generating notes for {len(chapter_transcripts)} chapters...",
+                video_id=video_id,
+            )
 
-        chapter_notes = {}
-        total_chapters = len(chapter_transcripts)
+            chapter_notes = {}
+            total_chapters = len(chapter_transcripts)
 
-        for i, (chapter_title, chapter_text) in enumerate(
-            chapter_transcripts.items(), 1
-        ):
-            msg = f"Chapter {i}/{total_chapters}: {chapter_title[:20]}..."
-            self._update_status(video_title, msg, video_id=video_id)
+            for i, (chapter_title, chapter_text) in enumerate(
+                chapter_transcripts.items(), 1
+            ):
+                msg = f"Chapter {i}/{total_chapters}: {chapter_title[:20]}..."
+                self._update_status(video_title, msg, video_id=video_id)
 
-            # If a chapter is huge, perform recursive chunking
-            token_count = self._count_tokens(chapter_text)
-            if token_count > self.chunk_size:
-                logger.info(
-                    f"Chapter '{chapter_title}' too long "
-                    f"({token_count:,} tokens), chunking..."
-                )
-                chunks = self._chunk_transcript(chapter_text)
-                chunk_notes = []
+                # If a chapter is huge, perform recursive chunking
+                token_count = self._count_tokens(chapter_text)
+                if token_count > self.chunk_size:
+                    logger.info(
+                        f"Chapter '{chapter_title}' too long "
+                        f"({token_count:,} tokens), chunking..."
+                    )
+                    chunks = self._chunk_transcript(chapter_text)
+                    chunk_notes = []
 
-                for j, chunk in enumerate(chunks, 1):
-                    chunk_msg = f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
-                    self._update_status(video_title, chunk_msg, video_id=video_id)
+                    for j, chunk in enumerate(chunks, 1):
+                        chunk_msg = f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
+                        self._update_status(video_title, chunk_msg, video_id=video_id)
 
-                    note = await self.provider.generate(
+                        note = await self.provider.generate(
+                            system_prompt=CHAPTER_SYSTEM_PROMPT,
+                            user_prompt=get_chapter_prompt(chapter_title, chunk),
+                            temperature=self.temperature,
+                            max_tokens=self.max_tokens,
+                        )
+                        chunk_notes.append(note)
+
+                    # Combine chunks of this specific chapter
+                    self._update_status(
+                        video_title,
+                        f"Combining chunks for chapter: {chapter_title[:20]}...",
+                        video_id=video_id,
+                    )
+                    notes = await self.provider.generate(
                         system_prompt=CHAPTER_SYSTEM_PROMPT,
-                        user_prompt=get_chapter_prompt(chapter_title, chunk),
+                        user_prompt=get_combine_prompt(chunk_notes),
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
                     )
-                    chunk_notes.append(note)
+                else:
+                    notes = await self.provider.generate(
+                        system_prompt=CHAPTER_SYSTEM_PROMPT,
+                        user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                        temperature=self.temperature,
+                        max_tokens=self.max_tokens,
+                    )
 
-                # Combine chunks of this specific chapter
-                self._update_status(
-                    video_title,
-                    f"Combining chunks for chapter: {chapter_title[:20]}...",
-                    video_id=video_id,
-                )
-                notes = await self.provider.generate(
-                    system_prompt=CHAPTER_SYSTEM_PROMPT,
-                    user_prompt=get_combine_prompt(chunk_notes),
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                )
-            else:
-                notes = await self.provider.generate(
-                    system_prompt=CHAPTER_SYSTEM_PROMPT,
-                    user_prompt=get_chapter_prompt(chapter_title, chapter_text),
-                    temperature=self.temperature,
-                    max_tokens=self.max_tokens,
-                )
+                if video_id:
+                    notes = self._post_process_timestamps(notes, video_id)
+
+                chapter_notes[chapter_title] = notes
+
+            self._update_status(
+                video_title, "Combining chapter notes...", video_id=video_id
+            )
+
+            final_notes = await self.provider.generate(
+                system_prompt=CHAPTER_SYSTEM_PROMPT,
+                user_prompt=get_combine_chapters_prompt(chapter_notes),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
 
             if video_id:
-                notes = self._post_process_timestamps(notes, video_id)
+                final_notes = self._post_process_timestamps(final_notes, video_id)
 
-            chapter_notes[chapter_title] = notes
-
-        self._update_status(
-            video_title, "Combining chapter notes...", video_id=video_id
-        )
-
-        final_notes = await self.provider.generate(
-            system_prompt=CHAPTER_SYSTEM_PROMPT,
-            user_prompt=get_combine_chapters_prompt(chapter_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
-
-        if video_id:
-            final_notes = self._post_process_timestamps(final_notes, video_id)
-
-        return final_notes
+            telemetry.capture_event(
+                "chapter_notes_generation_success",
+                {"video_id": video_id, "chapters": total_chapters},
+            )
+            return final_notes
+        except Exception as e:
+            telemetry.capture_exception(e, {"video_id": video_id, "task": "chapter_notes"})
+            raise
