@@ -24,8 +24,14 @@ logger = structlog.get_logger(__name__)
 POSTHOG_API_KEY = "phc_84al8IgA5g3ATbomr3VB7sDXsgdlp9gT3J9njqpbUj7"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
-SENSITIVE_KEYS = {"api_key", "token",
-                  "password", "secret", "credential", "key"}
+SENSITIVE_KEYS = {
+    "api_key",
+    "token",
+    "password",
+    "secret",
+    "credential",
+    "key",
+}
 ALLOWLISTED_KEYS = {
     "prompt_tokens",
     "completion_tokens",
@@ -181,8 +187,9 @@ class Telemetry:
         # We use keywords for all arguments to satisfy mypy's strictness
         # and accommodate potential variations in the posthog-python library.
         with contextlib.suppress(Exception):
-            posthog.capture(distinct_id=self.distinct_id,
-                            event=name, properties=props)
+            posthog.capture(
+                distinct_id=self.distinct_id, event=name, properties=props
+            )
 
     def capture_exception(
         self, exception: Exception, context: dict[str, Any] | None = None
@@ -226,8 +233,7 @@ class Telemetry:
         props = redact_pii(properties)
         with contextlib.suppress(Exception):
             if set_once:
-                posthog.set_once(distinct_id=self.distinct_id,
-                                 properties=props)
+                posthog.set_once(distinct_id=self.distinct_id, properties=props)
             else:
                 posthog.set(distinct_id=self.distinct_id, properties=props)
 
@@ -382,8 +388,7 @@ class Telemetry:
 
             def __enter__(self) -> "CommandTracker":
                 self.start_time = time.time()
-                self.telemetry.capture_event(
-                    "command_start", {"command": self.name})
+                self.telemetry.capture_event("command_start", {"command": self.name})
                 return self
 
             def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -402,8 +407,7 @@ class Telemetry:
                     )
                 elif exc_type is None:
                     self.telemetry.capture_event(
-                        "command_success", {
-                            "command": self.name, "duration": duration}
+                        "command_success", {"command": self.name, "duration": duration}
                     )
 
         return CommandTracker(self, command_name)
