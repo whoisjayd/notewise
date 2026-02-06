@@ -82,6 +82,8 @@ class Telemetry:
         if self.enabled:
             posthog.api_key = POSTHOG_API_KEY
             posthog.host = POSTHOG_HOST
+            # Enable automatic exception tracking for unhandled errors
+            posthog.enable_exception_autocapture = True
             # Disable posthog's internal logger to avoid noise
             posthog.disabled = False
         else:
@@ -151,19 +153,25 @@ class Telemetry:
             pass
 
     def capture_exception(self, exception: Exception, context: dict[str, Any] | None = None) -> None:
-        """Capture an exception event."""
+        """Capture an exception event for PostHog Error Tracking."""
         if not self.is_enabled:
             return
 
+        # Align with PostHog Error Tracking schema:
+        # https://posthog.com/docs/errors-exceptions/manual-error-tracking
         error_data = {
-            "error_type": type(exception).__name__,
-            "error_message": str(exception),
-            "stack_trace": "".join(traceback.format_exception(type(exception), exception, exception.__traceback__)),
+            "$exception_type": type(exception).__name__,
+            "$exception_message": str(exception),
+            "$exception_stack_trace": "".join(
+                traceback.format_exception(
+                    type(exception), exception, exception.__traceback__
+                )
+            ),
         }
         if context:
             error_data.update(context)
 
-        self.capture_event("exception", error_data)
+        self.capture_event("$exception", error_data)
 
     def _get_app_version(self) -> str:
         try:
