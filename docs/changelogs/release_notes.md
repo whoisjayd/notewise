@@ -14,9 +14,17 @@ This release significantly improves the robustness, scalability, and feature set
 ## New Features
 - **Synthetic Chapters**: Automatically generates a logical table of contents for videos that lack native YouTube chapters, ensuring structured notes for all content.
 - **Diagnostics & Feedback**: New `bug-report` command to collect anonymized system info and simplify issue reporting.
+- **"Pro" Web Visualizer**:
+  - IDE-inspired layout using Splitters and Tree navigation.
+  - Dark mode by default for reduced eye strain.
+  - In-place Markdown editing with "Save" functionality.
+  - Synced video player that jumps to specific moments when clicking timestamps in notes.
+- **Granular Resume**: Intelligent chapter-level skipping that resumes exactly where a generation job was interrupted.
 - **Telemetry & Privacy**:
   - Optional usage analytics via PostHog to guide development.
   - Robust PII scrubbing ensures sensitive data (usernames, paths) never leaves your machine.
+  - Fixed redaction logic to allow tracking of performance metrics (tokens, duration).
+  - Proper exception and stack trace capture for improved reliability.
   - Easy opt-out with `yt-study config telemetry --off`.
 - **Per-chunk Saving**: Intermediate LLM responses are now saved in a `chunks/` subdirectory, providing transparency into the generation process and a fallback if the final merge fails.
 - **Advanced CLI Flags**:

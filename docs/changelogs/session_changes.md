@@ -32,8 +32,20 @@ Videos lacking native YouTube chapters now receive AI-generated "Synthetic Chapt
 
 ### Web Visualizer (`serve`)
 Launched a web-based study material visualizer built with NiceGUI.
-- **Usage**: Run `yt-study serve` to launch.
-- **Features**: Interactive project browser, synced video-to-note timestamps, and a responsive reading interface.
+- **Pro Interface**: Complete UI overhaul using Splitters and Tree navigation for a professional, IDE-like experience.
+- **Dark Mode**: Enabled dark mode by default for better readability.
+- **Live Editing**: In-place Markdown editing and saving directly from the browser.
+- **Synced Player**: Integrated video player with clickable timestamps that automatically seek the video.
+
+### Granular Resume Logic
+- **Chapter-Level Skipping**: The generator now checks `output/chapters/*.md` and skips already generated chapters during retries, saving significant time and tokens.
+
+### UI/Dashboard Stability
+- **Unified Console**: Standardized UI rendering via a unified `Console` instance to eliminate header flickering and repeating elements in the CLI dashboard.
+
+### Telemetry & Observability
+- **Metric Tracking**: Fixed aggressive redaction of metrics; tokens (prompt/completion) and duration are now properly captured.
+- **Exception Tracking**: Enabled proper Exception tracking and stack trace capture in PostHog for faster debugging.
 
 ### Diagnostics & Feedback
 - **`bug-report` Command**: Added a dedicated command to collect anonymized system diagnostics and generate a pre-filled GitHub issue template.
