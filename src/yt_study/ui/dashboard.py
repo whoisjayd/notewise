@@ -170,7 +170,7 @@ class PipelineDashboard:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
 
         # Compose Layout Group
-        elements = [
+        elements: list[RenderableType] = [
             header,
             Rule(style="dim"),
             self.overall_progress,

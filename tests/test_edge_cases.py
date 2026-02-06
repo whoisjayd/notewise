@@ -1,19 +1,22 @@
-import pytest
-from unittest.mock import MagicMock, patch
-import httpx
-from pathlib import Path
-from yt_study.core.telemetry import Telemetry
-from yt_study.core.updates import get_latest_version, is_update_available
-from yt_study.ui.web import WebVisualizer
 import json
+from unittest.mock import MagicMock, patch
+
+import httpx
+
+from yt_study.core.telemetry import Telemetry
+from yt_study.core.updates import get_latest_version
+from yt_study.ui.web import WebVisualizer
+
 
 # --- Telemetry Edge Cases ---
 
-def test_telemetry_posthog_timeout(tmp_path):
-    with patch("posthog.capture") as mock_capture, \
-         patch("pathlib.Path.home", return_value=tmp_path), \
-         patch("yt_study.core.telemetry.config") as mock_config:
 
+def test_telemetry_posthog_timeout(tmp_path):
+    with (
+        patch("posthog.capture") as mock_capture,
+        patch("pathlib.Path.home", return_value=tmp_path),
+        patch("yt_study.core.telemetry.config") as mock_config,
+    ):
         mock_config.telemetry_enabled = True
         # Force capture to raise an exception (like a timeout)
         mock_capture.side_effect = Exception("Timeout")
@@ -23,6 +26,7 @@ def test_telemetry_posthog_timeout(tmp_path):
         telemetry.capture_event("test_event")
 
         mock_capture.assert_called_once()
+
 
 def test_telemetry_directory_unwritable(tmp_path):
     # Create a file where the directory should be to make it unwritable
@@ -35,15 +39,20 @@ def test_telemetry_directory_unwritable(tmp_path):
         assert ".telemetry" in str(telemetry.telemetry_dir)
         assert telemetry.telemetry_dir.exists()
 
+
 # --- Update Edge Cases ---
+
 
 def test_updates_pypi_404():
     with patch("httpx.Client.get") as mock_get:
         mock_response = MagicMock()
-        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError("404", request=MagicMock(), response=mock_response)
+        mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
+            "404", request=MagicMock(), response=mock_response
+        )
         mock_get.return_value = mock_response
 
         assert get_latest_version() is None
+
 
 def test_updates_malformed_json():
     with patch("httpx.Client.get") as mock_get:
@@ -53,6 +62,7 @@ def test_updates_malformed_json():
 
         assert get_latest_version() is None
 
+
 def test_updates_empty_json():
     with patch("httpx.Client.get") as mock_get:
         mock_response = MagicMock()
@@ -61,18 +71,21 @@ def test_updates_empty_json():
 
         assert get_latest_version() is None
 
+
 # --- Web Visualizer Edge Cases ---
+
 
 def test_web_visualizer_empty_dir(tmp_path):
     viz = WebVisualizer(tmp_path)
     assert viz.tree_data == []
+
 
 def test_web_visualizer_corrupted_md(tmp_path):
     project_dir = tmp_path / "test_123"
     project_dir.mkdir()
     # New UI looks for {item.name}.md or chapters/
     md_file = project_dir / "test_123.md"
-    md_file.write_bytes(b"\xff\xfe\xfd") # Corrupted bytes
+    md_file.write_bytes(b"\xff\xfe\xfd")  # Corrupted bytes
 
     viz = WebVisualizer(tmp_path)
     # The scan should find it as a standalone video

@@ -109,9 +109,7 @@ class TestPipelineOrchestrator:
             ),
             patch(
                 "yt_study.pipeline.orchestrator.get_video_chapters",
-                return_value=[
-                    MagicMock(title="Ch1", start_seconds=0, end_seconds=100)
-                ],
+                return_value=[MagicMock(title="Ch1", start_seconds=0, end_seconds=100)],
             ),
             patch(
                 "yt_study.pipeline.orchestrator.fetch_transcript",

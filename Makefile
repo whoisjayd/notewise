@@ -1,4 +1,4 @@
-.PHONY: help install install-dev clean format lint type-check test test-cov test-watch build publish dev-setup all check
+.PHONY: help install install-dev clean format format-check lint lint-check type-check test test-cov test-cov-ci test-watch build publish dev-setup all check ci
 
 # Default target
 help:
@@ -11,13 +11,17 @@ help:
 	@echo ""
 	@echo "Code Quality:"
 	@echo "  make format         Format code with ruff"
-	@echo "  make lint           Run ruff linter"
+	@echo "  make format-check   Check code formatting without fixing"
+	@echo "  make lint           Run ruff linter with auto-fix"
+	@echo "  make lint-check     Run ruff linter without fixing"
 	@echo "  make type-check     Run mypy type checker"
 	@echo "  make check          Run all checks (format, lint, type-check)"
+	@echo "  make ci             Run CI checks (format-check, lint-check, type-check, test)"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test           Run tests with pytest"
 	@echo "  make test-cov       Run tests with coverage report"
+	@echo "  make test-cov-ci    Run tests with XML coverage for CI"
 	@echo "  make test-watch     Run tests in watch mode"
 	@echo ""
 	@echo "Build & Publish:"
@@ -42,19 +46,33 @@ dev-setup: install-dev
 # Code formatting
 format:
 	@echo "Formatting code with ruff..."
-	ruff format src/ tests/
+	uv run ruff format src/ tests/
 	@echo "[OK] Formatting complete"
+
+format-check:
+	@echo "Checking code formatting..."
+	uv run ruff format --check src/ tests/
+	@echo "[OK] Format check complete"
 
 # Linting
 lint:
 	@echo "Running ruff linter..."
-	ruff check src/ tests/ --fix
+	uv run ruff check src/ tests/ --fix
 	@echo "[OK] Linting complete"
+
+lint-check:
+	@echo "Checking linting..."
+	uv run ruff check src/ tests/
+	@echo "[OK] Lint check complete"
 
 # Type checking
 type-check:
 	@echo "Running mypy type checker..."
-	mypy src/yt_study
+	uv run mypy src/yt_study
+
+# CI checks (no auto-fix)
+ci: format-check lint-check type-check test
+	@echo "[OK] CI checks passed"
 	@echo "[OK] Type checking complete"
 
 # Combined checks
@@ -64,23 +82,22 @@ check: format lint type-check
 # Testing
 test:
 	@echo "Running tests..."
-	uv run python -m pytest tests/ -v
+	uv run python -m pytest -n auto -v
 
 test-cov:
 	@echo "Running tests with coverage..."
-	uv run python -m pytest tests/ --cov=src/yt_study --cov-report=html --cov-report=term-missing -v
+	uv run python -m pytest -n auto -v --cov=src/yt_study --cov-report=html --cov-report=term-missing
 	@echo ""
 	@echo "Coverage report generated in htmlcov/index.html"
 
-test-watch:
-	@echo "Running tests in watch mode..."
-	uv run python -m pytest-watch tests/ -v
+test-cov-ci:
+	@echo "Running tests with coverage for CI..."
+	uv run python -m pytest -n auto -v --cov=src/yt_study --cov-report=xml
 
 # Build
 build: clean
 	@echo "Building distribution packages..."
-	pip install build
-	python -m build
+	uv build
 	@echo "[OK] Build complete - check dist/ folder"
 
 # Publish to PyPI

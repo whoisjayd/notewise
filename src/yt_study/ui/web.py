@@ -30,7 +30,7 @@ class WebVisualizer:
 
     def refresh_data(self) -> None:
         """Scan output directory and build tree data."""
-        self.tree_data = []
+        self.tree_data.clear()
 
         # 1. Group by playlist/standalone
         playlists: dict[str, list[Path]] = {}
@@ -64,7 +64,7 @@ class WebVisualizer:
         # 2. Build Tree Nodes
         # Playlists
         for pl_name, video_dirs in sorted(playlists.items()):
-            pl_node = {
+            pl_node: dict[str, Any] = {
                 "id": f"pl_{pl_name}",
                 "label": pl_name,
                 "icon": "folder",
@@ -76,7 +76,7 @@ class WebVisualizer:
 
         # Standalone videos
         if standalone:
-            standalone_node = {
+            standalone_node: dict[str, Any] = {
                 "id": "standalone",
                 "label": "Videos",
                 "icon": "video_library",

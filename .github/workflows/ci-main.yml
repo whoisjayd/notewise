@@ -27,17 +27,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Enforce Formatting
-        run: uv run ruff format --check .
-
-      - name: Linting
-        run: uv run ruff check .
-
-      - name: Type Checking
-        run: uv run mypy src
-
-      - name: Unit Tests
-        run: uv run python -m pytest
+      - name: Run CI checks
+        run: make ci
 
   matrix-test:
     needs: quality-gate
@@ -64,8 +55,8 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run full suite with coverage
-        run: uv run python -m pytest --cov=src/yt_study --cov-report=xml
+      - name: Run tests with coverage
+        run: make test-cov-ci
 
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
