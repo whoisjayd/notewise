@@ -420,27 +420,39 @@ def version() -> None:
 def update() -> None:
     """Check for updates and show upgrade instructions."""
     with telemetry.track_command("update"):
-        from .core.updates import is_update_available, is_frozen
         from . import __version__
+        from .core.updates import is_frozen, is_update_available
 
         console.print("[cyan]Checking for updates...[/cyan]")
         available, latest = is_update_available()
 
         if available:
-            console.print(f"\n[yellow]A new version of yt-study is available: [green]{latest}[/green] (current: {__version__})[/yellow]")
+            console.print(
+                f"\n[yellow]A new version of yt-study is available: "
+                f"[green]{latest}[/green] (current: {__version__})[/yellow]"
+            )
 
             if is_frozen():
-                console.print("\n[bold]Download the new version from GitHub Releases:[/bold]")
-                console.print("[blue]https://github.com/jayss/yt-study/releases[/blue]\n")
+                console.print(
+                    "\n[bold]Download the new version from GitHub Releases:[/bold]"
+                )
+                console.print(
+                    "[blue]https://github.com/jayss/yt-study/releases[/blue]\n"
+                )
             else:
                 console.print("\n[bold]Run one of the following to upgrade:[/bold]")
                 console.print("  [cyan]uv tool upgrade yt-study[/cyan]")
                 console.print("  [dim]or[/dim]")
                 console.print("  [cyan]pip install --upgrade yt-study[/cyan]\n")
         elif latest:
-            console.print(f"\n[green]You are on the latest version ({__version__}).[/green]\n")
+            console.print(
+                f"\n[green]You are on the latest version ({__version__}).[/green]\n"
+            )
         else:
-            console.print("\n[red]Could not check for updates. Please check your internet connection.[/red]\n")
+            console.print(
+                "\n[red]Could not check for updates. "
+                "Please check your internet connection.[/red]\n"
+            )
 
 
 @app.command()
@@ -489,9 +501,13 @@ def serve(
 
             selected_output = output or config.default_output_dir
 
-            console.print(f"\n[bold cyan]🚀 Launching Visualizer[/bold cyan]")
-            console.print(f"[dim]Output directory:[/dim] [green]{selected_output}[/green]")
-            console.print(f"[dim]URL:[/dim] [bold blue]http://{host}:{port}[/bold blue]\n")
+            console.print("\n[bold cyan]🚀 Launching Visualizer[/bold cyan]")
+            console.print(
+                f"[dim]Output directory:[/dim] [green]{selected_output}[/green]"
+            )
+            console.print(
+                f"[dim]URL:[/dim] [bold blue]http://{host}:{port}[/bold blue]\n"
+            )
 
             start_web_ui(port=port, host=host, output_dir=selected_output)
         except Exception as e:
