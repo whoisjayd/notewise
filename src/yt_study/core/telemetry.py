@@ -75,9 +75,7 @@ def redact_pii(data: Any) -> Any:
 
         # Redact potential API keys (simple heuristic: long alphanumeric strings)
         # Only if they look like random tokens (not words)
-        key_pattern = (
-            r"(?i)((?:key|token|api|auth)[-_\s]*[=:][-_\s]*)[a-zA-Z0-9]{20,}"
-        )
+        key_pattern = r"(?i)((?:key|token|api|auth)[-_\s]*[=:][-_\s]*)[a-zA-Z0-9]{20,}"
         data = re.sub(key_pattern, r"\1<REDACTED>", data)
 
     return data
@@ -115,6 +113,7 @@ class Telemetry:
             return id_file.read_text().strip()
 
         import uuid
+
         new_id = str(uuid.uuid4())
         with contextlib.suppress(Exception):
             id_file.write_text(new_id)
@@ -154,12 +153,14 @@ class Telemetry:
         props = redact_pii(props)
 
         # Add system info
-        props.update({
-            "os": platform.system(),
-            "os_release": platform.release(),
-            "python_version": sys.version.split()[0],
-            "app_version": self._get_app_version(),
-        })
+        props.update(
+            {
+                "os": platform.system(),
+                "os_release": platform.release(),
+                "python_version": sys.version.split()[0],
+                "app_version": self._get_app_version(),
+            }
+        )
 
         # Local log
         self._log_locally(name, props)
@@ -196,6 +197,7 @@ class Telemetry:
     def _get_app_version(self) -> str:
         try:
             from .. import __version__
+
             return __version__
         except ImportError:
             return "unknown"
@@ -231,8 +233,7 @@ class Telemetry:
                 duration = time.time() - self.start_time
                 if exc_type and exc_type is not SystemExit:
                     self.telemetry.capture_exception(
-                        exc_val,
-                        {"command": self.name, "duration": duration}
+                        exc_val, {"command": self.name, "duration": duration}
                     )
                     self.telemetry.capture_event(
                         "command_fail",

@@ -261,6 +261,7 @@ class PipelineOrchestrator:
                 # Save chapters.json if we have chapters
                 if chapters:
                     import json
+
                     chapters_json_path = video_folder / "chapters.json"
                     chapters_data = [
                         {

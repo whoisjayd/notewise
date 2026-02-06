@@ -223,7 +223,7 @@ class PipelineDashboard:
         # satisfy RenderableType
         # but mypy struggles with the list inference
 
-        body = Group(*elements)  # type: ignore
+        body = Group(*elements)
 
         return Panel(
             body,

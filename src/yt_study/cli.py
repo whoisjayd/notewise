@@ -630,6 +630,7 @@ def bug_report(
 
     try:
         from . import __version__
+
         report_data["app_version"] = __version__
     except ImportError:
         report_data["app_version"] = "unknown"
@@ -639,7 +640,7 @@ def bug_report(
     recent_logs = ""
     if log_file.exists():
         lines = log_file.read_text(encoding="utf-8").splitlines()
-        recent_logs = "\n".join(lines[-100:]) # Last 100 lines
+        recent_logs = "\n".join(lines[-100:])  # Last 100 lines
 
     if send:
         if not telemetry.enabled:
@@ -650,10 +651,13 @@ def bug_report(
             return
 
         console.print("[cyan]Sending report via telemetry...[/cyan]")
-        telemetry.capture_event("bug_report", {
-            **report_data,
-            "logs": recent_logs,
-        })
+        telemetry.capture_event(
+            "bug_report",
+            {
+                **report_data,
+                "logs": recent_logs,
+            },
+        )
         console.print("[green]Report sent successfully![/green]")
     else:
         # Create a local zip

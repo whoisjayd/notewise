@@ -108,9 +108,7 @@ class LLMProvider:
                 usage = getattr(response, "usage", None)
                 content = response.choices[0].message.content or ""
 
-                provider = (
-                    self.model.split("/")[0] if "/" in self.model else "unknown"
-                )
+                provider = self.model.split("/")[0] if "/" in self.model else "unknown"
                 event_props = {
                     "$ai_model": self.model,
                     "$ai_provider": provider,
@@ -127,11 +125,13 @@ class LLMProvider:
                     event_props["$ai_trace_id"] = trace_id
 
                 if usage:
-                    event_props.update({
-                        "$ai_input_tokens": getattr(usage, "prompt_tokens", 0),
-                        "$ai_output_tokens": getattr(usage, "completion_tokens", 0),
-                        "$ai_total_tokens": getattr(usage, "total_tokens", 0),
-                    })
+                    event_props.update(
+                        {
+                            "$ai_input_tokens": getattr(usage, "prompt_tokens", 0),
+                            "$ai_output_tokens": getattr(usage, "completion_tokens", 0),
+                            "$ai_total_tokens": getattr(usage, "total_tokens", 0),
+                        }
+                    )
 
                 telemetry.capture_event("$ai_generation", event_props)
             except Exception:

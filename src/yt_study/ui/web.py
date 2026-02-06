@@ -17,14 +17,14 @@ class WebVisualizer:
         self.is_editing = False
 
         # UI Elements (initialized in render)
-        self.tree: ui.tree = None  # type: ignore
-        self.markdown_view: ui.markdown = None  # type: ignore
-        self.editor_container: ui.column = None  # type: ignore
-        self.editor: ui.textarea = None  # type: ignore
-        self.video_player: ui.html = None  # type: ignore
-        self.title_label: ui.label = None  # type: ignore
-        self.edit_btn: ui.button = None  # type: ignore
-        self.save_btn: ui.button = None  # type: ignore
+        self.tree: ui.tree
+        self.markdown_view: ui.markdown
+        self.editor_container: ui.column
+        self.editor: ui.textarea
+        self.video_player: ui.html
+        self.title_label: ui.label
+        self.edit_btn: ui.button
+        self.save_btn: ui.button
 
         self.refresh_data()
 
@@ -71,7 +71,7 @@ class WebVisualizer:
                 "children": [],
             }
             for v_dir in video_dirs:
-                pl_node["children"].append(self._build_video_node(v_dir))  # type: ignore
+                pl_node["children"].append(self._build_video_node(v_dir))
             self.tree_data.append(pl_node)
 
         # Standalone videos
@@ -83,7 +83,7 @@ class WebVisualizer:
                 "children": [],
             }
             for v_dir in sorted(standalone):
-                standalone_node["children"].append(self._build_video_node(v_dir))  # type: ignore
+                standalone_node["children"].append(self._build_video_node(v_dir))
             self.tree_data.append(standalone_node)
 
     def _build_video_node(self, v_dir: Path) -> dict[str, Any]:
@@ -211,7 +211,7 @@ class WebVisualizer:
             f'<iframe id="yt-player" width="100%" height="100%" '
             f'src="{url}" frameborder="0" allow="accelerometer; autoplay; '
             f'clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
-            f'allowfullscreen></iframe>'
+            f"allowfullscreen></iframe>"
         )
 
     def toggle_edit(self) -> None:
@@ -347,9 +347,12 @@ class WebVisualizer:
             "w-full h-[calc(100vh-64px)]"
         ) as main_splitter:
             # Left Pane: Navigation
-            with main_splitter.before, ui.column().classes(
-                "w-full h-full bg-slate-900/50 p-4 "
-                "overflow-y-auto border-r border-slate-800"
+            with (
+                main_splitter.before,
+                ui.column().classes(
+                    "w-full h-full bg-slate-900/50 p-4 "
+                    "overflow-y-auto border-r border-slate-800"
+                ),
             ):
                 ui.label("EXPLORER").classes(
                     "text-xs font-bold text-slate-500 uppercase tracking-widest mb-4"
@@ -367,13 +370,16 @@ class WebVisualizer:
                 ) as content_splitter,
             ):
                 # Content Area (Left side of right pane)
-                with content_splitter.before, ui.column().classes(
-                    "w-full h-full p-8 overflow-y-auto bg-slate-950"
+                with (
+                    content_splitter.before,
+                    ui.column().classes(
+                        "w-full h-full p-8 overflow-y-auto bg-slate-950"
+                    ),
                 ):
                     with ui.row().classes("w-full items-center justify-between mb-6"):
-                        self.title_label = ui.label(
-                            "Select a video to begin"
-                        ).classes("text-3xl font-bold text-slate-100")
+                        self.title_label = ui.label("Select a video to begin").classes(
+                            "text-3xl font-bold text-slate-100"
+                        )
                         self.edit_btn = (
                             ui.button("Edit", icon="edit", on_click=self.toggle_edit)
                             .props("flat color=blue-400")
