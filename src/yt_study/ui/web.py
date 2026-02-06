@@ -175,7 +175,7 @@ class WebVisualizer:
             # Process timestamps for markdown
             # Pattern: [00:00:00] or [00:00]
             processed_content = re.sub(
-                r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]",
+                r"\[(\d{1,2}:\d{2}(?::\d{2})?)\](?:\([^)]+\))?",
                 r'<span class="timestamp-link" data-timestamp="\1">[\1]</span>',
                 content
             )
