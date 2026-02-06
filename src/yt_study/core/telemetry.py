@@ -24,7 +24,8 @@ logger = structlog.get_logger(__name__)
 POSTHOG_API_KEY = "phc_84al8IgA5g3ATbomr3VB7sDXsgdlp9gT3J9njqpbUj7"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
-SENSITIVE_KEYS = {"api_key", "token", "password", "secret", "credential", "key"}
+SENSITIVE_KEYS = {"api_key", "token",
+                  "password", "secret", "credential", "key"}
 ALLOWLISTED_KEYS = {
     "prompt_tokens",
     "completion_tokens",
@@ -32,6 +33,17 @@ ALLOWLISTED_KEYS = {
     "temperature",
     "duration",
     "timestamp",
+    "max_tokens",
+    # AI/LLM observability metrics
+    "$ai_input_tokens",
+    "$ai_output_tokens",
+    "$ai_total_tokens",
+    "$ai_latency_ms",
+    "$ai_model",
+    "$ai_provider",
+    "$ai_trace_id",
+    "role",
+    "content_length",
 }
 
 
@@ -169,7 +181,8 @@ class Telemetry:
         # We use keywords for all arguments to satisfy mypy's strictness
         # and accommodate potential variations in the posthog-python library.
         with contextlib.suppress(Exception):
-            posthog.capture(distinct_id=self.distinct_id, event=name, properties=props)
+            posthog.capture(distinct_id=self.distinct_id,
+                            event=name, properties=props)
 
     def capture_exception(
         self, exception: Exception, context: dict[str, Any] | None = None
@@ -193,6 +206,149 @@ class Telemetry:
             error_data.update(context)
 
         self.capture_event("$exception", error_data)
+
+    def identify(self, properties: dict[str, Any] | None = None) -> None:
+        """Identify the user and set person properties."""
+        if not self.is_enabled:
+            return
+
+        props = redact_pii(properties) if properties else None
+        with contextlib.suppress(Exception):
+            posthog.set(distinct_id=self.distinct_id, properties=props)
+
+    def set_person_properties(
+        self, properties: dict[str, Any], set_once: bool = False
+    ) -> None:
+        """Set person properties (set or set_once)."""
+        if not self.is_enabled:
+            return
+
+        props = redact_pii(properties)
+        with contextlib.suppress(Exception):
+            if set_once:
+                posthog.set_once(distinct_id=self.distinct_id,
+                                 properties=props)
+            else:
+                posthog.set(distinct_id=self.distinct_id, properties=props)
+
+    def alias(self, previous_id: str) -> None:
+        """Alias an anonymous ID with the identified user."""
+        if not self.is_enabled:
+            return
+
+        with contextlib.suppress(Exception):
+            posthog.alias(
+                previous_id=previous_id,
+                distinct_id=self.distinct_id,
+            )
+
+    def identify_group(
+        self, group_type: str, group_key: str, properties: dict[str, Any] | None = None
+    ) -> None:
+        """Identify a group for B2B analytics."""
+        if not self.is_enabled:
+            return
+
+        props = redact_pii(properties) if properties else None
+        with contextlib.suppress(Exception):
+            posthog.group_identify(
+                group_type=group_type,
+                group_key=group_key,
+                properties=props,
+            )
+
+    def page_view(self, url: str, properties: dict[str, Any] | None = None) -> None:
+        """Track a page view event."""
+        props = properties or {}
+        props["$current_url"] = url
+        self.capture_event("$pageview", props)
+
+    def screen_view(self, name: str, properties: dict[str, Any] | None = None) -> None:
+        """Track a screen view event."""
+        props = properties or {}
+        props["$screen_name"] = name
+        self.capture_event("$screen", props)
+
+    def feature_enabled(
+        self,
+        flag_key: str,
+        person_properties: dict[str, Any] | None = None,
+        groups: dict[str, str] | None = None,
+    ) -> bool:
+        """Check if a feature flag is enabled for the user."""
+        if not self.is_enabled:
+            return False
+
+        try:
+            return bool(
+                posthog.feature_enabled(
+                    flag_key,
+                    self.distinct_id,
+                    person_properties=person_properties,
+                    groups=groups,
+                    only_evaluate_locally=False,
+                )
+            )
+        except Exception:
+            return False
+
+    def get_feature_flag(
+        self,
+        flag_key: str,
+        person_properties: dict[str, Any] | None = None,
+        groups: dict[str, str] | None = None,
+    ) -> str | bool | None:
+        """Get the value of a feature flag (for multivariate flags)."""
+        if not self.is_enabled:
+            return None
+
+        try:
+            result = posthog.get_feature_flag(
+                flag_key,
+                self.distinct_id,
+                person_properties=person_properties,
+                groups=groups,
+                only_evaluate_locally=False,
+            )
+            # PostHog returns various types, ensure we match our return type
+            return result  # type: ignore[return-value]
+        except Exception:
+            return None
+
+    def get_all_flags(
+        self,
+        person_properties: dict[str, Any] | None = None,
+        groups: dict[str, str] | None = None,
+    ) -> dict[str, str | bool]:
+        """Get all feature flags for the user."""
+        if not self.is_enabled:
+            return {}
+
+        try:
+            flags = posthog.get_all_flags(
+                self.distinct_id,
+                person_properties=person_properties,
+                groups=groups,
+                only_evaluate_locally=False,
+            )
+            # PostHog returns dict with various value types
+            return flags if flags else {}  # type: ignore[return-value]
+        except Exception:
+            return {}
+
+    def shutdown(self) -> None:
+        """Shutdown telemetry and flush pending events to PostHog."""
+        if not self.is_enabled or posthog.disabled:
+            return
+
+        try:
+            # Flush any pending events
+            posthog.flush()  # type: ignore[no-untyped-call]
+            # Shutdown the background thread
+            posthog.shutdown()  # type: ignore[no-untyped-call]
+            logger.debug("Telemetry shutdown complete")
+        except Exception as e:
+            logger.debug(f"Error during telemetry shutdown: {e}")
 
     def _get_app_version(self) -> str:
         try:
@@ -226,7 +382,8 @@ class Telemetry:
 
             def __enter__(self) -> "CommandTracker":
                 self.start_time = time.time()
-                self.telemetry.capture_event("command_start", {"command": self.name})
+                self.telemetry.capture_event(
+                    "command_start", {"command": self.name})
                 return self
 
             def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
@@ -245,7 +402,8 @@ class Telemetry:
                     )
                 elif exc_type is None:
                     self.telemetry.capture_event(
-                        "command_success", {"command": self.name, "duration": duration}
+                        "command_success", {
+                            "command": self.name, "duration": duration}
                     )
 
         return CommandTracker(self, command_name)

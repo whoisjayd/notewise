@@ -457,6 +457,16 @@ def start_web_ui(
 
     @ui.page("/")
     def init_ui() -> None:
+        # Track page view
+        if telemetry.is_enabled:
+            telemetry.page_view(
+                url="/",
+                properties={
+                    "output_dir": str(output_dir),
+                    "interface": "web",
+                },
+            )
+
         visualizer = WebVisualizer(output_dir)
         visualizer.render()
 

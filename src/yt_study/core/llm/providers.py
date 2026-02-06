@@ -109,6 +109,24 @@ class LLMProvider:
                 content = response.choices[0].message.content or ""
 
                 provider = self.model.split("/")[0] if "/" in self.model else "unknown"
+
+                # Redact actual content but preserve message structure metadata
+                redacted_input = [
+                    {
+                        "role": msg["role"],
+                        "content": "<REDACTED>",
+                        "content_length": len(msg["content"]),
+                    }
+                    for msg in messages
+                ]
+                redacted_output = [
+                    {
+                        "role": "assistant",
+                        "content": "<REDACTED>",
+                        "content_length": len(content),
+                    }
+                ]
+
                 event_props = {
                     "$ai_model": self.model,
                     "$ai_provider": provider,
@@ -117,8 +135,8 @@ class LLMProvider:
                         "max_tokens": max_tokens,
                     },
                     "$ai_latency_ms": latency_ms,
-                    "$ai_input": messages,
-                    "$ai_output": [{"role": "assistant", "content": content}],
+                    "$ai_input": redacted_input,
+                    "$ai_output": redacted_output,
                 }
 
                 if trace_id:

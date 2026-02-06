@@ -1,8 +1,10 @@
 """Command-line interface using Typer."""
 
 import asyncio
+import atexit
 import logging
 import os
+import platform
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -13,8 +15,13 @@ import typer
 from rich.logging import RichHandler
 from rich.table import Table
 
+from .config import config
 from .core.telemetry import telemetry
 from .ui.console import console
+
+
+# Register cleanup function to flush telemetry on exit
+atexit.register(telemetry.shutdown)
 
 
 # Suppress LiteLLM verbose logging early
@@ -85,6 +92,17 @@ def configure_logging() -> None:
 
 configure_logging()
 logger = structlog.get_logger(__name__)
+
+# Identify user with system properties on startup
+if config.telemetry_enabled:
+    telemetry.identify(
+        properties={
+            "os": platform.system(),
+            "os_version": platform.release(),
+            "python_version": sys.version.split()[0],
+            "first_seen": datetime.now().isoformat(),
+        }
+    )
 
 app = typer.Typer(
     name="yt-study",
