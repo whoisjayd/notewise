@@ -170,11 +170,6 @@ class PipelineDashboard:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
 
         # Compose Layout Group
-        # Only show worker progress if there are multiple tasks (not single
-        # video). OR if we want to show it anyway. The user requested hiding
-        # idle workers. But for simplicity, let's keep it consistent: always
-        # show tasks section, but maybe cleaner.
-
         elements = [
             header,
             Rule(style="dim"),
@@ -182,12 +177,37 @@ class PipelineDashboard:
             Rule(style="dim"),
         ]
 
-        # Only add active tasks section if there are workers
-        if self.worker_tasks:
+        # Filter active worker tasks
+        active_worker_tasks = [
+            tid
+            for tid in self.worker_tasks
+            if not self.worker_progress.tasks[
+                self.worker_progress.get_task(tid).id
+            ].description.startswith("[dim]Idle")
+        ]
+
+        # Only add active tasks section if there are active workers
+        if active_worker_tasks:
+            # We create a temporary progress view for only active tasks
+            # to avoid showing the idle ones in the group
+            active_progress = Progress(
+                *self.worker_progress.columns,
+                expand=True,
+            )
+            for tid in active_worker_tasks:
+                task = self.worker_progress.get_task(tid)
+                active_progress.add_task(
+                    description=task.description,
+                    total=task.total,
+                    completed=task.completed,
+                    visible=task.visible,
+                    **task.fields,
+                )
+
             elements.extend(
                 [
                     Text("⚡ Active Tasks", style="bold white"),
-                    self.worker_progress,
+                    active_progress,
                     Rule(style="dim"),
                 ]
             )

@@ -15,6 +15,7 @@ from rich.logging import RichHandler
 from rich.table import Table
 
 from .core.telemetry import telemetry
+from .ui.console import console
 
 
 # Suppress LiteLLM verbose logging early
@@ -93,8 +94,6 @@ app = typer.Typer(
     add_completion=True,
     rich_markup_mode="rich",
 )
-
-console = Console()
 
 
 def check_config_exists() -> bool:

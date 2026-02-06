@@ -4,10 +4,9 @@ import asyncio
 
 import structlog
 from pytubefix import Playlist
-from rich.console import Console
+from ...ui.console import console
 
 
-console = Console()
 logger = structlog.get_logger(__name__)
 
 

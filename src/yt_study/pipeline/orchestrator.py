@@ -5,7 +5,6 @@ from pathlib import Path
 
 import structlog
 from aiolimiter import AsyncLimiter
-from rich.console import Console
 from rich.live import Live
 from rich.panel import Panel
 from rich.progress import Progress, TaskID
@@ -29,11 +28,11 @@ from ..core.youtube.transcript import (
     fetch_transcript,
     split_transcript_by_chapters,
 )
+from ..ui.console import console
 from ..ui.dashboard import PipelineDashboard
 from ..utils import get_video_slug, sanitize_filename
 
 
-console = Console()
 logger = structlog.get_logger(__name__)
 
 
@@ -427,7 +426,13 @@ class PipelineOrchestrator:
 
         # Run Live Display (inline, not full screen)
         # We start it immediately to show "Fetching metadata..." state
-        with Live(dashboard, refresh_per_second=10, console=console, screen=False):
+        with Live(
+            dashboard,
+            refresh_per_second=10,
+            console=console,
+            screen=False,
+            transient=True,
+        ):
             # --- Phase 1: Metadata Fetching ---
             TITLE_FETCH_CONCURRENCY = 10
             if not is_single_video:

@@ -5,10 +5,9 @@ from typing import Any
 
 import structlog
 from pytubefix import Playlist, YouTube
-from rich.console import Console
+from ...ui.console import console
 
 
-console = Console()
 logger = structlog.get_logger(__name__)
 
 

@@ -5,7 +5,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import structlog
-from rich.console import Console
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     IpBlocked,
@@ -15,10 +14,8 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
+from ...ui.console import console
 from .metadata import VideoChapter
-
-
-console = Console()
 logger = structlog.get_logger(__name__)
 
 
