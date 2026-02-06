@@ -65,6 +65,7 @@ output/
 └── {video_title}_{video_id}/
     ├── {video_title}_{video_id}.md  # Combined study notes
     ├── transcript.txt               # Raw transcript (if requested)
+    ├── chapters.json                # Raw chapter metadata and structure
     ├── chapters/                    # Individual chapter notes
     └── chunks/                      # Intermediate processing segments
 ```
