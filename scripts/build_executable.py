@@ -15,14 +15,14 @@ def create_zip_archive(source_file: Path, output_file: Path):
     """Create a ZIP archive."""
     with zipfile.ZipFile(output_file, 'w', zipfile.ZIP_DEFLATED, compresslevel=9) as zf:
         zf.write(source_file, source_file.name)
-    print(f"✓ Created archive: {output_file}")
+    print(f"[OK] Created archive: {output_file}")
 
 
 def create_tar_gz_archive(source_file: Path, output_file: Path):
     """Create a tar.gz archive."""
     with tarfile.open(output_file, 'w:gz') as tf:
         tf.add(source_file, arcname=source_file.name)
-    print(f"✓ Created archive: {output_file}")
+    print(f"[OK] Created archive: {output_file}")
 
 
 def main():
@@ -99,12 +99,12 @@ sys.exit(app())
         final_exe = release_dir / output_name
 
     if not exe_file.exists():
-        print(f"✗ Executable not found: {exe_file}")
+        print(f"[ERROR] Executable not found: {exe_file}")
         sys.exit(1)
 
     # Move executable to release directory
     shutil.move(str(exe_file), str(final_exe))
-    print(f"✓ Executable built: {final_exe}")
+    print(f"[OK] Executable built: {final_exe}")
 
     # Create compressed archive
     archive_name = release_dir / f"{output_name}{archive_ext}"
@@ -116,7 +116,7 @@ sys.exit(app())
     # Clean up launcher
     Path("launcher.py").unlink(missing_ok=True)
 
-    print(f"\n✓ Build complete!")
+    print(f"\n[OK] Build complete!")
     print(f"  Executable: {final_exe}")
     print(f"  Archive: {archive_name}")
 
