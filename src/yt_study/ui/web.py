@@ -97,7 +97,7 @@ class WebVisualizer:
                 "label": "Full Summary",
                 "icon": "description",
                 "video_id": video_id,
-                "path": main_md
+                "path": str(main_md)
             })
 
         if chapters_dir.exists():
@@ -113,7 +113,7 @@ class WebVisualizer:
                     "label": ch_file.stem.replace("_", " "),
                     "icon": "segment",
                     "video_id": video_id,
-                    "path": ch_file
+                    "path": str(ch_file)
                 })
             if chapters_node["children"]:
                 children.append(chapters_node)
@@ -163,7 +163,10 @@ class WebVisualizer:
                     return found
         return None
 
-    def load_content(self, path: Path, video_id: Optional[str]) -> None:
+    def load_content(self, path: Any, video_id: Optional[str]) -> None:
+        if path is None:
+            return
+        path = Path(path)
         self.current_path = path
         self.current_video_id = video_id
 
