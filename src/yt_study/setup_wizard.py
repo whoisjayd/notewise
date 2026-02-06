@@ -175,12 +175,13 @@ def save_config(new_config: dict[str, str]) -> None:
     )
 
 
-def get_available_models() -> dict[str, list[str]]:
+def get_available_models(force_refresh: bool = False) -> dict[str, list[str]]:
     """Fetch available models from LiteLLM."""
-    # Try loading from cache first
-    cached_models = _load_models_from_cache()
-    if cached_models:
-        return cached_models
+    # Try loading from cache first unless forced
+    if not force_refresh:
+        cached_models = _load_models_from_cache()
+        if cached_models:
+            return cached_models
 
     try:
         # Lazy import to avoid slow startup if not running setup
@@ -221,10 +222,11 @@ def get_available_models() -> dict[str, list[str]]:
         # Fallback to curated list
         return {
             "gemini": [
-                "gemini/gemini-2.0-flash-exp",
                 "gemini/gemini-2.0-flash",
+                "gemini/gemini-2.0-flash-lite-preview-02-05",
                 "gemini/gemini-1.5-pro",
                 "gemini/gemini-1.5-flash",
+                "gemini/gemini-1.5-flash-8b",
             ],
             "openai": [
                 "gpt-4o",
@@ -232,20 +234,40 @@ def get_available_models() -> dict[str, list[str]]:
                 "gpt-4-turbo",
                 "o1",
                 "o1-mini",
+                "o1-preview",
             ],
             "anthropic": [
+                "anthropic/claude-3-7-sonnet-20250219",
                 "anthropic/claude-3-5-sonnet-20241022",
                 "anthropic/claude-3-5-haiku-20241022",
                 "anthropic/claude-3-opus-20240229",
             ],
+            "deepseek": [
+                "deepseek/deepseek-chat",
+                "deepseek/deepseek-reasoner",
+                "deepseek/deepseek-v3",
+            ],
             "groq": [
                 "groq/llama-3.3-70b-versatile",
+                "groq/llama-3.1-70b-versatile",
                 "groq/llama-3.1-8b-instant",
                 "groq/mixtral-8x7b-32768",
+                "groq/deepseek-r1-distill-llama-70b",
+            ],
+            "mistral": [
+                "mistral/mistral-large-latest",
+                "mistral/pixtral-large-latest",
+                "mistral/mistral-small-latest",
+                "mistral/open-mistral-nemo",
             ],
             "xai": [
                 "xai/grok-2-latest",
-                "xai/grok-2-vision-latest",
+                "xai/grok-2-1212",
+                "xai/grok-beta",
+            ],
+            "cohere": [
+                "cohere/command-r-plus",
+                "cohere/command-r",
             ],
         }
 
@@ -418,7 +440,7 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
 
     # Fetch available models from LiteLLM
     console.print("\n[cyan]Fetching available models from LiteLLM...[/cyan]")
-    available_models = get_available_models()
+    available_models = get_available_models(force_refresh=force)
     console.print(
         f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
         f"models across {len(available_models)} providers[/green]"
