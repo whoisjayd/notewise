@@ -45,6 +45,9 @@ class Config:
     # Transcript Configuration
     default_languages: list[str] = field(default_factory=lambda: ["en"])
 
+    # Telemetry Configuration
+    telemetry_enabled: bool = True
+
     # Security: Allowed keys for environment injection
     ALLOWED_KEYS: set[str] = field(
         default_factory=lambda: {
@@ -60,6 +63,7 @@ class Config:
             "YOUTUBE_REQUESTS_PER_MINUTE",
             "TEMPERATURE",
             "MAX_TOKENS",
+            "TELEMETRY_ENABLED",
         }
     )
 
@@ -77,6 +81,14 @@ class Config:
         self.groq_api_key = os.getenv("GROQ_API_KEY") or self.groq_api_key
         self.xai_api_key = os.getenv("XAI_API_KEY") or self.xai_api_key
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY") or self.mistral_api_key
+
+        # Check for NO_TELEMETRY env var
+        if os.getenv("YT_STUDY_NO_TELEMETRY"):
+            self.telemetry_enabled = False
+
+        env_telemetry = os.getenv("TELEMETRY_ENABLED")
+        if env_telemetry is not None:
+            self.telemetry_enabled = env_telemetry.lower() in ("true", "1", "yes")
 
         # Load default model and output dir from config
         env_model = os.getenv("DEFAULT_MODEL")

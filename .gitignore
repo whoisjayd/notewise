@@ -1,4 +1,12 @@
-# Python-generated files
+# Hypothesis
+.hypothesis/
+.pytest_cache/
+
+# Local telemetry data
+.telemetry/
+
+# Bug reports
+yt-study-bug-report-*.zip
 __pycache__/
 *.py[oc]
 build/

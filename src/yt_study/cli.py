@@ -524,10 +524,52 @@ def telemetry_cmd(
             help="Show usage statistics.",
         ),
     ] = True,
+    on: Annotated[
+        bool,
+        typer.Option(
+            "--on",
+            help="Enable telemetry.",
+        ),
+    ] = False,
+    off: Annotated[
+        bool,
+        typer.Option(
+            "--off",
+            help="Disable telemetry.",
+        ),
+    ] = False,
 ) -> None:
     """
     Manage application telemetry.
     """
+    from .config import config
+
+    if on or off:
+        config_file = Path.home() / ".yt-study" / "config.env"
+        if not config_file.exists():
+            console.print("[yellow]⚠ No configuration file found. Run setup first.[/yellow]")
+            return
+
+        lines = config_file.read_text(encoding="utf-8").splitlines()
+        new_lines = []
+        found = False
+        val = "true" if on else "false"
+
+        for line in lines:
+            if line.strip().startswith("TELEMETRY_ENABLED="):
+                new_lines.append(f"TELEMETRY_ENABLED={val}")
+                found = True
+            else:
+                new_lines.append(line)
+
+        if not found:
+            new_lines.append(f"TELEMETRY_ENABLED={val}")
+
+        config_file.write_text("\n".join(new_lines) + "\n", encoding="utf-8")
+        status = "enabled" if on else "disabled"
+        console.print(f"[green]Telemetry has been {status}.[/green]")
+        return
+
     if stats:
         data = telemetry.get_stats()
 
@@ -551,6 +593,78 @@ def telemetry_cmd(
         rate = (success / total * 100) if total > 0 else 0
         console.print(f"\n[dim]Total commands run:[/dim] [bold]{total}[/bold]")
         console.print(f"[dim]Overall success rate:[/dim] [bold]{rate:.1f}%[/bold]")
+        console.print(f"[dim]Telemetry enabled:[/dim] [bold]{'Yes' if config.telemetry_enabled else 'No'}[/bold]")
+
+
+@app.command()
+def bug_report(
+    send: Annotated[
+        bool,
+        typer.Option(
+            "--send",
+            help="Automatically send the report to the developers.",
+        ),
+    ] = False,
+) -> None:
+    """
+    Generate a bug report with system info and recent logs.
+    """
+    import json
+    import platform
+    import shutil
+    import tempfile
+    import zipfile
+
+    console.print("[cyan]Generating bug report...[/cyan]")
+
+    report_data = {
+        "os": platform.system(),
+        "os_release": platform.release(),
+        "python_version": sys.version.split()[0],
+        "timestamp": datetime.now().isoformat(),
+    }
+
+    try:
+        from . import __version__
+        report_data["app_version"] = __version__
+    except ImportError:
+        report_data["app_version"] = "unknown"
+
+    # Gather recent logs
+    log_file = Path.home() / ".yt-study" / "logs" / "yt-study.jsonl"
+    recent_logs = ""
+    if log_file.exists():
+        lines = log_file.read_text(encoding="utf-8").splitlines()
+        recent_logs = "\n".join(lines[-100:]) # Last 100 lines
+
+    if send:
+        if not telemetry.enabled:
+            console.print("[yellow]⚠ Telemetry is disabled. Cannot send automatically.[/yellow]")
+            console.print("[dim]Use --no-send to generate a local zip instead.[/dim]")
+            return
+
+        console.print("[cyan]Sending report via telemetry...[/cyan]")
+        telemetry.capture_event("bug_report", {
+            **report_data,
+            "logs": recent_logs,
+        })
+        console.print("[green]Report sent successfully![/green]")
+    else:
+        # Create a local zip
+        report_file = Path.cwd() / f"yt-study-bug-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmp_path = Path(tmpdir)
+            (tmp_path / "system_info.json").write_text(json.dumps(report_data, indent=2), encoding="utf-8")
+            if recent_logs:
+                (tmp_path / "recent_logs.jsonl").write_text(recent_logs, encoding="utf-8")
+
+            with zipfile.ZipFile(report_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+                for file in tmp_path.iterdir():
+                    zipf.write(file, file.name)
+
+        console.print(f"[green]Bug report generated:[/green] [bold]{report_file}[/bold]")
+        console.print("[dim]You can attach this file to a GitHub issue.[/dim]")
 
 
 if __name__ == "__main__":

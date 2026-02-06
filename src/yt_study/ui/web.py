@@ -130,7 +130,10 @@ class WebVisualizer:
                         "text-2xl font-bold mb-4 border-b w-full"
                     )
 
-                    content = project["path"].read_text(encoding="utf-8")
+                    try:
+                        content = project["path"].read_text(encoding="utf-8")
+                    except Exception as e:
+                        content = f"Error reading file: {e}"
 
                     # Replace timestamps with clickable links
                     # Pattern matches [HH:MM:SS] or [MM:SS]

@@ -451,12 +451,20 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
         "Max concurrent videos to process?", default=default_concurrency
     )
 
+    # Optional: Configure telemetry
+    console.print("\n[bold cyan]Telemetry:[/bold cyan]")
+    console.print(
+        "[dim]Help us improve yt-study by sending anonymous usage statistics and error reports.[/dim]"
+    )
+    telemetry_enabled = Confirm.ask("Enable anonymous telemetry?", default=True)
+
     # Build config updates
     new_config = {
         "DEFAULT_MODEL": model,
         provider_info["env_var"]: api_key,
         "OUTPUT_DIR": output_dir,
         "MAX_CONCURRENT_VIDEOS": concurrency,
+        "TELEMETRY_ENABLED": "true" if telemetry_enabled else "false",
     }
 
     # Save configuration (merging with existing)

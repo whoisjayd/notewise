@@ -36,6 +36,7 @@ dependencies = [
     "nicegui>=3.7.1",
     "httpx>=0.27.0",
     "packaging>=24.0",
+    "posthog>=7.8.2",
 ]
 
 [project.optional-dependencies]
@@ -54,6 +55,7 @@ dev = [
     "types-aiofiles>=25.1.0.20251011",
     "mkdocs>=1.6.0",
     "mkdocs-material>=9.5.0",
+    "hypothesis>=6.151.5",
 ]
 
 [project.scripts]

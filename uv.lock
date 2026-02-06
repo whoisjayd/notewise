@@ -222,6 +222,15 @@ wheels = [
 ]
 
 [[package]]
+name = "backoff"
+version = "2.2.1"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/47/d7/5bbeb12c44d7c4f2fb5b56abce497eb5ed9f34d85701de869acedd602619/backoff-2.2.1.tar.gz", hash = "sha256:03f829f5bb1923180821643f8753b0502c3b682293992485b0eef2807afa5cba", size = 17001, upload-time = "2022-10-05T19:19:32.061Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/df/73/b6e24bd22e6720ca8ee9a85a0c4a2971af8497d8f3193fa05390cbd46e09/backoff-2.2.1-py3-none-any.whl", hash = "sha256:63579f9a0628e06278f7e47b7d7d5b6ce20dc65c5e96a6f3ca99a6adca0396e8", size = 15148, upload-time = "2022-10-05T19:19:30.546Z" },
+]
+
+[[package]]
 name = "backports-asyncio-runner"
 version = "1.2.0"
 source = { registry = "https://pypi.org/simple" }
@@ -890,6 +899,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/67/e9/2658cb9bc4c72a67b7f87650e827266139befaf499095883d30dabc4d49f/huggingface_hub-1.3.5.tar.gz", hash = "sha256:8045aca8ddab35d937138f3c386c6d43a275f53437c5c64cdc9aa8408653b4ed", size = 627456, upload-time = "2026-01-29T10:34:19.687Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f9/84/a579b95c46fe8e319f89dc700c087596f665141575f4dcf136aaa97d856f/huggingface_hub-1.3.5-py3-none-any.whl", hash = "sha256:fe332d7f86a8af874768452295c22cd3f37730fb2463cf6cc3295e26036f8ef9", size = 536675, upload-time = "2026-01-29T10:34:17.713Z" },
+]
+
+[[package]]
+name = "hypothesis"
+version = "6.151.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "exceptiongroup", marker = "python_full_version < '3.11'" },
+    { name = "sortedcontainers" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/4e/d7/c40dcd401cc360d8d084e584ffb7ab17255fde22e2b9cf2b53bf25aed629/hypothesis-6.151.5.tar.gz", hash = "sha256:ae3a0622f9693e6b19c697777c2c266c02801f9769ab7c2c37b7ec83d4743783", size = 475923, upload-time = "2026-02-03T19:33:55.845Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/c0/d9/53a8b53e75279a953fae608bd01025d9afcf393406c0da1dda1b7f5693c5/hypothesis-6.151.5-py3-none-any.whl", hash = "sha256:c0e15c91fa0e67bc0295551ef5041bebad42753b7977a610cd7a6ec1ad04ef13", size = 543338, upload-time = "2026-02-03T19:33:54.583Z" },
 ]
 
 [[package]]
@@ -1788,6 +1810,23 @@ wheels = [
 ]
 
 [[package]]
+name = "posthog"
+version = "7.8.2"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "backoff" },
+    { name = "distro" },
+    { name = "python-dateutil" },
+    { name = "requests" },
+    { name = "six" },
+    { name = "typing-extensions" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/9c/5c/35edae017d92b2f7625a2b3be45dc36c8e6e14acbe5dbeeaa5a20a932ccf/posthog-7.8.2.tar.gz", hash = "sha256:d36472763750d8da60ebc3cbf6349a91222ba6a43dfdbdcdb6a9f03796514239", size = 166995, upload-time = "2026-02-04T15:10:31.251Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/53/d9/8f2374c559a6e50d2e92601b42540aae296f6e0a2066e913fed8bd603f23/posthog-7.8.2-py3-none-any.whl", hash = "sha256:d3fa69f7e15830a8e19cd4de4e7b40982838efa5d0f448133be3115bd556feef", size = 192440, upload-time = "2026-02-04T15:10:29.767Z" },
+]
+
+[[package]]
 name = "pre-commit"
 version = "4.5.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2630,6 +2669,15 @@ wheels = [
 ]
 
 [[package]]
+name = "sortedcontainers"
+version = "2.4.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/e8/c4/ba2f8066cceb6f23394729afe52f3bf7adec04bf9ed2c820b39e19299111/sortedcontainers-2.4.0.tar.gz", hash = "sha256:25caa5a06cc30b6b83d11423433f65d1f9d76c4c6a0c90e3379eaa43b9bfdb88", size = 30594, upload-time = "2021-05-16T22:03:42.897Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/32/46/9cb0e58b2deb7f82b84065f37f3bffeb12413f947f9388e4cac22c4621ce/sortedcontainers-2.4.0-py2.py3-none-any.whl", hash = "sha256:a163dcaede0f1c021485e957a39245190e74249897e2ae4b2aa38595db237ee0", size = 29575, upload-time = "2021-05-16T22:03:41.177Z" },
+]
+
+[[package]]
 name = "starlette"
 version = "0.50.0"
 source = { registry = "https://pypi.org/simple" }
@@ -3350,6 +3398,7 @@ dependencies = [
     { name = "nicegui" },
     { name = "packaging" },
     { name = "pathvalidate" },
+    { name = "posthog" },
     { name = "pytubefix" },
     { name = "rich" },
     { name = "structlog" },
@@ -3359,6 +3408,7 @@ dependencies = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "hypothesis" },
     { name = "mkdocs" },
     { name = "mkdocs-material" },
     { name = "mypy" },
@@ -3383,6 +3433,7 @@ requires-dist = [
     { name = "nicegui", specifier = ">=3.7.1" },
     { name = "packaging", specifier = ">=24.0" },
     { name = "pathvalidate", specifier = ">=3.2.1" },
+    { name = "posthog", specifier = ">=7.8.2" },
     { name = "pytubefix", specifier = ">=10.3.6" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "structlog", specifier = ">=25.1.0" },
@@ -3392,6 +3443,7 @@ requires-dist = [
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "hypothesis", specifier = ">=6.151.5" },
     { name = "mkdocs", specifier = ">=1.6.0" },
     { name = "mkdocs-material", specifier = ">=9.5.0" },
     { name = "mypy", specifier = ">=1.19.1" },

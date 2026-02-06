@@ -302,6 +302,7 @@ class TestWizardOrchestration:
             ),
             patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
             patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch("rich.prompt.Confirm.ask", return_value=True),
             patch("yt_study.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True)
