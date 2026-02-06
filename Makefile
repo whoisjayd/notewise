@@ -26,6 +26,7 @@ help:
 	@echo ""
 	@echo "Build & Publish:"
 	@echo "  make build          Build distribution packages"
+	@echo "  make build-exe      Build standalone executable with compression"
 	@echo "  make publish        Publish to PyPI (requires credentials)"
 	@echo "  make clean          Clean build artifacts and cache"
 	@echo ""
@@ -99,6 +100,10 @@ build: clean
 	@echo "Building distribution packages..."
 	uv build
 	@echo "[OK] Build complete - check dist/ folder"
+
+build-exe:
+	@echo "Building standalone executable..."
+	@bash scripts/build_executable.sh
 
 # Publish to PyPI
 publish: build

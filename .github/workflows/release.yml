@@ -40,28 +40,10 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install dependencies
-        run: uv sync --group dev
+        run: uv sync --all-extras --dev
       - name: Build executable
         shell: bash
-        run: |
-          # Create a launcher to avoid relative import issues in cli.py
-          echo "from yt_study.cli import app; import sys; sys.exit(app())" > launcher.py
-          uv run pyinstaller --onefile --name yt-study \
-            --collect-all litellm \
-            --collect-all pydantic \
-            --paths src \
-            launcher.py
-      - name: Rename and Prepare Artifacts
-        shell: bash
-        run: |
-          mkdir -p dist/release
-          if [ "${{ matrix.os }}" = "windows-latest" ]; then
-            mv dist/yt-study.exe dist/release/yt-study-windows.exe
-          elif [ "${{ matrix.os }}" = "macos-latest" ]; then
-            mv dist/yt-study dist/release/yt-study-macos
-          else
-            mv dist/yt-study dist/release/yt-study-linux
-          fi
+        run: bash scripts/build_executable.sh
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
