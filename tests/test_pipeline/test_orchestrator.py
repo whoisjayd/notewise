@@ -109,7 +109,9 @@ class TestPipelineOrchestrator:
             ),
             patch(
                 "yt_study.pipeline.orchestrator.get_video_chapters",
-                return_value=["chap1"],
+                return_value=[
+                    MagicMock(title="Ch1", start_seconds=0, end_seconds=100)
+                ],
             ),
             patch(
                 "yt_study.pipeline.orchestrator.fetch_transcript",
@@ -136,9 +138,13 @@ class TestPipelineOrchestrator:
             assert success is True
             # Verify folder creation
             assert video_folder.exists()
-            # Verify individual chapter file created (mock provider returns
-            # default text)
-            assert (video_folder / "chapters" / "01_Ch1.md").exists()
+            # Verify that generate_chapter_based_notes was called with output_dir
+            orchestrator.generator.generate_chapter_based_notes.assert_called_once_with(
+                {"Ch1": "text"},
+                video_title=video_title,
+                video_id=video_id,
+                output_dir=video_folder,
+            )
             assert output_path.exists()
             assert output_path.read_text(encoding="utf-8") == "# Combined Chapter Notes"
 

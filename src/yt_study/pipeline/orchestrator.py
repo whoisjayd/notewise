@@ -254,10 +254,14 @@ class PipelineOrchestrator:
                     else:
                         logger.info(f"No synthetic chapters generated for {video_id}")
 
+                # Create output directory early
+                video_folder = output_path.parent
+                video_folder.mkdir(parents=True, exist_ok=True)
+
                 # Save chapters.json if we have chapters
                 if chapters:
                     import json
-                    chapters_json_path = output_path.parent / "chapters.json"
+                    chapters_json_path = video_folder / "chapters.json"
                     chapters_data = [
                         {
                             "title": c.title,
@@ -285,13 +289,9 @@ class PipelineOrchestrator:
 
                 # 3. Determine Generation Strategy
                 # Use chapters if video is long (>1h) and chapters exist
-                use_chapters = duration > 3600 and len(chapters) > 0 and not is_playlist
+                use_chapters_strategy = duration > 3600 and len(chapters) > 0 and not is_playlist
 
-                # Base output folder is the parent of the final MD file
-                video_folder = output_path.parent
-                video_folder.mkdir(parents=True, exist_ok=True)
-
-                if use_chapters:
+                if use_chapters_strategy:
                     if progress and local_task_id is not None:
                         progress.update(
                             local_task_id,
@@ -305,46 +305,12 @@ class PipelineOrchestrator:
                         transcript_obj, chapters, include_timestamps=True
                     )
 
-                    # Create folder for chapter notes
-                    chapters_folder = video_folder / "chapters"
-                    chapters_folder.mkdir(parents=True, exist_ok=True)
-
-                    # Generate chapter notes
-                    for i, (chap_title, chap_text) in enumerate(
-                        chapter_transcripts.items(), 1
-                    ):
-                        status_msg = f"Chapter {i}/{len(chapter_transcripts)}"
-                        if progress and local_task_id is not None:
-                            progress.update(
-                                local_task_id,
-                                description=(
-                                    f"[cyan]🤖 {title_display}... ({status_msg})[/cyan]"
-                                ),
-                            )
-
-                        notes = await self.generator.generate_single_chapter_notes(
-                            chapter_title=chap_title,
-                            chapter_text=chap_text,
-                            video_id=video_id,
-                        )
-
-                        # Save individual chapter
-                        safe_chapter = sanitize_filename(chap_title)
-                        chapter_file = chapters_folder / f"{i:02d}_{safe_chapter}.md"
-                        chapter_file.write_text(notes, encoding="utf-8")
-
-                    # Final notes for chapter-based approach
-                    # currently it combines them
-                    # We might want to update generate_chapter_based_notes too, but
-                    # for now we'll just fix the single-file fallback below.
-                    # Actually, the logic above just saves files and returns True.
-                    # We need a way to create the combined file too.
-
-                    # Generate the combined file
+                    # Generate chapter notes (handles per-chapter resume logic internally)
                     final_notes = await self.generator.generate_chapter_based_notes(
                         chapter_transcripts,
                         video_title=video_title,
                         video_id=video_id,
+                        output_dir=video_folder,
                     )
                     output_path.write_text(final_notes, encoding="utf-8")
 

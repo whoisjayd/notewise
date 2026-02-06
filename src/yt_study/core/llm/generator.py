@@ -13,6 +13,7 @@ from litellm import token_counter
 
 from ..telemetry import telemetry
 from ...config import config
+from ...utils import sanitize_filename
 
 if TYPE_CHECKING:
     from ..events import EventEmitter
@@ -430,6 +431,7 @@ class StudyMaterialGenerator:
         chapter_transcripts: dict[str, str],
         video_title: str = "Video",
         video_id: str | None = None,
+        output_dir: Path | None = None,
     ) -> str:
         """
         Generate study notes using chapter-based approach.
@@ -438,6 +440,7 @@ class StudyMaterialGenerator:
             chapter_transcripts: Dictionary mapping chapter titles to transcript text.
             video_title: Video title for display.
             video_id: YouTube video ID for generating timestamp links.
+            output_dir: Optional directory to save/resume individual chapters.
 
         Returns:
             Complete study notes organized by chapters.
@@ -461,9 +464,28 @@ class StudyMaterialGenerator:
             chapter_notes = {}
             total_chapters = len(chapter_transcripts)
 
+            # Prepare chapters folder if output_dir is provided
+            chapters_folder = None
+            if output_dir:
+                chapters_folder = output_dir / "chapters"
+                chapters_folder.mkdir(parents=True, exist_ok=True)
+
             for i, (chapter_title, chapter_text) in enumerate(
                 chapter_transcripts.items(), 1
             ):
+                # Check for existing chapter file to resume
+                chapter_file = None
+                if chapters_folder:
+                    safe_chapter = sanitize_filename(chapter_title)
+                    chapter_file = chapters_folder / f"{i:02d}_{safe_chapter}.md"
+
+                    if chapter_file.exists() and chapter_file.stat().st_size > 0:
+                        logger.info(f"Skipping chapter {i}: {chapter_title} (already exists)")
+                        async with aiofiles.open(chapter_file, "r", encoding="utf-8") as f:
+                            notes = await f.read()
+                        chapter_notes[chapter_title] = notes
+                        continue
+
                 msg = f"Chapter {i}/{total_chapters}: {chapter_title[:20]}..."
                 self._update_status(video_title, msg, video_id=video_id)
 
@@ -514,6 +536,11 @@ class StudyMaterialGenerator:
 
                 if video_id:
                     notes = self._post_process_timestamps(notes, video_id)
+
+                # Save individual chapter if chapters_folder is available
+                if chapters_folder and chapter_file:
+                    async with aiofiles.open(chapter_file, "w", encoding="utf-8") as f:
+                        await f.write(notes)
 
                 chapter_notes[chapter_title] = notes
 

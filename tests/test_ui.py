@@ -64,6 +64,7 @@ def test_dashboard_rendering():
     # Add some data to render
     dash.add_completion("Completed Video")
     dash.add_failure("Failed Video")
+    dash.update_worker(0, "Processing Video...")
 
     renderable = dash.__rich__()
 

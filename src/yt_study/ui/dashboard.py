@@ -178,13 +178,12 @@ class PipelineDashboard:
         ]
 
         # Filter active worker tasks
-        active_worker_tasks = [
-            tid
-            for tid in self.worker_tasks
-            if not self.worker_progress.tasks[
-                self.worker_progress.get_task(tid).id
-            ].description.startswith("[dim]Idle")
-        ]
+        active_worker_tasks = []
+        for tid in self.worker_tasks:
+            # Find the task in the progress instance
+            task = next((t for t in self.worker_progress.tasks if t.id == tid), None)
+            if task and not task.description.startswith("[dim]Idle"):
+                active_worker_tasks.append(tid)
 
         # Only add active tasks section if there are active workers
         if active_worker_tasks:
@@ -195,14 +194,15 @@ class PipelineDashboard:
                 expand=True,
             )
             for tid in active_worker_tasks:
-                task = self.worker_progress.get_task(tid)
-                active_progress.add_task(
-                    description=task.description,
-                    total=task.total,
-                    completed=task.completed,
-                    visible=task.visible,
-                    **task.fields,
-                )
+                task = next((t for t in self.worker_progress.tasks if t.id == tid), None)
+                if task:
+                    active_progress.add_task(
+                        description=task.description,
+                        total=task.total,
+                        completed=task.completed,
+                        visible=task.visible,
+                        **task.fields,
+                    )
 
             elements.extend(
                 [
