@@ -40,15 +40,13 @@ jobs:
         with:
           python-version: "3.10"
       - name: Install dependencies
-        run: |
-          uv sync --group dev
-          uv pip install . pyinstaller
+        run: uv sync --group dev
       - name: Build executable
         shell: bash
         run: |
           # Create a launcher to avoid relative import issues in cli.py
           echo "from yt_study.cli import app; import sys; sys.exit(app())" > launcher.py
-          pyinstaller --onefile --name yt-study \
+          uv run pyinstaller --onefile --name yt-study \
             --collect-all litellm \
             --collect-all pydantic \
             --paths src \

@@ -25,3 +25,4 @@ drafts/
 .omc
 .claude
 site/
+rewrite.py
