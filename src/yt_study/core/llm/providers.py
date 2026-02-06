@@ -1,6 +1,7 @@
 """LLM provider configuration using LiteLLM."""
 
 import os
+import time
 from typing import Any
 
 import structlog
@@ -62,6 +63,7 @@ class LLMProvider:
         user_prompt: str,
         temperature: float = 0.7,
         max_tokens: int | None = None,
+        trace_id: str | None = None,
     ) -> str:
         """
         Generate text using the configured LLM.
@@ -71,6 +73,7 @@ class LLMProvider:
             user_prompt: User query/content.
             temperature: Sampling temperature (0.0 to 1.0).
             max_tokens: Maximum tokens to generate (None for model default).
+            trace_id: Optional trace ID for linking events in observability.
 
         Returns:
             Generated text content.
@@ -79,6 +82,7 @@ class LLMProvider:
             LLMGenerationError: If generation fails after retries.
         """
         try:
+            start_time = time.perf_counter()
             messages = [
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt},
@@ -97,21 +101,36 @@ class LLMProvider:
 
             # LiteLLM's acompletion handles async requests to various providers
             response = await acompletion(**kwargs)
+            latency_ms = int((time.perf_counter() - start_time) * 1000)
 
-            # Track usage
+            # Track usage and LLM observability
             try:
                 usage = getattr(response, "usage", None)
+                content = response.choices[0].message.content or ""
+
+                event_props = {
+                    "$ai_model": self.model,
+                    "$ai_provider": self.model.split("/")[0] if "/" in self.model else "unknown",
+                    "$ai_model_parameters": {
+                        "temperature": temperature,
+                        "max_tokens": max_tokens,
+                    },
+                    "$ai_latency_ms": latency_ms,
+                    "$ai_input": messages,
+                    "$ai_output": [{"role": "assistant", "content": content}],
+                }
+
+                if trace_id:
+                    event_props["$ai_trace_id"] = trace_id
+
                 if usage:
-                    telemetry.capture_event(
-                        "llm_generation",
-                        {
-                            "model": self.model,
-                            "prompt_tokens": getattr(usage, "prompt_tokens", 0),
-                            "completion_tokens": getattr(usage, "completion_tokens", 0),
-                            "total_tokens": getattr(usage, "total_tokens", 0),
-                            "temperature": temperature,
-                        },
-                    )
+                    event_props.update({
+                        "$ai_input_tokens": getattr(usage, "prompt_tokens", 0),
+                        "$ai_output_tokens": getattr(usage, "completion_tokens", 0),
+                        "$ai_total_tokens": getattr(usage, "total_tokens", 0),
+                    })
+
+                telemetry.capture_event("$ai_generation", event_props)
             except Exception:
                 pass
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -259,12 +260,14 @@ class StudyMaterialGenerator:
         Returns:
             Complete study notes in Markdown format.
         """
+        trace_id = str(uuid.uuid4())
         telemetry.capture_event(
-            "study_notes_generation_start",
+            "ai_study_notes_generation_start",
             {
                 "video_id": video_id,
                 "has_chapters": chapters is not None,
                 "transcript_length": len(transcript),
+                "$ai_trace_id": trace_id,
             },
         )
         try:
@@ -281,14 +284,15 @@ class StudyMaterialGenerator:
                     user_prompt=get_single_pass_prompt(transcript),
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
+                    trace_id=trace_id,
                 )
 
                 if video_id:
                     notes = self._post_process_timestamps(notes, video_id)
 
                 telemetry.capture_event(
-                    "study_notes_generation_success",
-                    {"video_id": video_id, "chunks": 1},
+                    "ai_study_notes_generation_success",
+                    {"video_id": video_id, "chunks": 1, "$ai_trace_id": trace_id},
                 )
                 return notes
 
@@ -314,6 +318,7 @@ class StudyMaterialGenerator:
                     user_prompt=get_chunk_prompt(chunk),
                     temperature=self.temperature,
                     max_tokens=self.max_tokens,
+                    trace_id=trace_id,
                 )
 
                 if video_id:
@@ -348,14 +353,15 @@ class StudyMaterialGenerator:
                 user_prompt=get_combine_prompt(chunk_notes),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
+                trace_id=trace_id,
             )
 
             if video_id:
                 final_notes = self._post_process_timestamps(final_notes, video_id)
 
             telemetry.capture_event(
-                "study_notes_generation_success",
-                {"video_id": video_id, "chunks": len(chunks)},
+                "ai_study_notes_generation_success",
+                {"video_id": video_id, "chunks": len(chunks), "$ai_trace_id": trace_id},
             )
             return final_notes
         except Exception as e:
@@ -432,11 +438,13 @@ class StudyMaterialGenerator:
         Returns:
             Complete study notes organized by chapters.
         """
+        trace_id = str(uuid.uuid4())
         telemetry.capture_event(
-            "chapter_notes_generation_start",
+            "ai_chapter_notes_generation_start",
             {
                 "video_id": video_id,
                 "chapter_count": len(chapter_transcripts),
+                "$ai_trace_id": trace_id,
             },
         )
         try:
@@ -474,6 +482,7 @@ class StudyMaterialGenerator:
                             user_prompt=get_chapter_prompt(chapter_title, chunk),
                             temperature=self.temperature,
                             max_tokens=self.max_tokens,
+                            trace_id=trace_id,
                         )
                         chunk_notes.append(note)
 
@@ -488,6 +497,7 @@ class StudyMaterialGenerator:
                         user_prompt=get_combine_prompt(chunk_notes),
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
+                        trace_id=trace_id,
                     )
                 else:
                     notes = await self.provider.generate(
@@ -495,6 +505,7 @@ class StudyMaterialGenerator:
                         user_prompt=get_chapter_prompt(chapter_title, chapter_text),
                         temperature=self.temperature,
                         max_tokens=self.max_tokens,
+                        trace_id=trace_id,
                     )
 
                 if video_id:
@@ -511,14 +522,15 @@ class StudyMaterialGenerator:
                 user_prompt=get_combine_chapters_prompt(chapter_notes),
                 temperature=self.temperature,
                 max_tokens=self.max_tokens,
+                trace_id=trace_id,
             )
 
             if video_id:
                 final_notes = self._post_process_timestamps(final_notes, video_id)
 
             telemetry.capture_event(
-                "chapter_notes_generation_success",
-                {"video_id": video_id, "chapters": total_chapters},
+                "ai_chapter_notes_generation_success",
+                {"video_id": video_id, "chapters": total_chapters, "$ai_trace_id": trace_id},
             )
             return final_notes
         except Exception as e:
