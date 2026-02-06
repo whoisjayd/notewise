@@ -254,6 +254,24 @@ class PipelineOrchestrator:
                     else:
                         logger.info(f"No synthetic chapters generated for {video_id}")
 
+                # Save chapters.json if we have chapters
+                if chapters:
+                    import json
+                    chapters_json_path = output_path.parent / "chapters.json"
+                    chapters_data = [
+                        {
+                            "title": c.title,
+                            "start_seconds": c.start_seconds,
+                            "end_seconds": c.end_seconds,
+                        }
+                        for c in chapters
+                    ]
+                    chapters_json_path.write_text(
+                        json.dumps(chapters_data, indent=2, ensure_ascii=False),
+                        encoding="utf-8",
+                    )
+                    logger.info(f"Saved chapters to {chapters_json_path}")
+
                 # Export Raw Transcript if requested
                 if self.export_transcript:
                     raw_text = transcript_obj.to_text()

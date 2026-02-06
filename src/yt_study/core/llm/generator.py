@@ -388,7 +388,11 @@ class StudyMaterialGenerator:
 
             return f"[{ts_str}](https://youtu.be/{video_id}?t={total_seconds})"
 
-        # Match [MM:SS] or [HH:MM:SS]
+        # 1. Clean up backticked timestamps: `[MM:SS]` -> [MM:SS]
+        # This prevents breaking markdown links if the LLM wraps them in backticks
+        text = re.sub(r"`\[(\d{1,2}:\d{2}(?::\d{2})?)\]`", r"[\1]", text)
+
+        # 2. Convert [MM:SS] or [HH:MM:SS] into clickable YouTube links
         pattern = r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]"
         return re.sub(pattern, replace_timestamp, text)
 

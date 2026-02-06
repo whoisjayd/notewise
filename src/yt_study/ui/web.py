@@ -18,20 +18,16 @@ class WebVisualizer:
 
     def _scan_projects(self) -> list[dict[str, Any]]:
         projects = []
-        # Support both flat and playlist structures
+        seen_slugs = set()
+
+        # 1. First pass: Find existing .md files (slug/slug.md)
         for md_file in self.output_dir.glob("**/*.md"):
-            # Skip files in 'chapters' directory as they are partial
-            if "chapters" in md_file.parts:
+            if "chapters" in md_file.parts or "chunks" in md_file.parts:
                 continue
 
-            # The slug is usually the parent directory name and also the filename
             slug = md_file.stem
             if md_file.parent.name == slug:
-                # This matches our structure: slug/slug.md
-                # Try to extract video ID from slug (usually at the end after _)
                 video_id = slug.split("_")[-1] if "_" in slug else ""
-
-                # Check if it's in a playlist folder
                 playlist = ""
                 if md_file.parent.parent != self.output_dir:
                     playlist = md_file.parent.parent.name
@@ -43,10 +39,39 @@ class WebVisualizer:
                         "path": md_file,
                         "playlist": playlist,
                         "slug": slug,
+                        "has_main": True,
                     }
                 )
+                seen_slugs.add(slug)
 
-        # Sort by playlist and then title
+        # 2. Second pass: Find projects with only chapters
+        # Look for directories that have a 'chapters' subfolder with .md files
+        for chapters_dir in self.output_dir.glob("**/chapters"):
+            parent = chapters_dir.parent
+            slug = parent.name
+
+            if slug in seen_slugs:
+                continue
+
+            # Check if there are any .md files in chapters
+            if any(chapters_dir.glob("*.md")):
+                video_id = slug.split("_")[-1] if "_" in slug else ""
+                playlist = ""
+                if parent.parent != self.output_dir:
+                    playlist = parent.parent.name
+
+                projects.append(
+                    {
+                        "title": slug.rsplit("_", 1)[0] if "_" in slug else slug,
+                        "id": video_id,
+                        "path": parent / f"{slug}.md", # This path doesn't exist yet
+                        "playlist": playlist,
+                        "slug": slug,
+                        "has_main": False,
+                    }
+                )
+                seen_slugs.add(slug)
+
         return sorted(projects, key=lambda x: (x["playlist"], x["title"]))
 
     def _get_video_url(self, video_id: str, t: int = 0) -> str:
@@ -142,9 +167,25 @@ class WebVisualizer:
                     )
 
                     try:
-                        content = project["path"].read_text(encoding="utf-8")
+                        if project.get("has_main", True) and project["path"].exists():
+                            content = project["path"].read_text(encoding="utf-8")
+                        else:
+                            # Aggregate chapters
+                            chapters_dir = project["path"].parent / "chapters"
+                            if chapters_dir.exists():
+                                chapter_files = sorted(chapters_dir.glob("*.md"))
+                                if chapter_files:
+                                    content = "# Study Notes (Aggregated from Chapters)\n\n"
+                                    content += "> Note: The main summary file is missing. Showing individual chapters below.\n\n"
+                                    for cf in chapter_files:
+                                        content += f"## {cf.stem.replace('_', ' ')}\n\n"
+                                        content += cf.read_text(encoding="utf-8") + "\n\n---\n\n"
+                                else:
+                                    content = "No study notes or chapters found for this project."
+                            else:
+                                content = "Project directory not found or main file missing."
                     except Exception as e:
-                        content = f"Error reading file: {e}"
+                        content = f"Error reading project content: {e}"
 
                     # Replace timestamps with clickable links
                     # Pattern matches [HH:MM:SS] or [MM:SS]
