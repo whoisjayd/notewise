@@ -4,6 +4,7 @@ from typing import Any
 from nicegui import ui
 from nicegui.elements.html import Html
 
+from ..core.telemetry import POSTHOG_API_KEY, POSTHOG_HOST, telemetry
 from ..config import config
 
 
@@ -67,6 +68,16 @@ class WebVisualizer:
             return 0
 
     def render(self) -> None:
+        # Inject PostHog Telemetry and Session Replay
+        if telemetry.is_enabled:
+            ui.add_head_html(f"""
+                <script>
+                !function(t,e){{var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){{function g(t,e){{var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){{t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}}}((p=t.createElement("script")).type="text/javascript",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){{var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e}},u.capture=function(t,o,n){{u.push(["capture",t,o,n])}},u.set_config=function(t){{u.push(["set_config",t])}},u.register=function(t){{u.push(["register",t])}},u.register_once=function(t){{u.push(["register_once",t])}},u.unregister=function(t){{u.push(["unregister",t])}},u.identify=function(t,o){{u.push(["identify",t,o])}},u.alias=function(t,o){{u.push(["alias",t,o])}},u.set_person_properties=function(t,o){{u.push(["set_person_properties",t,o])}},u.group=function(t,o,n,p){{u.push(["group",t,o,n,p])}},u.page_view=function(t,o){{u.push(["page_view",t,o])}},u.reset=function(t){{u.push(["reset",t])}},u.get_distinct_id=function(t){{return u.get_property("distinct_id")}},u.get_groups=function(){{return u.get_property("$groups")}},u.get_group_id=function(t){{return u.get_property("$group_0")}},u.get_property=function(t){{return u._get_prop(t)}},u.on=function(t,e){{u.push(["on",t,e])}},u.off=function(t,e){{u.push(["off",t,e])}},u.get_session_id=function(){{return u.get_property("$session_id")}},u.get_session_replay_url=function(){{return u.get_property("$session_replay_url")}},o=["capture","identify","alias","people.set","people.set_once","people.unset","people.increment","people.append","people.union","people.track_charge","people.clear_charges","people.delete_user","set_config","register","register_once","unregister","group","on","off","get_session_id","get_session_replay_url"],n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])}},e.__SV=1.0)}}(document,window.posthog||[]);
+                posthog.init('{POSTHOG_API_KEY}',{{api_host:'{POSTHOG_HOST}', person_profiles: 'identified_only', disable_session_recording: false}})
+                posthog.identify('{telemetry.distinct_id}')
+                </script>
+            """)
+
         with ui.header().classes("items-center justify-between"):
             ui.label("yt-study Visualizer").classes("text-2xl font-bold")
             with ui.row():

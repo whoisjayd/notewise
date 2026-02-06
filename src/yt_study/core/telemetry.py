@@ -19,7 +19,7 @@ from ..config import config
 logger = structlog.get_logger(__name__)
 
 # PostHog Public API Key (Standard OSS practice for telemetry)
-POSTHOG_API_KEY = "phc_y7m1C9B6Jv0f8L9x4n5M3K2W1Q9P8O7N6M5L4K3J2I"
+POSTHOG_API_KEY = "phc_84al8IgA5g3ATbomr3VB7sDXsgdlp9gT3J9njqpbUj7"
 POSTHOG_HOST = "https://us.i.posthog.com"
 
 SENSITIVE_KEYS = {"api_key", "token", "password", "secret", "credential", "key"}

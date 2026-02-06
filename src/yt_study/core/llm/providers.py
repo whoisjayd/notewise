@@ -6,6 +6,7 @@ from typing import Any
 import structlog
 from litellm import acompletion
 
+from ..telemetry import telemetry
 from ...config import config
 
 
@@ -96,6 +97,23 @@ class LLMProvider:
 
             # LiteLLM's acompletion handles async requests to various providers
             response = await acompletion(**kwargs)
+
+            # Track usage
+            try:
+                usage = getattr(response, "usage", None)
+                if usage:
+                    telemetry.capture_event(
+                        "llm_generation",
+                        {
+                            "model": self.model,
+                            "prompt_tokens": getattr(usage, "prompt_tokens", 0),
+                            "completion_tokens": getattr(usage, "completion_tokens", 0),
+                            "total_tokens": getattr(usage, "total_tokens", 0),
+                            "temperature": temperature,
+                        },
+                    )
+            except Exception:
+                pass
 
             # safely extract content
             if not response.choices or not response.choices[0].message.content:
