@@ -40,43 +40,45 @@ def configure_logging() -> None:
     shared_processors: list[Any] = [
         structlog.contextvars.merge_contextvars,
         structlog.processors.add_log_level,
+        structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
         structlog.processors.TimeStamper(fmt="iso"),
     ]
 
     structlog.configure(
         processors=shared_processors
         + [
-            structlog.processors.StackInfoRenderer(),
-            structlog.processors.format_exc_info,
-            structlog.make_filtering_bound_logger(logging.INFO),
-            (
-                structlog.dev.ConsoleRenderer()
-                if sys.stderr.isatty()
-                else structlog.processors.JSONRenderer()
-            ),
+            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
         ],
-        context_class=dict,
-        logger_factory=structlog.PrintLoggerFactory(),
+        logger_factory=structlog.stdlib.LoggerFactory(),
         wrapper_class=structlog.make_filtering_bound_logger(logging.INFO),
         cache_logger_on_first_use=True,
     )
 
-    # Standard logging bridge
-    logging.basicConfig(
-        format="%(message)s",
-        level=logging.WARNING,
-        handlers=[RichHandler(rich_tracebacks=True, show_time=False, show_path=False)],
+    # Console handler
+    console_handler = RichHandler(rich_tracebacks=True, show_time=False, show_path=False)
+    console_handler.setFormatter(
+        structlog.stdlib.ProcessorFormatter(
+            processor=structlog.dev.ConsoleRenderer()
+            if sys.stderr.isatty()
+            else structlog.processors.JSONRenderer(),
+        )
     )
 
     # File handler for JSON logs
     file_handler = logging.FileHandler(log_file_json, encoding="utf-8")
-    file_handler.setLevel(logging.DEBUG)
     file_handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
             processor=structlog.processors.JSONRenderer(),
         )
     )
-    logging.getLogger().addHandler(file_handler)
+
+    # Configure root logger
+    logging.basicConfig(
+        level=logging.INFO,
+        handlers=[console_handler, file_handler],
+        force=True,
+    )
 
 
 configure_logging()
