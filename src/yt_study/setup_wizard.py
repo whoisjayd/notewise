@@ -11,6 +11,8 @@ from rich.table import Table
 
 from yt_study import __version__
 from yt_study.ui.console import console
+
+
 logger = structlog.get_logger(__name__)
 
 
@@ -472,9 +474,11 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
 
     # Optional: Configure telemetry
     console.print("\n[bold cyan]Telemetry:[/bold cyan]")
-    console.print(
-        "[dim]Help us improve yt-study by sending anonymous usage statistics and error reports.[/dim]"
+    msg = (
+        "Help us improve yt-study by sending anonymous usage statistics "
+        "and error reports."
     )
+    console.print(f"[dim]{msg}[/dim]")
     telemetry_enabled = Confirm.ask("Enable anonymous telemetry?", default=True)
 
     # Build config updates

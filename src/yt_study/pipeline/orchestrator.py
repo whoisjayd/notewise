@@ -289,7 +289,9 @@ class PipelineOrchestrator:
 
                 # 3. Determine Generation Strategy
                 # Use chapters if video is long (>1h) and chapters exist
-                use_chapters_strategy = duration > 3600 and len(chapters) > 0 and not is_playlist
+                use_chapters_strategy = (
+                    duration > 3600 and len(chapters) > 0 and not is_playlist
+                )
 
                 if use_chapters_strategy:
                     if progress and local_task_id is not None:
@@ -305,7 +307,8 @@ class PipelineOrchestrator:
                         transcript_obj, chapters, include_timestamps=True
                     )
 
-                    # Generate chapter notes (handles per-chapter resume logic internally)
+                    # Generate chapter notes
+                    # (handles per-chapter resume logic internally)
                     final_notes = await self.generator.generate_chapter_based_notes(
                         chapter_transcripts,
                         video_title=video_title,

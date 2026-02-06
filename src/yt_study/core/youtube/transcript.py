@@ -14,8 +14,9 @@ from youtube_transcript_api._errors import (
     VideoUnavailable,
 )
 
-from ...ui.console import console
 from .metadata import VideoChapter
+
+
 logger = structlog.get_logger(__name__)
 
 

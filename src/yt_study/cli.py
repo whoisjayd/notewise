@@ -10,7 +10,6 @@ from typing import Annotated, Any
 
 import structlog
 import typer
-from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
@@ -57,7 +56,9 @@ def configure_logging() -> None:
     )
 
     # Console handler
-    console_handler = RichHandler(rich_tracebacks=True, show_time=False, show_path=False)
+    console_handler = RichHandler(
+        rich_tracebacks=True, show_time=False, show_path=False
+    )
     console_handler.setFormatter(
         structlog.stdlib.ProcessorFormatter(
             processor=structlog.dev.ConsoleRenderer()
@@ -548,7 +549,9 @@ def telemetry_cmd(
     if on or off:
         config_file = Path.home() / ".yt-study" / "config.env"
         if not config_file.exists():
-            console.print("[yellow]⚠ No configuration file found. Run setup first.[/yellow]")
+            console.print(
+                "[yellow]⚠ No configuration file found. Run setup first.[/yellow]"
+            )
             return
 
         lines = config_file.read_text(encoding="utf-8").splitlines()
@@ -594,7 +597,8 @@ def telemetry_cmd(
         rate = (success / total * 100) if total > 0 else 0
         console.print(f"\n[dim]Total commands run:[/dim] [bold]{total}[/bold]")
         console.print(f"[dim]Overall success rate:[/dim] [bold]{rate:.1f}%[/bold]")
-        console.print(f"[dim]Telemetry enabled:[/dim] [bold]{'Yes' if config.telemetry_enabled else 'No'}[/bold]")
+        enabled_str = "Yes" if config.telemetry_enabled else "No"
+        console.print(f"[dim]Telemetry enabled:[/dim] [bold]{enabled_str}[/bold]")
 
 
 @app.command()
@@ -612,7 +616,6 @@ def bug_report(
     """
     import json
     import platform
-    import shutil
     import tempfile
     import zipfile
 
@@ -640,7 +643,9 @@ def bug_report(
 
     if send:
         if not telemetry.enabled:
-            console.print("[yellow]⚠ Telemetry is disabled. Cannot send automatically.[/yellow]")
+            console.print(
+                "[yellow]⚠ Telemetry is disabled. Cannot send automatically.[/yellow]"
+            )
             console.print("[dim]Use --no-send to generate a local zip instead.[/dim]")
             return
 
@@ -652,19 +657,25 @@ def bug_report(
         console.print("[green]Report sent successfully![/green]")
     else:
         # Create a local zip
-        report_file = Path.cwd() / f"yt-study-bug-report-{datetime.now().strftime('%Y%m%d-%H%M%S')}.zip"
+        ts_str = datetime.now().strftime("%Y%m%d-%H%M%S")
+        report_file = Path.cwd() / f"yt-study-bug-report-{ts_str}.zip"
 
         with tempfile.TemporaryDirectory() as tmpdir:
             tmp_path = Path(tmpdir)
-            (tmp_path / "system_info.json").write_text(json.dumps(report_data, indent=2), encoding="utf-8")
+            json_report = json.dumps(report_data, indent=2)
+            (tmp_path / "system_info.json").write_text(json_report, encoding="utf-8")
             if recent_logs:
-                (tmp_path / "recent_logs.jsonl").write_text(recent_logs, encoding="utf-8")
+                (tmp_path / "recent_logs.jsonl").write_text(
+                    recent_logs, encoding="utf-8"
+                )
 
-            with zipfile.ZipFile(report_file, 'w', zipfile.ZIP_DEFLATED) as zipf:
+            with zipfile.ZipFile(report_file, "w", zipfile.ZIP_DEFLATED) as zipf:
                 for file in tmp_path.iterdir():
                     zipf.write(file, file.name)
 
-        console.print(f"[green]Bug report generated:[/green] [bold]{report_file}[/bold]")
+        console.print(
+            f"[green]Bug report generated:[/green] [bold]{report_file}[/bold]"
+        )
         console.print("[dim]You can attach this file to a GitHub issue.[/dim]")
 
 

@@ -11,9 +11,10 @@ import aiofiles
 import structlog
 from litellm import token_counter
 
-from ..telemetry import telemetry
 from ...config import config
 from ...utils import sanitize_filename
+from ..telemetry import telemetry
+
 
 if TYPE_CHECKING:
     from ..events import EventEmitter
@@ -278,7 +279,9 @@ class StudyMaterialGenerator:
 
             # Single chunk - generate directly
             if len(chunks) == 1:
-                self._update_status(video_title, "Generating notes...", video_id=video_id)
+                self._update_status(
+                    video_title, "Generating notes...", video_id=video_id
+                )
 
                 notes = await self.provider.generate(
                     system_prompt=SYSTEM_PROMPT,
@@ -366,7 +369,9 @@ class StudyMaterialGenerator:
             )
             return final_notes
         except Exception as e:
-            telemetry.capture_exception(e, {"video_id": video_id, "task": "study_notes"})
+            telemetry.capture_exception(
+                e, {"video_id": video_id, "task": "study_notes"}
+            )
             raise
 
     def _post_process_timestamps(self, text: str, video_id: str) -> str:
@@ -480,8 +485,10 @@ class StudyMaterialGenerator:
                     chapter_file = chapters_folder / f"{i:02d}_{safe_chapter}.md"
 
                     if chapter_file.exists() and chapter_file.stat().st_size > 0:
-                        logger.info(f"Skipping chapter {i}: {chapter_title} (already exists)")
-                        async with aiofiles.open(chapter_file, "r", encoding="utf-8") as f:
+                        logger.info(
+                            f"Skipping chapter {i}: {chapter_title} (already exists)"
+                        )
+                        async with aiofiles.open(chapter_file, encoding="utf-8") as f:
                             notes = await f.read()
                         chapter_notes[chapter_title] = notes
                         continue
@@ -500,7 +507,9 @@ class StudyMaterialGenerator:
                     chunk_notes = []
 
                     for j, chunk in enumerate(chunks, 1):
-                        chunk_msg = f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
+                        chunk_msg = (
+                            f"Chapter {i}/{total_chapters} (Part {j}/{len(chunks)})"
+                        )
                         self._update_status(video_title, chunk_msg, video_id=video_id)
 
                         note = await self.provider.generate(
@@ -561,9 +570,15 @@ class StudyMaterialGenerator:
 
             telemetry.capture_event(
                 "ai_chapter_notes_generation_success",
-                {"video_id": video_id, "chapters": total_chapters, "$ai_trace_id": trace_id},
+                {
+                    "video_id": video_id,
+                    "chapters": total_chapters,
+                    "$ai_trace_id": trace_id,
+                },
             )
             return final_notes
         except Exception as e:
-            telemetry.capture_exception(e, {"video_id": video_id, "task": "chapter_notes"})
+            telemetry.capture_exception(
+                e, {"video_id": video_id, "task": "chapter_notes"}
+            )
             raise

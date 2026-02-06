@@ -1,5 +1,6 @@
 """Telemetry module for tracking application usage and errors with PostHog."""
 
+import contextlib
 import json
 import os
 import platform
@@ -15,6 +16,7 @@ import posthog
 import structlog
 
 from ..config import config
+
 
 logger = structlog.get_logger(__name__)
 
@@ -73,7 +75,10 @@ def redact_pii(data: Any) -> Any:
 
         # Redact potential API keys (simple heuristic: long alphanumeric strings)
         # Only if they look like random tokens (not words)
-        data = re.sub(r"(?i)((?:key|token|api|auth)[-_\s]*[=:][-_\s]*)[a-zA-Z0-9]{20,}", r"\1<REDACTED>", data)
+        key_pattern = (
+            r"(?i)((?:key|token|api|auth)[-_\s]*[=:][-_\s]*)[a-zA-Z0-9]{20,}"
+        )
+        data = re.sub(key_pattern, r"\1<REDACTED>", data)
 
     return data
 
@@ -111,10 +116,8 @@ class Telemetry:
 
         import uuid
         new_id = str(uuid.uuid4())
-        try:
+        with contextlib.suppress(Exception):
             id_file.write_text(new_id)
-        except Exception:
-            pass
         return new_id
 
     def _ensure_dir(self) -> None:
@@ -134,7 +137,9 @@ class Telemetry:
             return False
         return config.telemetry_enabled
 
-    def capture_event(self, name: str, properties: dict[str, Any] | None = None) -> None:
+    def capture_event(
+        self, name: str, properties: dict[str, Any] | None = None
+    ) -> None:
         """Capture a telemetry event."""
         if not self.is_enabled:
             return
@@ -160,13 +165,14 @@ class Telemetry:
         self._log_locally(name, props)
 
         # Remote log
-        try:
-            posthog.capture(self.distinct_id, name, props)
-        except Exception:
-            # Never crash on telemetry failure
-            pass
+        # We use keywords for all arguments to satisfy mypy's strictness
+        # and accommodate potential variations in the posthog-python library.
+        with contextlib.suppress(Exception):
+            posthog.capture(distinct_id=self.distinct_id, event=name, properties=props)
 
-    def capture_exception(self, exception: Exception, context: dict[str, Any] | None = None) -> None:
+    def capture_exception(
+        self, exception: Exception, context: dict[str, Any] | None = None
+    ) -> None:
         """Capture an exception event for PostHog Error Tracking."""
         if not self.is_enabled:
             return
@@ -230,7 +236,11 @@ class Telemetry:
                     )
                     self.telemetry.capture_event(
                         "command_fail",
-                        {"command": self.name, "duration": duration, "error": str(exc_val)}
+                        {
+                            "command": self.name,
+                            "duration": duration,
+                            "error": str(exc_val),
+                        },
                     )
                 elif exc_type is None:
                     self.telemetry.capture_event(
@@ -265,7 +275,11 @@ class Telemetry:
                         if event_type == "command_start":
                             stats["total_commands"] += 1
                             if cmd not in stats["commands"]:
-                                stats["commands"][cmd] = {"starts": 0, "successes": 0, "fails": 0}
+                                stats["commands"][cmd] = {
+                                    "starts": 0,
+                                    "successes": 0,
+                                    "fails": 0,
+                                }
                             stats["commands"][cmd]["starts"] += 1
                         elif event_type == "command_success":
                             stats["success_count"] += 1

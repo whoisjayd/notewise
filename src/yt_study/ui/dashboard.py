@@ -194,12 +194,14 @@ class PipelineDashboard:
                 expand=True,
             )
             for tid in active_worker_tasks:
-                task = next((t for t in self.worker_progress.tasks if t.id == tid), None)
+                task = next(
+                    (t for t in self.worker_progress.tasks if t.id == tid), None
+                )
                 if task:
                     active_progress.add_task(
                         description=task.description,
-                        total=task.total,
-                        completed=task.completed,
+                        total=int(task.total) if task.total is not None else None,
+                        completed=int(task.completed),
                         visible=task.visible,
                         **task.fields,
                     )

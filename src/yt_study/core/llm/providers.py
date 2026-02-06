@@ -7,8 +7,8 @@ from typing import Any
 import structlog
 from litellm import acompletion
 
-from ..telemetry import telemetry
 from ...config import config
+from ..telemetry import telemetry
 
 
 logger = structlog.get_logger(__name__)
@@ -108,9 +108,12 @@ class LLMProvider:
                 usage = getattr(response, "usage", None)
                 content = response.choices[0].message.content or ""
 
+                provider = (
+                    self.model.split("/")[0] if "/" in self.model else "unknown"
+                )
                 event_props = {
                     "$ai_model": self.model,
-                    "$ai_provider": self.model.split("/")[0] if "/" in self.model else "unknown",
+                    "$ai_provider": provider,
                     "$ai_model_parameters": {
                         "temperature": temperature,
                         "max_tokens": max_tokens,
