@@ -13,6 +13,11 @@ This release significantly improves the robustness, scalability, and feature set
 
 ## New Features
 - **Synthetic Chapters**: Automatically generates a logical table of contents for videos that lack native YouTube chapters, ensuring structured notes for all content.
+- **Diagnostics & Feedback**: New `bug-report` command to collect anonymized system info and simplify issue reporting.
+- **Telemetry & Privacy**:
+  - Optional usage analytics via PostHog to guide development.
+  - Robust PII scrubbing ensures sensitive data (usernames, paths) never leaves your machine.
+  - Easy opt-out with `yt-study config telemetry --off`.
 - **Per-chunk Saving**: Intermediate LLM responses are now saved in a `chunks/` subdirectory, providing transparency into the generation process and a fallback if the final merge fails.
 - **Advanced CLI Flags**:
   - `--no-chapters`: Skip using native YouTube chapters.
@@ -24,6 +29,9 @@ This release significantly improves the robustness, scalability, and feature set
 
 ## Robustness & Architecture
 - **Concurrent Processing**: Redesigned the pipeline with an `asyncio.Queue` based worker pool for more reliable parallel execution.
+- **Property-Based Testing**: Added `hypothesis` tests to verify core logic against a wide range of edge cases and malformed inputs.
+- **Encoding Fixes**: Unified character encoding across the codebase and documentation, eliminating legacy mojibake artifacts.
+- **Cleanup**: Removed the `wiki` submodule; all documentation is now centrally managed in the `docs/` directory.
 - **Error Handling**: Improved detection and reporting of YouTube IP blocks with actionable recommendations.
 - **Retry Logic**: Added exponential backoff for network-related failures in playlist and transcript extraction.
 - **Thread Offloading**: Network-heavy blocking calls are now properly offloaded to threads using `asyncio.to_thread` to keep the UI responsive.

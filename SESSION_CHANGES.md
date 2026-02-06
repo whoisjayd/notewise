@@ -35,6 +35,9 @@ Launched a web-based study material visualizer built with NiceGUI.
 - **Usage**: Run `yt-study serve` to launch.
 - **Features**: Interactive project browser, synced video-to-note timestamps, and a responsive reading interface.
 
+### Diagnostics & Feedback
+- **`bug-report` Command**: Added a dedicated command to collect anonymized system diagnostics and generate a pre-filled GitHub issue template.
+
 ### LLM Pipeline Enhancements
 - **Recursive Chunking**: Automatically handles oversized chapters by sub-chunking them to fit within model context limits.
 - **Interactive Timestamps**: A post-processing layer converts `[MM:SS]` text into clickable YouTube links.
@@ -55,16 +58,20 @@ Implemented a comprehensive GitHub Actions suite (`release.yml`):
 - **PyPI Publishing**: Automated package distribution to the Python Package Index.
 - **Integrity**: Automatic generation of `SHA256SUMS.txt` for all release artifacts.
 
-### Quality Gates & Linting
+### Quality Gates & Testing
 - **Ruff & Mypy**: Integrated into `pyproject.toml` for high-performance linting and strict static type checking.
 - **Pre-commit**: Established hooks to ensure code quality before every commit.
+- **Property-Based Testing**: Integrated `hypothesis` for automated edge-case discovery, specifically targeting PII redaction and filename sanitization.
+- **Edge-Case Coverage**: Expanded test suite to handle telemetry timeouts, update checker failures, and corrupted project files.
 
 ---
 
 ## 4. Robustness & Observability
 
 ### Telemetry & Structured Logging
-- **Local Telemetry**: A new module tracks command success rates and durations locally (`~/.yt-study/telemetry/`).
+- **Local & Remote Telemetry**: Integrated PostHog for optional usage analytics to help prioritize features.
+- **Privacy First**: Implemented a multi-stage PII scrubbing engine that redacts usernames, file paths, and sensitive tokens before transmission.
+- **Opt-out Mechanism**: Users can fully disable telemetry via `yt-study config telemetry --off`.
 - **Structured Logging**: Migrated to `structlog` for machine-readable, high-context JSON logs.
 
 ### Reliability Enhancements
@@ -74,11 +81,17 @@ Implemented a comprehensive GitHub Actions suite (`release.yml`):
 
 ---
 
+## 5. Maintenance & Cleanup
+
+### Repository Optimization
+- **Submodule Removal**: Deleted the legacy `wiki` submodule; all documentation is now unified in `docs/` and managed via MkDocs.
+- **Encoding Correction**: Performed a codebase-wide sweep to fix character encoding artifacts (mojibake), restoring proper emojis (e.g., 🚀) and special characters.
+
 ## Technical Summary
-- **Files Modified**: 28
-- **New LOC**: ~1,450
+- **Files Modified**: 34
+- **New LOC**: ~1,850
 - **Version**: Bumped to `v0.1.9`
-- **Documentation**: Finalized MkDocs material theme setup and fixed character encoding issues in legacy docs.
+- **Documentation**: Finalized MkDocs material theme setup and unified all project knowledge.
 
 ---
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
