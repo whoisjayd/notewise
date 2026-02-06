@@ -94,5 +94,3 @@ Implemented a comprehensive GitHub Actions suite (`release.yml`):
 - **Documentation**: Finalized MkDocs material theme setup and unified all project knowledge.
 
 ---
-🤖 Generated with [Claude Code](https://claude.com/claude-code)
-Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>
