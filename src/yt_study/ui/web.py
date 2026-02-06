@@ -283,7 +283,7 @@ class WebVisualizer:
                 ui.button(icon="refresh", on_click=lambda: ui.run_javascript("window.location.reload()")).props("flat color=slate-400")
                 ui.button("GitHub", on_click=lambda: ui.open("https://github.com/jayss/yt-study")).props("flat color=slate-400")
 
-        with ui.splitter(value=20).classes("w-full h-[calc(100vh-64px)]") as main_splitter:
+        with ui.splitter(value=20, limits=(15, 40)).classes("w-full h-[calc(100vh-64px)]") as main_splitter:
             # Left Pane: Navigation
             with main_splitter.before:
                 with ui.column().classes("w-full h-full bg-slate-900/50 p-4 overflow-y-auto border-r border-slate-800"):
@@ -293,7 +293,7 @@ class WebVisualizer:
 
             # Right Pane: Content & Video
             with main_splitter.after:
-                with ui.splitter(value=60).classes("w-full h-full") as content_splitter:
+                with ui.splitter(value=60, limits=(30, 80)).classes("w-full h-full") as content_splitter:
                     # Content Area (Left side of right pane)
                     with content_splitter.before:
                         with ui.column().classes("w-full h-full p-8 overflow-y-auto bg-slate-950"):
@@ -311,19 +311,20 @@ class WebVisualizer:
 
                     # Video Area (Right side of right pane)
                     with content_splitter.after:
-                        with ui.column().classes("w-full h-full bg-slate-900 p-4 border-l border-slate-800"):
-                            ui.label("VIDEO PLAYER").classes("text-xs font-bold text-slate-500 uppercase tracking-widest mb-4")
-                            with ui.card().classes("w-full aspect-video bg-black p-0 overflow-hidden shadow-2xl rounded-xl border border-slate-700"):
-                                self.video_player = ui.html(
-                                    '<div class="flex items-center justify-center w-full h-full text-slate-600 italic">No video selected</div>'
-                                ).classes("w-full h-full")
+                        with ui.column().classes("w-full h-full bg-slate-900 p-6 border-l border-slate-800 overflow-y-auto"):
+                            with ui.column().classes("w-full sticky top-0 gap-6"):
+                                ui.label("VIDEO PLAYER").classes("text-xs font-bold text-slate-500 uppercase tracking-widest")
+                                with ui.card().classes("w-full aspect-video bg-black p-0 overflow-hidden shadow-2xl rounded-xl border border-slate-700"):
+                                    self.video_player = ui.html(
+                                        '<div class="flex items-center justify-center w-full h-full text-slate-600 italic">No video selected</div>'
+                                    ).classes("w-full h-full")
 
-                            with ui.column().classes("mt-6 gap-2"):
-                                ui.label("QUICK ACTIONS").classes("text-xs font-bold text-slate-500 uppercase tracking-widest")
-                                with ui.row().classes("gap-2"):
-                                    ui.button("Open in YouTube", icon="open_in_new",
-                                              on_click=lambda: ui.open(f"https://youtube.com/watch?v={self.current_video_id}") if self.current_video_id else None
-                                             ).props("flat size=sm color=slate-400")
+                                with ui.column().classes("gap-2"):
+                                    ui.label("QUICK ACTIONS").classes("text-xs font-bold text-slate-500 uppercase tracking-widest")
+                                    with ui.row().classes("gap-2"):
+                                        ui.button("Open in YouTube", icon="open_in_new",
+                                                  on_click=lambda: ui.open(f"https://youtube.com/watch?v={self.current_video_id}") if self.current_video_id else None
+                                                 ).props("flat size=sm color=slate-400")
 
 
 def start_web_ui(
