@@ -32,13 +32,20 @@
 - 🌐 **Web Visualizer**: Interactive dashboard to view and manage your study notes (`yt-study serve`).
 - 📝 **Academic Quality**: Generates detailed notes with code blocks, tables, and structured summaries.
 - ⚡ **Parallel Processing**: Efficiently process entire playlists with configurable concurrency.
+- 📂 **Organized Output**: Clean directory structure for all generated content.
 
 ## 🚀 Quick Start
 
 ### 1. Installation
 
+**Standard (pip):**
 ```bash
 pip install yt-study
+```
+
+**Fast (uv):**
+```bash
+uv tool install yt-study
 ```
 
 ### 2. Initialization
@@ -76,6 +83,7 @@ You can customize `yt-study` via environment variables or the `~/.yt-study/confi
 | `DEFAULT_MODEL` | LLM model to use | `gemini/gemini-2.0-flash` |
 | `OUTPUT_DIR` | Where to save notes | `./output` |
 | `MAX_CONCURRENT_VIDEOS` | Parallel processing limit | `5` |
+| `TEMPERATURE` | LLM creativity (0.0 to 1.0) | `0.7` |
 
 <details>
 <summary><b>View More Configuration Options</b></summary>
