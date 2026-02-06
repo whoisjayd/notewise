@@ -206,15 +206,17 @@ class WebVisualizer:
 
 
 def start_web_ui(
-    port: int = 8080, host: str = "0.0.0.0", output_dir: Path | None = None
+    port: int = 8000, host: str = "0.0.0.0", output_dir: Path | None = None
 ) -> None:
     if output_dir is None:
         output_dir = config.default_output_dir
 
-    visualizer = WebVisualizer(output_dir)
-    visualizer.render()
+    @ui.page("/")
+    def init_ui() -> None:
+        visualizer = WebVisualizer(output_dir)
+        visualizer.render()
 
-    ui.run(title="yt-study Visualizer", port=port, host=host, reload=False, show=True)
+    ui.run(title="yt-study Visualizer", port=port, host=host, reload=False)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
