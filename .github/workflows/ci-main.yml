@@ -62,4 +62,8 @@ jobs:
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: whoisjayd/yt-study
+          files: ./coverage.xml
+          flags: ${{ matrix.os }}-${{ matrix.python }}
+          name: ${{ matrix.os }}-${{ matrix.python }}
+          fail_ci_if_error: false
+          verbose: true
