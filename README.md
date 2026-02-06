@@ -1,7 +1,13 @@
 # 🎓 yt-study
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/whoisjayd/yt-study/main/docs/assets/logo.png" alt="yt-study logo" width="200">
+  <pre align="center">
+                 _                     _             _
+            _  _| |_      ___| |_ _  _| | _  _
+           | || |  _|____(_-<|  _| || | |/ /| || |
+            \_, |\__|____/__/ \__|\_,_|_|\_\ \_, |
+            |__/                             |__/
+  </pre>
 </p>
 
 <p align="center">
@@ -11,10 +17,8 @@
 <p align="center">
   <a href="https://badge.fury.io/py/yt-study"><img src="https://badge.fury.io/py/yt-study.svg" alt="PyPI version"></a>
   <a href="https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml"><img src="https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml/badge.svg" alt="CI Status"></a>
-  <a href="https://codecov.io/gh/whoisjayd/yt-study"><img src="https://codecov.io/gh/whoisjayd/yt-study/branch/main/graph/badge.svg?token=CODECOV_TOKEN" alt="Code Coverage"></a>
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://www.python.org/downloads/"><img src="https://img.shields.io/badge/python-3.10+-blue.svg" alt="Python 3.10+"></a>
-  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
 
 ---
@@ -23,14 +27,11 @@
 
 ## ✨ Key Features
 
-| Feature | Description |
-| :--- | :--- |
-| 🤖 **Multi-Model Support** | Seamlessly use Gemini, Claude, GPT-4, or Groq via LiteLLM. |
-| 🧠 **Smart Chaptering** | Automatically detects logical sections for videos without native chapters. |
-| 📝 **Academic Quality** | Generates detailed notes with code blocks, tables, and structured summaries. |
-| 📂 **Organized Output** | Creates a clean directory structure for each video and playlist. |
-| ⚡ **Parallel Processing** | Handles large playlists efficiently with configurable concurrency. |
-| 🛠 **Developer Friendly** | Fully type-checked, tested, and easy to extend. |
+- 🤖 **Multi-Model Support**: Use Gemini, Claude, GPT-4, or Groq via LiteLLM.
+- 🧠 **Smart Chaptering**: Automatically detects logical sections even for videos without native chapters.
+- 🌐 **Web Visualizer**: Interactive dashboard to view and manage your study notes (`yt-study serve`).
+- 📝 **Academic Quality**: Generates detailed notes with code blocks, tables, and structured summaries.
+- ⚡ **Parallel Processing**: Efficiently process entire playlists with configurable concurrency.
 
 ## 🚀 Quick Start
 
@@ -42,7 +43,7 @@ pip install yt-study
 
 ### 2. Initialization
 
-Run the setup wizard to configure your preferred LLM provider and API keys:
+Configure your preferred LLM provider and API keys:
 
 ```bash
 yt-study setup
@@ -53,12 +54,34 @@ yt-study setup
 Transform any video into structured notes instantly:
 
 ```bash
-# Process a single video
 yt-study process "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
-
-# Process an entire playlist
-yt-study process "https://www.youtube.com/playlist?list=PL..."
 ```
+
+## 🖥️ Web Visualizer
+
+`yt-study` comes with a built-in web dashboard to browse your notes library:
+
+```bash
+yt-study serve
+```
+
+Visit `http://localhost:8000` to explore your generated notes in a beautiful, searchable interface.
+
+## ⚙️ Configuration
+
+You can customize `yt-study` via environment variables or the `~/.yt-study/config.env` file.
+
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `DEFAULT_MODEL` | LLM model to use | `gemini/gemini-2.0-flash` |
+| `OUTPUT_DIR` | Where to save notes | `./output` |
+| `MAX_CONCURRENT_VIDEOS` | Parallel processing limit | `5` |
+
+<details>
+<summary><b>View More Configuration Options</b></summary>
+
+See the full list in the [Configuration Documentation](https://whoisjayd.github.io/yt-study/Configuration/).
+</details>
 
 ## 📖 Documentation
 
@@ -68,13 +91,7 @@ For full installation guides, CLI reference, and advanced configuration, visit o
 
 ## 🤝 Contributing
 
-Contributions are welcome! Whether it's a bug report, feature request, or a pull request, we appreciate your help in making `yt-study` better.
-
-1. Clone the repo: `git clone https://github.com/whoisjayd/yt-study.git`
-2. Install dev dependencies: `make install-dev`
-3. Run checks: `make all`
-
-Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
+Contributions are welcome! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for more details.
 
 ---
 
