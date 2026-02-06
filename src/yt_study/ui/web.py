@@ -1,5 +1,6 @@
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict, List, Optional
+import re
 
 from nicegui import ui
 from nicegui.elements.html import Html
@@ -11,78 +12,127 @@ from ..config import config
 class WebVisualizer:
     def __init__(self, output_dir: Path):
         self.output_dir = output_dir
-        self.projects = self._scan_projects()
-        self.current_project: dict[str, Any] | None = None
-        self.video_player: Html | None = None
-        self.content_area: ui.column = None  # type: ignore
+        self.tree_data: List[Dict[str, Any]] = []
+        self.current_video_id: Optional[str] = None
+        self.current_path: Optional[Path] = None
+        self.is_editing = False
 
-    def _scan_projects(self) -> list[dict[str, Any]]:
-        projects = []
-        seen_slugs = set()
+        # UI Elements (initialized in render)
+        self.tree: ui.tree = None  # type: ignore
+        self.markdown_view: ui.markdown = None  # type: ignore
+        self.editor_container: ui.column = None  # type: ignore
+        self.editor: ui.textarea = None  # type: ignore
+        self.video_player: ui.html = None  # type: ignore
+        self.title_label: ui.label = None  # type: ignore
+        self.edit_btn: ui.button = None  # type: ignore
+        self.save_btn: ui.button = None  # type: ignore
 
-        # 1. First pass: Find existing .md files (slug/slug.md)
-        for md_file in self.output_dir.glob("**/*.md"):
-            if "chapters" in md_file.parts or "chunks" in md_file.parts:
-                continue
+        self.refresh_data()
 
-            slug = md_file.stem
-            if md_file.parent.name == slug:
-                video_id = slug.split("_")[-1] if "_" in slug else ""
-                playlist = ""
-                if md_file.parent.parent != self.output_dir:
-                    playlist = md_file.parent.parent.name
+    def refresh_data(self) -> None:
+        """Scan output directory and build tree data."""
+        self.tree_data = []
 
-                projects.append(
-                    {
-                        "title": slug.rsplit("_", 1)[0] if "_" in slug else slug,
-                        "id": video_id,
-                        "path": md_file,
-                        "playlist": playlist,
-                        "slug": slug,
-                        "has_main": True,
-                    }
-                )
-                seen_slugs.add(slug)
+        # 1. Group by playlist/standalone
+        playlists: Dict[str, List[Path]] = {}
+        standalone: List[Path] = []
 
-        # 2. Second pass: Find projects with only chapters
-        # Look for directories that have a 'chapters' subfolder with .md files
-        for chapters_dir in self.output_dir.glob("**/chapters"):
-            parent = chapters_dir.parent
-            slug = parent.name
+        if not self.output_dir.exists():
+            return
 
-            if slug in seen_slugs:
-                continue
+        for item in self.output_dir.iterdir():
+            if item.is_dir():
+                # Check if it's a playlist dir (contains subdirs which are videos)
+                # or a video dir (contains .md file with same name)
+                is_video_dir = (item / f"{item.name}.md").exists() or (item / "chapters").exists()
 
-            # Check if there are any .md files in chapters
-            if any(chapters_dir.glob("*.md")):
-                video_id = slug.split("_")[-1] if "_" in slug else ""
-                playlist = ""
-                if parent.parent != self.output_dir:
-                    playlist = parent.parent.name
+                if is_video_dir:
+                    standalone.append(item)
+                else:
+                    # Likely a playlist directory
+                    videos = []
+                    for sub in item.iterdir():
+                        if sub.is_dir() and ((sub / f"{sub.name}.md").exists() or (sub / "chapters").exists()):
+                            videos.append(sub)
+                    if videos:
+                        playlists[item.name] = sorted(videos)
 
-                projects.append(
-                    {
-                        "title": slug.rsplit("_", 1)[0] if "_" in slug else slug,
-                        "id": video_id,
-                        "path": parent / f"{slug}.md", # This path doesn't exist yet
-                        "playlist": playlist,
-                        "slug": slug,
-                        "has_main": False,
-                    }
-                )
-                seen_slugs.add(slug)
+        # 2. Build Tree Nodes
+        # Playlists
+        for pl_name, video_dirs in sorted(playlists.items()):
+            pl_node = {
+                "id": f"pl_{pl_name}",
+                "label": pl_name,
+                "icon": "folder",
+                "children": [],
+            }
+            for v_dir in video_dirs:
+                pl_node["children"].append(self._build_video_node(v_dir)) # type: ignore
+            self.tree_data.append(pl_node)
 
-        return sorted(projects, key=lambda x: (x["playlist"], x["title"]))
+        # Standalone videos
+        if standalone:
+            standalone_node = {
+                "id": "standalone",
+                "label": "Videos",
+                "icon": "video_library",
+                "children": [],
+            }
+            for v_dir in sorted(standalone):
+                standalone_node["children"].append(self._build_video_node(v_dir)) # type: ignore
+            self.tree_data.append(standalone_node)
+
+    def _build_video_node(self, v_dir: Path) -> Dict[str, Any]:
+        slug = v_dir.name
+        video_id = slug.split("_")[-1] if "_" in slug else ""
+        title = slug.rsplit("_", 1)[0] if "_" in slug else slug
+
+        main_md = v_dir / f"{slug}.md"
+        chapters_dir = v_dir / "chapters"
+
+        children = []
+        if main_md.exists():
+            children.append({
+                "id": str(main_md),
+                "label": "Full Summary",
+                "icon": "description",
+                "video_id": video_id,
+                "path": main_md
+            })
+
+        if chapters_dir.exists():
+            chapters_node = {
+                "id": f"chapters_{slug}",
+                "label": "Chapters",
+                "icon": "folder",
+                "children": []
+            }
+            for ch_file in sorted(chapters_dir.glob("*.md")):
+                chapters_node["children"].append({
+                    "id": str(ch_file),
+                    "label": ch_file.stem.replace("_", " "),
+                    "icon": "segment",
+                    "video_id": video_id,
+                    "path": ch_file
+                })
+            if chapters_node["children"]:
+                children.append(chapters_node)
+
+        return {
+            "id": f"video_{slug}",
+            "label": title,
+            "icon": "movie",
+            "children": children
+        }
 
     def _get_video_url(self, video_id: str, t: int = 0) -> str:
-        url = f"https://www.youtube.com/embed/{video_id}?enablejsapi=1"
+        url = f"https://www.youtube.com/embed/{video_id}?enablejsapi=1&rel=0"
         if t > 0:
             url += f"&start={t}"
         return url
 
     def _parse_timestamp(self, ts_str: str) -> int:
-        """Convert HH:MM:SS or MM:SS to seconds."""
-        parts = ts_str.split(":")
+        parts = ts_str.strip("[]").split(":")
         try:
             if len(parts) == 3:
                 return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
@@ -92,7 +142,91 @@ class WebVisualizer:
         except ValueError:
             return 0
 
+    def handle_tree_select(self, e: Any) -> None:
+        """Handle selection in the navigation tree."""
+        node_id = e.value
+        if not node_id:
+            return
+
+        # Find the node in tree_data (recursive search)
+        node = self._find_node(self.tree_data, node_id)
+        if node and "path" in node:
+            self.load_content(node["path"], node.get("video_id"))
+
+    def _find_node(self, nodes: List[Dict[str, Any]], target_id: str) -> Optional[Dict[str, Any]]:
+        for n in nodes:
+            if n["id"] == target_id:
+                return n
+            if "children" in n:
+                found = self._find_node(n["children"], target_id)
+                if found:
+                    return found
+        return None
+
+    def load_content(self, path: Path, video_id: Optional[str]) -> None:
+        self.current_path = path
+        self.current_video_id = video_id
+
+        try:
+            content = path.read_text(encoding="utf-8")
+            # Process timestamps for markdown
+            # Pattern: [00:00:00] or [00:00]
+            processed_content = re.sub(
+                r"\[(\d{1,2}:\d{2}(?::\d{2})?)\]",
+                r'<span class="timestamp-link" data-timestamp="\1">[\1]</span>',
+                content
+            )
+            self.current_content = content
+            self.markdown_view.content = processed_content
+            self.title_label.text = path.stem.replace("_", " ")
+
+            if video_id:
+                self.update_video(video_id)
+
+            self.markdown_view.set_visibility(True)
+            self.editor_container.set_visibility(False)
+            self.is_editing = False
+            self.edit_btn.set_visibility(True)
+        except Exception as e:
+            ui.notify(f"Error loading content: {e}", type="negative")
+
+    def update_video(self, video_id: str, t: int = 0) -> None:
+        url = self._get_video_url(video_id, t)
+        if t > 0:
+            url += "&autoplay=1"
+        self.video_player.content = (
+            f'<iframe id="yt-player" width="100%" height="100%" '
+            f'src="{url}" frameborder="0" allow="accelerometer; autoplay; '
+            f'clipboard-write; encrypted-media; gyroscope; picture-in-picture" '
+            f'allowfullscreen></iframe>'
+        )
+
+    def toggle_edit(self) -> None:
+        if self.is_editing:
+            # Save (called from save button)
+            pass
+        else:
+            self.is_editing = True
+            self.editor.value = self.current_content
+            self.markdown_view.set_visibility(False)
+            self.editor_container.set_visibility(True)
+            self.edit_btn.set_visibility(False)
+
+    async def save_content(self) -> None:
+        if not self.current_path:
+            return
+
+        try:
+            new_content = self.editor.value
+            self.current_path.write_text(new_content, encoding="utf-8")
+            ui.notify("Saved successfully", color="positive")
+            self.load_content(self.current_path, self.current_video_id)
+        except Exception as e:
+            ui.notify(f"Error saving: {e}", type="negative")
+
     def render(self) -> None:
+        ui.dark_mode().enable()
+
         # Inject PostHog Telemetry and Session Replay
         if telemetry.is_enabled:
             ui.add_head_html(f"""
@@ -103,151 +237,94 @@ class WebVisualizer:
                 </script>
             """)
 
-        with ui.header().classes("items-center justify-between"):
-            ui.label("yt-study Visualizer").classes("text-2xl font-bold")
-            with ui.row():
-                ui.button("Refresh", on_click=self.refresh).props(
-                    "flat color=white icon=refresh"
-                )
+        ui.add_head_html("""
+            <style>
+                .prose h1 { font-size: 2.25rem; font-weight: 800; margin-bottom: 1.5rem; color: #f8fafc; }
+                .prose h2 { font-size: 1.5rem; font-weight: 700; margin-top: 2rem; margin-bottom: 1rem; color: #f1f5f9; border-bottom: 1px solid #334155; padding-bottom: 0.5rem; }
+                .prose h3 { font-size: 1.25rem; font-weight: 600; margin-top: 1.5rem; margin-bottom: 0.75rem; color: #e2e8f0; }
+                .prose p { margin-bottom: 1.25rem; line-height: 1.75; color: #cbd5e1; }
+                .prose a { color: #38bdf8; text-decoration: none; }
+                .prose a:hover { text-decoration: underline; }
+                .prose code { background-color: #1e293b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; font-family: monospace; }
+                .prose blockquote { border-left: 4px solid #38bdf8; padding-left: 1rem; font-style: italic; color: #94a3b8; margin: 1.5rem 0; }
+                .timestamp-link { color: #38bdf8; font-family: monospace; cursor: pointer; font-weight: bold; }
+                .timestamp-link:hover { text-decoration: underline; color: #7dd3fc; }
+            </style>
+            <script>
+                document.addEventListener('click', function(e) {
+                    const target = e.target.closest('.timestamp-link');
+                    if (target) {
+                        const ts = target.dataset.timestamp;
+                        const parts = ts.split(':').reverse();
+                        let seconds = 0;
+                        if (parts[0]) seconds += parseInt(parts[0]);
+                        if (parts[1]) seconds += parseInt(parts[1]) * 60;
+                        if (parts[2]) seconds += parseInt(parts[2]) * 3600;
 
-        with ui.left_drawer(value=True).classes("bg-slate-100"):
-            ui.label("Projects").classes("text-xl font-semibold mb-4")
+                        const player = document.getElementById('yt-player');
+                        if (player) {
+                            const baseUrl = player.src.split('?')[0];
+                            player.src = baseUrl + '?enablejsapi=1&autoplay=1&start=' + seconds;
+                        }
+                    }
+                });
+            </script>
+        """)
 
-            # Group projects by playlist
-            current_playlist = None
-            for p in self.projects:
-                if p["playlist"] != current_playlist:
-                    current_playlist = p["playlist"]
-                    ui.label(current_playlist or "Single Videos").classes(
-                        "text-sm font-bold mt-4 mb-1 text-slate-500 uppercase"
-                    )
+        with ui.header().classes("bg-slate-900 border-b border-slate-800 items-center justify-between"):
+            with ui.row().classes("items-center gap-4"):
+                ui.icon("smart_display", size="32px").classes("text-blue-500")
+                ui.label("yt-study Pro").classes("text-2xl font-black tracking-tight")
 
-                ui.button(
-                    p["title"], on_click=lambda p=p: self.select_project(p)
-                ).props("flat align=left").classes("w-full")
+            with ui.row().classes("items-center gap-2"):
+                ui.button(icon="refresh", on_click=lambda: ui.run_javascript("window.location.reload()")).props("flat color=slate-400")
+                ui.button("GitHub", on_click=lambda: ui.open("https://github.com/jayss/yt-study")).props("flat color=slate-400")
 
-        with ui.column().classes("w-full p-4") as self.content_area:
-            if not self.projects:
-                ui.label("No projects found in output directory.").classes(
-                    "text-xl italic text-slate-400"
-                )
-            else:
-                ui.label("Select a project from the sidebar to view details.").classes(
-                    "text-xl italic text-slate-400"
-                )
+        with ui.splitter(value=20).classes("w-full h-[calc(100vh-64px)]") as main_splitter:
+            # Left Pane: Navigation
+            with main_splitter.before:
+                with ui.column().classes("w-full h-full bg-slate-900/50 p-4 overflow-y-auto border-r border-slate-800"):
+                    ui.label("EXPLORER").classes("text-xs font-bold text-slate-500 uppercase tracking-widest mb-4")
+                    self.tree = ui.tree(self.tree_data, label_key="label", on_select=self.handle_tree_select).classes("w-full text-slate-300")
+                    self.tree.props('no-connectors dark color="blue-5"')
 
-    def select_project(self, project: dict[str, Any]) -> None:
-        self.current_project = project
-        self.content_area.clear()
+            # Right Pane: Content & Video
+            with main_splitter.after:
+                with ui.splitter(value=60).classes("w-full h-full") as content_splitter:
+                    # Content Area (Left side of right pane)
+                    with content_splitter.before:
+                        with ui.column().classes("w-full h-full p-8 overflow-y-auto bg-slate-950"):
+                            with ui.row().classes("w-full items-center justify-between mb-6"):
+                                self.title_label = ui.label("Select a video to begin").classes("text-3xl font-bold text-slate-100")
+                                self.edit_btn = ui.button("Edit", icon="edit", on_click=self.toggle_edit).props("flat color=blue-400").classes("hidden")
 
-        with self.content_area:
-            ui.label(project["title"]).classes("text-3xl font-bold mb-2")
+                            self.markdown_view = ui.markdown().classes("prose max-w-none w-full")
 
-            with ui.row().classes("w-full gap-4 items-start"):
-                # Video Player Section (sticky or fixed width)
-                with ui.column().classes("flex-1 max-w-3xl"):
-                    self.video_player = ui.html(
-                        f'<iframe id="yt-player" width="100%" height="450" '
-                        f'src="{self._get_video_url(project["id"])}" '
-                        f'frameborder="0" allow="accelerometer; autoplay; '
-                        f"clipboard-write; encrypted-media; gyroscope; "
-                        f'picture-in-picture" allowfullscreen></iframe>'
-                    ).classes("w-full aspect-video shadow-lg rounded-lg mb-4")
+                            with ui.column().classes("w-full gap-4 hidden") as self.editor_container:
+                                self.editor = ui.textarea(label="Markdown Content").classes("w-full h-[60vh] font-mono").props('outlined dark autogrow color="blue-5"')
+                                with ui.row().classes("gap-2"):
+                                    self.save_btn = ui.button("Save", icon="save", on_click=self.save_content).props("color=blue-600")
+                                    ui.button("Cancel", icon="close", on_click=lambda: self.load_content(self.current_path, self.current_video_id)).props("flat color=slate-400")
 
-                    ui.label(f"Video ID: {project['id']}").classes(
-                        "text-sm text-slate-500"
-                    )
+                    # Video Area (Right side of right pane)
+                    with content_splitter.after:
+                        with ui.column().classes("w-full h-full bg-slate-900 p-4 border-l border-slate-800"):
+                            ui.label("VIDEO PLAYER").classes("text-xs font-bold text-slate-500 uppercase tracking-widest mb-4")
+                            with ui.card().classes("w-full aspect-video bg-black p-0 overflow-hidden shadow-2xl rounded-xl border border-slate-700"):
+                                self.video_player = ui.html(
+                                    '<div class="flex items-center justify-center w-full h-full text-slate-600 italic">No video selected</div>'
+                                ).classes("w-full h-full")
 
-                # Content Section
-                with ui.column().classes(
-                    "flex-1 min-w-[400px] max-h-[80vh] overflow-y-auto"
-                ):
-                    ui.label("Study Notes").classes(
-                        "text-2xl font-bold mb-4 border-b w-full"
-                    )
-
-                    try:
-                        if project.get("has_main", True) and project["path"].exists():
-                            content = project["path"].read_text(encoding="utf-8")
-                        else:
-                            # Aggregate chapters
-                            chapters_dir = project["path"].parent / "chapters"
-                            if chapters_dir.exists():
-                                chapter_files = sorted(chapters_dir.glob("*.md"))
-                                if chapter_files:
-                                    content = "# Study Notes (Aggregated from Chapters)\n\n"
-                                    content += "> Note: The main summary file is missing. Showing individual chapters below.\n\n"
-                                    for cf in chapter_files:
-                                        content += f"## {cf.stem.replace('_', ' ')}\n\n"
-                                        content += cf.read_text(encoding="utf-8") + "\n\n---\n\n"
-                                else:
-                                    content = "No study notes or chapters found for this project."
-                            else:
-                                content = "Project directory not found or main file missing."
-                    except Exception as e:
-                        content = f"Error reading project content: {e}"
-
-                    # Replace timestamps with clickable links
-                    # Pattern matches [HH:MM:SS] or [MM:SS]
-                    def replace_ts(match: Any) -> str:
-                        ts = match.group(1)
-                        seconds = self._parse_timestamp(ts)
-                        url = (
-                            f"{self._get_video_url(project['id'], seconds)}&autoplay=1"
-                        )
-                        return (
-                            f'<a href="javascript:void(0)" onclick="'
-                            "document.getElementById('yt-player').src="
-                            f"'{url}'\" class=\"text-blue-600 "
-                            f'hover:underline font-mono">[{ts}]</a>'
-                        )
-
-                    ui.markdown(content).classes("prose max-w-none")
-
-                    # NiceGUI's markdown doesn't easily support custom link handling
-                    # for JS calls inside the markdown block without some hacks
-                    # or post-processing.
-                    # Alternative: use a regex to find timestamps and wrap them
-                    # in something we can intercept.
-                    # For now, let's keep it simple. If we want clickable,
-                    # we might need to process the markdown ourselves.
-
-                    # Improved timestamp handling:
-                    # We can use ui.html if we want full control, or just use
-                    # markdown and inject some JS to handle clicks.
-                    ui.run_javascript("""
-                        document.addEventListener('click', function(e) {
-                            if (e.target && e.target.tagName === 'A' &&
-                                e.target.textContent.match(
-                                    /\\[\\d{1,2}:\\d{2}(:\\d{2})?\\]/
-                                )) {
-                                const ts = e.target.textContent.replace('[', '')
-                                           .replace(']', '');
-                                const parts = ts.split(':').reverse();
-                                let seconds = 0;
-                                if (parts[0]) seconds += parseInt(parts[0]);
-                                if (parts[1]) seconds += parseInt(parts[1]) * 60;
-                                if (parts[2]) seconds += parseInt(parts[2]) * 3600;
-
-                                const player = document.getElementById('yt-player');
-                                const baseUrl = player.src.split('?')[0];
-                                player.src = baseUrl + '?enablejsapi=1&start=' +
-                                             seconds + '&autoplay=1';
-                                e.preventDefault();
-                            }
-                        });
-                    """)
-
-    def refresh(self) -> None:
-        self.projects = self._scan_projects()
-        ui.notify("Projects refreshed")
-        # We might need to refresh the whole page or just the drawer
-        # For simplicity, let's just reload the page
-        ui.run_javascript("window.location.reload()")
+                            with ui.column().classes("mt-6 gap-2"):
+                                ui.label("QUICK ACTIONS").classes("text-xs font-bold text-slate-500 uppercase tracking-widest")
+                                with ui.row().classes("gap-2"):
+                                    ui.button("Open in YouTube", icon="open_in_new",
+                                              on_click=lambda: ui.open(f"https://youtube.com/watch?v={self.current_video_id}") if self.current_video_id else None
+                                             ).props("flat size=sm color=slate-400")
 
 
 def start_web_ui(
-    port: int = 8000, host: str = "0.0.0.0", output_dir: Path | None = None
+    port: int = 8000, host: str = "0.0.0.0", output_dir: Optional[Path] = None
 ) -> None:
     if output_dir is None:
         output_dir = config.default_output_dir
@@ -257,7 +334,7 @@ def start_web_ui(
         visualizer = WebVisualizer(output_dir)
         visualizer.render()
 
-    ui.run(title="yt-study Visualizer", port=port, host=host, reload=False)
+    ui.run(title="yt-study Pro", port=port, host=host, reload=False)
 
 
 if __name__ in {"__main__", "__mp_main__"}:
