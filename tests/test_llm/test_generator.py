@@ -4,8 +4,8 @@ from unittest.mock import patch
 
 import pytest
 
-from yt_study.config import config
-from yt_study.llm.generator import StudyMaterialGenerator
+from yt_study.core.config import config
+from yt_study.core.llm.generator import StudyMaterialGenerator
 
 
 class TestStudyMaterialGenerator:
@@ -18,14 +18,14 @@ class TestStudyMaterialGenerator:
     def test_count_tokens_fallback(self, generator):
         """Test token counting fallback when library fails."""
         with patch(
-            "yt_study.llm.generator.token_counter", side_effect=Exception("Error")
+            "yt_study.core.llm.generator.token_counter", side_effect=Exception("Error")
         ):
             count = generator._count_tokens("1234")
             assert count == 1  # 4 chars // 4 = 1
 
     def test_chunk_transcript_small(self, generator):
         """Test that small transcripts are not chunked."""
-        with patch("yt_study.llm.generator.token_counter", return_value=100):
+        with patch("yt_study.core.llm.generator.token_counter", return_value=100):
             chunks = generator._chunk_transcript("Small text")
             assert len(chunks) == 1
             assert chunks[0] == "Small text"
@@ -36,7 +36,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 5  # Allow room for a sentence + delimiter
 
         try:
-            with patch("yt_study.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
                 # 1 token per word, with the delimiter ". " adding extra tokens
                 def count_tokens(_model, text):  # noqa: ARG001
                     return len(text.split())
@@ -60,7 +60,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 2
 
         try:
-            with patch("yt_study.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
                 mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
 
                 # No periods, just newlines
@@ -78,7 +78,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 1  # Tiny
 
         try:
-            with patch("yt_study.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
                 # Mock token counter to say everything is too big
                 mock_tc.side_effect = lambda _model, text: len(text)  # noqa: ARG005
 

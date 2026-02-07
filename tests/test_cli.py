@@ -14,7 +14,7 @@ runner = CliRunner()
 @pytest.fixture
 def mock_orchestrator():  # noqa: ARG001
     # Patch where PipelineOrchestrator is defined
-    with patch("yt_study.pipeline.orchestrator.PipelineOrchestrator") as mock:
+    with patch("yt_study.core.orchestrator.PipelineOrchestrator") as mock:
         instance = mock.return_value
         instance.run = AsyncMock()
         yield mock
@@ -114,7 +114,7 @@ def test_process_missing_config():
     """Test that missing config triggers setup check/error."""
     with (
         patch("yt_study.cli.check_config_exists", return_value=False),
-        patch("yt_study.setup_wizard.run_setup_wizard") as mock_setup,
+        patch("yt_study.core.setup_wizard.run_setup_wizard") as mock_setup,
     ):
         runner.invoke(app, ["process", "url"])
         mock_setup.assert_called_once()
@@ -146,7 +146,7 @@ def test_process_general_exception(mock_config_exists, mock_orchestrator):  # no
 
 def test_setup_command():
     """Test setup command triggers wizard."""
-    with patch("yt_study.setup_wizard.run_setup_wizard") as mock_wizard:
+    with patch("yt_study.core.setup_wizard.run_setup_wizard") as mock_wizard:
         result = runner.invoke(app, ["setup"])
         assert result.exit_code == 0
         mock_wizard.assert_called_once()
@@ -155,7 +155,7 @@ def test_setup_command():
 def test_setup_import_error():
     """Test setup command handling missing wizard module."""
     # Simulate ImportError when importing setup_wizard
-    with patch.dict("sys.modules", {"yt_study.setup_wizard": None}):
+    with patch.dict("sys.modules", {"yt_study.core.setup_wizard": None}):
         # This approach is tricky because we are inside the test process.
         # Better to patch the specific import or function call if lazy.
         pass
@@ -165,7 +165,7 @@ def test_ensure_setup_import_error():
     """Test ensure_setup handles missing wizard."""
     with (
         patch("yt_study.cli.check_config_exists", return_value=False),
-        patch.dict("sys.modules", {"yt_study.setup_wizard": None}),
+        patch.dict("sys.modules", {"yt_study.core.setup_wizard": None}),
     ):
         # This won't work easily as the module is likely already imported.
         pass

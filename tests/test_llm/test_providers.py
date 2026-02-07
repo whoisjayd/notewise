@@ -4,7 +4,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_study.llm.providers import LLMGenerationError, LLMProvider, get_provider
+from yt_study.core.llm.providers import LLMGenerationError, LLMProvider, get_provider
 
 
 class TestLLMProvider:
@@ -20,7 +20,7 @@ class TestLLMProvider:
     @pytest.mark.asyncio
     async def test_generate_success(self):
         """Test successful generation."""
-        with patch("yt_study.llm.providers.acompletion") as mock_acompletion:
+        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
             # Setup mock response
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -43,7 +43,7 @@ class TestLLMProvider:
     @pytest.mark.asyncio
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
-        with patch("yt_study.llm.providers.acompletion") as mock_acompletion:
+        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
             mock_response = MagicMock()
             # LLM returns content wrapped in ```markdown ... ```
             mock_response.choices[
@@ -59,7 +59,7 @@ class TestLLMProvider:
     @pytest.mark.asyncio
     async def test_generate_failure(self):
         """Test generation failure raises custom exception."""
-        with patch("yt_study.llm.providers.acompletion") as mock_acompletion:
+        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
             mock_acompletion.side_effect = Exception("API Error")
 
             provider = LLMProvider("gpt-4o")
