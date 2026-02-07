@@ -78,7 +78,7 @@ def ensure_setup() -> None:
             "\n[yellow]⚠ No configuration found. Running setup wizard...[/yellow]\n"
         )
         try:
-            from .setup_wizard import run_setup_wizard
+            from .core.setup_wizard import run_setup_wizard
 
             run_setup_wizard(force=False)
         except ImportError as e:
@@ -177,8 +177,8 @@ def process(
 
     try:
         # Lazy import for faster CLI startup
-        from .config import config
-        from .pipeline.orchestrator import PipelineOrchestrator
+        from .core.config import config
+        from .core.orchestrator import PipelineOrchestrator
 
         # Use config values as defaults, allow CLI overrides
         selected_model = model or config.default_model
@@ -283,7 +283,7 @@ def setup(
     Runs a wizard to generate the [bold]~/.yt-study/config.env[/bold] file.
     """
     try:
-        from .setup_wizard import run_setup_wizard
+        from .core.setup_wizard import run_setup_wizard
 
         run_setup_wizard(force=force)
     except ImportError as e:

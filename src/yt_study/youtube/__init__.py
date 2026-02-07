@@ -1,1 +1,3 @@
-"""YouTube module for handling video URLs, playlists, and transcripts."""
+"""Backward compatibility - youtube package moved to core.youtube."""
+
+from yt_study.core.youtube import *  # noqa: F401, F403

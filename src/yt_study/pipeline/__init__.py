@@ -1,6 +1,5 @@
-"""Pipeline orchestration module."""
+"""Backward compatibility - pipeline package moved to core."""
 
-from .orchestrator import PipelineOrchestrator
+from yt_study.core.orchestrator import PipelineOrchestrator, sanitize_filename
 
-
-__all__ = ["PipelineOrchestrator"]
+__all__ = ["PipelineOrchestrator", "sanitize_filename"]
