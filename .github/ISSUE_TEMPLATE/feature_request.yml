@@ -1,25 +1,77 @@
 name: Feature Request
-description: Suggest an idea for this project
+description: Propose an improvement or new capability
 title: "[Feature]: "
 labels: ["type:feature", "triage"]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Strong feature requests include clear user value, scope, and examples.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight Checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: This request is for yt-study (not provider/API support policy).
+          required: true
   - type: textarea
     id: problem
     attributes:
-      label: Is your feature request related to a problem? Please describe.
-      description: A clear and concise description of what the problem is.
+      label: Problem Statement
+      description: What problem are you trying to solve?
       placeholder: I'm always frustrated when...
     validations:
       required: true
   - type: textarea
     id: solution
     attributes:
-      label: Describe the solution you'd like
-      description: A clear and concise description of what you want to happen.
+      label: Proposed Solution
+      description: Describe the behavior you want.
     validations:
       required: true
   - type: textarea
+    id: usage
+    attributes:
+      label: Proposed CLI/API Usage
+      description: Show examples of commands/options/output if applicable.
+      placeholder: |
+        yt-study process "..." --new-flag
+        # Expected output...
+  - type: textarea
     id: alternatives
     attributes:
-      label: Describe alternatives you've considered
-      description: A clear and concise description of any alternative solutions or features you've considered.
+      label: Alternatives Considered
+      description: What alternatives have you considered?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Primary project area for this request.
+      options:
+        - area:core
+        - area:youtube
+        - area:llm
+        - area:cli
+        - area:docs
+        - area:tests
+        - area:devops
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:low
+        - priority:medium
+        - priority:high
+        - priority:critical
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Scope and Impact
+      description: Who benefits and what parts of the project would be affected?

@@ -16,3 +16,5 @@ nul
 drafts/
 .omc
 .claude
+coverage.xml
+htmlcov/

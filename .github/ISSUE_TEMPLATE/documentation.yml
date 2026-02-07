@@ -1,22 +1,60 @@
 name: Documentation Request
-description: Request improvements or additions to documentation
+description: Report missing, incorrect, or unclear docs
 title: "[Docs]: "
-labels: ["type:documentation", "triage"]
+labels: ["type:documentation", "triage", "area:docs"]
 body:
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight Checklist
+      options:
+        - label: I searched existing issues and docs first.
+          required: true
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: What documentation is missing or needs improvement?
+      label: What is unclear or missing?
+      description: Describe the current docs gap.
     validations:
       required: true
+  - type: input
+    id: audience
+    attributes:
+      label: Target Audience
+      description: Who is blocked by this docs issue?
+      placeholder: New users / Contributors / CI maintainers
   - type: textarea
     id: location
     attributes:
-      label: Location
-      description: Where should this documentation live? (e.g. README, Wiki, Docstring)
+      label: Affected Location
+      description: Which page/file needs update?
+      placeholder: README.md, wiki/Usage.md, CONTRIBUTING.md
+    validations:
+      required: true
+  - type: textarea
+    id: proposed
+    attributes:
+      label: Suggested Improvement
+      description: Optional proposed wording, structure, or examples.
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: How disruptive is this docs issue?
+      options:
+        - severity:low
+        - severity:medium
+        - severity:high
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:low
+        - priority:medium
+        - priority:high
   - type: textarea
     id: context
     attributes:
       label: Additional Context
-      description: Any other details?
+      description: Screenshots, references, or related issues.

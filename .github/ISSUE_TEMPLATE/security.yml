@@ -1,17 +1,69 @@
 name: Security Vulnerability
-description: Report a security vulnerability
+description: Public security issue template (non-sensitive reports only)
 title: "[Security]: "
 labels: ["type:security", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        **Please do not report sensitive security vulnerabilities publicly.**
-        See [SECURITY.md](../../SECURITY.md) for instructions on how to report privately.
+        Please do not disclose sensitive vulnerabilities publicly.
+        For private reporting instructions, see [SECURITY.md](../../SECURITY.md).
+  - type: checkboxes
+    id: acknowledgement
+    attributes:
+      label: Acknowledgement
+      options:
+        - label: I understand this is a public issue and I have removed sensitive exploit details.
+          required: true
   - type: textarea
     id: description
     attributes:
-      label: Description
-      description: A broad description of the issue (sanitize sensitive info).
+      label: High-level Description
+      description: Non-sensitive summary only.
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Potential Impact
+      description: What risk does this issue introduce?
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Choose the closest impact level.
+      options:
+        - severity:high
+        - severity:critical
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - priority:high
+        - priority:critical
+    validations:
+      required: true
+  - type: textarea
+    id: affected
+    attributes:
+      label: Affected Components
+      description: Files, commands, or workflows potentially affected.
+      placeholder: src/yt_study/config.py, .github/workflows/release.yml
+  - type: input
+    id: versions
+    attributes:
+      label: Affected Versions
+      description: Version/tag/commit range if known.
+      placeholder: <= v0.2.1
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Suggested Mitigation
+      description: Optional remediation ideas.
     validations:
       required: true

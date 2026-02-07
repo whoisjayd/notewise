@@ -1,33 +1,129 @@
 name: Bug Report
-description: Create a report to help us improve
+description: Report a reproducible bug in yt-study
 title: "[Bug]: "
 labels: ["type:bug", "triage"]
 body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report!
+        Thanks for reporting this. Please provide enough detail for us to reproduce quickly.
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Pre-flight Checklist
+      options:
+        - label: I searched existing issues and did not find a duplicate.
+          required: true
+        - label: I read the README and wiki docs first.
+          required: true
+        - label: I removed sensitive information (API keys, personal data) from logs.
+          required: true
   - type: textarea
     id: reproduction
     attributes:
       label: Reproduction Steps
-      description: How do we reproduce this bug?
+      description: Exact steps and input used to trigger the issue.
       placeholder: |
-        1. Run '...'
-        2. See error...
+        1. Run: yt-study process "..."
+        2. Observe: ...
+        3. Expected: ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What should have happened?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior
+      description: What happened instead?
     validations:
       required: true
   - type: input
     id: version
     attributes:
       label: Version
-      description: What version of yt-study are you running?
-      placeholder: v0.1.0
+      description: Output of `yt-study version`
+      placeholder: yt-study version 0.2.1
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python Version
+      description: Output of `python --version`
+      placeholder: Python 3.12.8
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating System
+      description: OS and version
+      placeholder: Windows 11 / macOS 15 / Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model Used
+      description: Model configured or passed with `-m`
+      placeholder: gemini/gemini-2.0-flash
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Which part of the project is affected?
+      options:
+        - area:core
+        - area:youtube
+        - area:llm
+        - area:cli
+        - area:docs
+        - area:tests
+        - area:devops
+    validations:
+      required: true
+  - type: dropdown
+    id: severity
+    attributes:
+      label: Severity
+      description: Impact level of this bug
+      options:
+        - severity:low
+        - severity:medium
+        - severity:high
+        - severity:critical
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      description: How urgently should this be handled?
+      options:
+        - priority:low
+        - priority:medium
+        - priority:high
+        - priority:critical
     validations:
       required: true
   - type: textarea
     id: logs
     attributes:
       label: Log Output
-      description: Please paste any relevant logs.
+      description: Paste relevant sanitized logs or traceback.
       render: shell
+  - type: textarea
+    id: config
+    attributes:
+      label: Relevant Config (Sanitized)
+      description: Optional. Include non-sensitive values from `~/.yt-study/config.env`.
+      placeholder: |
+        DEFAULT_MODEL=...
+        MAX_CONCURRENT_VIDEOS=...
+        OUTPUT_DIR=...

@@ -1,27 +1,28 @@
-# Pull Request Checklist
+## Pull Request Checklist
 
-Thank you for contributing! Please check the following before submitting:
+- [ ] I ran `make ci` locally and all checks passed (`format-check`, `lint-check`, `type-check`, `deps-check`, `security`, `test-cov`).
+- [ ] I added or updated tests for the behavior change.
+- [ ] I updated docs for user-facing changes.
+- [ ] I documented any breaking change in this PR description.
 
-- [ ] **All Checks Pass**: I have run `make all` and all checks passed.
-  - [ ] **Formatting**: Code formatted with `make format`
-  - [ ] **Linting**: No linting errors (`make lint`)
-  - [ ] **Type Checking**: No type errors (`make type-check`)
-  - [ ] **Tests**: All tests pass (`make test`)
-- [ ] **New Tests**: I have added tests for new features/fixes.
-- [ ] **Coverage**: Test coverage has not decreased (check with `make test-cov`).
-- [ ] **Documentation**: I have updated the README or docs if necessary.
-- [ ] **Breaking Changes**: I have noted any breaking changes in the description.
+## Validation Commands
 
-## Quick Verification
-
-Run this command to verify everything:
 ```bash
-make all
+make ci
 ```
 
-## Description
-<!-- Describe your changes here -->
+Optional local quality commands:
+
+```bash
+make check
+make verify
+make pre-commit
+```
+
+## Summary
+
+<!-- What changed and why? -->
 
 ## Related Issue
-<!-- Link to the issue this PR closes -->
+
 Closes #

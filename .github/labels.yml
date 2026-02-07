@@ -1,0 +1,99 @@
+- name: triage
+  color: FBCA04
+  description: Needs maintainer triage
+
+- name: stale
+  color: E4E669
+  description: No activity for a long period
+
+- name: good-first-issue
+  color: 7057FF
+  description: Good for newcomers
+
+- name: help-wanted
+  color: 008672
+  description: Extra attention is needed
+
+- name: type:bug
+  color: D73A4A
+  description: Something is not working
+
+- name: type:feature
+  color: A2EEEF
+  description: New feature or enhancement request
+
+- name: type:documentation
+  color: 0075CA
+  description: Documentation improvements
+
+- name: type:security
+  color: B60205
+  description: Security-related report
+
+- name: dependencies
+  color: 0366D6
+  description: Pull requests that update dependency files
+
+- name: github_actions
+  color: 000000
+  description: Pull requests that update GitHub Actions code
+
+- name: area:cli
+  color: 1D76DB
+  description: CLI or terminal UX area
+
+- name: area:core
+  color: 0E8A16
+  description: Core pipeline/config/orchestration
+
+- name: area:llm
+  color: 5319E7
+  description: LLM providers, prompts, and generation
+
+- name: area:youtube
+  color: C2E0C6
+  description: YouTube parsing, transcripts, metadata, playlists
+
+- name: area:docs
+  color: 0052CC
+  description: Documentation and wiki
+
+- name: area:tests
+  color: BFDADC
+  description: Testing and test infrastructure
+
+- name: area:devops
+  color: F9D0C4
+  description: CI/CD, workflows, automation, release engineering
+
+- name: severity:low
+  color: C5DEF5
+  description: Minor impact
+
+- name: severity:medium
+  color: FEF2C0
+  description: Moderate impact
+
+- name: severity:high
+  color: F9D0C4
+  description: High impact
+
+- name: severity:critical
+  color: B60205
+  description: Critical impact requiring urgent attention
+
+- name: priority:low
+  color: 00FF00
+  description: Low priority
+
+- name: priority:medium
+  color: FFA500
+  description: Medium priority
+
+- name: priority:high
+  color: FF0000
+  description: High priority
+
+- name: priority:critical
+  color: 800000
+  description: Critical priority
