@@ -4,10 +4,8 @@ version = "0.2.1"
 description = "Convert YouTube videos into AI-powered study notes with chapter support"
 readme = "README.md"
 requires-python = ">=3.10"
-license = {text = "MIT"}
-authors = [
-    {name = "whoisjayd", email = "contactjaydeepsolanki@gmail.com"}
-]
+license = { text = "MIT" }
+authors = [{ name = "whoisjayd", email = "contactjaydeepsolanki@gmail.com" }]
 keywords = ["youtube", "study", "notes", "ai", "llm", "education", "transcript"]
 classifiers = [
     "Development Status :: 4 - Beta",
@@ -28,22 +26,13 @@ dependencies = [
     "litellm>=1.81.1",
     "typer>=0.21.1",
     "rich>=13.9.4",
-    "aiohttp>=3.11.11",
 ]
 
-[project.optional-dependencies]
-
-[dependency-groups]
-dev = [
-    "pytest>=9.0.0",
-    "pytest-cov>=6.0.0",
-    "pytest-asyncio>=1.3.0",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.14.14",
-    "mypy>=1.19.1",
-    "types-requests",
-    "types-setuptools",
-]
+[project.urls]
+Homepage = "https://github.com/whoisjayd/yt-study"
+Repository = "https://github.com/whoisjayd/yt-study"
+Issues = "https://github.com/whoisjayd/yt-study/issues"
+Documentation = "https://github.com/whoisjayd/yt-study/tree/main/wiki"
 
 [project.scripts]
 yt-study = "yt_study.cli:app"
@@ -52,9 +41,38 @@ yt-study = "yt_study.cli:app"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.hatch.build.targets.wheel]
+packages = ["src/yt_study"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/src",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
+
+[dependency-groups]
+dev = [
+    "pre-commit>=4.5.1",
+    "pytest>=9.0.2",
+    "pytest-cov>=7.0.0",
+    "pytest-asyncio>=1.3.0",
+    "pytest-mock>=3.15.1",
+    "ruff>=0.15.0",
+    "mypy>=1.19.1",
+    "bandit[toml]>=1.9.3",
+    "deptry>=0.24.0",
+    "types-requests",
+    "types-setuptools",
+]
+
 [tool.ruff]
 line-length = 88
 target-version = "py310"
+src = ["src", "tests", "scripts"]
+unsafe-fixes = true
 
 [tool.ruff.lint]
 select = [
@@ -70,7 +88,6 @@ select = [
 ignore = []
 
 [tool.ruff.lint.isort]
-# Configure import sorting behavior
 known-first-party = ["yt_study"]
 force-single-line = false
 lines-after-imports = 2
@@ -79,7 +96,7 @@ section-order = [
     "standard-library",
     "third-party",
     "first-party",
-    "local-folder"
+    "local-folder",
 ]
 
 [tool.ruff.format]
@@ -96,8 +113,10 @@ warn_unused_configs = true
 disallow_untyped_defs = true
 check_untyped_defs = true
 ignore_missing_imports = true
+files = ["src/yt_study"]
 
 [tool.pytest.ini_options]
+addopts = "-ra"
 asyncio_mode = "auto"
 asyncio_default_fixture_loop_scope = "function"
 testpaths = ["tests"]
@@ -109,8 +128,11 @@ python_functions = "test_*"
 source = ["src/yt_study"]
 omit = ["*/tests/*", "*/__pycache__/*"]
 concurrency = ["thread"]
+branch = true
 
 [tool.coverage.report]
+show_missing = true
+skip_empty = true
 exclude_lines = [
     "pragma: no cover",
     "def __repr__",
@@ -119,4 +141,19 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "if TYPE_CHECKING:",
     "async def",
+]
+
+[tool.bandit]
+exclude_dirs = ["tests", "scripts"]
+severity = "HIGH"
+confidence = "HIGH"
+
+[tool.deptry]
+exclude = [
+    ".venv",
+    "build",
+    "dist",
+    "scripts",
+    "tests",
+    "wiki",
 ]

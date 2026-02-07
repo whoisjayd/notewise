@@ -19,3 +19,5 @@ drafts/
 
 # Generated content
 src/yt_study/output/
+coverage.xml
+htmlcov/

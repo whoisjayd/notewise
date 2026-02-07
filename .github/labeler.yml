@@ -1,34 +1,60 @@
 # Area Labels
-area:cli:
-  changed-files:
-    - src/yt_study/cli.py
-    - src/yt_study/ui/**
+"area:cli":
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/yt_study/cli.py
+          - src/yt_study/ui/**
 
-area:core:
-  changed-files:
-    - src/yt_study/pipeline/**
-    - src/yt_study/config.py
+"area:core":
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/yt_study/pipeline/**
+          - src/yt_study/config.py
 
-area:llm:
-  changed-files:
-    - src/yt_study/llm/**
-    - src/yt_study/prompts/**
+"area:llm":
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/yt_study/llm/**
+          - src/yt_study/prompts/**
 
-area:youtube:
-  changed-files:
-    - src/yt_study/youtube/**
+"area:youtube":
+  - changed-files:
+      - any-glob-to-any-file:
+          - src/yt_study/youtube/**
 
-area:docs:
-  changed-files:
-    - docs/**
-    - wiki/**
-    - '*.md'
+"area:docs":
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - wiki/**
+          - "*.md"
 
-area:tests:
-  changed-files:
-    - tests/**
+"area:tests":
+  - changed-files:
+      - any-glob-to-any-file:
+          - tests/**
 
-area:devops:
-  changed-files:
-    - .github/**
-    - Dockerfile
+"area:devops":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/**
+          - Dockerfile
+
+"type:documentation":
+  - changed-files:
+      - any-glob-to-any-file:
+          - docs/**
+          - wiki/**
+          - "*.md"
+
+"dependencies":
+  - changed-files:
+      - any-glob-to-any-file:
+          - pyproject.toml
+          - uv.lock
+          - .github/dependabot.yml
+
+"github_actions":
+  - changed-files:
+      - any-glob-to-any-file:
+          - .github/workflows/**

@@ -1,0 +1,63 @@
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: check-yaml
+      - id: check-toml
+      - id: check-json
+      - id: check-merge-conflict
+      - id: debug-statements
+      - id: check-added-large-files
+      - id: detect-private-key
+      - id: end-of-file-fixer
+      - id: trailing-whitespace
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.0
+    hooks:
+      - id: ruff-check
+        args: ["--fix", "--unsafe-fixes"]
+      - id: ruff-format
+
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.3.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.9.3
+    hooks:
+      - id: bandit
+        args: ["-c", "pyproject.toml", "--severity-level", "high"]
+        additional_dependencies: ["bandit[toml]"]
+        exclude: ^(tests/|scripts/)
+
+  - repo: local
+    hooks:
+      - id: single-line-commit
+        name: single-line commit message
+        entry: scripts/hooks/check-single-line-commit.sh
+        language: script
+        stages: [commit-msg]
+      - id: mypy
+        name: mypy (src/yt_study)
+        entry: uv run mypy src/yt_study
+        language: system
+        pass_filenames: false
+        types: [python]
+      - id: deptry
+        name: deptry (unused/missing dependencies)
+        entry: uv run deptry src
+        language: system
+        pass_filenames: false
+      - id: pytest-fast
+        name: pytest fast (pre-push)
+        entry: uv run pytest tests -q
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

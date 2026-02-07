@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Usage Questions and Help
+    url: https://github.com/whoisjayd/yt-study/wiki/FAQ
+    about: Check the FAQ and documentation before opening a new issue.
+  - name: Security Reporting Guide
+    url: https://github.com/whoisjayd/yt-study/blob/main/SECURITY.md
+    about: Use private security reporting instructions for sensitive vulnerabilities.
