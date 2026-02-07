@@ -34,12 +34,12 @@ Convert videos, playlists, and URL batches into clean Markdown notes with chapte
 
 Use the wiki for detailed guides:
 
-- [Wiki Home](wiki/Home.md)
-- [Installation Guide](wiki/Installation.md)
-- [Usage Guide](wiki/Usage.md)
-- [Configuration Reference](wiki/Configuration.md)
-- [Architecture](wiki/Architecture.md)
-- [FAQ](wiki/FAQ.md)
+- [Wiki Home](https://github.com/whoisjayd/yt-study/wiki)
+- [Installation Guide](https://github.com/whoisjayd/yt-study/wiki/Installation)
+- [Usage Guide](https://github.com/whoisjayd/yt-study/wiki/Usage)
+- [Configuration Reference](https://github.com/whoisjayd/yt-study/wiki/Configuration)
+- [Architecture](https://github.com/whoisjayd/yt-study/wiki/Architecture)
+- [FAQ](https://github.com/whoisjayd/yt-study/wiki/FAQ)
 
 ## Vision
 
@@ -245,7 +245,7 @@ If home is not writable, logs fall back to a local `./logs` directory.
 
 ### Where can I read extended docs?
 
-Use the wiki pages linked in [Documentation Map](#documentation-map), including [FAQ](wiki/FAQ.md).
+Use the wiki pages linked in [Documentation Map](#documentation-map), including [FAQ](https://github.com/whoisjayd/yt-study/wiki/FAQ).
 
 ## Configuration
 
@@ -266,7 +266,7 @@ Configuration loading behavior:
 - Applies environment variable overrides after file load.
 - Syncs provider API keys into process environment for downstream SDK usage.
 
-Full reference: `wiki/Configuration.md`
+Full reference: [Configuration Wiki](https://github.com/whoisjayd/yt-study/wiki/Configuration)
 
 ## Output Organization
 
