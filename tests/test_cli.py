@@ -117,7 +117,7 @@ def test_config_path_missing():
 
 def test_setup_command():
     """Test setup command triggers wizard."""
-    with patch("yt_study.core.setup_wizard.run_setup_wizard") as mock_wizard:
+    with patch("yt_study.setup_wizard.run_setup_wizard") as mock_wizard:
         result = runner.invoke(app, ["setup"])
         assert result.exit_code == 0
         mock_wizard.assert_called_once()
@@ -227,7 +227,7 @@ def test_process_missing_config():
     """Test that missing config triggers the setup wizard."""
     with (
         patch("yt_study.cli.check_config_exists", return_value=False),
-        patch("yt_study.core.setup_wizard.run_setup_wizard") as mock_setup,
+        patch("yt_study.setup_wizard.run_setup_wizard") as mock_setup,
     ):
         runner.invoke(app, ["process", "url"])
         mock_setup.assert_called_once()

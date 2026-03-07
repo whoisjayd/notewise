@@ -5,10 +5,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from pytubefix import Playlist, YouTube
-from rich.console import Console
 
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 

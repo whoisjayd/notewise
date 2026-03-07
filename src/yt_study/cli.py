@@ -78,7 +78,7 @@ def ensure_setup() -> None:
             "\n[yellow]⚠ No configuration found. Running setup wizard...[/yellow]\n"
         )
         try:
-            from .core.setup_wizard import run_setup_wizard
+            from .setup_wizard import run_setup_wizard
 
             run_setup_wizard(force=False)
         except ImportError as e:
@@ -172,7 +172,6 @@ def process(
       [cyan]yt-study process "URL" -m gpt-4o[/cyan]
       [cyan]yt-study process batch_urls.txt -o ./course-notes[/cyan]
     """
-    # Ensure configuration exists
     ensure_setup()
 
     try:
@@ -375,7 +374,6 @@ def process(
             else:
                 await _run_single_url(url)
 
-        # Run pipeline
         asyncio.run(run_processing())
 
     except KeyboardInterrupt:
@@ -420,7 +418,7 @@ def setup(
     Runs a wizard to generate the [bold]~/.yt-study/config.env[/bold] file.
     """
     try:
-        from .core.setup_wizard import run_setup_wizard
+        from .setup_wizard import run_setup_wizard
 
         run_setup_wizard(force=force)
     except ImportError as e:

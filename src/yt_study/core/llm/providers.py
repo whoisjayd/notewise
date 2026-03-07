@@ -5,12 +5,10 @@ import os
 from typing import Any
 
 from litellm import acompletion
-from rich.console import Console
 
 from ..config import config
 
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 

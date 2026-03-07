@@ -5,7 +5,6 @@ import logging
 from dataclasses import dataclass
 from typing import Any
 
-from rich.console import Console
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     IpBlocked,
@@ -18,7 +17,6 @@ from youtube_transcript_api._errors import (
 from .metadata import VideoChapter
 
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 

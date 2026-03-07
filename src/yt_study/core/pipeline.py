@@ -8,6 +8,7 @@ No Rich, no Console, no Dashboard imports here.
 
 import asyncio
 import logging
+import os
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -85,7 +86,9 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*]', "", name)
     name = re.sub(r"\s+", " ", name)
     name = name.strip()[:100]
-    return name if name else "untitled"
+    if not name or name in {".", ".."}:
+        return "untitled"
+    return name
 
 
 class CorePipeline:
@@ -143,29 +146,21 @@ class CorePipeline:
         """
         key_name = config.get_api_key_name_for_model(self.model)
 
-        if key_name:
-            import os
-
-            if not os.environ.get(key_name):
-                logger.error(f"Missing API Key for {self.model}. Expected: {key_name}")
-                return False
+        if key_name and not os.environ.get(key_name):
+            logger.error(f"Missing API Key for {self.model}. Expected: {key_name}")
+            return False
         return True
 
     async def _process_single_video(
         self,
         video_id: str,
-        output_path: Path,
         on_event: Callable[[PipelineEvent], None] | None = None,
     ) -> bool:
         """
         Process a single video: fetch transcript and generate study notes.
 
-        This is an INTERNAL method (async worker).
-        It emits events that the CLI/UI can listen to.
-
         Args:
             video_id: YouTube Video ID.
-            output_path: Destination path for the MD file.
             on_event: Callback for progress events.
 
         Returns:
@@ -177,18 +172,33 @@ class CorePipeline:
                 emit = self._emit_event(on_event)
                 emit(EventType.METADATA_START, video_id)
 
-                # Fetch metadata concurrently
-                title = await asyncio.to_thread(get_video_title, video_id)
-                duration, chapters = await asyncio.gather(
+                # Fetch all metadata concurrently; title failure is non-fatal
+                meta_results = await asyncio.gather(
+                    asyncio.to_thread(get_video_title, video_id),
                     asyncio.to_thread(get_video_duration, video_id),
                     asyncio.to_thread(get_video_chapters, video_id),
+                    return_exceptions=True,
                 )
+                raw_title, duration, chapters = meta_results
+
+                # Fall back to video_id when title cannot be retrieved
+                title: str = (
+                    (raw_title or video_id)
+                    if not isinstance(raw_title, BaseException)
+                    else video_id
+                )
+
+                # Duration and chapters are required; re-raise on failure
+                if isinstance(duration, BaseException):
+                    raise duration
+                if isinstance(chapters, BaseException):
+                    raise chapters
 
                 emit(
                     EventType.METADATA_FETCHED,
                     video_id,
                     title=title,
-                    chapter_number=len(chapters) if chapters else 0,
+                    total_chapters=len(chapters) if chapters else 0,
                 )
 
                 # --- Transcript Phase ---
@@ -199,7 +209,7 @@ class CorePipeline:
                 emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
 
                 # --- Generation Strategy ---
-                use_chapters = duration > 3600 and len(chapters) > 0
+                use_chapters = bool(duration > 3600 and chapters)
 
                 if use_chapters:
                     # Chapter-based generation
@@ -252,6 +262,7 @@ class CorePipeline:
                         video_title=title,
                     )
 
+                    output_path = self.output_dir / f"{sanitize_filename(title)}.md"
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(notes, encoding="utf-8")
 
@@ -282,11 +293,7 @@ class CorePipeline:
         self,
         on_event: Callable[[PipelineEvent], None] | None,
     ) -> Callable[..., None]:
-        """
-        Create a helper function to emit events.
-
-        This allows cleaner event emission throughout the code.
-        """
+        """Return a helper that constructs and dispatches a PipelineEvent."""
 
         def emit(
             event_type: EventType,
@@ -320,8 +327,6 @@ class CorePipeline:
         on_event: Callable[[PipelineEvent], None] | None = None,
     ) -> PipelineResult:
         """
-        ✅ SINGLE ENTRY POINT FOR CLI AND OTHER FRONTENDS
-
         Process a list of video IDs concurrently.
 
         Args:
@@ -331,21 +336,6 @@ class CorePipeline:
 
         Returns:
             PipelineResult with success count, failures, and detailed errors.
-
-        Example (CLI usage):
-            >>> pipeline = CorePipeline(model="gemini-1.5-flash")
-            >>>
-            >>> def on_progress(event):
-            ...     if event.event_type == EventType.VIDEO_SUCCESS:
-            ...         print(f"✓ {event.title}")
-            ...     elif event.event_type == EventType.VIDEO_FAILED:
-            ...         print(f"✗ {event.title}: {event.error}")
-            >>>
-            >>> result = await pipeline.run(
-            ...     ["VIDEO_ID_1", "VIDEO_ID_2"],
-            ...     on_event=on_progress
-            ... )
-            >>> print(f"Completed: {result.success_count}/{result.total_count}")
         """
         # --- Validation ---
         if not self._check_api_key():
@@ -367,32 +357,23 @@ class CorePipeline:
             )
 
         emit = self._emit_event(on_event)
-        emit(EventType.PIPELINE_START, video_ids[0])
+        emit(EventType.PIPELINE_START, "")
 
         self.errors.clear()
         success_count = 0
 
         # --- Process all videos concurrently ---
-        tasks = []
-        for video_id in video_ids:
-            safe_title = sanitize_filename(video_id)
-            output_path = self.output_dir / f"{safe_title}.md"
+        tasks = [
+            self._process_single_video(video_id, on_event=on_event)
+            for video_id in video_ids
+        ]
 
-            task = self._process_single_video(
-                video_id,
-                output_path,
-                on_event=on_event,
-            )
-            tasks.append(task)
-
-        # Gather results
         results = await asyncio.gather(*tasks, return_exceptions=False)
         success_count = sum(1 for r in results if r is True)
 
-        # --- Return Structured Result ---
         failure_count = len(video_ids) - success_count
 
-        emit(EventType.PIPELINE_COMPLETE, video_ids[0])
+        emit(EventType.PIPELINE_COMPLETE, "")
 
         return PipelineResult(
             success_count=success_count,
