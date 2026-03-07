@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -238,6 +239,78 @@ def process(
             )
             console.print("[dim]Check logs for detailed error reports.[/dim]\n")
 
+        class WorkerSlotManager:
+            """Manages worker slot assignment and release for concurrent processing."""
+
+            def __init__(self, concurrency: int):
+                """Initialize slot manager with available slots.
+
+                Args:
+                    concurrency: Number of concurrent worker slots.
+                """
+                self.available_slots: list[int] = list(range(concurrency))
+                self.video_slots: dict[str, int] = {}
+
+            def acquire_slot(self, video_id: str) -> int | None:
+                """Assign an available slot to a video.
+
+                Args:
+                    video_id: The video ID to assign a slot to.
+
+                Returns:
+                    The assigned slot index, or None if no slots available.
+                """
+                if self.available_slots:
+                    assigned = self.available_slots.pop(0)
+                    self.video_slots[video_id] = assigned
+                    return assigned
+                return None
+
+            def release_slot(self, video_id: str) -> int | None:
+                """Release a slot back to the pool.
+
+                Args:
+                    video_id: The video ID whose slot should be released.
+
+                Returns:
+                    The released slot index, or None if video had no slot.
+                """
+                released = self.video_slots.pop(video_id, None)
+                if released is not None:
+                    self.available_slots.append(released)
+                return released
+
+            def get_slot(self, video_id: str) -> int | None:
+                """Get the currently assigned slot for a video.
+
+                Args:
+                    video_id: The video ID to look up.
+
+                Returns:
+                    The assigned slot index, or None if not assigned.
+                """
+                return self.video_slots.get(video_id)
+
+        # Status message templates for different event types
+        STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
+            EventType.METADATA_START: lambda t, _: (
+                f"[yellow]{t}... (Metadata)[/yellow]"
+            ),
+            EventType.METADATA_FETCHED: lambda t, _: f"[cyan]{t}... (Fetched)[/cyan]",
+            EventType.TRANSCRIPT_FETCHING: lambda t, _: (
+                f"[cyan]📥 {t}... (Transcript)[/cyan]"
+            ),
+            EventType.GENERATION_START: lambda t, _: (
+                f"[cyan]🤖 {t}... (Generating)[/cyan]"
+            ),
+            EventType.CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
+            EventType.CHAPTER_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
+            ),
+        }
+
         async def _run_single_url(single_url: str) -> None:
             """Parse one URL and run the pipeline with a Rich dashboard."""
             try:
@@ -280,66 +353,37 @@ def process(
             )
 
             # --- Event → Dashboard bridge ---
-            # Maps video_id to its assigned worker-slot index.
-            available_slots: list[int] = list(range(concurrency))
-            video_slots: dict[str, int] = {}
+            # Use WorkerSlotManager to track video-to-slot assignments
+            slot_manager = WorkerSlotManager(concurrency)
 
             def on_event(event: PipelineEvent) -> None:
                 vid = event.video_id
                 title = (event.title or vid)[:40]
-                slot = video_slots.get(vid)
+                slot = slot_manager.get_slot(vid)
 
+                # Handle slot acquisition for new videos
                 if event.event_type == EventType.METADATA_START:
-                    if available_slots:
-                        assigned = available_slots.pop(0)
-                        video_slots[vid] = assigned
-                        dashboard.update_worker(
-                            assigned,
-                            f"[yellow]{title}... (Metadata)[/yellow]",
-                        )
+                    assigned = slot_manager.acquire_slot(vid)
+                    if assigned is not None:
+                        slot = assigned
+                        status_fn = STATUS_MAP.get(event.event_type)
+                        if status_fn:
+                            dashboard.update_worker(assigned, status_fn(title, event))
 
-                elif event.event_type == EventType.METADATA_FETCHED:
-                    if slot is not None:
-                        dashboard.update_worker(
-                            slot, f"[cyan]{title}... (Fetched)[/cyan]"
-                        )
+                # Handle standard status updates
+                elif event.event_type in STATUS_MAP and slot is not None:
+                    status_fn = STATUS_MAP[event.event_type]
+                    dashboard.update_worker(slot, status_fn(title, event))
 
-                elif event.event_type == EventType.TRANSCRIPT_FETCHING:
-                    if slot is not None:
-                        dashboard.update_worker(
-                            slot, f"[cyan]📥 {title}... (Transcript)[/cyan]"
-                        )
-
-                elif event.event_type == EventType.GENERATION_START:
-                    if slot is not None:
-                        dashboard.update_worker(
-                            slot, f"[cyan]🤖 {title}... (Generating)[/cyan]"
-                        )
-
-                elif event.event_type == EventType.CHUNK_GENERATING:
-                    if slot is not None:
-                        chunk_info = f"Chunk {event.chunk_number}/{event.total_chunks}"
-                        dashboard.update_worker(
-                            slot,
-                            f"[cyan]🤖 {title}... ({chunk_info})[/cyan]",
-                        )
-
-                elif event.event_type == EventType.CHAPTER_GENERATING:
-                    if slot is not None:
-                        chap_info = f"Ch {event.chapter_number}/{event.total_chapters}"
-                        dashboard.update_worker(
-                            slot,
-                            f"[cyan]🤖 {title}... ({chap_info})[/cyan]",
-                        )
-
+                # Handle completion/failure events (release slots)
                 elif event.event_type in (
                     EventType.VIDEO_SUCCESS,
                     EventType.VIDEO_FAILED,
                 ):
-                    released = video_slots.pop(vid, None)
+                    released = slot_manager.release_slot(vid)
                     if released is not None:
-                        available_slots.append(released)
                         dashboard.update_worker(released, "[dim]Idle[/dim]")
+
                     if event.event_type == EventType.VIDEO_SUCCESS:
                         dashboard.add_completion(event.title or vid)
                     else:

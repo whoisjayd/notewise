@@ -1,6 +1,6 @@
 """Tests for study material generator."""
 
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -92,6 +92,25 @@ class TestStudyMaterialGenerator:
                 assert len(chunks[0]) > 0
         finally:
             config.chunk_size = orig_size
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_on_chunk_callback(self, generator):
+        """Ensure on_chunk is invoked with (i, total) for each chunk."""
+        chunks = ["chunk1", "chunk2", "chunk3"]
+
+        # Force the generator to produce exactly three chunks
+        with patch.object(generator, "_chunk_transcript", return_value=chunks):
+            on_chunk = MagicMock()
+
+            # Run the generation with the callback
+            await generator.generate_study_notes(
+                transcript="dummy transcript",
+                on_chunk=on_chunk,
+            )
+
+        # Verify that on_chunk was called once per chunk with (i, total)
+        calls = [c.args for c in on_chunk.call_args_list]
+        assert calls == [(1, 3), (2, 3), (3, 3)]
 
     @pytest.mark.asyncio
     async def test_generate_study_notes_single(self, generator):

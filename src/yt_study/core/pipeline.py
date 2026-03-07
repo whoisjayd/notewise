@@ -14,6 +14,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
+from typing import Any
 
 from .config import config
 from .llm.generator import StudyMaterialGenerator
@@ -212,7 +213,9 @@ class CorePipeline:
                 emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
 
                 # --- Generation Strategy ---
-                use_chapters = bool(duration > 3600 and chapters)
+                use_chapters = bool(
+                    duration > config.chapter_generation_min_duration and chapters
+                )
 
                 if use_chapters:
                     # Chapter-based generation
@@ -312,25 +315,13 @@ class CorePipeline:
         def emit(
             event_type: EventType,
             video_id: str,
-            title: str | None = None,
-            chapter_number: int | None = None,
-            total_chapters: int | None = None,
-            chunk_number: int | None = None,
-            total_chunks: int | None = None,
-            error: str | None = None,
-            output_path: Path | None = None,
+            **data: Any,
         ) -> None:
             if on_event:
                 event = PipelineEvent(
                     event_type=event_type,
                     video_id=video_id,
-                    title=title,
-                    chapter_number=chapter_number,
-                    total_chapters=total_chapters,
-                    chunk_number=chunk_number,
-                    total_chunks=total_chunks,
-                    error=error,
-                    output_path=output_path,
+                    **data,
                 )
                 try:
                     on_event(event)
@@ -357,12 +348,25 @@ class CorePipeline:
         """
         # --- Validation ---
         if not self._check_api_key():
+            errors = {vid: "Missing API key" for vid in video_ids}
+
+            # Emit events so consumers relying on events see the failure as well
+            if on_event is not None:
+                emit = self._emit_event(on_event)
+                emit(EventType.PIPELINE_START, "")
+
+                # Per-video failure events
+                for vid in video_ids:
+                    emit(EventType.VIDEO_FAILED, vid, error="Missing API key")
+
+                emit(EventType.PIPELINE_COMPLETE, "")
+
             return PipelineResult(
                 success_count=0,
                 failure_count=len(video_ids),
                 total_count=len(video_ids),
                 video_ids=video_ids,
-                errors={vid: "Missing API key" for vid in video_ids},
+                errors=errors,
             )
 
         if not video_ids:
@@ -398,7 +402,7 @@ class CorePipeline:
             failure_count=failure_count,
             total_count=len(video_ids),
             video_ids=video_ids,
-            errors=self.errors,
+            errors=dict(self.errors),  # Return copy to avoid shared state mutations
         )
 
 

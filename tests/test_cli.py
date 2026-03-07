@@ -30,7 +30,7 @@ def _make_pipeline_result(total: int = 1, success: int = 1):
     result = MagicMock()
     result.total_count = total
     result.success_count = success
-    result.failed_count = total - success
+    result.failure_count = total - success
     return result
 
 
@@ -90,6 +90,33 @@ def mock_pipeline(tmp_path):
 # ---------------------------------------------------------------------------
 # Version / config-path / setup commands (no pipeline involved)
 # ---------------------------------------------------------------------------
+
+
+def test_process_missing_api_key_exits_with_error(monkeypatch):
+    """CLI exits with code 1 and helpful message when required API key is missing."""
+
+    # Ensure FAKE_KEY is not set in the environment
+    monkeypatch.delenv("FAKE_KEY", raising=False)
+
+    # Patch config to require FAKE_KEY for the selected model
+    with (
+        patch(
+            "yt_study.core.config.config.get_api_key_name_for_model",
+            return_value="FAKE_KEY",
+        ),
+        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+    ):
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 1
+    # The error message should mention the missing env var name
+    assert "FAKE_KEY" in result.output
+    # And it should clearly indicate it's about an API key
+    assert "Missing API Key" in result.output or "API key" in result.output
 
 
 def test_version():

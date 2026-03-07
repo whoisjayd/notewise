@@ -11,6 +11,7 @@ from yt_study.core.pipeline import (
     PipelineResult,
     sanitize_filename,
 )
+from yt_study.core.youtube.transcript import YouTubeIPBlockError
 
 
 # ---------------------------------------------------------------------------
@@ -260,3 +261,198 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     assert result.success_count == 1
     expected_file = pipeline.output_dir / "myVideoId.md"
     assert expected_file.exists(), "Expected fallback filename using video_id"
+
+
+# ---------------------------------------------------------------------------
+# CorePipeline.run – error handling and event emission
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_ip_block_error_emits_video_failed_event(pipeline):
+    """YouTubeIPBlockError triggers VIDEO_FAILED event."""
+    events: list[PipelineEvent] = []
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+            side_effect=YouTubeIPBlockError("IP blocked"),
+        ),
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        result = await pipeline.run(["vid123"], on_event=events.append)
+
+    # Check result
+    assert result.success_count == 0
+    assert result.failure_count == 1
+    assert "vid123" in result.errors
+    assert "IP blocked" in result.errors["vid123"]
+
+    # Check events
+    event_types = [e.event_type for e in events]
+    assert EventType.VIDEO_FAILED in event_types
+
+    failed_event = next(e for e in events if e.event_type == EventType.VIDEO_FAILED)
+    assert failed_event.video_id == "vid123"
+    assert "IP blocked" in failed_event.error or "VPN" in failed_event.error
+
+
+@pytest.mark.asyncio
+async def test_run_generic_error_emits_video_failed_event(pipeline):
+    """When processing raises generic RuntimeError, VIDEO_FAILED event is emitted."""
+    events: list[PipelineEvent] = []
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+            side_effect=RuntimeError("network timeout"),
+        ),
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        result = await pipeline.run(["vid456"], on_event=events.append)
+
+    # Check result
+    assert result.success_count == 0
+    assert result.failure_count == 1
+    assert "vid456" in result.errors
+    assert "RuntimeError" in result.errors["vid456"]
+
+    # Check events
+    event_types = [e.event_type for e in events]
+    assert EventType.VIDEO_FAILED in event_types
+
+    failed_event = next(e for e in events if e.event_type == EventType.VIDEO_FAILED)
+    assert failed_event.video_id == "vid456"
+    assert "RuntimeError" in failed_event.error
+
+
+# ---------------------------------------------------------------------------
+# CorePipeline.run – chapter-based generation path
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline):
+    """Long videos with chapters generate per-chapter files."""
+    video_id = "video-with-chapters"
+    video_title = "My Great Video: Intro & Deep Dive"
+    chapter_meta = [
+        {"title": "Intro", "start_seconds": 0},
+        {"title": "Deep Dive", "start_seconds": 600},
+    ]
+
+    with (
+        patch(
+            "yt_study.core.pipeline.get_video_title",
+            return_value=video_title,
+        ),
+        patch(
+            "yt_study.core.pipeline.get_video_duration",
+            return_value=7200,  # 2 hours
+        ),
+        patch(
+            "yt_study.core.pipeline.get_video_chapters",
+            return_value=chapter_meta,
+        ),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+        ) as mock_split,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        # Mock transcript
+        mock_transcript = MagicMock()
+        mock_fetch.return_value = mock_transcript
+
+        # Mock chapter-split transcripts
+        chapter_transcripts = {
+            "Intro": "intro transcript text",
+            "Deep Dive": "deep dive transcript text",
+        }
+        mock_split.return_value = chapter_transcripts
+
+        result = await pipeline.run([video_id])
+
+    # Verify success
+    assert result.success_count == 1
+
+    # Verify chapter-based generation was called
+    assert pipeline.generator.generate_single_chapter_notes.await_count == 2
+
+    # Verify per-chapter files were created
+    expected_folder = pipeline.output_dir / sanitize_filename(video_title)
+    assert expected_folder.is_dir()
+
+    expected_files = {
+        f"01_{sanitize_filename('Intro')}.md",
+        f"02_{sanitize_filename('Deep Dive')}.md",
+    }
+    actual_files = {p.name for p in expected_folder.iterdir() if p.is_file()}
+
+    assert expected_files.issubset(actual_files)
+
+
+@pytest.mark.asyncio
+async def test_run_chapter_generation_emits_chapter_events(pipeline):
+    """Chapter-based generation emits CHAPTER_GENERATING events with correct counts."""
+    events: list[PipelineEvent] = []
+
+    chapter_meta = [
+        {"title": "Chapter 1", "start_seconds": 0},
+        {"title": "Chapter 2", "start_seconds": 300},
+        {"title": "Chapter 3", "start_seconds": 600},
+    ]
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="My Video"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=7200),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=chapter_meta),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript", new_callable=AsyncMock
+        ) as mock_fetch,
+        patch("yt_study.core.pipeline.split_transcript_by_chapters") as mock_split,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_fetch.return_value = mock_transcript
+
+        chapter_transcripts = {
+            "Chapter 1": "text1",
+            "Chapter 2": "text2",
+            "Chapter 3": "text3",
+        }
+        mock_split.return_value = chapter_transcripts
+
+        await pipeline.run(["vid789"], on_event=events.append)
+
+    # Verify chapter events
+    chapter_events = [e for e in events if e.event_type == EventType.CHAPTER_GENERATING]
+    assert len(chapter_events) == 3
+
+    # Verify chapter numbers and totals
+    for i, event in enumerate(chapter_events, 1):
+        assert event.chapter_number == i
+        assert event.total_chapters == 3
