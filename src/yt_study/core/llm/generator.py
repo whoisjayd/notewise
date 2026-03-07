@@ -1,6 +1,7 @@
 """Study material generator with chunking and combining logic."""
 
 import logging
+from collections.abc import Callable
 
 from litellm import token_counter
 
@@ -159,6 +160,7 @@ class StudyMaterialGenerator:
         self,
         transcript: str,
         video_title: str = "Video",
+        on_chunk: Callable[[int, int], None] | None = None,
     ) -> str:
         """
         Generate study notes from transcript.
@@ -187,6 +189,8 @@ class StudyMaterialGenerator:
         chunk_notes = []
 
         for i, chunk in enumerate(chunks, 1):
+            if on_chunk:
+                on_chunk(i, len(chunks))
             logger.info(f"{video_title}: Chunk {i}/{len(chunks)}")
             note = await self.provider.generate(
                 system_prompt=SYSTEM_PROMPT,

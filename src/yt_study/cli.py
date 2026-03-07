@@ -316,6 +316,14 @@ def process(
                             slot, f"[cyan]🤖 {title}... (Generating)[/cyan]"
                         )
 
+                elif event.event_type == EventType.CHUNK_GENERATING:
+                    if slot is not None:
+                        chunk_info = f"Chunk {event.chunk_number}/{event.total_chunks}"
+                        dashboard.update_worker(
+                            slot,
+                            f"[cyan]🤖 {title}... ({chunk_info})[/cyan]",
+                        )
+
                 elif event.event_type == EventType.CHAPTER_GENERATING:
                     if slot is not None:
                         chap_info = f"Ch {event.chapter_number}/{event.total_chapters}"

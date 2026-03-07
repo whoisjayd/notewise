@@ -41,6 +41,7 @@ class EventType(Enum):
     TRANSCRIPT_FETCHING = "transcript_fetching"
     TRANSCRIPT_FETCHED = "transcript_fetched"
     GENERATION_START = "generation_start"
+    CHUNK_GENERATING = "chunk_generating"
     CHAPTER_GENERATING = "chapter_generating"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
@@ -58,6 +59,8 @@ class PipelineEvent:
     title: str | None = None
     chapter_number: int | None = None
     total_chapters: int | None = None
+    chunk_number: int | None = None
+    total_chunks: int | None = None
     error: str | None = None
     output_path: Path | None = None
 
@@ -257,9 +260,20 @@ class CorePipeline:
                     emit(EventType.GENERATION_START, video_id, title=title)
 
                     transcript_text = transcript_obj.to_text()
+
+                    def _on_chunk(chunk_num: int, total: int) -> None:
+                        emit(
+                            EventType.CHUNK_GENERATING,
+                            video_id,
+                            title=title,
+                            chunk_number=chunk_num,
+                            total_chunks=total,
+                        )
+
                     notes = await self.generator.generate_study_notes(
                         transcript_text,
                         video_title=title,
+                        on_chunk=_on_chunk,
                     )
 
                     output_path = self.output_dir / f"{sanitize_filename(title)}.md"
@@ -301,6 +315,8 @@ class CorePipeline:
             title: str | None = None,
             chapter_number: int | None = None,
             total_chapters: int | None = None,
+            chunk_number: int | None = None,
+            total_chunks: int | None = None,
             error: str | None = None,
             output_path: Path | None = None,
         ) -> None:
@@ -311,6 +327,8 @@ class CorePipeline:
                     title=title,
                     chapter_number=chapter_number,
                     total_chapters=total_chapters,
+                    chunk_number=chunk_number,
+                    total_chunks=total_chunks,
                     error=error,
                     output_path=output_path,
                 )
