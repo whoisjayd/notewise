@@ -34,6 +34,9 @@ class Config:
     chunk_size: int = 4000  # tokens
     chunk_overlap: int = 200  # tokens
 
+    # Chapter Generation Configuration
+    chapter_generation_min_duration: int = 3600  # seconds (1 hour)
+
     # Concurrency Configuration
     max_concurrent_videos: int = 5
 

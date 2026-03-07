@@ -3,7 +3,7 @@
 import os
 from unittest.mock import patch
 
-from yt_study.config import Config
+from yt_study.core.config import Config
 
 
 class TestConfig:

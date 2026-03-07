@@ -48,7 +48,7 @@ body:
     attributes:
       label: Version
       description: Output of `yt-study version`
-      placeholder: yt-study version 0.2.1
+      placeholder: yt-study version 0.2.2
     validations:
       required: true
   - type: input

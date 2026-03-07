@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
@@ -172,15 +173,26 @@ def process(
       [cyan]yt-study process "URL" -m gpt-4o[/cyan]
       [cyan]yt-study process batch_urls.txt -o ./course-notes[/cyan]
     """
-    # Ensure configuration exists
     ensure_setup()
 
     try:
-        # Lazy import for faster CLI startup
-        from .config import config
-        from .pipeline.orchestrator import PipelineOrchestrator
+        # Lazy imports for faster CLI startup
+        from rich.live import Live
+        from rich.table import Table
 
-        # Use config values as defaults, allow CLI overrides
+        from .core.config import config
+        from .core.pipeline import (
+            CorePipeline,
+            EventType,
+            PipelineEvent,
+            PipelineResult,
+            sanitize_filename,
+        )
+        from .core.youtube.metadata import get_playlist_info
+        from .core.youtube.parser import parse_youtube_url
+        from .core.youtube.playlist import extract_playlist_videos
+        from .ui.dashboard import PipelineDashboard
+
         selected_model = model or config.default_model
         selected_output = output or config.default_output_dir
         selected_languages = language or config.default_languages
@@ -191,24 +203,204 @@ def process(
             max_tokens if max_tokens is not None else config.max_tokens
         )
 
-        # Create orchestrator
-        orchestrator = PipelineOrchestrator(
-            model=selected_model,
-            output_dir=selected_output,
-            languages=selected_languages,
-            temperature=selected_temperature,
-            max_tokens=selected_max_tokens,
-        )
+        # Validate API key before launching UI
+        key_name = config.get_api_key_name_for_model(selected_model)
+        if key_name and not os.environ.get(key_name):
+            console.print(
+                f"\n[red bold]✗ Missing API Key for {selected_model}[/red bold]"
+            )
+            console.print(f"[yellow]Expected environment variable: {key_name}[/yellow]")
+            console.print("[dim]Run [cyan]yt-study setup[/cyan] to configure.[/dim]\n")
+            raise typer.Exit(code=1)
+
+        def _print_run_summary(
+            result: PipelineResult, dashboard: PipelineDashboard
+        ) -> None:
+            """Render a summary table after the Live display closes."""
+            if not result.total_count:
+                return
+            summary_table = Table(
+                title="📊 Processing Summary",
+                border_style="cyan",
+                show_header=True,
+                header_style="bold magenta",
+            )
+            summary_table.add_column("Status", justify="center")
+            summary_table.add_column("Video Title", style="dim")
+            for title in dashboard.recent_failures:
+                summary_table.add_row("[bold red]FAILED[/bold red]", title)
+            for title in dashboard.recent_completions:
+                summary_table.add_row("[green]SUCCESS[/green]", title)
+            console.print("\n")
+            console.print(summary_table)
+            console.print(
+                f"\n[bold]Total Completed:[/bold] "
+                f"{result.success_count}/{result.total_count}"
+            )
+            console.print("[dim]Check logs for detailed error reports.[/dim]\n")
+
+        class WorkerSlotManager:
+            """Manages worker slot assignment and release for concurrent processing."""
+
+            def __init__(self, concurrency: int):
+                """Initialize slot manager with available slots.
+
+                Args:
+                    concurrency: Number of concurrent worker slots.
+                """
+                self.available_slots: list[int] = list(range(concurrency))
+                self.video_slots: dict[str, int] = {}
+
+            def acquire_slot(self, video_id: str) -> int | None:
+                """Assign an available slot to a video.
+
+                Args:
+                    video_id: The video ID to assign a slot to.
+
+                Returns:
+                    The assigned slot index, or None if no slots available.
+                """
+                if self.available_slots:
+                    assigned = self.available_slots.pop(0)
+                    self.video_slots[video_id] = assigned
+                    return assigned
+                return None
+
+            def release_slot(self, video_id: str) -> int | None:
+                """Release a slot back to the pool.
+
+                Args:
+                    video_id: The video ID whose slot should be released.
+
+                Returns:
+                    The released slot index, or None if video had no slot.
+                """
+                released = self.video_slots.pop(video_id, None)
+                if released is not None:
+                    self.available_slots.append(released)
+                return released
+
+            def get_slot(self, video_id: str) -> int | None:
+                """Get the currently assigned slot for a video.
+
+                Args:
+                    video_id: The video ID to look up.
+
+                Returns:
+                    The assigned slot index, or None if not assigned.
+                """
+                return self.video_slots.get(video_id)
+
+        # Status message templates for different event types
+        STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
+            EventType.METADATA_START: lambda t, _: (
+                f"[yellow]{t}... (Metadata)[/yellow]"
+            ),
+            EventType.METADATA_FETCHED: lambda t, _: f"[cyan]{t}... (Fetched)[/cyan]",
+            EventType.TRANSCRIPT_FETCHING: lambda t, _: (
+                f"[cyan]📥 {t}... (Transcript)[/cyan]"
+            ),
+            EventType.GENERATION_START: lambda t, _: (
+                f"[cyan]🤖 {t}... (Generating)[/cyan]"
+            ),
+            EventType.CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
+            EventType.CHAPTER_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
+            ),
+        }
+
+        async def _run_single_url(single_url: str) -> None:
+            """Parse one URL and run the pipeline with a Rich dashboard."""
+            try:
+                parsed = parse_youtube_url(single_url)
+            except ValueError as e:
+                console.print(f"[red]Input Error: {e}[/red]")
+                return
+
+            if parsed.url_type == "video":
+                if not parsed.video_id:
+                    console.print("[red]Error: Could not extract video ID[/red]")
+                    return
+                video_ids = [parsed.video_id]
+                playlist_name = "Single Video"
+                out_dir = selected_output
+            else:  # playlist
+                if not parsed.playlist_id:
+                    console.print("[red]Error: Could not extract playlist ID[/red]")
+                    return
+                playlist_name, _ = await asyncio.to_thread(
+                    get_playlist_info, parsed.playlist_id
+                )
+                video_ids = await extract_playlist_videos(parsed.playlist_id)
+                out_dir = selected_output / sanitize_filename(playlist_name)
+                out_dir.mkdir(parents=True, exist_ok=True)
+
+            pipeline = CorePipeline(
+                model=selected_model,
+                output_dir=out_dir,
+                languages=selected_languages,
+                temperature=selected_temperature,
+                max_tokens=selected_max_tokens,
+            )
+            concurrency = min(len(video_ids), config.max_concurrent_videos)
+            dashboard = PipelineDashboard(
+                total_videos=len(video_ids),
+                concurrency=concurrency,
+                playlist_name=playlist_name,
+                model_name=selected_model,
+            )
+
+            # --- Event → Dashboard bridge ---
+            # Use WorkerSlotManager to track video-to-slot assignments
+            slot_manager = WorkerSlotManager(concurrency)
+
+            def on_event(event: PipelineEvent) -> None:
+                vid = event.video_id
+                title = (event.title or vid)[:40]
+                slot = slot_manager.get_slot(vid)
+
+                # Handle slot acquisition for new videos
+                if event.event_type == EventType.METADATA_START:
+                    assigned = slot_manager.acquire_slot(vid)
+                    if assigned is not None:
+                        slot = assigned
+                        status_fn = STATUS_MAP.get(event.event_type)
+                        if status_fn:
+                            dashboard.update_worker(assigned, status_fn(title, event))
+
+                # Handle standard status updates
+                elif event.event_type in STATUS_MAP and slot is not None:
+                    status_fn = STATUS_MAP[event.event_type]
+                    dashboard.update_worker(slot, status_fn(title, event))
+
+                # Handle completion/failure events (release slots)
+                elif event.event_type in (
+                    EventType.VIDEO_SUCCESS,
+                    EventType.VIDEO_FAILED,
+                ):
+                    released = slot_manager.release_slot(vid)
+                    if released is not None:
+                        dashboard.update_worker(released, "[dim]Idle[/dim]")
+
+                    if event.event_type == EventType.VIDEO_SUCCESS:
+                        dashboard.add_completion(event.title or vid)
+                    else:
+                        dashboard.add_failure(event.title or vid)
+
+            with Live(dashboard, refresh_per_second=10, console=console, screen=False):
+                result = await pipeline.run(video_ids, on_event=on_event)
+
+            _print_run_summary(result, dashboard)
 
         async def run_processing() -> None:
-            """Determine if input is URL or file and run pipeline."""
+            """Determine if input is URL or batch file and dispatch."""
             input_path = Path(url)
 
-            # Check if input is an existing file (Batch Mode)
             if input_path.exists() and input_path.is_file():
-                # Removed redundant panel print here since dashboard handles UI
+                # Batch Mode: read one URL per non-comment line
                 try:
-                    # Robust encoding handling and line splitting
                     content = input_path.read_text(encoding="utf-8")
                     urls = [
                         line.strip()
@@ -225,28 +417,23 @@ def process(
                     console.print("[yellow]⚠ Batch file is empty.[/yellow]")
                     return
 
-                # Removed: console.print(f"[dim]Found {len(urls)} URLs[/dim]\n")
-
                 for i, batch_url in enumerate(urls, 1):
-                    # Keep this rule as it separates batch items distinctly
                     console.rule(f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]")
-                    # Removed redundant URL print as dashboard shows title/status
                     try:
-                        await orchestrator.run(batch_url)
+                        await _run_single_url(batch_url)
                     except Exception as e:
                         console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
             else:
-                # Single URL Mode (Orchestrator handles Video vs Playlist detection)
-                await orchestrator.run(url)
+                await _run_single_url(url)
 
-        # Run pipeline
         asyncio.run(run_processing())
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
         raise typer.Exit(code=1) from None
+    except typer.Exit:
+        raise
     except Exception as e:
-        # Import Panel locally
         from rich.panel import Panel
 
         console.print(

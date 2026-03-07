@@ -16,5 +16,8 @@ nul
 drafts/
 .omc
 .claude
+
+# Generated content
+src/yt_study/output/
 coverage.xml
 htmlcov/

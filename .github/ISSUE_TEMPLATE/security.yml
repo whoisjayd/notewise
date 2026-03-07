@@ -59,7 +59,7 @@ body:
     attributes:
       label: Affected Versions
       description: Version/tag/commit range if known.
-      placeholder: <= v0.2.1
+      placeholder: <= v0.2.2
   - type: textarea
     id: mitigation
     attributes:
