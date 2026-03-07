@@ -2,7 +2,7 @@
 
 import pytest
 
-from yt_study.youtube.parser import (
+from yt_study.core.youtube.parser import (
     extract_playlist_id,
     extract_video_id,
     parse_youtube_url,

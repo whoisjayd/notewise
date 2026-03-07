@@ -4,10 +4,8 @@ import asyncio
 import logging
 
 from pytubefix import Playlist
-from rich.console import Console
 
 
-console = Console()
 logger = logging.getLogger(__name__)
 
 

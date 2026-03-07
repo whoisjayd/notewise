@@ -58,7 +58,8 @@ class TestConfigIO:
         mock_path = Path("dummy_path")
         with (
             patch(
-                "yt_study.setup_wizard.load_config", return_value={"OLD_KEY": "old_val"}
+                "yt_study.setup_wizard.load_config",
+                return_value={"OLD_KEY": "old_val"},
             ),
             patch("pathlib.Path.open", mock_open()) as mock_file,
             patch("yt_study.setup_wizard.get_config_path", return_value=mock_path),
@@ -179,7 +180,8 @@ class TestInteractiveFlow:
 
         with (
             patch(
-                "yt_study.setup_wizard.PROVIDER_CONFIG", {"gemini": {"name": "Google"}}
+                "yt_study.setup_wizard.PROVIDER_CONFIG",
+                {"gemini": {"name": "Google"}},
             ),
             patch("rich.prompt.Prompt.ask", return_value="1"),
         ):
@@ -228,7 +230,8 @@ class TestWizardOrchestration:
             ),
             patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
             patch(
-                "yt_study.setup_wizard.select_model", return_value="gemini/gemini-pro"
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
             ),
             patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
             patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
@@ -246,7 +249,10 @@ class TestWizardOrchestration:
     def test_run_setup_wizard_skip_existing(self):
         """Test skipping setup if config exists."""
         with (
-            patch("yt_study.setup_wizard.load_config", return_value={"exists": "true"}),
+            patch(
+                "yt_study.setup_wizard.load_config",
+                return_value={"exists": "true"},
+            ),
             patch("rich.prompt.Confirm.ask", return_value=False),
         ):  # Do not reconfigure
             config = run_setup_wizard(force=False)
