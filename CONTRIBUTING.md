@@ -1,201 +1,272 @@
 # Contributing to yt-study
 
-Thank you for contributing to `yt-study`.
+> Contributor workflow for local setup, quality checks, tests, docs, hooks, and PR expectations.
 
-This project values correctness, maintainability, and reproducible workflows.
-Please use this guide to keep contributions fast to review and safe to merge.
+---
 
-## Table of Contents
+## Principles
 
-- [Development Setup](#development-setup)
-- [Branch and Commit Workflow](#branch-and-commit-workflow)
-- [Local Development Commands](#local-development-commands)
-- [Pre-commit Hooks](#pre-commit-hooks)
-- [Code Quality Standards](#code-quality-standards)
-- [Testing Expectations](#testing-expectations)
-- [Documentation Expectations](#documentation-expectations)
-- [Submitting a Pull Request](#submitting-a-pull-request)
-- [Issue Reporting](#issue-reporting)
-- [Project Map](#project-map)
+- Keep behavior grounded in the current codebase.
+- Preserve the `core/` vs `ui/` separation.
+- Treat docs as product surface, not afterthought.
+- Add tests for behavior changes.
+- Prefer small, reviewable PRs.
 
-## Development Setup
+## Quick Start
 
-1. Fork and clone the repository.
+Clone the repository and initialize the wiki submodule:
 
 ```bash
 git clone https://github.com/whoisjayd/yt-study.git
 cd yt-study
+git submodule update --init --recursive
 ```
 
-2. Install dependencies and local package.
+Install dependencies:
 
 ```bash
-make dev-setup
+make sync
 ```
 
-3. Verify local environment.
-
-```bash
-make info
-```
-
-4. (Optional) Run setup wizard for local manual testing.
-
-```bash
-yt-study setup
-```
-
-## Branch and Commit Workflow
-
-- Create feature/fix branches from `main`.
-- Keep PRs scoped to one concern.
-- Prefer clear Conventional Commit style messages:
-  - `feat: ...`
-  - `fix: ...`
-  - `docs: ...`
-  - `chore: ...`
-- Commit messages are enforced as single-line by `commit-msg` hook.
-
-Examples:
-
-- `fix: handle transcript fallback when manual captions are unavailable`
-- `docs: expand README troubleshooting and FAQ`
-
-## Local Development Commands
-
-Core workflow:
-
-```bash
-make sync      # install locked dependencies
-make quick     # fast checks before small push
-make ci        # CI-equivalent local checks
-make all       # alias for ci
-```
-
-Full command list:
-
-```bash
-make help
-```
-
-## Pre-commit Hooks
-
-Install hooks once per clone:
+Install hooks:
 
 ```bash
 make hooks-install
 ```
 
-Run all hooks manually:
+Show tool versions:
 
 ```bash
-make hooks-run
+make info
 ```
 
-Run full quality gate + fast tests:
+## Daily Workflow
 
-```bash
-make pre-commit
-```
+| Command | Use it for |
+| --- | --- |
+| `make quick` | fast local validation |
+| `make ci` | CI-equivalent validation |
+| `make verify` | autofix + quality pass |
+| `make test-cov` | coverage run |
+| `make help` | full target list |
 
-Run quality checks only (includes dependency + security checks):
+## Branching and Commits
 
-```bash
-make check
-```
+- Branch from `main`.
+- Keep each branch focused on one concern.
+- Prefer conventional commit style:
+  - `feat: ...`
+  - `fix: ...`
+  - `docs: ...`
+  - `refactor: ...`
+  - `test: ...`
+  - `chore: ...`
 
-Run auto-fix quality checks + dependency/security checks:
+Commit-message enforcement:
 
-```bash
-make verify
-```
+- `conventional-pre-commit` validates the commit message format
+- `scripts/hooks/check-single-line-commit.sh` rejects multiline commit messages
 
-Direct tool commands (if needed):
+Examples:
 
-```bash
-uv run ruff format --check src/yt_study tests
-uv run ruff check src/yt_study tests
-uv run mypy src/yt_study
-uv run deptry src
-uv run bandit -c pyproject.toml -r src/yt_study --severity-level high
-uv run pytest tests -q
-```
+- `fix: preserve video id fallback when metadata title fetch fails`
+- `docs: polish wiki usage and troubleshooting guides`
 
-## Code Quality Standards
+---
 
-- Follow existing architecture and module boundaries.
-- Prefer explicit typing and keep MyPy strictness intact.
-- Keep functions small and behavior-focused.
-- Preserve async safety:
-  - Do not add blocking network I/O directly inside async paths.
-  - Use `asyncio.to_thread(...)` for blocking library calls.
-- Keep CLI behavior stable and user-friendly (`yt-study process`, `setup`, etc.).
-- Avoid adding noisy logging in hot paths.
+## Make Targets
+
+### Setup
+
+- `make sync`
+- `make install`
+- `make install-dev`
+- `make dev-setup`
+
+### Quality
+
+- `make format`
+- `make format-check`
+- `make lint`
+- `make lint-check`
+- `make type-check`
+- `make deps-check`
+- `make security`
+- `make check`
+- `make verify`
+- `make audit`
+
+### Testing
+
+- `make test`
+- `make test-fast`
+- `make test-cov`
+- `make test-watch`
+- `make test-failed`
+- `make test-verbose`
+
+### Hooks
+
+- `make hooks-install`
+- `make hooks-run`
+- `make pre-commit`
+
+### Build and publish
+
+- `make build`
+- `make publish`
+- `make publish-test`
+
+### Cleanup
+
+- `make clean`
+- `make clean-all`
+
+## Coding Standards
+
+### Architecture
+
+- `src/yt_study/core/` must remain UI-free.
+- Do not import Rich or console rendering into `core/`.
+- Keep blocking YouTube library calls off the event loop with `asyncio.to_thread(...)`.
+- Keep CLI concerns inside `src/yt_study/cli.py`.
+- Keep Rich dashboard concerns inside `src/yt_study/ui/dashboard.py`.
+
+### Configuration
+
+- `Config` lives in `src/yt_study/core/config.py`.
+- If you add a provider key to `Config.ALLOWED_KEYS`, also update:
+  - `Config.get_api_key_name_for_model()`
+  - `Config._sync_env_vars()`
+- Do not document unsupported config keys as user-configurable.
+
+### Pipeline
+
+- `CorePipeline` communicates progress through `PipelineEvent`.
+- UI layers turn events into dashboard and summary output.
+- Chapter-based saved output is handled directly in `CorePipeline._process_single_video()`.
+- Do not route saved pipeline chapter output through `generate_chapter_based_notes()`.
+
+### Docs
+
+- Update `README.md` for user-facing summary changes.
+- Update `wiki/` pages for detailed behavior, usage, or troubleshooting changes.
+- Update `CONTRIBUTING.md` when the contributor workflow changes.
+- Update `AGENTS.md` when the repo map or engineering rules change.
 
 ## Testing Expectations
 
-Before opening a PR:
-
-1. Add tests for behavior changes.
-2. Update tests for modified behavior or output contracts.
-3. Ensure `make ci` passes locally (includes deps/security checks).
-
-Guidelines:
-
-- Put tests under `tests/` mirroring source structure.
-- Prefer deterministic tests with clear assertions.
-- Include regression tests for bug fixes.
-
-## Documentation Expectations
-
-Update docs when behavior changes:
-
-- `README.md` for user-facing changes.
-- `wiki/*.md` for deeper guides and references.
-- `CONTRIBUTING.md` when development flow changes.
-- `.github/pull_request_template.md` if PR expectations change.
-
-## Submitting a Pull Request
-
-1. Run local checks:
+Run before opening a PR:
 
 ```bash
 make ci
 ```
 
-2. Fill in the PR template completely.
-3. Link related issues (`Closes #...` when applicable).
-4. Keep PR description practical:
-   - what changed
-   - why it changed
-   - risk/impact
-   - test coverage added/updated
+Test map:
 
-## Issue Reporting
+| Location | Focus |
+| --- | --- |
+| `tests/test_cli.py` | Typer command behavior |
+| `tests/test_config.py` | config parsing and env overrides |
+| `tests/test_setup_wizard.py` | wizard flow |
+| `tests/test_llm/` | provider and chunking behavior |
+| `tests/test_pipeline/` | orchestration and events |
+| `tests/test_youtube/` | parser, playlist, transcript, metadata |
+| `tests/test_ui.py` | dashboard rendering/state |
 
-Use the issue forms in GitHub for:
+Use deterministic tests. Network and provider interactions should be mocked.
 
-- bugs
-- features
-- docs
-- security (public, non-sensitive only)
+## Pre-commit and Hooks
 
-For sensitive security reports, follow `SECURITY.md` private disclosure process.
+The repo uses `.pre-commit-config.yaml` with:
 
-When filing bugs, include:
+- repo hygiene checks
+- Ruff format/lint
+- Bandit
+- conventional commit validation
+- local `mypy`
+- local `deptry`
+- local `pytest-fast` on `pre-push`
+- local `single-line-commit` on `commit-msg`
 
-1. Exact command used.
-2. Full sanitized error output/traceback.
-3. `yt-study version`, Python version, and OS.
-4. Relevant non-sensitive config values.
+Install once:
 
-## Project Map
+```bash
+make hooks-install
+```
 
-- `src/yt_study/cli.py`: Typer CLI entrypoint.
-- `src/yt_study/config.py`: runtime config loading and env mapping.
-- `src/yt_study/pipeline/`: orchestration and concurrency flow.
-- `src/yt_study/llm/`: provider integration and note generation logic.
-- `src/yt_study/youtube/`: parsing, metadata, transcripts, playlists.
-- `src/yt_study/ui/`: Rich live dashboard components.
-- `tests/`: unit/integration tests.
-- `.github/workflows/`: CI, PR gate, release, and labeling automation.
+Run manually:
+
+```bash
+make hooks-run
+```
+
+## Wiki and Documentation Workflow
+
+The `wiki/` directory is a Git submodule:
+
+```text
+path = wiki
+url = https://github.com/whoisjayd/yt-study.wiki.git
+```
+
+That means docs work can create changes in:
+
+- the parent repo, such as `README.md`, `CONTRIBUTING.md`, and `AGENTS.md`
+- the wiki submodule content inside `wiki/`
+
+Recommended workflow:
+
+1. update or initialize the submodule
+2. edit wiki pages inside `wiki/`
+3. verify links from `wiki/Home.md`
+4. check Git status both at repo root and inside `wiki/` if preparing commits manually
+
+## CI and Release Overview
+
+Current workflows:
+
+- `.github/workflows/ci-main.yml`
+  - format check
+  - lint check
+  - mypy type check
+  - pytest coverage on Python 3.12
+  - matrix tests on Ubuntu, Windows, and macOS for Python 3.10 to 3.12
+- `.github/workflows/pr-gate.yml`
+  - format check
+  - lint check
+  - type check
+  - unit tests
+- `.github/workflows/release.yml`
+  - reuses `ci-main.yml`
+  - builds distributions
+  - publishes to PyPI on `v*` tags
+  - creates a GitHub release
+
+## Pull Requests
+
+Before opening a PR:
+
+1. run `make ci`
+2. add or update tests
+3. update affected docs
+4. confirm the PR template still fits the change
+
+PR descriptions should clearly state:
+
+- what changed
+- why it changed
+- risks or migration concerns
+- how it was tested
+
+For linked issues:
+
+```text
+Closes #123
+```
+
+## Issues and Security Reports
+
+Use the issue forms in `.github/ISSUE_TEMPLATE/` for bugs, features, docs, and non-sensitive security topics.
+
+For private vulnerability reports, follow [SECURITY.md](SECURITY.md) and do not open a public issue.

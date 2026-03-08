@@ -5,7 +5,6 @@
 [![PyPI](https://badge.fury.io/py/yt-study.svg)](https://badge.fury.io/py/yt-study)
 [![Python](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![CI](https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml/badge.svg)](https://github.com/whoisjayd/yt-study/actions/workflows/ci-main.yml)
-[![PR Gate](https://github.com/whoisjayd/yt-study/actions/workflows/pr-gate.yml/badge.svg)](https://github.com/whoisjayd/yt-study/actions/workflows/pr-gate.yml)
 [![Coverage](https://codecov.io/gh/whoisjayd/yt-study/branch/main/graph/badge.svg)](https://codecov.io/gh/whoisjayd/yt-study)
 [![Ruff](https://img.shields.io/badge/lint-ruff-46a758)](https://github.com/astral-sh/ruff)
 [![Mypy](https://img.shields.io/badge/types-mypy-blue)](https://mypy-lang.org/)
@@ -13,89 +12,67 @@
 
 ### Turn YouTube learning into structured study material.
 
-Convert videos, playlists, and URL batches into clean Markdown notes with chapter awareness, transcript fallback logic, and LLM-powered organization.
+Convert videos, playlists, and URL batches into clean Markdown notes with chapter-aware output, transcript fallback logic, and LLM-powered organization.
 
-[Quick Start](#quick-start) • [Features](#features) • [How-It-Works](#how-it-works) • [Configuration](#configuration) • [Contributing](#contributing)
+[Quick Start](#quick-start) • [Features](#features) • [How It Works](#how-it-works) • [Configuration](#configuration) • [Documentation](#documentation) • [Contributing](#contributing)
 
 </div>
 
 ## At A Glance
 
-| Category      | Details                                                         |
-| ------------- | --------------------------------------------------------------- |
-| Primary Use   | Generate reusable study notes from YouTube                      |
-| Inputs        | Single video URL, playlist URL, `urls.txt` batch file           |
-| Output        | Markdown notes (single file or chapter-based files)             |
-| Core Stack    | Python, Typer, Rich, LiteLLM, youtube-transcript-api, pytubefix |
-| Runtime Style | Async orchestration with concurrent playlist workers            |
-| Quality       | Tests, Ruff, MyPy, CI workflows                                 |
+| Category | Details |
+| --- | --- |
+| Inputs | Single video URL, playlist URL, or text file with one URL per line |
+| Output | Markdown notes as one file per video or one file per chapter |
+| Runtime | Async pipeline with concurrency-limited video workers |
+| Core Stack | Python, Typer, Rich, LiteLLM, youtube-transcript-api, pytubefix |
+| Config Path | `~/.yt-study/config.env` |
+| Quality | Pytest, Ruff, MyPy, Bandit, Deptry, GitHub Actions |
 
-## Documentation Map
+## Why yt-study?
 
-Use the wiki for detailed guides:
+Video is useful for learning but weak for review. It is slow to scan, hard to search, and awkward to turn into reusable study assets. `yt-study` closes that gap by converting YouTube content into Markdown you can revisit, search, annotate, version, and move into tools like Obsidian or Notion.
 
-- [Wiki Home](https://github.com/whoisjayd/yt-study/wiki)
-- [Installation Guide](https://github.com/whoisjayd/yt-study/wiki/Installation)
-- [Usage Guide](https://github.com/whoisjayd/yt-study/wiki/Usage)
-- [Configuration Reference](https://github.com/whoisjayd/yt-study/wiki/Configuration)
-- [Architecture](https://github.com/whoisjayd/yt-study/wiki/Architecture)
-- [FAQ](https://github.com/whoisjayd/yt-study/wiki/FAQ)
+Design priorities:
 
-## Vision
-
-Most high-quality educational content is now video-first, but video is a weak medium for revision:
-
-- Slow to scan.
-- Hard to search deeply.
-- Difficult to convert into repeatable study systems.
-
-`yt-study` exists to close that gap.
-
-The long-term vision is to make long-form video learning operational: not just consumable once, but reusable as a durable knowledge asset.
-Instead of repeatedly scrubbing timelines, you get structured notes that can be reviewed, annotated, shared, and versioned.
-
-Design principles:
-
-1. **Fidelity over generic summarization**
-   Preserve critical terminology, workflow steps, and technical context.
-2. **Low-friction daily usage**
-   One command flow for setup, processing, and iteration.
-3. **Scalable processing**
-   Handle long transcripts and multi-video queues with concurrency.
-4. **Reliability under real-world conditions**
-   Fallbacks, retries, and strict engineering standards over demo-only flows.
+1. Fidelity over shallow summarization
+2. Low-friction daily usage
+3. Strong fallback behavior for real-world transcript issues
+4. Reliable processing for long videos and playlists
 
 ## Features
 
 ### Content Ingestion
 
-- Supports video URLs, playlist URLs, and batch files (`yt-study process urls.txt`).
-- Parses common YouTube formats: `watch`, `youtu.be`, `embed`, `shorts`, and playlist links.
+- Accepts single video URLs, playlist URLs, and batch files.
+- Supports common YouTube URL forms including `watch`, `youtu.be`, `embed`, and `shorts`.
+- Expands playlists into per-video jobs automatically.
 
 ### Transcript Reliability
 
-- Prioritizes manual transcripts in preferred language.
-- Falls back to auto-generated transcripts.
-- Can select other languages and translate when appropriate.
-- Includes retry behavior and IP-block detection paths.
+- Prefers manual captions in the requested language list.
+- Falls back to generated captions when needed.
+- Can use other available languages and translate to English when possible.
+- Retries transient failures and surfaces IP-block cases clearly.
 
-### Note Generation Quality
+### Note Generation
 
-- Uses chapter-based note generation for long standalone videos with chapters.
-- Uses chunked generation with overlap for large transcript contexts.
-- Outputs clean Markdown suitable for Obsidian, Notion import, Git docs, and revision sets.
+- Uses chapter-based generation for long videos with chapters.
+- Uses transcript chunking plus overlap for large contexts.
+- Produces Markdown suitable for notes repos, internal docs, or study vaults.
 
-### Pipeline + UX
+### Terminal Experience
 
-- Async orchestration for better throughput.
-- Concurrent worker processing for playlists.
-- Rich live dashboard for status, worker activity, and run summary.
+- Rich live dashboard for active worker status and total progress.
+- End-of-run summary for successes and failures.
+- Batch mode support for repeated study queues.
 
 ### Engineering Quality
 
-- Strict typing with MyPy.
-- Formatting/linting with Ruff.
-- Automated validation through CI and PR gate workflows.
+- Strict-ish typing via MyPy
+- Formatting and linting via Ruff
+- Security and dependency checks
+- Cross-platform CI matrix
 
 ## Quick Start
 
@@ -105,10 +82,16 @@ Design principles:
 pip install yt-study
 ```
 
-### 2. First-Time Setup
+### 2. Run First-Time Setup
 
 ```bash
 yt-study setup
+```
+
+This creates:
+
+```text
+~/.yt-study/config.env
 ```
 
 ### 3. Process Content
@@ -131,164 +114,190 @@ Batch file:
 yt-study process urls.txt
 ```
 
-### 4. Useful CLI Commands
+### 4. Useful Commands
 
 ```bash
 yt-study --help
+yt-study setup --force
 yt-study config-path
 yt-study version
+```
+
+## Command Reference
+
+Main command:
+
+```bash
+yt-study process [OPTIONS] URL_OR_FILE
+```
+
+Supported options:
+
+```bash
+--model / -m
+--output / -o
+--language / -l
+--temperature / -t
+--max-tokens / -k
+```
+
+Examples:
+
+```bash
+yt-study process "URL" -m gemini/gemini-2.0-flash
+yt-study process "URL" -o ./course-notes
+yt-study process "URL" -l hi -l en
+yt-study process "URL" -t 0.4 -k 2500
 ```
 
 ## How It Works
 
 ```text
-Input URL/File
-  -> URL parsing (video/playlist detection)
-  -> metadata + transcript retrieval
-  -> generation strategy selection
-     - chapter mode (long standalone video + chapters)
-     - chunked mode (large transcript)
-  -> LLM generation (provider/model from config)
+Input URL or batch file
+  -> URL parsing
+  -> metadata fetch (title, duration, chapters)
+  -> transcript fetch with fallback logic
+  -> strategy selection
+     - chapter mode for long videos with chapters
+     - chunked mode for everything else
+  -> LLM generation
   -> Markdown write to output directory
 ```
 
-## Command Reference
+Chapter mode activates when:
 
-```bash
-yt-study setup                # interactive first-run configuration
-yt-study process "URL"        # process a single video or playlist URL
-yt-study process urls.txt     # process a text file of URLs
-yt-study config-path          # show ~/.yt-study/config.env location
-yt-study version              # print installed CLI version
-yt-study --help               # full command/options help
-```
+- duration is greater than `3600` seconds
+- chapters are available
 
-## Usage Patterns
+Otherwise the transcript flows through the chunker in `core/llm/generator.py`.
 
-### Course Playlist Capture
+## Output Layout
 
-Use `yt-study` after finishing a lecture playlist to convert each session into searchable notes.
-
-### Research Queue
-
-Maintain `urls.txt` as a personal watch-and-learn queue and generate notes in batches.
-
-### Team Knowledge Sync
-
-Run on shared technical videos and commit generated Markdown into an internal docs repo.
-
-## Troubleshooting
-
-### YouTube IP Block Detected
-
-When YouTube rate-limits your IP, transcript/metadata requests can fail.
-
-Try:
-
-1. Wait and retry later.
-2. Reduce `MAX_CONCURRENT_VIDEOS` in `~/.yt-study/config.env` (for example `1` or `2`).
-3. Retry from a different network/IP.
-
-### Missing API Key For Model
-
-If the selected model is missing its provider key, processing will stop early.
-
-Fix:
-
-1. Run `yt-study setup` and reconfigure the provider/model.
-2. Verify expected key in `~/.yt-study/config.env`.
-3. Use `yt-study config-path` to confirm the active config location.
-
-### Transcript Not Available
-
-Some videos have disabled transcripts or no usable subtitles.
-
-What to try:
-
-1. Use `-l en` or provide preferred languages with `-l`.
-2. Confirm the video has captions available on YouTube.
-3. Try another video if captions are disabled by the creator.
-
-### Processing Fails For Some Playlist Items
-
-Large playlists can have mixed availability (private/deleted/restricted videos).
-
-What happens:
-
-- `yt-study` continues processing and shows failed items in summary.
-
-## FAQ
-
-### Is yt-study free?
-
-The CLI is open-source. LLM provider usage may cost money depending on your API plan.
-
-### Which model should I start with?
-
-Start with a fast model from your preferred provider, then move to higher-quality models for final notes.
-
-### Does yt-study support batch processing?
-
-Yes. Provide a text file with one URL per line:
-
-```bash
-yt-study process urls.txt
-```
-
-### Where are logs stored?
-
-Session log files are written to:
-
-- `~/.yt-study/logs/`
-
-If home is not writable, logs fall back to a local `./logs` directory.
-
-### Where can I read extended docs?
-
-Use the wiki pages linked in [Documentation Map](#documentation-map), including [FAQ](https://github.com/whoisjayd/yt-study/wiki/FAQ).
-
-## Configuration
-
-Config file location:
-
-- `~/.yt-study/config.env`
-
-Common settings:
-
-- `MODEL` (example: `gemini/gemini-2.5-pro`)
-- `MAX_CONCURRENT_VIDEOS` (default: `5`)
-- Provider keys such as `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`
-- Generation options including `temperature` and token controls
-
-Configuration loading behavior:
-
-- Reads `~/.yt-study/config.env` first.
-- Applies environment variable overrides after file load.
-- Syncs provider API keys into process environment for downstream SDK usage.
-
-Full reference: [Configuration Wiki](https://github.com/whoisjayd/yt-study/wiki/Configuration)
-
-## Output Organization
-
-Typical output shape:
+Single-file output:
 
 ```text
 output/
-  Video Title/
-    Video Title.md
-  Long Video With Chapters/
+  My Awesome Video.md
+```
+
+Chapter-based output:
+
+```text
+output/
+  My Awesome Video/
     01_Intro.md
-    02_Core Concept.md
+    02_Core Concepts.md
     03_Implementation.md
 ```
+
+Playlist output:
+
+```text
+output/
+  Sanitized Playlist Name/
+    Video One.md
+    Video Two.md
+    Long Video/
+      01_Intro.md
+      02_Deep Dive.md
+```
+
+Filenames are sanitized to remove filesystem-unsafe characters and trimmed to a safe length.
+
+## Configuration
+
+Runtime config location:
+
+```text
+~/.yt-study/config.env
+```
+
+Common supported keys:
+
+- `DEFAULT_MODEL`
+- `OUTPUT_DIR`
+- `MAX_CONCURRENT_VIDEOS`
+- `TEMPERATURE`
+- `MAX_TOKENS`
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GROQ_API_KEY`
+- `XAI_API_KEY`
+- `MISTRAL_API_KEY`
+
+Config behavior:
+
+- loads `~/.yt-study/config.env`
+- applies environment variable overrides
+- syncs supported provider keys into `os.environ` for LiteLLM
+
+Important:
+
+- the repository root `.env` is not used by the runtime
+- `.env.example` is only a reference for what belongs in `~/.yt-study/config.env`
+
+## Troubleshooting
+
+### Missing API key for selected model
+
+Run:
+
+```bash
+yt-study setup --force
+```
+
+Then verify the matching provider key exists in `~/.yt-study/config.env`.
+
+### Transcript unavailable
+
+Try:
+
+1. `-l en` or your preferred language order
+2. verifying captions exist on YouTube
+3. retrying another public video to isolate the issue
+
+### YouTube IP block or rate limiting
+
+Try:
+
+1. waiting and retrying later
+2. lowering `MAX_CONCURRENT_VIDEOS`
+3. retrying from another network or IP
+
+### Windows Unicode console issues
+
+If Rich output fails in a legacy console, use Windows Terminal or UTF-8 mode:
+
+```powershell
+chcp 65001
+```
+
+More detail: [Troubleshooting Wiki](https://github.com/whoisjayd/yt-study/wiki/Troubleshooting)
+
+## Documentation
+
+Detailed docs live in the wiki:
+
+- [Wiki Home](https://github.com/whoisjayd/yt-study/wiki)
+- [Installation Guide](https://github.com/whoisjayd/yt-study/wiki/Installation)
+- [Usage Guide](https://github.com/whoisjayd/yt-study/wiki/Usage)
+- [Configuration Reference](https://github.com/whoisjayd/yt-study/wiki/Configuration)
+- [Architecture](https://github.com/whoisjayd/yt-study/wiki/Architecture)
+- [Development Guide](https://github.com/whoisjayd/yt-study/wiki/Development)
+- [Troubleshooting](https://github.com/whoisjayd/yt-study/wiki/Troubleshooting)
+- [FAQ](https://github.com/whoisjayd/yt-study/wiki/FAQ)
 
 ## Developer Experience
 
 ```bash
-make sync      # install locked dependencies
-make ci        # CI-equivalent checks
-make all       # local full pass (with autofix)
-make help      # list all make targets
+make sync
+make quick
+make ci
+make all
+make hooks-install
+make test-cov
+make help
 ```
 
 Project layout:
@@ -296,13 +305,17 @@ Project layout:
 ```text
 src/yt_study/
   cli.py
-  config.py
   setup_wizard.py
-  llm/
-  pipeline/
-  prompts/
+  core/
+    config.py
+    pipeline.py
+    llm/
+    prompts/
+    youtube/
   ui/
-  youtube/
+    dashboard.py
+tests/
+wiki/
 ```
 
 ## Contributing
@@ -310,6 +323,8 @@ src/yt_study/
 - [Contributing Guide](CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
+
+The wiki is maintained as a Git submodule, so documentation changes can affect both the parent repo and the `wiki/` submodule.
 
 ## License
 

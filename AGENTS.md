@@ -1,117 +1,463 @@
 # PROJECT KNOWLEDGE BASE
 
-**Generated:** 2026-01-30
-**Commit:** 52919bc
+**Updated:** 2026-03-08
 **Branch:** main
 
 ## OVERVIEW
 
-Python CLI tool converting YouTube videos/playlists into AI-powered study notes. Stack: Python 3.10+, Typer CLI, LiteLLM, Rich TUI, youtube-transcript-api, pytubefix. Build via hatchling, managed with uv.
+`yt-study` is a Python CLI that converts YouTube videos, playlists, and URL batches into Markdown study notes using LLMs.
 
-## STRUCTURE
+Core stack:
 
-```
+- Python 3.10+
+- Typer CLI
+- Rich TUI
+- LiteLLM
+- youtube-transcript-api
+- pytubefix
+- hatchling
+- uv
+
+Primary output styles:
+
+- single Markdown file per video
+- chapter-based Markdown output for long videos with chapters
+
+## REPOSITORY STRUCTURE
+
+```text
 yt-study/
-├── wiki/               # Documentation (submodule)
-├── src/yt_study/           # Main package
-│   ├── cli.py              # Entry point (Typer app)
-│   ├── config.py           # Config dataclass + env loading
-│   ├── setup_wizard.py     # Interactive first-run setup
-│   ├── llm/                # LLM integration
-│   │   ├── generator.py    # Chunking + note generation logic
-│   │   └── providers.py    # LiteLLM wrapper (acompletion)
-│   ├── pipeline/
-│   │   └── orchestrator.py # Main async pipeline (418 LOC, largest file)
-│   ├── prompts/            # System/user prompt templates
-│   │   ├── study_notes.py  # Standard chunked generation
-│   │   └── chapter_notes.py# Chapter-based generation
-│   ├── ui/
-│   │   └── dashboard.py    # Rich Live TUI with progress bars
-│   └── youtube/            # YouTube data fetching
-│       ├── parser.py       # URL parsing (video/playlist detection)
-│       ├── transcript.py   # Transcript fetch with language fallback
-│       ├── metadata.py     # Title, duration, chapters
-│       └── playlist.py     # Playlist video extraction
-├── tests/                  # pytest test suite
-│   ├── conftest.py         # Fixtures (sample_video_id, sample_playlist_id)
-│   └── test_*/             # Module-specific tests
-├── pyproject.toml          # Build config, dependencies, pytest options
-└── .github/workflows/      # CI (pytest on 3.10, 3.11, 3.12)
+├── .github/                    # CI, release, issue templates, PR template
+├── scripts/
+│   └── hooks/                  # Local Git hook scripts
+├── src/yt_study/
+│   ├── __init__.py             # Package version
+│   ├── cli.py                  # Typer app, logging, dashboard bridge
+│   ├── setup_wizard.py         # Interactive config writer
+│   ├── core/
+│   │   ├── config.py           # Runtime config dataclass + env sync
+│   │   ├── pipeline.py         # CorePipeline, PipelineEvent, EventType
+│   │   ├── llm/
+│   │   │   ├── generator.py    # Chunking + generation orchestration
+│   │   │   └── providers.py    # LiteLLM wrapper
+│   │   ├── prompts/
+│   │   │   ├── study_notes.py  # Standard generation prompts
+│   │   │   └── chapter_notes.py# Chapter generation prompts
+│   │   └── youtube/
+│   │       ├── parser.py       # URL parsing
+│   │       ├── metadata.py     # Title, duration, chapters, playlist info
+│   │       ├── transcript.py   # Transcript fetch + fallback logic
+│   │       └── playlist.py     # Playlist expansion with retries
+│   └── ui/
+│       └── dashboard.py        # Rich live dashboard state/rendering
+├── tests/                      # Pytest suite
+├── wiki/                       # Git submodule for project wiki
+├── Makefile                    # Cross-platform dev workflow
+├── pyproject.toml              # Packaging, tooling, pytest, mypy, ruff
+├── .pre-commit-config.yaml     # Hook configuration
+├── README.md                   # User-facing overview
+├── CONTRIBUTING.md             # Contributor workflow
+└── AGENTS.md                   # This file
 ```
 
-## WHERE TO LOOK
+## IMPORTANT FILES TO KNOW
 
-| Task | Location | Notes |
-|------|----------|-------|
-| Add CLI command | `cli.py` | Use `@app.command()` decorator |
-| Change LLM behavior | `llm/providers.py` | Uses `litellm.acompletion` |
-| Modify prompt templates | `prompts/*.py` | SYSTEM_PROMPT, CHUNK_GENERATION_PROMPT, etc. |
-| Adjust chunking logic | `llm/generator.py` | `_chunk_transcript()` method |
-| Add new LLM provider | `config.py` | Add to ALLOWED_KEYS, key_map in orchestrator |
-| Parse new URL format | `youtube/parser.py` | Add regex pattern |
-| Handle transcript edge cases | `youtube/transcript.py` | Language fallback, retry logic |
-| Customize TUI | `ui/dashboard.py` | `PipelineDashboard.__rich__()` |
-| Add/modify tests | `tests/` | Follow pytest async pattern |
+| Area | File | Why it matters |
+| --- | --- | --- |
+| CLI | `src/yt_study/cli.py` | Defines commands, logging, batch handling, dashboard bridge |
+| Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
+| Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
+| Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
+| LLM | `src/yt_study/core/llm/generator.py` | Chunking strategy and note generation |
+| Provider | `src/yt_study/core/llm/providers.py` | LiteLLM async completion wrapper |
+| YouTube | `src/yt_study/core/youtube/transcript.py` | Transcript fallback and retry logic |
+| YouTube | `src/yt_study/core/youtube/metadata.py` | Duration/title/chapters/playlist info |
+| YouTube | `src/yt_study/core/youtube/playlist.py` | Playlist ID expansion |
+| UI | `src/yt_study/ui/dashboard.py` | Rich dashboard rendering |
+| Tests | `tests/test_pipeline/test_core_pipeline.py` | Best reference for expected pipeline behavior |
+| Workflow | `Makefile` | Canonical local commands |
+| Hooks | `.pre-commit-config.yaml` | Actual enforced local checks |
+| CI | `.github/workflows/ci-main.yml` | Main validation and matrix jobs |
 
-## CODE MAP
+## CLI SURFACE
 
-| Symbol | Type | Location | Role |
-|--------|------|----------|------|
-| `app` | Typer | `cli.py:38` | CLI entry point |
-| `PipelineOrchestrator` | class | `pipeline/orchestrator.py:34` | Main processing coordinator |
-| `StudyMaterialGenerator` | class | `llm/generator.py:23` | Chunk + generate logic |
-| `LLMProvider` | class | `llm/providers.py:14` | LiteLLM abstraction |
-| `Config` | dataclass | `config.py:12` | Global singleton (`config`) |
-| `PipelineDashboard` | class | `ui/dashboard.py:25` | Rich Live TUI component |
-| `fetch_transcript` | async fn | `youtube/transcript.py:49` | Multi-language transcript fetch |
-| `parse_youtube_url` | fn | `youtube/parser.py:59` | URL → ParsedURL |
-
-## CONVENTIONS
-
-- **Async-first**: Use `async def` for I/O operations, wrap sync libs with `asyncio.to_thread()`
-- **Config pattern**: Single `Config` dataclass instance at module level (`config = Config()`)
-- **Lazy imports**: Heavy imports inside functions for faster CLI startup (see `cli.py:107`)
-- **LiteLLM model format**: Provider prefix required (`gemini/`, `anthropic/`, `groq/`, `xai/`, etc.)
-- **Error handling**: Custom exceptions (`TranscriptError`), retry with exponential backoff
-- **UI updates**: Pass `Progress` and `TaskID` through call stack, never create nested Progress bars
-
-## ANTI-PATTERNS (THIS PROJECT)
-
-- **DO NOT** create nested `rich.progress.Progress` bars - causes display corruption
-- **DO NOT** print to console during `Live` context - use `dashboard.update_worker()` instead
-- **NEVER** call blocking YouTube API directly in async context - use `asyncio.to_thread()`
-- **NEVER** add keys to `Config.ALLOWED_KEYS` without updating `_load_from_user_config()`
-- **AVOID** `logging.getLogger("LiteLLM")` calls in hot paths - already suppressed in `cli.py`
-
-## UNIQUE STYLES
-
-- **Filename sanitization**: `sanitize_filename()` in orchestrator removes `<>:"/\|?*`, limits to 100 chars
-- **Chapter detection**: Videos >1hr with chapters → separate notes per chapter
-- **Transcript fallback**: Manual → Auto-generated → Any language → Translate to English
-- **Chunk overlap**: 200 tokens overlap between chunks to preserve context
-- **Token counting**: Uses `litellm.token_counter()` for model-specific tokenization
-
-## COMMANDS
+Commands:
 
 ```bash
-# Development
-uv sync                          # Install dependencies
-uv run pytest                    # Run tests
-uv run yt-study --help           # CLI help
-uv run yt-study setup            # Configure API keys
-uv run yt-study process "URL"    # Generate notes
-
-# Build
-uv build                         # Create wheel/sdist in dist/
-
-# CI runs: uv sync --all-extras --dev && uv run pytest
+yt-study setup
+yt-study setup --force
+yt-study process "URL_OR_FILE"
+yt-study config-path
+yt-study version
 ```
 
-## NOTES
+`process` options:
 
-- **User config**: `~/.yt-study/config.env` (not `.env` in project root)
-- **Logs**: `~/.yt-study/logs/yt-study.log` (file handler at DEBUG level)
-- **Concurrency**: `config.max_concurrent_videos` (default 5) controls parallel processing
-- **Test fixtures**: `sample_video_id` = Rick Astley, `sample_playlist_id` = public test playlist
-- **Rich screen mode**: Playlist processing uses `screen=True` in `Live()` to prevent scroll artifacts
-- **pytubefix**: Fork of pytube with better maintenance, used for playlist extraction
+```bash
+--model / -m
+--output / -o
+--language / -l
+--temperature / -t
+--max-tokens / -k
+```
+
+Accepted input shapes for `process`:
+
+- single YouTube video URL
+- playlist URL
+- text file with one URL per line
+
+Batch-file behavior:
+
+- blank lines ignored
+- lines beginning with `#` ignored
+- each remaining line processed sequentially as its own input
+
+## CURRENT CONFIG MODEL
+
+Runtime config file:
+
+```text
+~/.yt-study/config.env
+```
+
+Load order:
+
+1. `~/.yt-study/config.env`
+2. environment variables override file values
+3. supported provider keys synced back into `os.environ`
+
+Supported runtime keys today:
+
+- `DEFAULT_MODEL`
+- `OUTPUT_DIR`
+- `MAX_CONCURRENT_VIDEOS`
+- `TEMPERATURE`
+- `MAX_TOKENS`
+- `GEMINI_API_KEY`
+- `OPENAI_API_KEY`
+- `ANTHROPIC_API_KEY`
+- `GROQ_API_KEY`
+- `XAI_API_KEY`
+- `MISTRAL_API_KEY`
+
+Important distinction:
+
+- `default_languages`, `chunk_size`, `chunk_overlap`, and `chapter_generation_min_duration` exist as code defaults in `Config`
+- they are not currently first-class `config.env` keys loaded by `Config._load_from_user_config()`
+
+Provider mapping implemented in `Config.get_api_key_name_for_model()`:
+
+| Model family | Required env key |
+| --- | --- |
+| `gemini`, `vertex` | `GEMINI_API_KEY` |
+| `gpt`, `openai` | `OPENAI_API_KEY` |
+| `claude`, `anthropic` | `ANTHROPIC_API_KEY` |
+| `groq` | `GROQ_API_KEY` |
+| `grok`, `xai` | `XAI_API_KEY` |
+| `mistral` | `MISTRAL_API_KEY` |
+
+## ARCHITECTURE RULES
+
+### 1. `core/` stays UI-free
+
+Do not import Rich, `Console`, or dashboard components into `src/yt_study/core/`.
+
+### 2. Blocking YouTube calls stay off the event loop
+
+Use `asyncio.to_thread(...)` for `pytubefix` and `youtube-transcript-api` work.
+
+### 3. Progress moves through `PipelineEvent`
+
+The pipeline emits events and the CLI converts them into UI updates.
+
+### 4. Chapter output is orchestrated in `CorePipeline`
+
+Do not wire persisted chapter output through `generate_chapter_based_notes()` for the main pipeline path.
+
+### 5. Config provider support is a 3-part contract
+
+If you add a provider key, update all of:
+
+- `Config.ALLOWED_KEYS`
+- `Config.get_api_key_name_for_model()`
+- `Config._sync_env_vars()`
+
+## PIPELINE EVENT MODEL
+
+Event enum: `src/yt_study/core/pipeline.py`
+
+- `PIPELINE_START`
+- `METADATA_START`
+- `METADATA_FETCHED`
+- `TRANSCRIPT_FETCHING`
+- `TRANSCRIPT_FETCHED`
+- `GENERATION_START`
+- `CHUNK_GENERATING`
+- `CHAPTER_GENERATING`
+- `GENERATION_COMPLETE`
+- `VIDEO_SUCCESS`
+- `VIDEO_FAILED`
+- `PIPELINE_COMPLETE`
+
+Single-video event flow:
+
+```text
+PIPELINE_START
+  -> METADATA_START
+  -> METADATA_FETCHED
+  -> TRANSCRIPT_FETCHING
+  -> TRANSCRIPT_FETCHED
+  -> GENERATION_START or CHAPTER_GENERATING x N
+  -> GENERATION_COMPLETE
+  -> VIDEO_SUCCESS
+PIPELINE_COMPLETE
+```
+
+Failure path:
+
+```text
+... -> VIDEO_FAILED -> PIPELINE_COMPLETE
+```
+
+Pipeline-level events use an empty `video_id` sentinel.
+
+## GENERATION LOGIC
+
+### Standard path
+
+`StudyMaterialGenerator.generate_study_notes()`:
+
+1. count tokens
+2. chunk transcript when needed
+3. generate per-chunk notes
+4. combine chunk notes into one final document
+
+Single-chunk fast path:
+
+- uses `get_single_pass_prompt(...)`
+- skips the combine call
+
+### Chapter path
+
+Activated when:
+
+- video duration is greater than `config.chapter_generation_min_duration` (`3600`)
+- chapters are available
+
+Output path:
+
+```text
+{output_dir}/{safe_video_title}/{i:02d}_{safe_chapter}.md
+```
+
+### Chunking algorithm
+
+Priority order:
+
+1. sentence boundaries
+2. newline boundaries
+3. space boundaries
+4. hard split by character limit
+
+Defaults:
+
+- `chunk_size = 4000`
+- `chunk_overlap = 200`
+
+Token counting:
+
+- `litellm.token_counter(...)`
+- fallback to `len(text) // 4`
+
+## YOUTUBE RETRIEVAL RULES
+
+### URL parser
+
+Supported:
+
+- watch URLs
+- `youtu.be`
+- `embed`
+- `shorts`
+- playlist URLs
+- watch URLs containing `list=...`
+
+### Transcript priority
+
+`fetch_transcript()` tries:
+
+1. manual transcript in preferred languages
+2. generated transcript in preferred languages
+3. manual transcript in any language
+4. any transcript, translated to English if possible
+
+### Retry behavior
+
+- transcript fetch retries transient failures up to 3 times
+- playlist extraction retries up to 3 times
+- backoff uses `2**attempt`
+
+### IP block handling
+
+`YouTubeIPBlockError` is surfaced when YouTube blocks requests. The pipeline records a failure and continues with other videos.
+
+## OUTPUT RULES
+
+Filename sanitization:
+
+- strips `<>:"/\\|?*`
+- collapses whitespace
+- trims to 100 chars
+- returns `untitled` for empty or dot-only names
+
+Standard output:
+
+```text
+output/
+  Video Title.md
+```
+
+Playlist output:
+
+```text
+output/
+  Playlist Name/
+    Video One.md
+    Long Video/
+      01_Intro.md
+```
+
+## LOGGING
+
+Configured in `src/yt_study/cli.py`.
+
+- LiteLLM logging suppressed early
+- session logs go to `~/.yt-study/logs`
+- fallback to `./logs` if the home directory is unavailable
+- console only shows warning-level output and higher
+
+## TEST MAP
+
+| Test file | Focus |
+| --- | --- |
+| `tests/test_cli.py` | Typer command behavior, flags, config-path, setup |
+| `tests/test_config.py` | env/file loading and validation |
+| `tests/test_setup_wizard.py` | setup wizard prompts and save/load behavior |
+| `tests/test_ui.py` | dashboard state and render output |
+| `tests/test_llm/test_generator.py` | chunking and generation calls |
+| `tests/test_llm/test_providers.py` | LiteLLM wrapper behavior |
+| `tests/test_pipeline/test_core_pipeline.py` | event flow, output creation, chapter path |
+| `tests/test_youtube/test_parser.py` | URL parsing |
+| `tests/test_youtube/test_transcript.py` | transcript fallback and retry logic |
+| `tests/test_youtube/test_metadata.py` | metadata extraction |
+| `tests/test_youtube/test_playlist.py` | playlist extraction retries |
+
+## DEVELOPMENT COMMANDS
+
+Canonical commands come from `Makefile`.
+
+Setup:
+
+```bash
+make sync
+make install
+make install-dev
+make dev-setup
+```
+
+Quality:
+
+```bash
+make format
+make format-check
+make lint
+make lint-check
+make type-check
+make deps-check
+make security
+make check
+make verify
+```
+
+Testing:
+
+```bash
+make test
+make test-fast
+make test-cov
+make test-watch
+make test-failed
+make test-verbose
+```
+
+Hooks:
+
+```bash
+make hooks-install
+make hooks-run
+make pre-commit
+```
+
+Build/release:
+
+```bash
+make build
+make publish
+make publish-test
+```
+
+## HOOKS AND CI
+
+Pre-commit hooks include:
+
+- repo hygiene checks
+- Ruff format/lint
+- Bandit
+- conventional commit validation
+- single-line commit enforcement
+- mypy
+- deptry
+- pytest on pre-push
+
+GitHub workflows:
+
+- `ci-main.yml`: format, lint, mypy, coverage, cross-platform test matrix
+- `pr-gate.yml`: PR checks
+- `release.yml`: validate, build, publish to PyPI, create GitHub release
+
+## WIKI AND DOCS WORKFLOW
+
+The `wiki/` directory is a Git submodule.
+
+Implications:
+
+- docs updates can touch both parent-repo files and submodule content
+- new wiki pages must be linked from `wiki/Home.md`
+- README and wiki should stay aligned on commands, config keys, and output behavior
+
+When behavior changes:
+
+- update `README.md` for user-facing summary changes
+- update `wiki/` for detailed reference pages
+- update `CONTRIBUTING.md` for workflow changes
+- update this file when the repo map or engineering rules change
+
+## KNOWN GOTCHAS
+
+- Do not document repo-root `.env` as the runtime config source.
+- Do not claim unsupported provider env keys are wired unless `Config` actually supports them.
+- `yt-study --help` or other Rich-heavy output can hit Unicode issues on legacy Windows consoles; prefer Windows Terminal or UTF-8 mode when documenting support paths.
+- Avoid nested Rich progress bars; the current dashboard uses one overall bar plus worker status rows.
+
+## QUICK DECISION GUIDE
+
+If asked to change...
+
+- CLI behavior: start with `src/yt_study/cli.py`
+- setup/config flow: inspect `setup_wizard.py` and `core/config.py`
+- note generation: inspect `core/llm/generator.py` and `core/prompts/`
+- transcript issues: inspect `core/youtube/transcript.py`
+- playlist expansion: inspect `core/youtube/playlist.py`
+- dashboard rendering: inspect `ui/dashboard.py`
+- contributor workflow/docs: inspect `Makefile`, `.pre-commit-config.yaml`, `.github/workflows/`, `CONTRIBUTING.md`, and `wiki/`
