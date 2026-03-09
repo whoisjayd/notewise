@@ -8,11 +8,11 @@ This document describes the internal structure of `yt-study` for contributors wh
 
 The code is split into three main layers:
 
-| Layer | Package | Role |
-|---|---|---|
-| CLI | `yt_study/cli.py` | Parses flags, owns Rich dashboard / headless printing, launches pipeline |
-| Core | `yt_study/core/` | All business logic — YouTube retrieval, LLM generation, orchestration |
-| UI | `yt_study/ui/` | Rich live-dashboard rendering helpers |
+| Layer | Package           | Role                                                                     |
+| ----- | ----------------- | ------------------------------------------------------------------------ |
+| CLI   | `yt_study/cli.py` | Parses flags, owns Rich dashboard / headless printing, launches pipeline |
+| Core  | `yt_study/core/`  | All business logic — YouTube retrieval, LLM generation, orchestration    |
+| UI    | `yt_study/ui/`    | Rich live-dashboard rendering helpers                                    |
 
 `core/` is UI-free by design; it never imports Rich or anything from `ui/`.
 
