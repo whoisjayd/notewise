@@ -85,8 +85,8 @@ def sanitize_filename(name: str) -> str:
     Handles all known cross-platform constraints:
     - Strips characters forbidden on Windows and POSIX (<>:"/\\|?* and NUL)
     - Removes ASCII control characters (0x00-0x1F, 0x7F)
-    - Renames Windows reserved device names (CON, NUL, COM1…COM9, LPT1…LPT9)
-    - Strips trailing dots and spaces (illegal on Windows)
+    - Renames Windows reserved device names (CON, NUL, COM1–COM9, LPT1–LPT9)
+    - Strips trailing dots and spaces (illegal on Windows; leading dots are kept)
     - Collapses internal whitespace to a single space
     - Trims to 100 characters
     - Returns "untitled" for empty or dot-only results
@@ -101,8 +101,10 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "", name)
     # Collapse whitespace
     name = re.sub(r"\s+", " ", name)
-    # Strip leading/trailing spaces and dots (trailing dot illegal on Windows)
-    name = name.strip(" .")
+    # Strip surrounding whitespace; strip only trailing dots (trailing dot is
+    # illegal on Windows; leading dots like ".env" are valid)
+    name = name.strip()
+    name = name.rstrip(".")
     # Truncate to 100 characters
     name = name[:100]
     # Reject empty or dot-only names
@@ -110,7 +112,7 @@ def sanitize_filename(name: str) -> str:
         return "untitled"
     # Reject Windows reserved device names (case-insensitive, with or without extension)
     _RESERVED = re.compile(
-        r"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)",
+        r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)",
         re.IGNORECASE,
     )
     if _RESERVED.match(name):
@@ -242,11 +244,21 @@ class CorePipeline:
                     )
                     if will_use_chapters:
                         chapter_dir = self.output_dir / safe_title
-                        already_done = chapter_dir.exists() and any(
-                            chapter_dir.glob("*.md")
+                        already_done = (
+                            chapter_dir.exists()
+                            and len(list(chapter_dir.glob("*.md"))) >= len(chapters)
+                            and (
+                                not self.quiz
+                                or (self.output_dir / f"{safe_title}_quiz.md").exists()
+                            )
                         )
                     else:
-                        already_done = (self.output_dir / f"{safe_title}.md").exists()
+                        already_done = (
+                            self.output_dir / f"{safe_title}.md"
+                        ).exists() and (
+                            not self.quiz
+                            or (self.output_dir / f"{safe_title}_quiz.md").exists()
+                        )
 
                     if already_done:
                         logger.info(f"Skipping already-processed video: {title}")

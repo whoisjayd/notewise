@@ -265,6 +265,8 @@ class StudyMaterialGenerator:
         logger.info(
             f"Chapter '{chapter_title[:40]}': combining {len(chunk_notes)} parts..."
         )
+        if len(chunk_notes) == 1:
+            return chunk_notes[0]
         return await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
             user_prompt=get_combine_prompt(chunk_notes),

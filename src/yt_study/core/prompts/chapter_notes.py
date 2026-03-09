@@ -7,7 +7,9 @@ Create an in-depth, detailed study guide for this specific chapter:
 Chapter Title: {chapter_title}
 
 Transcript:
+<transcript>
 {transcript_chunk}
+</transcript>
 
 Requirements:
 1. **Deep Dive**: Provide a thorough, granular explanation of the chapter's topic.

@@ -52,6 +52,12 @@ def test_sanitize_filename_trailing_dots_removed():
     assert sanitize_filename("...") == "untitled"
 
 
+def test_sanitize_filename_preserves_leading_dot():
+    """Leading dots (e.g. .env, .gitignore) are valid and must not be stripped."""
+    assert sanitize_filename(".env") == ".env"
+    assert sanitize_filename(".gitignore") == ".gitignore"
+
+
 def test_sanitize_filename_trailing_spaces_removed():
     """Trailing spaces are illegal on Windows and must be stripped."""
     assert sanitize_filename("filename   ") == "filename"
@@ -66,9 +72,13 @@ def test_sanitize_filename_windows_reserved_names():
         result_lower = sanitize_filename(reserved.lower())
         assert result_lower == f"_{reserved.lower()}"
 
-    for i in range(0, 10):
+    for i in range(1, 10):
         assert sanitize_filename(f"COM{i}") == f"_COM{i}"
         assert sanitize_filename(f"LPT{i}") == f"_LPT{i}"
+
+    # COM0 and LPT0 are NOT Windows reserved names
+    assert sanitize_filename("COM0") == "COM0"
+    assert sanitize_filename("LPT0") == "LPT0"
 
 
 def test_sanitize_filename_reserved_names_with_extension():

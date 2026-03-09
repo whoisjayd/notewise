@@ -338,9 +338,6 @@ def process(
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
-            EventType.VIDEO_SKIPPED: lambda t, _: (
-                f"[dim]⏭ {t} (Skipped — already processed)[/dim]"
-            ),
         }
 
         async def _run_single_url(single_url: str) -> None:
@@ -412,7 +409,7 @@ def process(
                         extra = f" [{event.chapter_number}/{event.total_chapters}]"
                     elif event.error:
                         extra = f": {event.error}"
-                    console.print(f"[{label}] {title}{extra}")
+                    console.print(f"{label}: {title}{extra}", markup=False)
 
                 result = await pipeline.run(video_ids, on_event=on_event_headless)
                 if result.total_count:

@@ -306,10 +306,12 @@ def test_process_no_ui_flag_runs_without_dashboard(
 ):
     """--no-ui skips PipelineDashboard and still runs the pipeline."""
     _, pipeline_instance = mock_pipeline
-    result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+    with patch("yt_study.ui.dashboard.PipelineDashboard") as mock_dashboard_cls:
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
     assert result.exit_code == 0
     pipeline_instance.run.assert_awaited_once()
+    mock_dashboard_cls.assert_not_called()
 
 
 def test_process_no_ui_prints_done_summary(

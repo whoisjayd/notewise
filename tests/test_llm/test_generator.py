@@ -164,14 +164,14 @@ class TestStudyMaterialGenerator:
 
     @pytest.mark.asyncio
     async def test_generate_single_chapter_oversized_single_chunk(self, generator):
-        """Even when oversized but chunker returns 1 chunk, no combine call is made."""
+        """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
             patch("yt_study.core.llm.generator.token_counter", return_value=9999),
         ):
             await generator.generate_single_chapter_notes("Ch1", "big text")
-        # 1 chunk call + 1 combine = 2 calls (chunked path always combines)
-        assert generator.provider.generate.call_count == 2
+        # 1 chunk call only — combine is skipped when there is a single chunk
+        assert generator.provider.generate.call_count == 1
 
     @pytest.mark.asyncio
     async def test_generate_quiz_calls_provider_once(self, generator):

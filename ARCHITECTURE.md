@@ -37,7 +37,7 @@ flowchart TD
         K --> L{use chapters?}
         L -- yes --> M[generator: chapter-based notes]
         L -- no --> N[generator: standard notes]
-        M & N --> O[write .md file/s]
+        M & N --> O[write .md file(s)]
         O --> P{--quiz?}
         P -- yes --> Q[generator.generate_quiz → write _quiz.md]
         P -- no --> R([VIDEO_SUCCESS])
