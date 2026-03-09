@@ -1,37 +1,46 @@
 # Version control
+
 .git/
 .gitignore
 .gitmodules
 
 # Virtual environment (must be rebuilt inside the container)
+
 .venv/
 
 # Python artifacts
-__pycache__/
-*.py[cod]
-*.egg-info/
+
+**pycache**/
+_.py[cod]
+_.egg-info/
 dist/
 build/
 
 # Type / lint caches
+
 .mypy_cache/
 .ruff_cache/
 .pytest_cache/
 
 # Tests (not needed in the image)
+
 tests/
 
 # Editor / IDE
+
 .vscode/
 .idea/
 
 # CI / GitHub workflows
+
 .github/
 
 # Wiki submodule
+
 wiki/
 
 # Documentation (README.md is kept — pyproject.toml references it)
+
 ARCHITECTURE.md
 CONTRIBUTING.md
 CODE_OF_CONDUCT.md
@@ -39,12 +48,14 @@ SECURITY.md
 LICENSE
 
 # Dev tooling
+
 Makefile
 .pre-commit-config.yaml
 scripts/
 
 # Runtime output and local config
+
 logs/
 output/
-*.env
+\*.env
 .env
