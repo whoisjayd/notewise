@@ -321,6 +321,7 @@ wiki/
 ## Contributing
 
 - [Contributing Guide](CONTRIBUTING.md)
+- [Architecture Overview](ARCHITECTURE.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Security Policy](SECURITY.md)
 
