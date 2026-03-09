@@ -25,6 +25,8 @@ class Config:
     groq_api_key: str | None = None
     xai_api_key: str | None = None
     mistral_api_key: str | None = None
+    cohere_api_key: str | None = None
+    deepseek_api_key: str | None = None
 
     # LLM Generation Parameters
     temperature: float = 0.7
@@ -55,6 +57,8 @@ class Config:
             "GROQ_API_KEY",
             "XAI_API_KEY",
             "MISTRAL_API_KEY",
+            "COHERE_API_KEY",
+            "DEEPSEEK_API_KEY",
             "DEFAULT_MODEL",
             "OUTPUT_DIR",
             "MAX_CONCURRENT_VIDEOS",
@@ -77,6 +81,8 @@ class Config:
         self.groq_api_key = os.getenv("GROQ_API_KEY") or self.groq_api_key
         self.xai_api_key = os.getenv("XAI_API_KEY") or self.xai_api_key
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY") or self.mistral_api_key
+        self.cohere_api_key = os.getenv("COHERE_API_KEY") or self.cohere_api_key
+        self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or self.deepseek_api_key
 
         # Load default model and output dir from config
         env_model = os.getenv("DEFAULT_MODEL")
@@ -186,6 +192,10 @@ class Config:
             os.environ["XAI_API_KEY"] = self.xai_api_key
         if self.mistral_api_key:
             os.environ["MISTRAL_API_KEY"] = self.mistral_api_key
+        if self.cohere_api_key:
+            os.environ["COHERE_API_KEY"] = self.cohere_api_key
+        if self.deepseek_api_key:
+            os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
 
     def get_api_key_name_for_model(self, model: str) -> str | None:
         """Get the environment variable name for the API key required by a model."""
@@ -203,6 +213,10 @@ class Config:
             return "XAI_API_KEY"
         elif "mistral" in model_lower:
             return "MISTRAL_API_KEY"
+        elif "cohere" in model_lower or "command" in model_lower:
+            return "COHERE_API_KEY"
+        elif "deepseek" in model_lower:
+            return "DEEPSEEK_API_KEY"
 
         return None
 

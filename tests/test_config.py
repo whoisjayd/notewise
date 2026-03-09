@@ -68,6 +68,26 @@ class TestConfig:
             assert cfg.get_api_key_for_model("gpt-4") == "oa_key"
             assert cfg.get_api_key_for_model("unknown") is None
 
+    def test_cohere_deepseek_keys_load_from_env(self, monkeypatch):
+        """Cohere and DeepSeek API keys are loaded from environment variables."""
+        monkeypatch.setenv("COHERE_API_KEY", "co_key")
+        monkeypatch.setenv("DEEPSEEK_API_KEY", "ds_key")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.cohere_api_key == "co_key"
+            assert cfg.deepseek_api_key == "ds_key"
+
+    def test_cohere_deepseek_model_key_mapping(self):
+        """Cohere and DeepSeek model prefixes map to the right env var names."""
+        cfg = Config()
+        assert cfg.get_api_key_name_for_model("cohere/command-r") == "COHERE_API_KEY"
+        assert cfg.get_api_key_name_for_model("command-r-plus") == "COHERE_API_KEY"
+        assert (
+            cfg.get_api_key_name_for_model("deepseek/deepseek-chat")
+            == "DEEPSEEK_API_KEY"
+        )
+
     def test_temperature_out_of_range(self, monkeypatch):
         """TEMPERATURE > 1 falls back to 0.7."""
         monkeypatch.delenv("TEMPERATURE", raising=False)
