@@ -300,11 +300,9 @@ class StudyMaterialGenerator:
             logger.info(
                 f"{video_title}: Chapter {i}/{total_chapters}: {chapter_title[:30]}..."
             )
-            notes = await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            notes = await self.generate_single_chapter_notes(
+                chapter_title=chapter_title,
+                chapter_text=chapter_text,
             )
             chapter_notes[chapter_title] = notes
 

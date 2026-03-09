@@ -143,6 +143,20 @@ class TestStudyMaterialGenerator:
         assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_generate_chapter_notes_large_chapter_uses_chunking(self, generator):
+        """Large chapters are chunked via generate_single_chapter_notes."""
+        chapters = {"Big Chapter": "very long text"}
+        two_chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_chapter_based_notes(chapters)
+
+        # 2 chunk calls + 1 combine (single chapter) + 1 final combine = 4
+        assert generator.provider.generate.call_count == 4
+
+    @pytest.mark.asyncio
     async def test_generate_single_chapter_small(self, generator):
         """Single-pass path used when chapter fits within chunk_size."""
         with patch("yt_study.core.llm.generator.token_counter", return_value=50):

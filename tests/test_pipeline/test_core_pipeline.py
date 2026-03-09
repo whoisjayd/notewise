@@ -63,6 +63,15 @@ def test_sanitize_filename_trailing_spaces_removed():
     assert sanitize_filename("filename   ") == "filename"
 
 
+def test_sanitize_filename_reserved_name_stays_within_100_chars():
+    """Reserved names at the 100-char limit stay within 100 chars after prefixing."""
+    # "NUL." + 96 x "a" = 100 chars total; matches _RESERVED because of "NUL."
+    long_nul = "NUL." + "a" * 96
+    result = sanitize_filename(long_nul)
+    assert len(result) <= 100
+    assert result.startswith("_")
+
+
 def test_sanitize_filename_windows_reserved_names():
     """Windows reserved device names must be prefixed with underscore."""
     for reserved in ("CON", "PRN", "AUX", "NUL"):

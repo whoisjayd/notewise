@@ -119,7 +119,7 @@ def sanitize_filename(name: str) -> str:
         return "untitled"
     # Reject Windows reserved device names (case-insensitive, with or without extension)
     if _RESERVED.match(name):
-        name = f"_{name}"
+        name = f"_{name}"[:100]
     return name
 
 
@@ -248,10 +248,10 @@ class CorePipeline:
         Returns:
             True on success, False on failure.
         """
+        emit = self._emit_event(on_event)
         async with self.semaphore:
             try:
                 # --- Metadata Phase ---
-                emit = self._emit_event(on_event)
                 emit(EventType.METADATA_START, video_id)
 
                 # Fetch all metadata concurrently; title failure is non-fatal

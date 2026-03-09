@@ -192,3 +192,30 @@ class TestSplitTranscript:
 
         assert "Part 2" in result["Chapter 2"]
         assert "Part 2 End" in result["Chapter 2"]
+
+    def test_split_transcript_skips_empty_chapters(self):
+        """Chapters with no matching segments are omitted from the result."""
+        segments = [
+            MagicMock(text="Part 3", start=200, duration=10),
+        ]
+
+        transcript = VideoTranscript(
+            video_id="id",
+            segments=segments,
+            language="en",
+            language_code="en",
+            is_generated=False,
+        )
+
+        chapters = [
+            # This chapter has no segments in the 0-60s window
+            VideoChapter(title="Empty Chapter", start_seconds=0, end_seconds=60),
+            # This chapter captures the only segment
+            VideoChapter(title="Real Chapter", start_seconds=180, end_seconds=None),
+        ]
+
+        result = split_transcript_by_chapters(transcript, chapters)
+
+        assert "Empty Chapter" not in result
+        assert "Real Chapter" in result
+        assert "Part 3" in result["Real Chapter"]
