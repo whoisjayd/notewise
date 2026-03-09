@@ -317,6 +317,16 @@ class CorePipeline:
                     for i, (chap_title, chap_text) in enumerate(
                         chapter_transcripts.items(), 1
                     ):
+                        safe_chapter = sanitize_filename(chap_title)
+                        chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
+
+                        if not self.force and chapter_file.exists():
+                            logger.info(
+                                f"Skipping chapter {i}/{total_chapters}"
+                                f" '{chap_title[:40]}' (already exists)"
+                            )
+                            continue
+
                         emit(
                             EventType.CHAPTER_GENERATING,
                             video_id,
@@ -344,8 +354,6 @@ class CorePipeline:
                             on_chunk=_on_chapter_chunk,
                         )
 
-                        safe_chapter = sanitize_filename(chap_title)
-                        chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
                         chapter_file.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
