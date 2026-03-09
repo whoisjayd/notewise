@@ -81,17 +81,39 @@ def sanitize_filename(name: str) -> str:
     """
     Sanitize a string to be used as a filename.
 
+    Handles all known cross-platform constraints:
+    - Strips characters forbidden on Windows and POSIX (<>:"/\\|?* and NUL)
+    - Removes ASCII control characters (0x00-0x1F, 0x7F)
+    - Renames Windows reserved device names (CON, NUL, COM1…COM9, LPT1…LPT9)
+    - Strips trailing dots and spaces (illegal on Windows)
+    - Collapses internal whitespace to a single space
+    - Trims to 100 characters
+    - Returns "untitled" for empty or dot-only results
+
     Args:
         name: Raw filename string.
 
     Returns:
-        Sanitized string safe for file systems.
+        Sanitized string safe for all supported file systems.
     """
-    name = re.sub(r'[<>:"/\\|?*]', "", name)
+    # Strip forbidden and control characters
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "", name)
+    # Collapse whitespace
     name = re.sub(r"\s+", " ", name)
-    name = name.strip()[:100]
-    if not name or name in {".", ".."}:
+    # Strip leading/trailing spaces and dots (trailing dot illegal on Windows)
+    name = name.strip(" .")
+    # Truncate to 100 characters
+    name = name[:100]
+    # Reject empty or dot-only names
+    if not name:
         return "untitled"
+    # Reject Windows reserved device names (case-insensitive, with or without extension)
+    _RESERVED = re.compile(
+        r"^(CON|PRN|AUX|NUL|COM[0-9]|LPT[0-9])(\.|$)",
+        re.IGNORECASE,
+    )
+    if _RESERVED.match(name):
+        name = f"_{name}"
     return name
 
 
