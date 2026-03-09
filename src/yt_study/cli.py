@@ -157,6 +157,17 @@ def process(
             min=1,
         ),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-F",
+            help=(
+                "Re-process videos even if output already exists. "
+                "By default already-processed videos are skipped."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -309,6 +320,9 @@ def process(
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
+            EventType.VIDEO_SKIPPED: lambda t, _: (
+                f"[dim]⏭ {t} (Skipped — already processed)[/dim]"
+            ),
         }
 
         async def _run_single_url(single_url: str) -> None:
@@ -343,6 +357,7 @@ def process(
                 languages=selected_languages,
                 temperature=selected_temperature,
                 max_tokens=selected_max_tokens,
+                force=force,
             )
             concurrency = min(len(video_ids), config.max_concurrent_videos)
             dashboard = PipelineDashboard(
@@ -378,6 +393,7 @@ def process(
                 # Handle completion/failure events (release slots)
                 elif event.event_type in (
                     EventType.VIDEO_SUCCESS,
+                    EventType.VIDEO_SKIPPED,
                     EventType.VIDEO_FAILED,
                 ):
                     released = slot_manager.release_slot(vid)
@@ -386,6 +402,10 @@ def process(
 
                     if event.event_type == EventType.VIDEO_SUCCESS:
                         dashboard.add_completion(event.title or vid)
+                    elif event.event_type == EventType.VIDEO_SKIPPED:
+                        dashboard.add_completion(
+                            f"{event.title or vid} [dim](skipped)[/dim]"
+                        )
                     else:
                         dashboard.add_failure(event.title or vid)
 

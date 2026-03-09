@@ -46,6 +46,7 @@ class EventType(Enum):
     CHAPTER_GENERATING = "chapter_generating"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
+    VIDEO_SKIPPED = "video_skipped"
     VIDEO_FAILED = "video_failed"
     PIPELINE_START = "pipeline_start"
     PIPELINE_COMPLETE = "pipeline_complete"
@@ -134,6 +135,7 @@ class CorePipeline:
         languages: list[str] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        force: bool = False,
     ):
         """
         Initialize the core pipeline.
@@ -144,6 +146,7 @@ class CorePipeline:
             languages: Preferred transcript languages.
             temperature: LLM temperature.
             max_tokens: Max tokens for generation.
+            force: Re-process videos that already have saved output.
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -159,6 +162,7 @@ class CorePipeline:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        self.force = force
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.errors: dict[str, str] = {}
 
@@ -226,6 +230,25 @@ class CorePipeline:
                     title=title,
                     total_chapters=len(chapters) if chapters else 0,
                 )
+
+                # --- Checkpoint: skip if output already exists (unless --force) ---
+                if not self.force:
+                    safe_title = sanitize_filename(title)
+                    will_use_chapters = bool(
+                        duration > config.chapter_generation_min_duration and chapters
+                    )
+                    if will_use_chapters:
+                        chapter_dir = self.output_dir / safe_title
+                        already_done = chapter_dir.exists() and any(
+                            chapter_dir.glob("*.md")
+                        )
+                    else:
+                        already_done = (self.output_dir / f"{safe_title}.md").exists()
+
+                    if already_done:
+                        logger.info(f"Skipping already-processed video: {title}")
+                        emit(EventType.VIDEO_SKIPPED, video_id, title=title)
+                        return True
 
                 # --- Transcript Phase ---
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)

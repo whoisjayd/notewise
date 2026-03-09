@@ -509,3 +509,103 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
     for i, event in enumerate(chapter_events, 1):
         assert event.chapter_number == i
         assert event.total_chapters == 3
+
+
+# ---------------------------------------------------------------------------
+# CorePipeline – playlist checkpointing (#38)
+# ---------------------------------------------------------------------------
+
+_COMMON_PATCHES = dict(
+    title="yt_study.core.pipeline.get_video_title",
+    duration="yt_study.core.pipeline.get_video_duration",
+    chapters="yt_study.core.pipeline.get_video_chapters",
+    fetch="yt_study.core.pipeline.fetch_transcript",
+    api_key="yt_study.core.pipeline.config.get_api_key_name_for_model",
+)
+
+
+def _make_pipeline(tmp_path, mock_llm_provider, force: bool = False):
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        p = CorePipeline(model="mock-model", output_dir=tmp_path, force=force)
+        p.generator = MagicMock()
+        p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+        return p
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_skips_existing_single_file(
+    temp_output_dir, mock_llm_provider
+):
+    """VIDEO_SKIPPED is emitted when output .md already exists and force=False."""
+    # Pre-create the expected output file
+    (temp_output_dir / "Test Video.md").write_text("old notes", encoding="utf-8")
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        result = await p.run(["vid1"], on_event=events.append)
+
+    assert result.success_count == 1
+    assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
+    # Transcript should NOT have been fetched
+    mock_fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_force_reprocesses_existing(
+    temp_output_dir, mock_llm_provider
+):
+    """With force=True an existing output file is overwritten."""
+    output_file = temp_output_dir / "Test Video.md"
+    output_file.write_text("old notes", encoding="utf-8")
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "new content"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid1"])
+
+    assert result.success_count == 1
+    # File must now contain the regenerated content
+    assert output_file.read_text(encoding="utf-8") == "# Notes"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider):
+    """When no prior output exists the video is processed normally."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Brand New Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["newvid"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Brand New Video.md").exists()
