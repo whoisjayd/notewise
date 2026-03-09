@@ -117,6 +117,11 @@ class TestModelFetching:
             assert len(models["gemini"]) > 0
             # Fallback list has "gemini/gemini-1.5-flash"
             assert "gemini/gemini-1.5-flash" in models["gemini"]
+            # Cohere, DeepSeek, and Mistral must be present so the wizard
+            # offers them even when LiteLLM is unavailable.
+            assert "cohere" in models
+            assert "deepseek" in models
+            assert "mistral" in models
 
     def test_get_available_models_fallback_trigger(self):
         """Trigger fallback manually by raising exception during processing."""
