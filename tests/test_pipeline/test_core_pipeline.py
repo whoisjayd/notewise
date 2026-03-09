@@ -38,6 +38,59 @@ def test_sanitize_filename_truncates_to_100():
     assert len(sanitize_filename("a" * 200)) == 100
 
 
+def test_sanitize_filename_strips_control_characters():
+    """ASCII control characters must be removed."""
+    assert sanitize_filename("foo\x00bar") == "foobar"
+    assert sanitize_filename("foo\x1fbar") == "foobar"
+    assert sanitize_filename("foo\x7fbar") == "foobar"
+
+
+def test_sanitize_filename_trailing_dots_removed():
+    """Trailing dots are illegal on Windows and must be stripped."""
+    assert sanitize_filename("filename.") == "filename"
+    assert sanitize_filename("filename...") == "filename"
+    assert sanitize_filename("...") == "untitled"
+
+
+def test_sanitize_filename_trailing_spaces_removed():
+    """Trailing spaces are illegal on Windows and must be stripped."""
+    assert sanitize_filename("filename   ") == "filename"
+
+
+def test_sanitize_filename_windows_reserved_names():
+    """Windows reserved device names must be prefixed with underscore."""
+    for reserved in ("CON", "PRN", "AUX", "NUL"):
+        result = sanitize_filename(reserved)
+        assert result == f"_{reserved}", f"Expected _{reserved}, got {result}"
+        # Case-insensitive
+        result_lower = sanitize_filename(reserved.lower())
+        assert result_lower == f"_{reserved.lower()}"
+
+    for i in range(0, 10):
+        assert sanitize_filename(f"COM{i}") == f"_COM{i}"
+        assert sanitize_filename(f"LPT{i}") == f"_LPT{i}"
+
+
+def test_sanitize_filename_reserved_names_with_extension():
+    """Reserved names followed by a dot (e.g. NUL.txt pattern) must also be renamed."""
+    assert sanitize_filename("NUL.txt") == "_NUL.txt"
+    assert sanitize_filename("com1.log") == "_com1.log"
+
+
+def test_sanitize_filename_non_reserved_prefix():
+    """Names that start with a reserved word but aren't reserved must pass through."""
+    assert sanitize_filename("CONSOLE") == "CONSOLE"
+    assert sanitize_filename("NULLIFY") == "NULLIFY"
+    assert sanitize_filename("auxillary") == "auxillary"
+
+
+def test_sanitize_filename_mixed_forbidden_and_reserved():
+    """NUL<video>.txt after stripping forbidden chars is NULvideo.txt — not reserved."""
+    assert sanitize_filename("NUL<video>.txt") == "NULvideo.txt"
+    # But bare NUL.txt (after stripping) is still reserved
+    assert sanitize_filename("NUL.txt") == "_NUL.txt"
+
+
 # ---------------------------------------------------------------------------
 # CorePipeline fixtures
 # ---------------------------------------------------------------------------
