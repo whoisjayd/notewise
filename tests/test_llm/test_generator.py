@@ -141,3 +141,34 @@ class TestStudyMaterialGenerator:
 
         # Calls: 1 per chapter (2) + 1 combine = 3
         assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_small(self, generator):
+        """Single-pass path used when chapter fits within chunk_size."""
+        with patch("yt_study.core.llm.generator.token_counter", return_value=50):
+            await generator.generate_single_chapter_notes("Intro", "short text")
+        # One call only (no chunking needed)
+        assert generator.provider.generate.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_oversized(self, generator):
+        """Chunked path used when chapter text exceeds chunk_size."""
+        two_chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_single_chapter_notes("Ch1", "very long text")
+        # 2 chunk calls + 1 combine call = 3
+        assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_oversized_single_chunk(self, generator):
+        """Even when oversized but chunker returns 1 chunk, no combine call is made."""
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_single_chapter_notes("Ch1", "big text")
+        # 1 chunk call + 1 combine = 2 calls (chunked path always combines)
+        assert generator.provider.generate.call_count == 2

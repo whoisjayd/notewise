@@ -218,20 +218,58 @@ class StudyMaterialGenerator:
         """
         Generate study notes for a single chapter.
 
+        If the chapter transcript exceeds the configured chunk_size the text is
+        split into overlapping chunks first.  Each chunk is processed with the
+        chapter-specific prompt and the results are merged with get_combine_prompt
+        to produce a single coherent Markdown section.
+
         Args:
             chapter_title: Title of the chapter.
             chapter_text: Transcript text for the chapter.
 
         Returns:
-            Study notes for the chapter.
+            Study notes for the chapter in Markdown format.
         """
-        notes = await self.provider.generate(
+        token_count = self._count_tokens(chapter_text)
+
+        # Fast path: chapter fits in one context window call
+        if token_count <= config.chunk_size:
+            return await self.provider.generate(
+                system_prompt=CHAPTER_SYSTEM_PROMPT,
+                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+        # Chunked path: chapter is too long for a single call
+        logger.info(
+            f"Chapter '{chapter_title[:40]}' is large ({token_count:,} tokens),"
+            " chunking before generation..."
+        )
+        chunks = self._chunk_transcript(chapter_text)
+        chunk_notes: list[str] = []
+
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(
+                f"Chapter '{chapter_title[:40]}': generating part {i}/{len(chunks)}"
+            )
+            note = await self.provider.generate(
+                system_prompt=CHAPTER_SYSTEM_PROMPT,
+                user_prompt=get_chapter_prompt(chapter_title, chunk),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            chunk_notes.append(note)
+
+        logger.info(
+            f"Chapter '{chapter_title[:40]}': combining {len(chunk_notes)} parts..."
+        )
+        return await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
-            user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+            user_prompt=get_combine_prompt(chunk_notes),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        return notes
 
     async def generate_chapter_based_notes(
         self,
