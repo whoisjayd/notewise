@@ -7,6 +7,7 @@ No Rich, no Console, no Dashboard imports here.
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -32,6 +33,12 @@ from .youtube.transcript import (
 
 
 logger = logging.getLogger(__name__)
+
+# Windows reserved device names — compiled once at module level for reuse.
+_RESERVED = re.compile(
+    r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)",
+    re.IGNORECASE,
+)
 
 
 class EventType(Enum):
@@ -111,10 +118,6 @@ def sanitize_filename(name: str) -> str:
     if not name:
         return "untitled"
     # Reject Windows reserved device names (case-insensitive, with or without extension)
-    _RESERVED = re.compile(
-        r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)",
-        re.IGNORECASE,
-    )
     if _RESERVED.match(name):
         name = f"_{name}"
     return name
@@ -170,6 +173,7 @@ class CorePipeline:
         self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.errors: dict[str, str] = {}
+        self._manifest_lock = asyncio.Lock()
 
     def _check_api_key(self) -> bool:
         """
@@ -185,6 +189,49 @@ class CorePipeline:
             logger.error(f"Missing API Key for {self.model}. Expected: {key_name}")
             return False
         return True
+
+    # ------------------------------------------------------------------
+    # Manifest helpers (checkpoint by video ID)
+    # ------------------------------------------------------------------
+
+    def _manifest_path(self) -> Path:
+        """Return the path to the processed-video manifest file."""
+        return self.output_dir / ".yt_study_processed.json"
+
+    def _load_manifest(self) -> dict[str, bool]:
+        """Load the manifest dict from disk; return an empty dict on any error."""
+        path = self._manifest_path()
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return {k: bool(v) for k, v in data.items()}
+            except Exception:
+                return {}
+        return {}
+
+    async def _mark_processed(self, video_id: str) -> None:
+        """Atomically record *video_id* as successfully processed."""
+        async with self._manifest_lock:
+            manifest = self._load_manifest()
+            manifest[video_id] = True
+            try:
+                self.output_dir.mkdir(parents=True, exist_ok=True)
+                self._manifest_path().write_text(
+                    json.dumps(manifest, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                logger.warning(f"Failed to update processed manifest: {exc}")
+
+    # ------------------------------------------------------------------
+    # Quiz helper
+    # ------------------------------------------------------------------
+
+    async def _generate_and_write_quiz(self, transcript_text: str, title: str) -> None:
+        """Generate a quiz from *transcript_text* and write ``<title>_quiz.md``."""
+        quiz_notes = await self.generator.generate_quiz(transcript_text)
+        quiz_path = self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+        quiz_path.write_text(quiz_notes, encoding="utf-8")
 
     async def _process_single_video(
         self,
@@ -236,34 +283,11 @@ class CorePipeline:
                     total_chapters=len(chapters) if chapters else 0,
                 )
 
-                # --- Checkpoint: skip if output already exists (unless --force) ---
-                if not self.force:
-                    safe_title = sanitize_filename(title)
-                    will_use_chapters = bool(
-                        duration > config.chapter_generation_min_duration and chapters
-                    )
-                    if will_use_chapters:
-                        chapter_dir = self.output_dir / safe_title
-                        already_done = (
-                            chapter_dir.exists()
-                            and len(list(chapter_dir.glob("*.md"))) >= len(chapters)
-                            and (
-                                not self.quiz
-                                or (self.output_dir / f"{safe_title}_quiz.md").exists()
-                            )
-                        )
-                    else:
-                        already_done = (
-                            self.output_dir / f"{safe_title}.md"
-                        ).exists() and (
-                            not self.quiz
-                            or (self.output_dir / f"{safe_title}_quiz.md").exists()
-                        )
-
-                    if already_done:
-                        logger.info(f"Skipping already-processed video: {title}")
-                        emit(EventType.VIDEO_SKIPPED, video_id, title=title)
-                        return True
+                # --- Checkpoint: skip already-processed videos (unless --force) ---
+                if not self.force and self._load_manifest().get(video_id):
+                    logger.info(f"Skipping already-processed video: {title}")
+                    emit(EventType.VIDEO_SKIPPED, video_id, title=title)
+                    return True
 
                 # --- Transcript Phase ---
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
@@ -310,14 +334,11 @@ class CorePipeline:
                         chapter_file.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
-                        quiz_notes = await self.generator.generate_quiz(
-                            transcript_obj.to_text()
+                        await self._generate_and_write_quiz(
+                            transcript_obj.to_text(), title
                         )
-                        quiz_path = (
-                            self.output_dir / f"{sanitize_filename(title)}_quiz.md"
-                        )
-                        quiz_path.write_text(quiz_notes, encoding="utf-8")
 
+                    await self._mark_processed(video_id)
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
@@ -353,12 +374,9 @@ class CorePipeline:
                     output_path.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
-                        quiz_notes = await self.generator.generate_quiz(transcript_text)
-                        quiz_path = (
-                            self.output_dir / f"{sanitize_filename(title)}_quiz.md"
-                        )
-                        quiz_path.write_text(quiz_notes, encoding="utf-8")
+                        await self._generate_and_write_quiz(transcript_text, title)
 
+                    await self._mark_processed(video_id)
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,

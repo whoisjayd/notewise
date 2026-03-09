@@ -31,6 +31,10 @@ LABEL org.opencontainers.image.title="yt-study" \
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin/yt-study /usr/local/bin/yt-study
 
+# Run as non-root for security
+RUN useradd --create-home appuser
+USER appuser
+
 # Default output directory (mount a volume here to access generated files)
 VOLUME ["/output"]
 WORKDIR /output

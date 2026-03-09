@@ -55,3 +55,28 @@ Q1 – B
 def get_quiz_prompt(transcript: str) -> str:
     """Generate prompt for creating a quiz from a transcript."""
     return QUIZ_GENERATION_PROMPT.format(transcript=transcript)
+
+
+QUIZ_COMBINE_PROMPT = """
+You have generated partial quiz sections from different segments of the same video.
+Consolidate them into a single, well-structured final quiz.
+
+Partial quiz sections:
+{quiz_sections}
+
+Requirements:
+1. Select the **10–15 best questions** that together span the full video content.
+2. Renumber questions sequentially (Q1, Q2, …).
+3. Keep exactly 4 answer options (A, B, C, D) per question.
+4. Preserve the **Answer:** and **Explanation:** lines for every question.
+5. Group questions under `## Section` headers by main topic.
+6. End with a `## Answer Key` listing every question and its correct letter.
+7. Output clean Markdown only — no preamble, no closing remarks."""
+
+
+def get_quiz_combine_prompt(quiz_sections: list[str]) -> str:
+    """Generate prompt for combining partial quiz sections into one final quiz."""
+    combined = "\n\n---\n\n".join(
+        f"### Section {i + 1}\n\n{q}" for i, q in enumerate(quiz_sections)
+    )
+    return QUIZ_COMBINE_PROMPT.format(quiz_sections=combined)

@@ -179,3 +179,30 @@ class TestStudyMaterialGenerator:
         result = await generator.generate_quiz("full transcript text")
         assert generator.provider.generate.call_count == 1
         assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_chunked_large_transcript(self, generator):
+        """generate_quiz() chunks a large transcript and combines partial quizzes."""
+        chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            result = await generator.generate_quiz("very long transcript")
+
+        # 2 chunk calls + 1 combine call = 3
+        assert generator.provider.generate.call_count == 3
+        assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_chunked_single_chunk_no_combine(self, generator):
+        """When the chunker returns exactly one chunk no combine call is made."""
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            result = await generator.generate_quiz("big transcript")
+
+        # 1 chunk call only — combine is skipped
+        assert generator.provider.generate.call_count == 1
+        assert result == "# Generated Notes\n\nTest content."

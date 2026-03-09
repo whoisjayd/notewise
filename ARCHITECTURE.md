@@ -87,7 +87,7 @@ classDiagram
         +generate_single_chapter_notes(chapter_title, chapter_text) str
         +generate_chapter_based_notes(chapter_transcripts, video_title) str
         +generate_quiz(transcript) str
-        -_chunk_transcript(text) list~str~
+        -_chunk_transcript(text) List~String~
         -_count_tokens(text) int
     }
 
@@ -110,7 +110,7 @@ classDiagram
 
     class PipelineDashboard {
         +update(event)
-        +render() RenderableType
+        +RenderableType render()
     }
 
     CorePipeline --> StudyMaterialGenerator : owns

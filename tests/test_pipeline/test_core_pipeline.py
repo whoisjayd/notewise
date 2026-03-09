@@ -554,9 +554,13 @@ def _make_pipeline(
 async def test_checkpoint_skips_existing_single_file(
     temp_output_dir, mock_llm_provider
 ):
-    """VIDEO_SKIPPED is emitted when output .md already exists and force=False."""
-    # Pre-create the expected output file
-    (temp_output_dir / "Test Video.md").write_text("old notes", encoding="utf-8")
+    """VIDEO_SKIPPED is emitted when the video ID is in the manifest and force=False."""
+    import json
+
+    # Write a manifest entry for "vid1" to simulate a previously processed video.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
@@ -580,9 +584,13 @@ async def test_checkpoint_skips_existing_single_file(
 async def test_checkpoint_force_reprocesses_existing(
     temp_output_dir, mock_llm_provider
 ):
-    """With force=True an existing output file is overwritten."""
-    output_file = temp_output_dir / "Test Video.md"
-    output_file.write_text("old notes", encoding="utf-8")
+    """With force=True an existing manifest entry is ignored; video is reprocessed."""
+    import json
+
+    # Simulate a previously processed video in the manifest.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
 
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
 
@@ -601,6 +609,7 @@ async def test_checkpoint_force_reprocesses_existing(
 
     assert result.success_count == 1
     # File must now contain the regenerated content
+    output_file = temp_output_dir / "Test Video.md"
     assert output_file.read_text(encoding="utf-8") == "# Notes"
 
 
@@ -651,3 +660,37 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
         "# Quiz"
     )
     p.generator.generate_quiz.assert_awaited_once_with("full transcript")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_different_video_same_title_not_skipped(
+    temp_output_dir, mock_llm_provider
+):
+    """Two videos sharing a title must not collide — checkpoint is keyed by video ID."""
+    import json
+
+    # vid1 was already processed; vid2 shares the same title but is a different video.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Shared Title"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript for vid2"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid2"], on_event=events.append)
+
+    assert result.success_count == 1
+    # vid2 must NOT have been skipped — the manifest key is the video ID, not the title.
+    assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
+    mock_fetch.assert_awaited_once()
