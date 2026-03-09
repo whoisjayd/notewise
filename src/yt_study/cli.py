@@ -157,6 +157,35 @@ def process(
             min=1,
         ),
     ] = None,
+    force: Annotated[
+        bool,
+        typer.Option(
+            "--force",
+            "-F",
+            help=(
+                "Re-process videos even if output already exists. "
+                "By default already-processed videos are skipped."
+            ),
+        ),
+    ] = False,
+    no_ui: Annotated[
+        bool,
+        typer.Option(
+            "--no-ui",
+            help=(
+                "Disable the Rich live dashboard. "
+                "Outputs plain progress lines to stdout — "
+                "useful for CI, cron jobs, and log piping."
+            ),
+        ),
+    ] = False,
+    quiz: Annotated[
+        bool,
+        typer.Option(
+            "--quiz",
+            help="Also generate a multiple-choice quiz file alongside the study notes.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -309,10 +338,14 @@ def process(
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
+            EventType.CHAPTER_CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
+                f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
         }
 
         async def _run_single_url(single_url: str) -> None:
-            """Parse one URL and run the pipeline with a Rich dashboard."""
+            """Parse one URL and run the pipeline (Rich dashboard or headless)."""
             try:
                 parsed = parse_youtube_url(single_url)
             except ValueError as e:
@@ -343,7 +376,69 @@ def process(
                 languages=selected_languages,
                 temperature=selected_temperature,
                 max_tokens=selected_max_tokens,
+                force=force,
+                quiz=quiz,
             )
+
+            if no_ui:
+                # ── Headless path: plain text progress ──────────────────────
+                _HEADLESS_LABELS: dict[EventType, str] = {
+                    EventType.METADATA_START: "Fetching metadata",
+                    EventType.METADATA_FETCHED: "Metadata ready",
+                    EventType.TRANSCRIPT_FETCHING: "Fetching transcript",
+                    EventType.TRANSCRIPT_FETCHED: "Transcript ready",
+                    EventType.GENERATION_START: "Generating notes",
+                    EventType.CHUNK_GENERATING: "Generating chunk",
+                    EventType.CHAPTER_GENERATING: "Generating chapter",
+                    EventType.CHAPTER_CHUNK_GENERATING: "Generating chapter part",
+                    EventType.GENERATION_COMPLETE: "Generation complete",
+                    EventType.VIDEO_SUCCESS: "Done",
+                    EventType.VIDEO_SKIPPED: "Skipped (already processed)",
+                    EventType.VIDEO_FAILED: "Failed",
+                }
+
+                def on_event_headless(event: PipelineEvent) -> None:
+                    if event.event_type in (
+                        EventType.PIPELINE_START,
+                        EventType.PIPELINE_COMPLETE,
+                    ):
+                        return
+                    label = _HEADLESS_LABELS.get(
+                        event.event_type, event.event_type.value
+                    )
+                    title = event.title or event.video_id
+                    extra = ""
+                    if (
+                        event.event_type == EventType.CHAPTER_CHUNK_GENERATING
+                        and event.chapter_number
+                        and event.total_chapters
+                        and event.chunk_number
+                        and event.total_chunks
+                    ):
+                        extra = (
+                            f" [Ch {event.chapter_number}/{event.total_chapters},"
+                            f" Part {event.chunk_number}/{event.total_chunks}]"
+                        )
+                    elif event.chunk_number and event.total_chunks:
+                        extra = f" [{event.chunk_number}/{event.total_chunks}]"
+                    elif event.chapter_number and event.total_chapters:
+                        extra = f" [{event.chapter_number}/{event.total_chapters}]"
+                    elif event.error:
+                        extra = f": {event.error}"
+                    console.print(f"{label}: {title}{extra}", markup=False)
+
+                result = await pipeline.run(video_ids, on_event=on_event_headless)
+                if result.total_count:
+                    console.print(
+                        f"\nDone: {result.success_count}/"
+                        f"{result.total_count} succeeded."
+                    )
+                    if result.failure_count:
+                        for vid, err in result.errors.items():
+                            console.print(f"  FAILED {vid}: {err}")
+                return
+
+            # ── Rich dashboard path ──────────────────────────────────────────
             concurrency = min(len(video_ids), config.max_concurrent_videos)
             dashboard = PipelineDashboard(
                 total_videos=len(video_ids),
@@ -378,6 +473,7 @@ def process(
                 # Handle completion/failure events (release slots)
                 elif event.event_type in (
                     EventType.VIDEO_SUCCESS,
+                    EventType.VIDEO_SKIPPED,
                     EventType.VIDEO_FAILED,
                 ):
                     released = slot_manager.release_slot(vid)
@@ -386,6 +482,10 @@ def process(
 
                     if event.event_type == EventType.VIDEO_SUCCESS:
                         dashboard.add_completion(event.title or vid)
+                    elif event.event_type == EventType.VIDEO_SKIPPED:
+                        dashboard.add_completion(
+                            f"{event.title or vid} [dim](skipped)[/dim]"
+                        )
                     else:
                         dashboard.add_failure(event.title or vid)
 

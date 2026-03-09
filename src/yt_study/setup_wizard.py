@@ -183,6 +183,19 @@ def get_available_models() -> dict[str, list[str]]:
                 "xai/grok-2-latest",
                 "xai/grok-2-vision-latest",
             ],
+            "mistral": [
+                "mistral/mistral-large-latest",
+                "mistral/mistral-small-latest",
+                "mistral/open-mixtral-8x22b",
+            ],
+            "cohere": [
+                "cohere/command-r-plus",
+                "cohere/command-r",
+            ],
+            "deepseek": [
+                "deepseek/deepseek-chat",
+                "deepseek/deepseek-reasoner",
+            ],
         }
 
 

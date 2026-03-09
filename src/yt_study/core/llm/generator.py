@@ -10,6 +10,7 @@ from ..prompts.chapter_notes import (
     get_chapter_prompt,
     get_combine_chapters_prompt,
 )
+from ..prompts.quiz import QUIZ_SYSTEM_PROMPT, get_quiz_combine_prompt, get_quiz_prompt
 from ..prompts.study_notes import (
     SYSTEM_PROMPT,
     get_chunk_prompt,
@@ -214,24 +215,67 @@ class StudyMaterialGenerator:
         self,
         chapter_title: str,
         chapter_text: str,
+        on_chunk: Callable[[int, int], None] | None = None,
     ) -> str:
         """
         Generate study notes for a single chapter.
+
+        If the chapter transcript exceeds the configured chunk_size the text is
+        split into overlapping chunks first.  Each chunk is processed with the
+        chapter-specific prompt and the results are merged with get_combine_prompt
+        to produce a single coherent Markdown section.
 
         Args:
             chapter_title: Title of the chapter.
             chapter_text: Transcript text for the chapter.
 
         Returns:
-            Study notes for the chapter.
+            Study notes for the chapter in Markdown format.
         """
-        notes = await self.provider.generate(
+        token_count = self._count_tokens(chapter_text)
+
+        # Fast path: chapter fits in one context window call
+        if token_count <= config.chunk_size:
+            return await self.provider.generate(
+                system_prompt=CHAPTER_SYSTEM_PROMPT,
+                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+        # Chunked path: chapter is too long for a single call
+        logger.info(
+            f"Chapter '{chapter_title[:40]}' is large ({token_count:,} tokens),"
+            " chunking before generation..."
+        )
+        chunks = self._chunk_transcript(chapter_text)
+        chunk_notes: list[str] = []
+
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(
+                f"Chapter '{chapter_title[:40]}': generating part {i}/{len(chunks)}"
+            )
+            if on_chunk:
+                on_chunk(i, len(chunks))
+            note = await self.provider.generate(
+                system_prompt=CHAPTER_SYSTEM_PROMPT,
+                user_prompt=get_chapter_prompt(chapter_title, chunk),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            chunk_notes.append(note)
+
+        logger.info(
+            f"Chapter '{chapter_title[:40]}': combining {len(chunk_notes)} parts..."
+        )
+        if len(chunk_notes) == 1:
+            return chunk_notes[0]
+        return await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
-            user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+            user_prompt=get_combine_prompt(chunk_notes),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        return notes
 
     async def generate_chapter_based_notes(
         self,
@@ -259,11 +303,9 @@ class StudyMaterialGenerator:
             logger.info(
                 f"{video_title}: Chapter {i}/{total_chapters}: {chapter_title[:30]}..."
             )
-            notes = await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            notes = await self.generate_single_chapter_notes(
+                chapter_title=chapter_title,
+                chapter_text=chapter_text,
             )
             chapter_notes[chapter_title] = notes
 
@@ -276,3 +318,50 @@ class StudyMaterialGenerator:
         )
         logger.info(f"Completed chapter-based notes for {video_title}")
         return final_notes
+
+    async def generate_quiz(self, transcript: str) -> str:
+        """Generate a multiple-choice quiz from a transcript.
+
+        If the transcript fits within the configured chunk size, a single
+        LLM call is made (fast path).  For longer transcripts the text is
+        split into chunks, a partial quiz is generated for each chunk, and
+        the results are combined into one final quiz.
+        """
+        token_count = self._count_tokens(transcript)
+
+        # Fast path: transcript fits in a single context window.
+        if token_count <= config.chunk_size:
+            return await self.provider.generate(
+                system_prompt=QUIZ_SYSTEM_PROMPT,
+                user_prompt=get_quiz_prompt(transcript),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+        # Chunked path: generate a partial quiz per chunk then combine.
+        logger.info(
+            f"Quiz transcript is large ({token_count:,} tokens)"
+            " — chunking before generation."
+        )
+        chunks = self._chunk_transcript(transcript)
+        partial_quizzes: list[str] = []
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(f"Quiz: generating part {i}/{len(chunks)}")
+            partial = await self.provider.generate(
+                system_prompt=QUIZ_SYSTEM_PROMPT,
+                user_prompt=get_quiz_prompt(chunk),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            partial_quizzes.append(partial)
+
+        if len(partial_quizzes) == 1:
+            return partial_quizzes[0]
+
+        logger.info(f"Quiz: combining {len(partial_quizzes)} partial quizzes.")
+        return await self.provider.generate(
+            system_prompt=QUIZ_SYSTEM_PROMPT,
+            user_prompt=get_quiz_combine_prompt(partial_quizzes),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )

@@ -141,3 +141,82 @@ class TestStudyMaterialGenerator:
 
         # Calls: 1 per chapter (2) + 1 combine = 3
         assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_large_chapter_uses_chunking(self, generator):
+        """Large chapters are chunked via generate_single_chapter_notes."""
+        chapters = {"Big Chapter": "very long text"}
+        two_chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_chapter_based_notes(chapters)
+
+        # 2 chunk calls + 1 combine (single chapter) + 1 final combine = 4
+        assert generator.provider.generate.call_count == 4
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_small(self, generator):
+        """Single-pass path used when chapter fits within chunk_size."""
+        with patch("yt_study.core.llm.generator.token_counter", return_value=50):
+            await generator.generate_single_chapter_notes("Intro", "short text")
+        # One call only (no chunking needed)
+        assert generator.provider.generate.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_oversized(self, generator):
+        """Chunked path used when chapter text exceeds chunk_size."""
+        two_chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_single_chapter_notes("Ch1", "very long text")
+        # 2 chunk calls + 1 combine call = 3
+        assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_oversized_single_chunk(self, generator):
+        """When chunker returns exactly 1 chunk, no combine call is made."""
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            await generator.generate_single_chapter_notes("Ch1", "big text")
+        # 1 chunk call only — combine is skipped when there is a single chunk
+        assert generator.provider.generate.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_calls_provider_once(self, generator):
+        """generate_quiz() delegates to the provider in a single call."""
+        result = await generator.generate_quiz("full transcript text")
+        assert generator.provider.generate.call_count == 1
+        assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_chunked_large_transcript(self, generator):
+        """generate_quiz() chunks a large transcript and combines partial quizzes."""
+        chunks = ["chunk A", "chunk B"]
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            result = await generator.generate_quiz("very long transcript")
+
+        # 2 chunk calls + 1 combine call = 3
+        assert generator.provider.generate.call_count == 3
+        assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_chunked_single_chunk_no_combine(self, generator):
+        """When the chunker returns exactly one chunk no combine call is made."""
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            result = await generator.generate_quiz("big transcript")
+
+        # 1 chunk call only — combine is skipped
+        assert generator.provider.generate.call_count == 1
+        assert result == "# Generated Notes\n\nTest content."

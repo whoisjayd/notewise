@@ -38,6 +38,78 @@ def test_sanitize_filename_truncates_to_100():
     assert len(sanitize_filename("a" * 200)) == 100
 
 
+def test_sanitize_filename_strips_control_characters():
+    """ASCII control characters must be removed."""
+    assert sanitize_filename("foo\x00bar") == "foobar"
+    assert sanitize_filename("foo\x1fbar") == "foobar"
+    assert sanitize_filename("foo\x7fbar") == "foobar"
+
+
+def test_sanitize_filename_trailing_dots_removed():
+    """Trailing dots are illegal on Windows and must be stripped."""
+    assert sanitize_filename("filename.") == "filename"
+    assert sanitize_filename("filename...") == "filename"
+    assert sanitize_filename("...") == "untitled"
+
+
+def test_sanitize_filename_preserves_leading_dot():
+    """Leading dots (e.g. .env, .gitignore) are valid and must not be stripped."""
+    assert sanitize_filename(".env") == ".env"
+    assert sanitize_filename(".gitignore") == ".gitignore"
+
+
+def test_sanitize_filename_trailing_spaces_removed():
+    """Trailing spaces are illegal on Windows and must be stripped."""
+    assert sanitize_filename("filename   ") == "filename"
+
+
+def test_sanitize_filename_reserved_name_stays_within_100_chars():
+    """Reserved names at the 100-char limit stay within 100 chars after prefixing."""
+    # "NUL." + 96 x "a" = 100 chars total; matches _RESERVED because of "NUL."
+    long_nul = "NUL." + "a" * 96
+    result = sanitize_filename(long_nul)
+    assert len(result) <= 100
+    assert result.startswith("_")
+
+
+def test_sanitize_filename_windows_reserved_names():
+    """Windows reserved device names must be prefixed with underscore."""
+    for reserved in ("CON", "PRN", "AUX", "NUL"):
+        result = sanitize_filename(reserved)
+        assert result == f"_{reserved}", f"Expected _{reserved}, got {result}"
+        # Case-insensitive
+        result_lower = sanitize_filename(reserved.lower())
+        assert result_lower == f"_{reserved.lower()}"
+
+    for i in range(1, 10):
+        assert sanitize_filename(f"COM{i}") == f"_COM{i}"
+        assert sanitize_filename(f"LPT{i}") == f"_LPT{i}"
+
+    # COM0 and LPT0 are NOT Windows reserved names
+    assert sanitize_filename("COM0") == "COM0"
+    assert sanitize_filename("LPT0") == "LPT0"
+
+
+def test_sanitize_filename_reserved_names_with_extension():
+    """Reserved names followed by a dot (e.g. NUL.txt pattern) must also be renamed."""
+    assert sanitize_filename("NUL.txt") == "_NUL.txt"
+    assert sanitize_filename("com1.log") == "_com1.log"
+
+
+def test_sanitize_filename_non_reserved_prefix():
+    """Names that start with a reserved word but aren't reserved must pass through."""
+    assert sanitize_filename("CONSOLE") == "CONSOLE"
+    assert sanitize_filename("NULLIFY") == "NULLIFY"
+    assert sanitize_filename("auxillary") == "auxillary"
+
+
+def test_sanitize_filename_mixed_forbidden_and_reserved():
+    """NUL<video>.txt after stripping forbidden chars is NULvideo.txt — not reserved."""
+    assert sanitize_filename("NUL<video>.txt") == "NULvideo.txt"
+    # But bare NUL.txt (after stripping) is still reserved
+    assert sanitize_filename("NUL.txt") == "_NUL.txt"
+
+
 # ---------------------------------------------------------------------------
 # CorePipeline fixtures
 # ---------------------------------------------------------------------------
@@ -456,3 +528,178 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
     for i, event in enumerate(chapter_events, 1):
         assert event.chapter_number == i
         assert event.total_chapters == 3
+
+
+# ---------------------------------------------------------------------------
+# CorePipeline – playlist checkpointing (#38)
+# ---------------------------------------------------------------------------
+
+_COMMON_PATCHES = dict(
+    title="yt_study.core.pipeline.get_video_title",
+    duration="yt_study.core.pipeline.get_video_duration",
+    chapters="yt_study.core.pipeline.get_video_chapters",
+    fetch="yt_study.core.pipeline.fetch_transcript",
+    api_key="yt_study.core.pipeline.config.get_api_key_name_for_model",
+)
+
+
+def _make_pipeline(
+    tmp_path, mock_llm_provider, force: bool = False, quiz: bool = False
+):
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        p = CorePipeline(
+            model="mock-model", output_dir=tmp_path, force=force, quiz=quiz
+        )
+        p.generator = MagicMock()
+        p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+        p.generator.generate_quiz = AsyncMock(return_value="# Quiz")
+        return p
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_skips_existing_single_file(
+    temp_output_dir, mock_llm_provider
+):
+    """VIDEO_SKIPPED is emitted when the video ID is in the manifest and force=False."""
+    import json
+
+    # Write a manifest entry for "vid1" to simulate a previously processed video.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        result = await p.run(["vid1"], on_event=events.append)
+
+    assert result.success_count == 1
+    assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
+    # Transcript should NOT have been fetched
+    mock_fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_force_reprocesses_existing(
+    temp_output_dir, mock_llm_provider
+):
+    """With force=True an existing manifest entry is ignored; video is reprocessed."""
+    import json
+
+    # Simulate a previously processed video in the manifest.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "new content"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid1"])
+
+    assert result.success_count == 1
+    # File must now contain the regenerated content
+    output_file = temp_output_dir / "Test Video.md"
+    assert output_file.read_text(encoding="utf-8") == "# Notes"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider):
+    """When no prior output exists the video is processed normally."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Brand New Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["newvid"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Brand New Video.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
+    """With quiz=True a *_quiz.md file is written alongside the study notes."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid1"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Study Subject.md").exists()
+    assert (temp_output_dir / "Study Subject_quiz.md").exists()
+    assert (temp_output_dir / "Study Subject_quiz.md").read_text(encoding="utf-8") == (
+        "# Quiz"
+    )
+    p.generator.generate_quiz.assert_awaited_once_with("full transcript")
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_different_video_same_title_not_skipped(
+    temp_output_dir, mock_llm_provider
+):
+    """Two videos sharing a title must not collide — checkpoint is keyed by video ID."""
+    import json
+
+    # vid1 was already processed; vid2 shares the same title but is a different video.
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"vid1": True}), encoding="utf-8"
+    )
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Shared Title"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript for vid2"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid2"], on_event=events.append)
+
+    assert result.success_count == 1
+    # vid2 must NOT have been skipped — the manifest key is the video ID, not the title.
+    assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
+    mock_fetch.assert_awaited_once()

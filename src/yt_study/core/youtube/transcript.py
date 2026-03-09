@@ -290,6 +290,11 @@ def split_transcript_by_chapters(
 
         # Combine segments for this chapter
         chapter_text = " ".join(chapter_segments)
+        if not chapter_text.strip():
+            logger.warning(
+                f"No transcript segments found for chapter: {chapter.title!r}"
+            )
+            continue
         chapter_transcripts[chapter.title] = chapter_text
 
     return chapter_transcripts

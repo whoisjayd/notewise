@@ -7,6 +7,7 @@ No Rich, no Console, no Dashboard imports here.
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -33,6 +34,12 @@ from .youtube.transcript import (
 
 logger = logging.getLogger(__name__)
 
+# Windows reserved device names — compiled once at module level for reuse.
+_RESERVED = re.compile(
+    r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)",
+    re.IGNORECASE,
+)
+
 
 class EventType(Enum):
     """Event types emitted by the pipeline."""
@@ -44,8 +51,10 @@ class EventType(Enum):
     GENERATION_START = "generation_start"
     CHUNK_GENERATING = "chunk_generating"
     CHAPTER_GENERATING = "chapter_generating"
+    CHAPTER_CHUNK_GENERATING = "chapter_chunk_generating"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
+    VIDEO_SKIPPED = "video_skipped"
     VIDEO_FAILED = "video_failed"
     PIPELINE_START = "pipeline_start"
     PIPELINE_COMPLETE = "pipeline_complete"
@@ -81,17 +90,37 @@ def sanitize_filename(name: str) -> str:
     """
     Sanitize a string to be used as a filename.
 
+    Handles all known cross-platform constraints:
+    - Strips characters forbidden on Windows and POSIX (<>:"/\\|?* and NUL)
+    - Removes ASCII control characters (0x00-0x1F, 0x7F)
+    - Renames Windows reserved device names (CON, NUL, COM1–COM9, LPT1–LPT9)
+    - Strips trailing dots and spaces (illegal on Windows; leading dots are kept)
+    - Collapses internal whitespace to a single space
+    - Trims to 100 characters
+    - Returns "untitled" for empty or dot-only results
+
     Args:
         name: Raw filename string.
 
     Returns:
-        Sanitized string safe for file systems.
+        Sanitized string safe for all supported file systems.
     """
-    name = re.sub(r'[<>:"/\\|?*]', "", name)
+    # Strip forbidden and control characters
+    name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "", name)
+    # Collapse whitespace
     name = re.sub(r"\s+", " ", name)
-    name = name.strip()[:100]
-    if not name or name in {".", ".."}:
+    # Strip surrounding whitespace; strip only trailing dots (trailing dot is
+    # illegal on Windows; leading dots like ".env" are valid)
+    name = name.strip()
+    name = name.rstrip(".")
+    # Truncate to 100 characters
+    name = name[:100]
+    # Reject empty or dot-only names
+    if not name:
         return "untitled"
+    # Reject Windows reserved device names (case-insensitive, with or without extension)
+    if _RESERVED.match(name):
+        name = f"_{name}"[:100]
     return name
 
 
@@ -112,6 +141,8 @@ class CorePipeline:
         languages: list[str] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        force: bool = False,
+        quiz: bool = False,
     ):
         """
         Initialize the core pipeline.
@@ -122,6 +153,8 @@ class CorePipeline:
             languages: Preferred transcript languages.
             temperature: LLM temperature.
             max_tokens: Max tokens for generation.
+            force: Re-process videos that already have saved output.
+            quiz: Also generate a multiple-choice quiz file.
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -137,8 +170,11 @@ class CorePipeline:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        self.force = force
+        self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.errors: dict[str, str] = {}
+        self._manifest_lock = asyncio.Lock()
 
     def _check_api_key(self) -> bool:
         """
@@ -155,6 +191,49 @@ class CorePipeline:
             return False
         return True
 
+    # ------------------------------------------------------------------
+    # Manifest helpers (checkpoint by video ID)
+    # ------------------------------------------------------------------
+
+    def _manifest_path(self) -> Path:
+        """Return the path to the processed-video manifest file."""
+        return self.output_dir / ".yt_study_processed.json"
+
+    def _load_manifest(self) -> dict[str, bool]:
+        """Load the manifest dict from disk; return an empty dict on any error."""
+        path = self._manifest_path()
+        if path.exists():
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                return {k: bool(v) for k, v in data.items()}
+            except Exception:
+                return {}
+        return {}
+
+    async def _mark_processed(self, video_id: str) -> None:
+        """Atomically record *video_id* as successfully processed."""
+        async with self._manifest_lock:
+            manifest = self._load_manifest()
+            manifest[video_id] = True
+            try:
+                self.output_dir.mkdir(parents=True, exist_ok=True)
+                self._manifest_path().write_text(
+                    json.dumps(manifest, indent=2, sort_keys=True),
+                    encoding="utf-8",
+                )
+            except Exception as exc:
+                logger.warning(f"Failed to update processed manifest: {exc}")
+
+    # ------------------------------------------------------------------
+    # Quiz helper
+    # ------------------------------------------------------------------
+
+    async def _generate_and_write_quiz(self, transcript_text: str, title: str) -> None:
+        """Generate a quiz from *transcript_text* and write ``<title>_quiz.md``."""
+        quiz_notes = await self.generator.generate_quiz(transcript_text)
+        quiz_path = self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+        quiz_path.write_text(quiz_notes, encoding="utf-8")
+
     async def _process_single_video(
         self,
         video_id: str,
@@ -170,10 +249,10 @@ class CorePipeline:
         Returns:
             True on success, False on failure.
         """
+        emit = self._emit_event(on_event)
         async with self.semaphore:
             try:
                 # --- Metadata Phase ---
-                emit = self._emit_event(on_event)
                 emit(EventType.METADATA_START, video_id)
 
                 # Fetch all metadata concurrently; title failure is non-fatal
@@ -205,6 +284,12 @@ class CorePipeline:
                     total_chapters=len(chapters) if chapters else 0,
                 )
 
+                # --- Checkpoint: skip already-processed videos (unless --force) ---
+                if not self.force and self._load_manifest().get(video_id):
+                    logger.info(f"Skipping already-processed video: {title}")
+                    emit(EventType.VIDEO_SKIPPED, video_id, title=title)
+                    return True
+
                 # --- Transcript Phase ---
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
 
@@ -232,6 +317,16 @@ class CorePipeline:
                     for i, (chap_title, chap_text) in enumerate(
                         chapter_transcripts.items(), 1
                     ):
+                        safe_chapter = sanitize_filename(chap_title)
+                        chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
+
+                        if not self.force and chapter_file.exists():
+                            logger.info(
+                                f"Skipping chapter {i}/{total_chapters}"
+                                f" '{chap_title[:40]}' (already exists)"
+                            )
+                            continue
+
                         emit(
                             EventType.CHAPTER_GENERATING,
                             video_id,
@@ -240,15 +335,33 @@ class CorePipeline:
                             total_chapters=total_chapters,
                         )
 
+                        def _on_chapter_chunk(
+                            chunk_num: int, total: int, _i: int = i
+                        ) -> None:
+                            emit(
+                                EventType.CHAPTER_CHUNK_GENERATING,
+                                video_id,
+                                title=title,
+                                chapter_number=_i,
+                                total_chapters=total_chapters,
+                                chunk_number=chunk_num,
+                                total_chunks=total,
+                            )
+
                         notes = await self.generator.generate_single_chapter_notes(
                             chapter_title=chap_title,
                             chapter_text=chap_text,
+                            on_chunk=_on_chapter_chunk,
                         )
 
-                        safe_chapter = sanitize_filename(chap_title)
-                        chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
                         chapter_file.write_text(notes, encoding="utf-8")
 
+                    if self.quiz:
+                        await self._generate_and_write_quiz(
+                            transcript_obj.to_text(), title
+                        )
+
+                    await self._mark_processed(video_id)
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
@@ -283,6 +396,10 @@ class CorePipeline:
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(notes, encoding="utf-8")
 
+                    if self.quiz:
+                        await self._generate_and_write_quiz(transcript_text, title)
+
+                    await self._mark_processed(video_id)
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
