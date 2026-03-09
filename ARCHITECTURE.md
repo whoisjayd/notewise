@@ -22,30 +22,40 @@ The code is split into three main layers:
 
 ```mermaid
 flowchart TD
-    A([User: yt-study process URL]) --> B[cli.py: parse flags]
-    B --> C{Input type}
-    C -- single video --> D[parser.py: extract video_id]
-    C -- playlist --> E[playlist.py: expand video IDs]
-    C -- batch file --> F[cli.py: read line-by-line]
-    D & E & F --> G[CorePipeline.run]
+    A([User runs yt-study with URL]) --> B[cli.py parses flags]
+    B --> C{Input type?}
 
-    subgraph Pipeline [core/pipeline.py]
-        G --> H[metadata.py: title / duration / chapters]
-        H --> I{Checkpoint: output exists?}
-        I -- yes, no --force --> J([VIDEO_SKIPPED])
-        I -- no or --force --> K[transcript.py: fetch transcript]
-        K --> L{use chapters?}
-        L -- yes --> M[generator: chapter-based notes]
-        L -- no --> N[generator: standard notes]
-        M & N --> O[write .md file(s)]
-        O --> P{--quiz?}
-        P -- yes --> Q[generator.generate_quiz → write _quiz.md]
-        P -- no --> R([VIDEO_SUCCESS])
+    C -->|single video| D[parser.py extracts video_id]
+    C -->|playlist| E[playlist.py expands video IDs]
+    C -->|batch file| F[cli.py reads file line by line]
+
+    D --> G[CorePipeline.run]
+    E --> G
+    F --> G
+
+    subgraph Pipeline["core/pipeline.py"]
+        G --> H[metadata.py fetches title, duration, and chapters]
+        H --> I{Output exists?}
+
+        I -->|yes and not force| J([VIDEO_SKIPPED])
+        I -->|no or force| K[transcript.py fetches transcript]
+
+        K --> L{Use chapters?}
+        L -->|yes| M[generator creates chapter-based notes]
+        L -->|no| N[generator creates standard notes]
+
+        M --> O[write .md file or files]
+        N --> O
+
+        O --> P{Quiz enabled?}
+        P -->|yes| Q[generator.generate_quiz writes _quiz.md]
+        P -->|no| R([VIDEO_SUCCESS])
+
         Q --> R
     end
 
     G --> S([PIPELINE_COMPLETE])
-    S --> T[cli.py: print summary]
+    S --> T[cli.py prints summary]
 ```
 
 ---
@@ -54,13 +64,15 @@ flowchart TD
 
 ```mermaid
 classDiagram
+    direction TB
+
     class CorePipeline {
-        +model: str
-        +output_dir: Path
-        +force: bool
-        +quiz: bool
-        +generator: StudyMaterialGenerator
-        +provider: LLMProvider
+        +model
+        +output_dir
+        +force
+        +quiz
+        +generator
+        +provider
         +run(video_ids, on_event) PipelineResult
         -_process_single_video(video_id, on_event) bool
         -_check_api_key() bool
@@ -68,9 +80,9 @@ classDiagram
     }
 
     class StudyMaterialGenerator {
-        +provider: LLMProvider
-        +temperature: float
-        +max_tokens: int
+        +provider
+        +temperature
+        +max_tokens
         +generate_study_notes(transcript, video_title, on_chunk) str
         +generate_single_chapter_notes(chapter_title, chapter_text) str
         +generate_chapter_based_notes(chapter_transcripts, video_title) str
@@ -80,20 +92,20 @@ classDiagram
     }
 
     class LLMProvider {
-        +model: str
+        +model
         +generate(system_prompt, user_prompt, temperature, max_tokens) str
     }
 
     class PipelineEvent {
-        +event_type: EventType
-        +video_id: str
-        +title: str
-        +chapter_number: int
-        +total_chapters: int
-        +chunk_number: int
-        +total_chunks: int
-        +error: str
-        +output_path: Path
+        +event_type
+        +video_id
+        +title
+        +chapter_number
+        +total_chapters
+        +chunk_number
+        +total_chunks
+        +error
+        +output_path
     }
 
     class PipelineDashboard {
@@ -125,20 +137,28 @@ sequenceDiagram
 
     CLI->>Pipeline: run(["id1", "id2"])
     activate Pipeline
+
     Pipeline->>W1: _process_single_video("id1")
-    Pipeline->>W2: _process_single_video("id2")
     activate W1
+
+    Pipeline->>W2: _process_single_video("id2")
     activate W2
+
     W1-->>Pipeline: METADATA_FETCHED(id1)
     W2-->>Pipeline: METADATA_FETCHED(id2)
+
     W1->>LLM: generate(prompt)
-    W2->>LLM: generate(prompt)
     LLM-->>W1: notes
+
+    W2->>LLM: generate(prompt)
     LLM-->>W2: notes
+
     W1-->>Pipeline: VIDEO_SUCCESS(id1)
-    W2-->>Pipeline: VIDEO_SUCCESS(id2)
     deactivate W1
+
+    W2-->>Pipeline: VIDEO_SUCCESS(id2)
     deactivate W2
+
     Pipeline-->>CLI: PipelineResult
     deactivate Pipeline
 ```
