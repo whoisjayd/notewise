@@ -172,3 +172,10 @@ class TestStudyMaterialGenerator:
             await generator.generate_single_chapter_notes("Ch1", "big text")
         # 1 chunk call + 1 combine = 2 calls (chunked path always combines)
         assert generator.provider.generate.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_calls_provider_once(self, generator):
+        """generate_quiz() delegates to the provider in a single call."""
+        result = await generator.generate_quiz("full transcript text")
+        assert generator.provider.generate.call_count == 1
+        assert result == "# Generated Notes\n\nTest content."

@@ -136,6 +136,7 @@ class CorePipeline:
         temperature: float | None = None,
         max_tokens: int | None = None,
         force: bool = False,
+        quiz: bool = False,
     ):
         """
         Initialize the core pipeline.
@@ -147,6 +148,7 @@ class CorePipeline:
             temperature: LLM temperature.
             max_tokens: Max tokens for generation.
             force: Re-process videos that already have saved output.
+            quiz: Also generate a multiple-choice quiz file.
         """
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -163,6 +165,7 @@ class CorePipeline:
             max_tokens=self.max_tokens,
         )
         self.force = force
+        self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.errors: dict[str, str] = {}
 
@@ -294,6 +297,15 @@ class CorePipeline:
                         chapter_file = output_folder / f"{i:02d}_{safe_chapter}.md"
                         chapter_file.write_text(notes, encoding="utf-8")
 
+                    if self.quiz:
+                        quiz_notes = await self.generator.generate_quiz(
+                            transcript_obj.to_text()
+                        )
+                        quiz_path = (
+                            self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+                        )
+                        quiz_path.write_text(quiz_notes, encoding="utf-8")
+
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
@@ -327,6 +339,13 @@ class CorePipeline:
                     output_path = self.output_dir / f"{sanitize_filename(title)}.md"
                     output_path.parent.mkdir(parents=True, exist_ok=True)
                     output_path.write_text(notes, encoding="utf-8")
+
+                    if self.quiz:
+                        quiz_notes = await self.generator.generate_quiz(transcript_text)
+                        quiz_path = (
+                            self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+                        )
+                        quiz_path.write_text(quiz_notes, encoding="utf-8")
 
                     emit(
                         EventType.GENERATION_COMPLETE,

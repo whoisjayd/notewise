@@ -353,3 +353,21 @@ def test_process_no_ui_prints_done_summary(
     assert result.exit_code == 0
     assert "Done:" in result.output
     assert "1/1 succeeded" in result.output
+
+
+# ---------------------------------------------------------------------------
+# process command — quiz flag (#30)
+# ---------------------------------------------------------------------------
+
+
+def test_process_quiz_flag_passed_to_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """--quiz is forwarded to CorePipeline as quiz=True."""
+    mock_cls, pipeline_instance = mock_pipeline
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--quiz"])
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs.get("quiz") is True

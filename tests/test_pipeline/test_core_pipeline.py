@@ -524,14 +524,19 @@ _COMMON_PATCHES = dict(
 )
 
 
-def _make_pipeline(tmp_path, mock_llm_provider, force: bool = False):
+def _make_pipeline(
+    tmp_path, mock_llm_provider, force: bool = False, quiz: bool = False
+):
     with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
-        p = CorePipeline(model="mock-model", output_dir=tmp_path, force=force)
+        p = CorePipeline(
+            model="mock-model", output_dir=tmp_path, force=force, quiz=quiz
+        )
         p.generator = MagicMock()
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
         p.generator.generate_single_chapter_notes = AsyncMock(
             return_value="# Chapter Notes"
         )
+        p.generator.generate_quiz = AsyncMock(return_value="# Quiz")
         return p
 
 
@@ -609,3 +614,30 @@ async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider
 
     assert result.success_count == 1
     assert (temp_output_dir / "Brand New Video.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
+    """With quiz=True a *_quiz.md file is written alongside the study notes."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid1"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Study Subject.md").exists()
+    assert (temp_output_dir / "Study Subject_quiz.md").exists()
+    assert (temp_output_dir / "Study Subject_quiz.md").read_text(encoding="utf-8") == (
+        "# Quiz"
+    )
+    p.generator.generate_quiz.assert_awaited_once_with("full transcript")

@@ -10,6 +10,7 @@ from ..prompts.chapter_notes import (
     get_chapter_prompt,
     get_combine_chapters_prompt,
 )
+from ..prompts.quiz import QUIZ_SYSTEM_PROMPT, get_quiz_prompt
 from ..prompts.study_notes import (
     SYSTEM_PROMPT,
     get_chunk_prompt,
@@ -314,3 +315,12 @@ class StudyMaterialGenerator:
         )
         logger.info(f"Completed chapter-based notes for {video_title}")
         return final_notes
+
+    async def generate_quiz(self, transcript: str) -> str:
+        """Generate a multiple-choice quiz from a transcript."""
+        return await self.provider.generate(
+            system_prompt=QUIZ_SYSTEM_PROMPT,
+            user_prompt=get_quiz_prompt(transcript),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )

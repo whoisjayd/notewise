@@ -179,6 +179,13 @@ def process(
             ),
         ),
     ] = False,
+    quiz: Annotated[
+        bool,
+        typer.Option(
+            "--quiz",
+            help="Also generate a multiple-choice quiz file alongside the study notes.",
+        ),
+    ] = False,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -369,6 +376,7 @@ def process(
                 temperature=selected_temperature,
                 max_tokens=selected_max_tokens,
                 force=force,
+                quiz=quiz,
             )
 
             if no_ui:
