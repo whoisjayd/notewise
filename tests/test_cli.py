@@ -293,3 +293,63 @@ def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # no
 
     assert result.exit_code == 0
     assert "Input Error" in result.stdout
+
+
+# ---------------------------------------------------------------------------
+# process command — headless / --no-ui mode (#37)
+# ---------------------------------------------------------------------------
+
+
+def test_process_no_ui_flag_runs_without_dashboard(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """--no-ui skips PipelineDashboard and still runs the pipeline."""
+    _, pipeline_instance = mock_pipeline
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+
+
+def test_process_no_ui_prints_done_summary(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """--no-ui prints a plain 'Done: N/N succeeded.' summary line."""
+    from yt_study.core.pipeline import PipelineResult
+
+    real_result = PipelineResult(
+        success_count=1,
+        failure_count=0,
+        total_count=1,
+        video_ids=["dQw4w9WgXcQ"],
+        errors={},
+    )
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=real_result)
+
+    with (
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.check_config_exists", return_value=True),
+    ):
+        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.get_api_key_name_for_model.return_value = None
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 0
+    assert "Done:" in result.output
+    assert "1/1 succeeded" in result.output
