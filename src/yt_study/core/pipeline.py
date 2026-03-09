@@ -51,6 +51,7 @@ class EventType(Enum):
     GENERATION_START = "generation_start"
     CHUNK_GENERATING = "chunk_generating"
     CHAPTER_GENERATING = "chapter_generating"
+    CHAPTER_CHUNK_GENERATING = "chapter_chunk_generating"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
     VIDEO_SKIPPED = "video_skipped"
@@ -324,9 +325,23 @@ class CorePipeline:
                             total_chapters=total_chapters,
                         )
 
+                        def _on_chapter_chunk(
+                            chunk_num: int, total: int, _i: int = i
+                        ) -> None:
+                            emit(
+                                EventType.CHAPTER_CHUNK_GENERATING,
+                                video_id,
+                                title=title,
+                                chapter_number=_i,
+                                total_chapters=total_chapters,
+                                chunk_number=chunk_num,
+                                total_chunks=total,
+                            )
+
                         notes = await self.generator.generate_single_chapter_notes(
                             chapter_title=chap_title,
                             chapter_text=chap_text,
+                            on_chunk=_on_chapter_chunk,
                         )
 
                         safe_chapter = sanitize_filename(chap_title)

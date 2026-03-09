@@ -215,6 +215,7 @@ class StudyMaterialGenerator:
         self,
         chapter_title: str,
         chapter_text: str,
+        on_chunk: Callable[[int, int], None] | None = None,
     ) -> str:
         """
         Generate study notes for a single chapter.
@@ -254,6 +255,8 @@ class StudyMaterialGenerator:
             logger.info(
                 f"Chapter '{chapter_title[:40]}': generating part {i}/{len(chunks)}"
             )
+            if on_chunk:
+                on_chunk(i, len(chunks))
             note = await self.provider.generate(
                 system_prompt=CHAPTER_SYSTEM_PROMPT,
                 user_prompt=get_chapter_prompt(chapter_title, chunk),

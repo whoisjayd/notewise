@@ -338,6 +338,10 @@ def process(
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
+            EventType.CHAPTER_CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
+                f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
         }
 
         async def _run_single_url(single_url: str) -> None:
@@ -386,6 +390,7 @@ def process(
                     EventType.GENERATION_START: "Generating notes",
                     EventType.CHUNK_GENERATING: "Generating chunk",
                     EventType.CHAPTER_GENERATING: "Generating chapter",
+                    EventType.CHAPTER_CHUNK_GENERATING: "Generating chapter part",
                     EventType.GENERATION_COMPLETE: "Generation complete",
                     EventType.VIDEO_SUCCESS: "Done",
                     EventType.VIDEO_SKIPPED: "Skipped (already processed)",
@@ -403,7 +408,18 @@ def process(
                     )
                     title = event.title or event.video_id
                     extra = ""
-                    if event.chunk_number and event.total_chunks:
+                    if (
+                        event.event_type == EventType.CHAPTER_CHUNK_GENERATING
+                        and event.chapter_number
+                        and event.total_chapters
+                        and event.chunk_number
+                        and event.total_chunks
+                    ):
+                        extra = (
+                            f" [Ch {event.chapter_number}/{event.total_chapters},"
+                            f" Part {event.chunk_number}/{event.total_chunks}]"
+                        )
+                    elif event.chunk_number and event.total_chunks:
                         extra = f" [{event.chunk_number}/{event.total_chunks}]"
                     elif event.chapter_number and event.total_chapters:
                         extra = f" [{event.chapter_number}/{event.total_chapters}]"
