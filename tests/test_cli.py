@@ -334,6 +334,16 @@ def test_process_missing_batch_file_reports_file_error():
     assert "Invalid YouTube URL" not in result.stdout
 
 
+def test_process_missing_nested_batch_file_reports_file_error():
+    """Explicit local paths with separators should also be treated as file inputs."""
+    with patch("yt_study.cli.check_config_exists", return_value=True):
+        result = runner.invoke(app, ["process", "batches/urls"])
+
+    assert result.exit_code == 1
+    assert "Batch file does not exist" in result.stdout
+    assert "Invalid YouTube URL" not in result.stdout
+
+
 # ---------------------------------------------------------------------------
 # process command — headless / --no-ui mode (#37)
 # ---------------------------------------------------------------------------

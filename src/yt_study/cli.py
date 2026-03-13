@@ -62,6 +62,13 @@ app = typer.Typer(
 )
 
 console = Console()
+_SCHEMELESS_YOUTUBE_PREFIXES = (
+    "youtube.com/",
+    "www.youtube.com/",
+    "m.youtube.com/",
+    "music.youtube.com/",
+    "youtu.be/",
+)
 
 
 def check_config_exists() -> bool:
@@ -94,12 +101,17 @@ def looks_like_batch_file_path(value: str) -> bool:
     if parsed.scheme in {"http", "https"} and parsed.netloc:
         return False
 
+    normalized = value.strip().lower().replace("\\", "/")
+    if normalized.startswith(_SCHEMELESS_YOUTUBE_PREFIXES):
+        return False
+
     input_path = Path(value).expanduser()
     return (
-        input_path.suffix.lower() == ".txt"
+        bool(input_path.suffix)
         or input_path.is_absolute()
         or bool(input_path.drive)
         or value.startswith((".", "~"))
+        or ("/" in value)
         or ("\\" in value)
     )
 
