@@ -297,6 +297,17 @@ def _parse_bool_config(value: str | None, default: bool) -> bool:
     return parse_bool_setting(value, default)
 
 
+def _prompt_positive_int(prompt: str, default: str) -> str:
+    """Prompt until the user enters a positive integer string."""
+    while True:
+        value = Prompt.ask(prompt, default=default).strip()
+        if value.isdigit() and int(value) >= 1:
+            return value
+        console.print(
+            "[red]Please enter a whole number greater than or equal to 1.[/red]"
+        )
+
+
 def select_provider(available_models: dict[str, list[str]]) -> str:
     """Interactive provider selection."""
     console.print("\n[bold cyan]Select LLM Provider:[/bold cyan]\n")
@@ -479,8 +490,9 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
 
     console.print("\n[bold cyan]Concurrency:[/bold cyan]")
     default_concurrency = current_config.get("MAX_CONCURRENT_VIDEOS", "5")
-    concurrency = Prompt.ask(
-        "Max concurrent videos to process?", default=default_concurrency
+    concurrency = _prompt_positive_int(
+        "Max concurrent videos to process?",
+        default_concurrency,
     )
 
     console.print("\n[bold cyan]YouTube Authentication (Optional):[/bold cyan]")

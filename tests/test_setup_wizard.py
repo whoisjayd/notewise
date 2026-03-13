@@ -327,6 +327,32 @@ class TestWizardOrchestration:
         assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "true"
         mock_save.assert_called_once()
 
+    def test_run_setup_wizard_reprompts_for_invalid_concurrency(self):
+        """Wizard should reject invalid concurrency input before saving config."""
+        with (
+            patch("yt_study.setup_wizard.load_config", return_value={}),
+            patch(
+                "yt_study.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ),
+            patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
+            patch(
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ),
+            patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["/custom/out", "zero", "0", "7"],
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("yt_study.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config["MAX_CONCURRENT_VIDEOS"] == "7"
+        mock_save.assert_called_once()
+
     def test_run_setup_wizard_oauth_disable_clears_existing_cache_settings(self):
         """Reconfiguring away from OAuth should clear stale token-cache settings."""
         existing_config = {
