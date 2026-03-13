@@ -15,6 +15,19 @@ from .config_helpers import (
 
 logger = logging.getLogger(__name__)
 _OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
+_NATIVE_PROVIDER_API_KEYS: dict[str, str] = {
+    "anthropic": "ANTHROPIC_API_KEY",
+    "cohere": "COHERE_API_KEY",
+    "deepseek": "DEEPSEEK_API_KEY",
+    "gemini": "GEMINI_API_KEY",
+    "groq": "GROQ_API_KEY",
+    "mistral": "MISTRAL_API_KEY",
+    "openai": "OPENAI_API_KEY",
+    "vertex": "GEMINI_API_KEY",
+    "vertex_ai": "GEMINI_API_KEY",
+    "xai": "XAI_API_KEY",
+}
+_UNSUPPORTED_GATEWAY_PREFIXES = {"azure", "openrouter", "vercel_ai_gateway"}
 
 
 @dataclass
@@ -279,27 +292,37 @@ class Config:
 
     def get_api_key_name_for_model(self, model: str) -> str | None:
         """Get the environment variable name for the API key required by a model."""
-        model_lower = model.lower()
+        model_lower = model.strip().lower()
+        if not model_lower:
+            return None
 
-        if "gemini" in model_lower or "vertex" in model_lower:
+        provider_prefix, separator, remainder = model_lower.partition("/")
+        if separator:
+            if provider_prefix in _UNSUPPORTED_GATEWAY_PREFIXES:
+                return None
+            if provider_prefix in _NATIVE_PROVIDER_API_KEYS:
+                return _NATIVE_PROVIDER_API_KEYS[provider_prefix]
+            return None
+
+        if model_lower.startswith("gemini") or model_lower.startswith("vertex"):
             return "GEMINI_API_KEY"
         elif (
-            "gpt" in model_lower
-            or "openai" in model_lower
-            or _OPENAI_REASONING_MODEL.search(model_lower) is not None
+            model_lower.startswith("gpt")
+            or model_lower.startswith("openai")
+            or (_OPENAI_REASONING_MODEL.search(model_lower) is not None)
         ):
             return "OPENAI_API_KEY"
-        elif "claude" in model_lower or "anthropic" in model_lower:
+        elif model_lower.startswith("claude") or model_lower.startswith("anthropic"):
             return "ANTHROPIC_API_KEY"
-        elif "groq" in model_lower:
+        elif model_lower.startswith("groq"):
             return "GROQ_API_KEY"
-        elif "grok" in model_lower or "xai" in model_lower:
+        elif model_lower.startswith("grok") or model_lower.startswith("xai"):
             return "XAI_API_KEY"
-        elif "mistral" in model_lower:
+        elif model_lower.startswith("mistral"):
             return "MISTRAL_API_KEY"
-        elif "cohere" in model_lower or "command" in model_lower:
+        elif model_lower.startswith("cohere") or model_lower.startswith("command"):
             return "COHERE_API_KEY"
-        elif "deepseek" in model_lower:
+        elif model_lower.startswith("deepseek"):
             return "DEEPSEEK_API_KEY"
 
         return None

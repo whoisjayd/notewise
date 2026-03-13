@@ -98,6 +98,17 @@ class TestConfig:
         assert cfg.get_api_key_name_for_model("o3-mini") == "OPENAI_API_KEY"
         assert cfg.get_api_key_name_for_model("o4-mini") == "OPENAI_API_KEY"
 
+    def test_gateway_models_do_not_map_to_first_party_api_keys(self):
+        """Unsupported gateway prefixes should not demand the wrong first-party key."""
+        cfg = Config()
+
+        assert (
+            cfg.get_api_key_name_for_model("openrouter/google/gemini-2.5-flash") is None
+        )
+        assert cfg.get_api_key_name_for_model("google/gemini-2.5-flash") is None
+        assert cfg.get_api_key_name_for_model("azure/gpt-4o") is None
+        assert cfg.get_api_key_name_for_model("vercel_ai_gateway/gpt-4o") is None
+
     def test_temperature_out_of_range(self, monkeypatch):
         """TEMPERATURE > 1 falls back to 0.7."""
         monkeypatch.delenv("TEMPERATURE", raising=False)
