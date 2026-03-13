@@ -28,6 +28,7 @@ dependencies = [
     "rich>=13.9.4",
     "aiolimiter>=1.2.1",
     "requests>=2.32.0",
+    "sqlmodel>=0.0.37",
 ]
 
 [project.urls]

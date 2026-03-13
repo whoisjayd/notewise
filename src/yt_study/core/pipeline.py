@@ -7,7 +7,6 @@ No Rich, no Console, no Dashboard imports here.
 """
 
 import asyncio
-import json
 import logging
 import os
 import re
@@ -19,6 +18,7 @@ from typing import Any
 
 from aiolimiter import AsyncLimiter
 
+from ..db import DatabaseManager, Video
 from .config import config
 from .config_helpers import default_youtube_oauth_token_file
 from .llm.generator import StudyMaterialGenerator
@@ -234,7 +234,7 @@ class CorePipeline:
         if self.use_oauth and self.save_oauth_token and self.oauth_token_file is None:
             self.oauth_token_file = default_youtube_oauth_token_file()
         self.errors: dict[str, str] = {}
-        self._manifest_lock = asyncio.Lock()
+        self.db = DatabaseManager.get_instance(self._cache_db_path())
 
     def _get_youtube_request_limiter(self) -> AsyncLimiter:
         """Return the shared limiter for this pipeline's configured rate."""
@@ -325,38 +325,45 @@ class CorePipeline:
             return False
         return True
 
-    # ------------------------------------------------------------------
-    # Manifest helpers (checkpoint by video ID)
-    # ------------------------------------------------------------------
+    def _cache_db_path(self) -> Path:
+        """Return SQLite cache path for this pipeline output directory."""
+        return self.output_dir / ".yt_study_cache.db"
 
-    def _manifest_path(self) -> Path:
-        """Return the path to the processed-video manifest file."""
-        return self.output_dir / ".yt_study_processed.json"
+    async def _get_cached_video(self, video_id: str) -> Video | None:
+        """Return cached metadata for a video when present."""
+        try:
+            return await asyncio.to_thread(self.db.get_video, video_id)
+        except Exception as exc:
+            logger.warning(f"Failed to read SQLite cache for {video_id}: {exc}")
+            return None
 
-    def _load_manifest(self) -> dict[str, bool]:
-        """Load the manifest dict from disk; return an empty dict on any error."""
-        path = self._manifest_path()
-        if path.exists():
-            try:
-                data = json.loads(path.read_text(encoding="utf-8"))
-                return {k: bool(v) for k, v in data.items()}
-            except Exception:
-                return {}
-        return {}
+    async def _persist_video_cache(
+        self,
+        *,
+        video_id: str,
+        title: str,
+        duration: int,
+        transcript_text: str,
+        transcript_language: str,
+    ) -> None:
+        """Persist metadata/transcript/run stats for completed videos."""
+        try:
+            await asyncio.to_thread(
+                self.db.upsert_video_cache,
+                video_id=video_id,
+                title=title,
+                duration=duration,
+                transcript_content=transcript_text,
+                language=transcript_language,
+                tokens_used=self._estimate_tokens_used(transcript_text),
+                model=self.model,
+            )
+        except Exception as exc:
+            logger.warning(f"Failed to persist SQLite cache for {video_id}: {exc}")
 
-    async def _mark_processed(self, video_id: str) -> None:
-        """Atomically record *video_id* as successfully processed."""
-        async with self._manifest_lock:
-            manifest = self._load_manifest()
-            manifest[video_id] = True
-            try:
-                self.output_dir.mkdir(parents=True, exist_ok=True)
-                self._manifest_path().write_text(
-                    json.dumps(manifest, indent=2, sort_keys=True),
-                    encoding="utf-8",
-                )
-            except Exception as exc:
-                logger.warning(f"Failed to update processed manifest: {exc}")
+    def _estimate_tokens_used(self, transcript_text: str) -> int:
+        """Estimate token usage for run stats when provider usage is unavailable."""
+        return max(1, len(transcript_text) // 4)
 
     # ------------------------------------------------------------------
     # Quiz helper
@@ -390,9 +397,16 @@ class CorePipeline:
                 emit(EventType.METADATA_START, video_id)
 
                 # --- Checkpoint: skip already-processed videos (unless --force) ---
-                if not self.force and self._load_manifest().get(video_id):
+                cached_video = (
+                    None if self.force else await self._get_cached_video(video_id)
+                )
+                if cached_video is not None:
                     logger.info(f"Skipping already-processed video: {video_id}")
-                    emit(EventType.VIDEO_SKIPPED, video_id, title=video_id)
+                    emit(
+                        EventType.VIDEO_SKIPPED,
+                        video_id,
+                        title=cached_video.title or video_id,
+                    )
                     return True
 
                 self._check_oauth_token_cache()
@@ -442,6 +456,7 @@ class CorePipeline:
                     cookies_path=self.cookies_path,
                     on_request=self._acquire_youtube_request_slot,
                 )
+                transcript_text = transcript_obj.to_text()
 
                 emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
 
@@ -505,11 +520,14 @@ class CorePipeline:
                         chapter_file.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
-                        await self._generate_and_write_quiz(
-                            transcript_obj.to_text(), title
-                        )
-
-                    await self._mark_processed(video_id)
+                        await self._generate_and_write_quiz(transcript_text, title)
+                    await self._persist_video_cache(
+                        video_id=video_id,
+                        title=title,
+                        duration=duration,
+                        transcript_text=transcript_text,
+                        transcript_language=transcript_obj.language_code,
+                    )
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
@@ -522,8 +540,6 @@ class CorePipeline:
                 else:
                     # Single file generation
                     emit(EventType.GENERATION_START, video_id, title=title)
-
-                    transcript_text = transcript_obj.to_text()
 
                     def _on_chunk(chunk_num: int, total: int) -> None:
                         emit(
@@ -546,8 +562,13 @@ class CorePipeline:
 
                     if self.quiz:
                         await self._generate_and_write_quiz(transcript_text, title)
-
-                    await self._mark_processed(video_id)
+                    await self._persist_video_cache(
+                        video_id=video_id,
+                        title=title,
+                        duration=duration,
+                        transcript_text=transcript_text,
+                        transcript_language=transcript_obj.language_code,
+                    )
                     emit(
                         EventType.GENERATION_COMPLETE,
                         video_id,
