@@ -19,7 +19,7 @@ class TestConfig:
         # Prevent loading from real user config file
         with patch.object(Config, "_load_from_user_config"):
             cfg = Config()
-            assert cfg.default_model == "gemini/gemini-2.0-flash"
+            assert cfg.default_model == "gemini/gemini-2.5-flash"
             assert cfg.max_concurrent_videos == 5
             assert cfg.youtube_requests_per_minute == 10
 
@@ -88,6 +88,26 @@ class TestConfig:
             cfg.get_api_key_name_for_model("deepseek/deepseek-chat")
             == "DEEPSEEK_API_KEY"
         )
+
+    def test_openai_reasoning_model_key_mapping(self):
+        """OpenAI reasoning-model families must resolve to OPENAI_API_KEY."""
+        cfg = Config()
+
+        assert cfg.get_api_key_name_for_model("o1") == "OPENAI_API_KEY"
+        assert cfg.get_api_key_name_for_model("o1-mini") == "OPENAI_API_KEY"
+        assert cfg.get_api_key_name_for_model("o3-mini") == "OPENAI_API_KEY"
+        assert cfg.get_api_key_name_for_model("o4-mini") == "OPENAI_API_KEY"
+
+    def test_gateway_models_do_not_map_to_first_party_api_keys(self):
+        """Unsupported gateway prefixes should not demand the wrong first-party key."""
+        cfg = Config()
+
+        assert (
+            cfg.get_api_key_name_for_model("openrouter/google/gemini-2.5-flash") is None
+        )
+        assert cfg.get_api_key_name_for_model("google/gemini-2.5-flash") is None
+        assert cfg.get_api_key_name_for_model("azure/gpt-4o") is None
+        assert cfg.get_api_key_name_for_model("vercel_ai_gateway/gpt-4o") is None
 
     def test_temperature_out_of_range(self, monkeypatch):
         """TEMPERATURE > 1 falls back to 0.7."""

@@ -110,6 +110,9 @@ yt-study version
 --token-file
 --save-oauth-token / --no-save-oauth-token
 --auto-refresh-oauth-token / --no-auto-refresh-oauth-token
+--force / -F
+--no-ui
+--quiz
 ```
 
 Accepted input shapes for `process`:
@@ -123,6 +126,7 @@ Batch-file behavior:
 - blank lines ignored
 - lines beginning with `#` ignored
 - each remaining line processed sequentially as its own input
+- unreadable or missing batch-file paths fail fast instead of falling through to URL parsing
 
 ## CURRENT CONFIG MODEL
 
@@ -169,13 +173,21 @@ Provider mapping implemented in `Config.get_api_key_name_for_model()`:
 | Model family | Required env key |
 | --- | --- |
 | `gemini`, `vertex` | `GEMINI_API_KEY` |
-| `gpt`, `openai` | `OPENAI_API_KEY` |
+| `gpt`, `openai`, `o1`, `o3`, `o4` | `OPENAI_API_KEY` |
 | `claude`, `anthropic` | `ANTHROPIC_API_KEY` |
 | `groq` | `GROQ_API_KEY` |
 | `grok`, `xai` | `XAI_API_KEY` |
 | `mistral` | `MISTRAL_API_KEY` |
 | `cohere`, `command` | `COHERE_API_KEY` |
 | `deepseek` | `DEEPSEEK_API_KEY` |
+
+Setup wizard model selection is intentionally strict for non-technical users:
+
+- native provider models only
+- deprecated models hidden
+- preview/beta/exp models kept when still current
+- non-text models hidden
+- curated stable fallback lists used when LiteLLM discovery is unavailable or incomplete
 
 ## ARCHITECTURE RULES
 
@@ -214,9 +226,17 @@ Event enum: `src/yt_study/core/pipeline.py`
 - `TRANSCRIPT_FETCHED`
 - `GENERATION_START`
 - `CHUNK_GENERATING`
+- `GENERATION_COMBINING`
 - `CHAPTER_GENERATING`
+- `CHAPTER_CHUNK_GENERATING`
+- `CHAPTER_COMBINING`
+- `QUIZ_GENERATING`
+- `QUIZ_CHUNK_GENERATING`
+- `QUIZ_COMBINING`
+- `QUIZ_COMPLETE`
 - `GENERATION_COMPLETE`
 - `VIDEO_SUCCESS`
+- `VIDEO_SKIPPED`
 - `VIDEO_FAILED`
 - `PIPELINE_COMPLETE`
 
@@ -228,7 +248,13 @@ PIPELINE_START
   -> METADATA_FETCHED
   -> TRANSCRIPT_FETCHING
   -> TRANSCRIPT_FETCHED
-  -> GENERATION_START or CHAPTER_GENERATING x N
+  -> GENERATION_START
+  -> CHUNK_GENERATING x N
+  -> GENERATION_COMBINING (when chunked)
+  -> or CHAPTER_GENERATING x N
+  -> CHAPTER_CHUNK_GENERATING x N (when chunked)
+  -> CHAPTER_COMBINING x N (when chunked)
+  -> QUIZ_GENERATING / QUIZ_CHUNK_GENERATING / QUIZ_COMBINING / QUIZ_COMPLETE (when enabled)
   -> GENERATION_COMPLETE
   -> VIDEO_SUCCESS
 PIPELINE_COMPLETE
@@ -270,6 +296,9 @@ Output path:
 ```text
 {output_dir}/{safe_video_title}/{i:02d}_{safe_chapter}.md
 ```
+
+If two videos sanitize to the same base output name, later outputs are
+disambiguated by appending ` (VIDEO_ID)` to the note filename or chapter folder.
 
 ### Chunking algorithm
 
@@ -324,6 +353,10 @@ Supported:
 - token `expires` supports numeric and string epoch values
 - access-token caches with missing/invalid expiry are treated as stale
 - stale caches without a refresh token are auto-cleared when `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN=true`
+- the CLI primes OAuth once before single-video processing starts so Rich Live
+  does not trap the device-flow prompt
+- `--use-oauth` with `--no-save-oauth-token` uses a temporary session token
+  file so repeated metadata calls reuse one login without leaving a cache file
 
 ### Local SQLite cache
 

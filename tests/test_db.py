@@ -1,6 +1,7 @@
 """Tests for SQLite cache database manager."""
 
 import os
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
@@ -83,7 +84,7 @@ def test_upsert_video_cache_persists_video_transcript_and_run_stats(tmp_path):
         prompt_tokens=30,
         completion_tokens=12,
         cost_usd=0.123456,
-        model="gemini/gemini-2.0-flash",
+        model="gemini/gemini-2.5-flash",
         transcript_seconds=1.5,
         generation_seconds=2.5,
     )
@@ -196,3 +197,136 @@ def test_database_manager_close_instance_evicts_singleton(tmp_path):
     manager_two = DatabaseManager.get_instance(db_path)
 
     assert manager_one is not manager_two
+
+
+def test_database_manager_repairs_older_runstats_schema_in_place(tmp_path):
+    """Older cache DBs should be upgraded before new metric writes occur."""
+    db_path = tmp_path / "legacy-cache.db"
+    with sqlite3.connect(db_path) as connection:
+        connection.executescript(
+            """
+            CREATE TABLE video (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                duration INTEGER NOT NULL
+            );
+            CREATE TABLE transcript (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL UNIQUE,
+                content TEXT NOT NULL,
+                language TEXT NOT NULL
+            );
+            CREATE TABLE runstats (
+                id INTEGER PRIMARY KEY,
+                video_id TEXT NOT NULL,
+                tokens_used INTEGER NOT NULL,
+                model TEXT NOT NULL,
+                timestamp TEXT NOT NULL
+            );
+            """
+        )
+
+    db = DatabaseManager.get_instance(db_path)
+    db.upsert_video_cache(
+        video_id="video-legacy",
+        title="Legacy Video",
+        duration=90,
+        transcript_content="legacy transcript",
+        language="en",
+        tokens_used=12,
+        prompt_tokens=7,
+        completion_tokens=5,
+        cost_usd=0.5,
+        model="gemini/gemini-2.5-flash",
+        transcript_seconds=1.25,
+        generation_seconds=2.75,
+    )
+
+    with sqlite3.connect(db_path) as connection:
+        columns = {
+            row[1]: row[4]
+            for row in connection.execute("PRAGMA table_info(runstats)").fetchall()
+        }
+
+    assert columns["prompt_tokens"] == "0"
+    assert columns["completion_tokens"] == "0"
+    assert columns["cost_usd"] == "0.0"
+    assert columns["transcript_seconds"] == "0.0"
+    assert columns["generation_seconds"] == "0.0"
+
+    stats = db.get_run_stats("video-legacy")
+    assert len(stats) == 1
+    assert stats[0].prompt_tokens == 7
+    assert stats[0].completion_tokens == 5
+    assert stats[0].cost_usd == 0.5
+    assert stats[0].transcript_seconds == 1.25
+    assert stats[0].generation_seconds == 2.75
+
+
+def test_get_run_stats_orders_rows_chronologically(tmp_path):
+    """Run stats should be returned oldest-first for stable latest-row access."""
+    db_path = tmp_path / "ordered-cache.db"
+    db = DatabaseManager.get_instance(db_path)
+
+    with sqlite3.connect(db_path) as connection:
+        connection.execute(
+            "INSERT INTO video (id, title, duration) VALUES (?, ?, ?)",
+            ("video-1", "Video One", 120),
+        )
+        connection.execute(
+            """
+            INSERT INTO runstats (
+                video_id,
+                tokens_used,
+                prompt_tokens,
+                completion_tokens,
+                cost_usd,
+                model,
+                transcript_seconds,
+                generation_seconds,
+                timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "video-1",
+                20,
+                12,
+                8,
+                0.2,
+                "model-newer",
+                1.0,
+                2.0,
+                "2026-03-13 12:00:00+00:00",
+            ),
+        )
+        connection.execute(
+            """
+            INSERT INTO runstats (
+                video_id,
+                tokens_used,
+                prompt_tokens,
+                completion_tokens,
+                cost_usd,
+                model,
+                transcript_seconds,
+                generation_seconds,
+                timestamp
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                "video-1",
+                10,
+                6,
+                4,
+                0.1,
+                "model-older",
+                0.5,
+                1.5,
+                "2026-03-13 11:00:00+00:00",
+            ),
+        )
+        connection.commit()
+
+    stats = db.get_run_stats("video-1")
+
+    assert [row.model for row in stats] == ["model-older", "model-newer"]

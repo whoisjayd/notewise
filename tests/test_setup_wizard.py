@@ -3,6 +3,7 @@
 from unittest.mock import mock_open, patch
 
 from yt_study.setup_wizard import (
+    CURATED_FALLBACK_MODELS,
     get_api_key,
     get_available_models,
     load_config,
@@ -111,17 +112,7 @@ class TestModelFetching:
             # and return the fallback list.
             models = get_available_models()
 
-            # Verify we got the fallback list (check for 'gemini' and
-            # specific structure)
-            assert "gemini" in models
-            assert len(models["gemini"]) > 0
-            # Fallback list has "gemini/gemini-1.5-flash"
-            assert "gemini/gemini-1.5-flash" in models["gemini"]
-            # Cohere, DeepSeek, and Mistral must be present so the wizard
-            # offers them even when LiteLLM is unavailable.
-            assert "cohere" in models
-            assert "deepseek" in models
-            assert "mistral" in models
+            assert models == CURATED_FALLBACK_MODELS
 
     def test_get_available_models_fallback_trigger(self):
         """Trigger fallback manually by raising exception during processing."""
@@ -137,6 +128,76 @@ class TestModelFetching:
 
         # Let's skip complex import mocking and assume fallback works if we can't fetch.
         pass
+
+    def test_get_available_models_filters_only_deprecated_gateway_and_non_text(self):
+        """Setup should keep preview models while still hiding deprecated ones."""
+        mock_models = [
+            "gpt-4o-mini",
+            "o3-mini",
+            "o4-mini",
+            "azure/gpt-4o",
+            "gpt-4o-mini-preview",
+            "gemini/gemini-2.5-flash",
+            "gemini/gemini-3-flash-preview",
+            "gemini/gemini-3.1-pro-preview",
+            "gemini/gemini-2.0-flash",
+            "gemini/imagen-4.0-generate-001",
+            "openrouter/google/gemini-2.5-flash",
+            "claude-sonnet-4-5-20250929",
+        ]
+        mock_cost = {
+            "gpt-4o-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "o3-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "o4-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "azure/gpt-4o": {"litellm_provider": "azure", "mode": "chat"},
+            "gpt-4o-mini-preview": {"litellm_provider": "openai", "mode": "chat"},
+            "gemini/gemini-2.5-flash": {"litellm_provider": "gemini", "mode": "chat"},
+            "gemini/gemini-3-flash-preview": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+            },
+            "gemini/gemini-3.1-pro-preview": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+            },
+            "gemini/gemini-2.0-flash": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+                "deprecation_date": "2026-06-01",
+            },
+            "gemini/imagen-4.0-generate-001": {
+                "litellm_provider": "gemini",
+                "mode": "image_generation",
+            },
+            "openrouter/google/gemini-2.5-flash": {
+                "litellm_provider": "openrouter",
+                "mode": "chat",
+            },
+            "claude-sonnet-4-5-20250929": {
+                "litellm_provider": "anthropic",
+                "mode": "chat",
+            },
+        }
+
+        with (
+            patch("litellm.model_list", mock_models, create=True),
+            patch("litellm.model_cost", mock_cost, create=True),
+        ):
+            models = get_available_models()
+
+        assert models["openai"] == [
+            "gpt-4o-mini",
+            "gpt-4o-mini-preview",
+            "o3-mini",
+            "o4-mini",
+        ]
+        assert models["gemini"] == [
+            "gemini/gemini-2.5-flash",
+            "gemini/gemini-3-flash-preview",
+            "gemini/gemini-3.1-pro-preview",
+        ]
+        assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
+        assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
 
 
 class TestInteractiveFlow:
@@ -283,6 +344,69 @@ class TestWizardOrchestration:
         assert config["YOUTUBE_SAVE_OAUTH_TOKEN"] == "false"
         assert config["YOUTUBE_OAUTH_TOKEN_FILE"] == ""
         assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "true"
+        mock_save.assert_called_once()
+
+    def test_run_setup_wizard_reprompts_for_invalid_concurrency(self):
+        """Wizard should reject invalid concurrency input before saving config."""
+        with (
+            patch("yt_study.setup_wizard.load_config", return_value={}),
+            patch(
+                "yt_study.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ),
+            patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
+            patch(
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ),
+            patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["/custom/out", "zero", "0", "7"],
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("yt_study.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config["MAX_CONCURRENT_VIDEOS"] == "7"
+        mock_save.assert_called_once()
+
+    def test_run_setup_wizard_oauth_disable_clears_existing_cache_settings(self):
+        """Reconfiguring away from OAuth should clear stale token-cache settings."""
+        existing_config = {
+            "DEFAULT_MODEL": "gemini/gemini-pro",
+            "GEMINI_API_KEY": "old-key",
+            "OUTPUT_DIR": "/existing/out",
+            "MAX_CONCURRENT_VIDEOS": "4",
+            "YOUTUBE_USE_OAUTH": "true",
+            "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
+            "YOUTUBE_OAUTH_TOKEN_FILE": "/existing/token.json",
+            "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": "false",
+        }
+
+        with (
+            patch("yt_study.setup_wizard.load_config", return_value=existing_config),
+            patch(
+                "yt_study.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ),
+            patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
+            patch(
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ),
+            patch("yt_study.setup_wizard.get_api_key", return_value="existing-key"),
+            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("yt_study.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config["YOUTUBE_USE_OAUTH"] == "false"
+        assert config["YOUTUBE_SAVE_OAUTH_TOKEN"] == "false"
+        assert config["YOUTUBE_OAUTH_TOKEN_FILE"] == ""
+        assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "false"
         mock_save.assert_called_once()
 
     def test_run_setup_wizard_skip_existing(self):

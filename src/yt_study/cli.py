@@ -6,7 +6,9 @@ import os
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Annotated
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
@@ -61,6 +63,13 @@ app = typer.Typer(
 )
 
 console = Console()
+_SCHEMELESS_YOUTUBE_PREFIXES = (
+    "youtube.com/",
+    "www.youtube.com/",
+    "m.youtube.com/",
+    "music.youtube.com/",
+    "youtu.be/",
+)
 
 
 def check_config_exists() -> bool:
@@ -87,6 +96,27 @@ def ensure_setup() -> None:
             raise typer.Exit(code=1) from e
 
 
+def looks_like_batch_file_path(value: str) -> bool:
+    """Heuristic for path-like batch-file inputs that should not be parsed as URLs."""
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return False
+
+    normalized = value.strip().lower().replace("\\", "/")
+    if normalized.startswith(_SCHEMELESS_YOUTUBE_PREFIXES):
+        return False
+
+    input_path = Path(value).expanduser()
+    return (
+        bool(input_path.suffix)
+        or input_path.is_absolute()
+        or bool(input_path.drive)
+        or value.startswith((".", "~"))
+        or ("/" in value)
+        or ("\\" in value)
+    )
+
+
 @app.command()
 def process(
     url: Annotated[
@@ -105,7 +135,7 @@ def process(
             "-m",
             help=(
                 "LLM model (overrides config). Example: [green]gpt-4o[/green] "
-                "or [green]gemini/gemini-2.0-flash[/green]"
+                "or [green]gemini/gemini-2.5-flash[/green]"
             ),
         ),
     ] = None,
@@ -274,9 +304,10 @@ def process(
             EventType,
             PipelineEvent,
             PipelineResult,
+            dedupe_video_ids,
             sanitize_filename,
         )
-        from .core.youtube.metadata import get_playlist_info
+        from .core.youtube.metadata import get_playlist_info, get_video_title
         from .core.youtube.parser import parse_youtube_url
         from .core.youtube.playlist import extract_playlist_videos
         from .ui.dashboard import PipelineDashboard
@@ -306,15 +337,21 @@ def process(
         selected_token_file = (
             token_file if token_file is not None else config.youtube_oauth_token_file
         )
-        if (
-            selected_use_oauth
-            and selected_save_oauth_token
-            and selected_token_file is None
-        ):
-            selected_token_file = default_youtube_oauth_token_file()
+        oauth_temp_dir: TemporaryDirectory[str] | None = None
+        effective_save_oauth_token = selected_save_oauth_token
+        effective_token_file = selected_token_file
+        if selected_use_oauth and not selected_save_oauth_token:
+            oauth_temp_dir = TemporaryDirectory(prefix="yt-study-oauth-")
+            effective_save_oauth_token = True
+            effective_token_file = (
+                Path(oauth_temp_dir.name) / "youtube-oauth-session.json"
+            )
+        elif selected_use_oauth and effective_token_file is None:
+            effective_token_file = default_youtube_oauth_token_file()
         oauth_token_file = (
-            str(selected_token_file) if selected_token_file is not None else None
+            str(effective_token_file) if effective_token_file is not None else None
         )
+        oauth_preflight_complete = False
 
         # Validate API key before launching UI
         key_name = config.get_api_key_name_for_model(selected_model)
@@ -419,6 +456,21 @@ def process(
             console.print("\n")
             console.print(cost_table)
 
+        async def _ensure_oauth_ready_for_video(video_id: str) -> None:
+            """Acquire OAuth once before the live UI starts for a single video."""
+            nonlocal oauth_preflight_complete
+            if not selected_use_oauth or oauth_preflight_complete:
+                return
+
+            await asyncio.to_thread(
+                get_video_title,
+                video_id,
+                use_oauth=True,
+                token_file=oauth_token_file,
+                allow_oauth_cache=effective_save_oauth_token,
+            )
+            oauth_preflight_complete = True
+
         class WorkerSlotManager:
             """Manages worker slot assignment and release for concurrent processing."""
 
@@ -471,8 +523,8 @@ def process(
                 """
                 return self.video_slots.get(video_id)
 
-        # Status message templates for different event types
-        STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
+        # Mirror the pipeline's user-visible event stream in the live dashboard.
+        DASHBOARD_STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
             EventType.METADATA_START: lambda t, _: (
                 f"[yellow]{t}... (Metadata)[/yellow]"
             ),
@@ -480,11 +532,17 @@ def process(
             EventType.TRANSCRIPT_FETCHING: lambda t, _: (
                 f"[cyan]📥 {t}... (Transcript)[/cyan]"
             ),
+            EventType.TRANSCRIPT_FETCHED: lambda t, _: (
+                f"[green]✓ {t}... (Transcript Ready)[/green]"
+            ),
             EventType.GENERATION_START: lambda t, _: (
                 f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
             EventType.CHUNK_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
+            EventType.GENERATION_COMBINING: lambda t, e: (
+                f"[cyan]🧩 {t}... (Combining {e.total_chunks} note parts)[/cyan]"
             ),
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
@@ -493,40 +551,65 @@ def process(
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
                 f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
             ),
+            EventType.CHAPTER_COMBINING: lambda t, e: (
+                f"[cyan]🧩 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
+                f" Combining {e.total_chunks} parts)[/cyan]"
+            ),
+            EventType.QUIZ_GENERATING: lambda t, _: (
+                f"[magenta]📝 {t}... (Quiz)[/magenta]"
+            ),
+            EventType.QUIZ_CHUNK_GENERATING: lambda t, e: (
+                "[magenta]📝 "
+                f"{t}... (Quiz Part {e.chunk_number}/{e.total_chunks})[/magenta]"
+            ),
+            EventType.QUIZ_COMBINING: lambda t, e: (
+                f"[magenta]🧩 {t}... (Combining {e.total_chunks} quiz parts)[/magenta]"
+            ),
+            EventType.QUIZ_COMPLETE: lambda t, _: (
+                f"[green]✓ {t}... (Quiz Ready)[/green]"
+            ),
+            EventType.GENERATION_COMPLETE: lambda t, _: (
+                f"[green]✓ {t}... (Generated)[/green]"
+            ),
         }
 
-        async def _run_single_url(single_url: str) -> None:
+        async def _run_single_url(single_url: str) -> bool:
             """Parse one URL and run the pipeline (Rich dashboard or headless)."""
+            nonlocal oauth_preflight_complete
             try:
                 parsed = parse_youtube_url(single_url)
             except ValueError as e:
                 console.print(f"[red]Input Error: {e}[/red]")
-                return
+                return False
 
             if parsed.url_type == "video":
                 if not parsed.video_id:
                     console.print("[red]Error: Could not extract video ID[/red]")
-                    return
+                    return False
+                await _ensure_oauth_ready_for_video(parsed.video_id)
                 video_ids = [parsed.video_id]
                 playlist_name = "Single Video"
                 out_dir = selected_output
             else:  # playlist
                 if not parsed.playlist_id:
                     console.print("[red]Error: Could not extract playlist ID[/red]")
-                    return
+                    return False
                 playlist_name, _ = await asyncio.to_thread(
                     get_playlist_info,
                     parsed.playlist_id,
                     use_oauth=selected_use_oauth,
                     token_file=oauth_token_file,
-                    allow_oauth_cache=selected_save_oauth_token,
+                    allow_oauth_cache=effective_save_oauth_token,
                 )
+                if selected_use_oauth:
+                    oauth_preflight_complete = True
                 video_ids = await extract_playlist_videos(
                     parsed.playlist_id,
                     use_oauth=selected_use_oauth,
                     token_file=oauth_token_file,
-                    allow_oauth_cache=selected_save_oauth_token,
+                    allow_oauth_cache=effective_save_oauth_token,
                 )
+                video_ids = dedupe_video_ids(video_ids)
                 out_dir = selected_output / sanitize_filename(playlist_name)
                 out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -538,8 +621,8 @@ def process(
                 max_tokens=selected_max_tokens,
                 cookies_path=cookies,
                 use_oauth=selected_use_oauth,
-                oauth_token_file=selected_token_file,
-                save_oauth_token=selected_save_oauth_token,
+                oauth_token_file=effective_token_file,
+                save_oauth_token=effective_save_oauth_token,
                 auto_refresh_oauth_token=selected_auto_refresh_oauth_token,
                 force=force,
                 quiz=quiz,
@@ -554,8 +637,14 @@ def process(
                     EventType.TRANSCRIPT_FETCHED: "Transcript ready",
                     EventType.GENERATION_START: "Generating notes",
                     EventType.CHUNK_GENERATING: "Generating chunk",
+                    EventType.GENERATION_COMBINING: "Combining notes",
                     EventType.CHAPTER_GENERATING: "Generating chapter",
                     EventType.CHAPTER_CHUNK_GENERATING: "Generating chapter part",
+                    EventType.CHAPTER_COMBINING: "Combining chapter",
+                    EventType.QUIZ_GENERATING: "Generating quiz",
+                    EventType.QUIZ_CHUNK_GENERATING: "Generating quiz part",
+                    EventType.QUIZ_COMBINING: "Combining quiz",
+                    EventType.QUIZ_COMPLETE: "Quiz ready",
                     EventType.GENERATION_COMPLETE: "Generation complete",
                     EventType.VIDEO_SUCCESS: "Done",
                     EventType.VIDEO_SKIPPED: "Skipped (already processed)",
@@ -588,6 +677,12 @@ def process(
                         extra = f" [{event.chunk_number}/{event.total_chunks}]"
                     elif event.chapter_number and event.total_chapters:
                         extra = f" [{event.chapter_number}/{event.total_chapters}]"
+                    elif event.total_chunks and event.event_type in (
+                        EventType.GENERATION_COMBINING,
+                        EventType.QUIZ_COMBINING,
+                        EventType.CHAPTER_COMBINING,
+                    ):
+                        extra = f" [{event.total_chunks} parts]"
                     elif event.error:
                         extra = f": {event.error}"
                     console.print(f"{label}: {title}{extra}", markup=False)
@@ -602,7 +697,7 @@ def process(
                         for vid, err in result.errors.items():
                             console.print(f"  FAILED {vid}: {err}")
                     _print_cost_summary(result)
-                return
+                return result.failure_count == 0
 
             # ── Rich dashboard path ──────────────────────────────────────────
             concurrency = min(len(video_ids), config.max_concurrent_videos)
@@ -627,13 +722,13 @@ def process(
                     assigned = slot_manager.acquire_slot(vid)
                     if assigned is not None:
                         slot = assigned
-                        status_fn = STATUS_MAP.get(event.event_type)
+                        status_fn = DASHBOARD_STATUS_MAP.get(event.event_type)
                         if status_fn:
                             dashboard.update_worker(assigned, status_fn(title, event))
 
                 # Handle standard status updates
-                elif event.event_type in STATUS_MAP and slot is not None:
-                    status_fn = STATUS_MAP[event.event_type]
+                elif event.event_type in DASHBOARD_STATUS_MAP and slot is not None:
+                    status_fn = DASHBOARD_STATUS_MAP[event.event_type]
                     dashboard.update_worker(slot, status_fn(title, event))
 
                 # Handle completion/failure events (release slots)
@@ -649,9 +744,7 @@ def process(
                     if event.event_type == EventType.VIDEO_SUCCESS:
                         dashboard.add_completion(event.title or vid)
                     elif event.event_type == EventType.VIDEO_SKIPPED:
-                        dashboard.add_completion(
-                            f"{event.title or vid} [dim](skipped)[/dim]"
-                        )
+                        dashboard.add_completion(f"{event.title or vid} (skipped)")
                     else:
                         dashboard.add_failure(event.title or vid)
 
@@ -659,12 +752,20 @@ def process(
                 result = await pipeline.run(video_ids, on_event=on_event)
 
             _print_run_summary(result, dashboard)
+            return result.failure_count == 0
 
-        async def run_processing() -> None:
+        async def run_processing() -> bool:
             """Determine if input is URL or batch file and dispatch."""
-            input_path = Path(url)
+            input_path = Path(url).expanduser()
 
-            if input_path.exists() and input_path.is_file():
+            if input_path.exists():
+                if not input_path.is_file():
+                    console.print(
+                        "[red]Input Error: Batch file path is not a file: "
+                        f"{input_path}[/red]"
+                    )
+                    return True
+
                 # Batch Mode: read one URL per non-comment line
                 try:
                     content = input_path.read_text(encoding="utf-8")
@@ -677,22 +778,38 @@ def process(
                     console.print(
                         f"[bold red]❌ Error reading batch file:[/bold red] {e}"
                     )
-                    return
+                    return True
 
                 if not urls:
                     console.print("[yellow]⚠ Batch file is empty.[/yellow]")
-                    return
+                    return True
+
+                had_failures = False
 
                 for i, batch_url in enumerate(urls, 1):
                     console.rule(f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]")
                     try:
-                        await _run_single_url(batch_url)
+                        run_failed = not await _run_single_url(batch_url)
+                        had_failures = run_failed or had_failures
                     except Exception as e:
                         console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
+                        had_failures = True
+                return had_failures
+            elif looks_like_batch_file_path(url):
+                console.print(
+                    f"[red]Input Error: Batch file does not exist: {input_path}[/red]"
+                )
+                return True
             else:
-                await _run_single_url(url)
+                return not await _run_single_url(url)
 
-        asyncio.run(run_processing())
+        try:
+            had_failures = asyncio.run(run_processing())
+        finally:
+            if oauth_temp_dir is not None:
+                oauth_temp_dir.cleanup()
+        if had_failures:
+            raise typer.Exit(code=1)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")

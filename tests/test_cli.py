@@ -1,6 +1,6 @@
 """Tests for CLI entry point."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -102,7 +102,7 @@ def mock_pipeline(tmp_path):
         patch("rich.live.Live.__enter__", return_value=None),
         patch("rich.live.Live.__exit__", return_value=False),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -220,7 +220,7 @@ def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path): 
 
     result = runner.invoke(app, ["process", str(batch_file)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Batch file is empty" in result.stdout
     pipeline_instance.run.assert_not_awaited()
 
@@ -233,7 +233,7 @@ def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path): 
     with patch("pathlib.Path.read_text", side_effect=OSError("Access denied")):
         result = runner.invoke(app, ["process", str(batch_file)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Error reading batch file" in result.stdout
 
 
@@ -313,15 +313,35 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
 
 
 def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
-    """Test that an invalid URL prints an error message but exits cleanly."""
+    """Invalid URLs should fail the command for shell automation."""
     with patch(
         "yt_study.core.youtube.parser.parse_youtube_url",
         side_effect=ValueError("Not a YouTube URL"),
     ):
         result = runner.invoke(app, ["process", "not-a-url"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Input Error" in result.stdout
+
+
+def test_process_missing_batch_file_reports_file_error():
+    """Missing batch-file paths should not be misreported as invalid YouTube URLs."""
+    with patch("yt_study.cli.check_config_exists", return_value=True):
+        result = runner.invoke(app, ["process", "missing_urls.txt"])
+
+    assert result.exit_code == 1
+    assert "Batch file does not exist" in result.stdout
+    assert "Invalid YouTube URL" not in result.stdout
+
+
+def test_process_missing_nested_batch_file_reports_file_error():
+    """Explicit local paths with separators should also be treated as file inputs."""
+    with patch("yt_study.cli.check_config_exists", return_value=True):
+        result = runner.invoke(app, ["process", "batches/urls"])
+
+    assert result.exit_code == 1
+    assert "Batch file does not exist" in result.stdout
+    assert "Invalid YouTube URL" not in result.stdout
 
 
 # ---------------------------------------------------------------------------
@@ -378,7 +398,7 @@ def test_process_no_ui_prints_done_summary(
         patch("yt_study.core.config.config") as mock_config,
         patch("yt_study.cli.check_config_exists", return_value=True),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -433,7 +453,7 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
         patch("yt_study.core.config.config") as mock_config,
         patch("yt_study.cli.check_config_exists", return_value=True),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -541,7 +561,7 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         patch("rich.live.Live.__enter__", return_value=None),
         patch("rich.live.Live.__exit__", return_value=False),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -557,10 +577,221 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
             app, ["process", "https://youtube.com/playlist?list=PL_UI"]
         )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Processing Summary" in result.output
     assert "Cost Summary" in result.output
     assert "Estimated Cost (USD)" in result.output
+
+
+def test_process_ui_shows_detailed_pipeline_states(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Rich UI should show detailed internal pipeline phases."""
+
+    async def _run_with_generation_events(_video_ids, on_event=None):  # noqa: ANN001
+        if on_event:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.TRANSCRIPT_FETCHED,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chunk_number=1,
+                    total_chunks=3,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.GENERATION_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    total_chunks=3,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_COMPLETE,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.GENERATION_COMPLETE,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=["vid1"],
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_generation_events)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 0
+    statuses = [
+        call.args[1] for call in dashboard_instance.update_worker.call_args_list
+    ]
+    assert "[green]✓ Video One... (Transcript Ready)[/green]" in statuses
+    assert "[cyan]🤖 Video One... (Chunk 1/3)[/cyan]" in statuses
+    assert "[cyan]🧩 Video One... (Combining 3 note parts)[/cyan]" in statuses
+    assert "[cyan]🤖 Video One... (Ch 2/5, Part 1/2)[/cyan]" in statuses
+    assert "[cyan]🧩 Video One... (Ch 2/5, Combining 2 parts)[/cyan]" in statuses
+    assert "[magenta]📝 Video One... (Quiz)[/magenta]" in statuses
+    assert "[magenta]📝 Video One... (Quiz Part 1/2)[/magenta]" in statuses
+    assert "[magenta]🧩 Video One... (Combining 2 quiz parts)[/magenta]" in statuses
+    assert "[green]✓ Video One... (Quiz Ready)[/green]" in statuses
+    assert "[green]✓ Video One... (Generated)[/green]" in statuses
+
+
+def test_process_no_ui_failure_exits_nonzero(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Headless runs should return a failing exit code when any video fails."""
+    failed_result = PipelineResult(
+        success_count=0,
+        failure_count=1,
+        total_count=1,
+        video_ids=["dQw4w9WgXcQ"],
+        errors={"dQw4w9WgXcQ": "boom"},
+        metrics=PipelineMetrics(),
+    )
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=failed_result)
+
+    with (
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.check_config_exists", return_value=True),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 1
+    assert "Done: 0/1 succeeded." in result.output
+    assert "FAILED dQw4w9WgXcQ: boom" in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -622,7 +853,7 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
     mock_config_exists,  # noqa: ARG001
     tmp_path,
 ):
-    """Playlist metadata/extraction should receive OAuth kwargs from CLI."""
+    """Playlist OAuth without persistence should use a temporary session cache."""
     pipeline_result = _make_pipeline_result()
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(return_value=pipeline_result)
@@ -651,7 +882,7 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
     ):
         mock_info.return_value = ("Playlist", 1)
         mock_extract.return_value = ["vid1"]
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -677,10 +908,175 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
         )
 
     assert result.exit_code == 0
-    expected_kwargs = {
-        "use_oauth": True,
-        "token_file": str(token_file),
-        "allow_oauth_cache": False,
-    }
-    mock_info.assert_called_once_with("PL_AUTH", **expected_kwargs)
-    mock_extract.assert_awaited_once_with("PL_AUTH", **expected_kwargs)
+    info_kwargs = mock_info.call_args.kwargs
+    extract_kwargs = mock_extract.await_args.kwargs
+    assert info_kwargs["use_oauth"] is True
+    assert extract_kwargs["use_oauth"] is True
+    assert info_kwargs["allow_oauth_cache"] is True
+    assert extract_kwargs["allow_oauth_cache"] is True
+    assert info_kwargs["token_file"] == extract_kwargs["token_file"]
+    assert info_kwargs["token_file"] != str(token_file)
+
+
+def test_process_video_oauth_preflight_uses_temporary_session_cache(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """Single-video OAuth should prompt before Live and reuse a temp session token."""
+    mock_cls, pipeline_instance = mock_pipeline
+
+    with patch("yt_study.core.youtube.metadata.get_video_title") as mock_title:
+        mock_title.return_value = "Warmup Title"
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                _VIDEO_URL,
+                "--use-oauth",
+                "--no-save-oauth-token",
+            ],
+        )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    runtime_token_file = call_kwargs["oauth_token_file"]
+    assert call_kwargs["save_oauth_token"] is True
+    assert runtime_token_file is not None
+    assert runtime_token_file.name == "youtube-oauth-session.json"
+    mock_title.assert_called_once_with(
+        "dQw4w9WgXcQ",
+        use_oauth=True,
+        token_file=str(runtime_token_file),
+        allow_oauth_cache=True,
+    )
+    assert not runtime_token_file.exists()
+    pipeline_instance.run.assert_awaited_once()
+
+
+def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Skipped dashboard entries should be plain text instead of raw markup."""
+
+    async def _run_with_skip(video_ids, on_event=None):  # noqa: ARG001
+        if on_event is not None:
+            on_event(PipelineEvent(event_type=EventType.PIPELINE_START, video_id=""))
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SKIPPED,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(PipelineEvent(event_type=EventType.PIPELINE_COMPLETE, video_id=""))
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=["vid1"],
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_skip)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 0
+    dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+
+
+def test_process_playlist_deduplicates_video_ids_before_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Playlist duplicates should be removed before dashboard sizing and run."""
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(
+        return_value=_make_pipeline_result(total=2, success=2)
+    )
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_DEDUPE"),
+        ),
+        patch(
+            "yt_study.core.youtube.metadata.get_playlist_info",
+            return_value=("Playlist", 3),
+        ),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["vid1", "vid1", "vid2"],
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ) as mock_dashboard_cls,
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app,
+            ["process", "https://youtube.com/playlist?list=PL_DEDUPE"],
+        )
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once_with(["vid1", "vid2"], on_event=ANY)
+    assert mock_dashboard_cls.call_args.kwargs["total_videos"] == 2

@@ -56,12 +56,12 @@ class LLMProvider:
     Handles API key verification and text generation with retries.
     """
 
-    def __init__(self, model: str = "gemini/gemini-2.0-flash"):
+    def __init__(self, model: str = "gemini/gemini-2.5-flash"):
         """
         Initialize LLM provider.
 
         Args:
-            model: LiteLLM-compatible model string (e.g., 'gemini/gemini-2.0-flash').
+            model: LiteLLM-compatible model string (e.g., 'gemini/gemini-2.5-flash').
         """
         self.model = model
         self._validate_config()
@@ -237,7 +237,7 @@ class LLMProvider:
         return content
 
 
-def get_provider(model: str = "gemini/gemini-2.0-flash") -> LLMProvider:
+def get_provider(model: str = "gemini/gemini-2.5-flash") -> LLMProvider:
     """
     Factory function to get an LLM provider instance.
 

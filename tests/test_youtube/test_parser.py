@@ -32,6 +32,16 @@ class TestVideoIDExtraction:
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ&t=10s"
         assert extract_video_id(url) == "dQw4w9WgXcQ"
 
+    def test_music_subdomain_watch_url(self):
+        """Music YouTube watch URLs should still parse as valid YouTube hosts."""
+        url = "https://music.youtube.com/watch?v=dQw4w9WgXcQ"
+        assert extract_video_id(url) == "dQw4w9WgXcQ"
+
+    def test_non_youtube_host_with_video_param_rejected(self):
+        """Host validation should reject arbitrary sites containing a video ID."""
+        url = "https://example.com/watch?v=dQw4w9WgXcQ"
+        assert extract_video_id(url) is None
+
 
 class TestPlaylistIDExtraction:
     """Test playlist ID extraction."""
@@ -74,6 +84,16 @@ class TestURLParsing:
         """Test invalid URL raises error."""
         with pytest.raises(ValueError, match="Invalid YouTube URL"):
             parse_youtube_url("https://example.com/video")
+
+    def test_invalid_host_with_playlist_param(self):
+        """Playlist IDs on non-YouTube hosts must not parse as YouTube playlists."""
+        with pytest.raises(ValueError, match="Invalid YouTube URL"):
+            parse_youtube_url("https://example.com/?list=PLtest123")
+
+    def test_free_form_text_with_video_param_rejected(self):
+        """Free-form text containing v= should not be treated as a valid URL."""
+        with pytest.raises(ValueError, match="Invalid YouTube URL"):
+            parse_youtube_url("not youtube but v=dQw4w9WgXcQ")
 
     def test_empty_url(self):
         """Test empty URL raises error."""

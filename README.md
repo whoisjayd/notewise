@@ -46,6 +46,7 @@ Design priorities:
 
 - Accepts single video URLs, playlist URLs, and batch files.
 - Supports common YouTube URL forms including `watch`, `youtu.be`, `embed`, and `shorts`.
+- Validates that inputs target real YouTube hosts before parsing video or playlist IDs.
 - Expands playlists into per-video jobs automatically.
 
 ### Transcript Reliability
@@ -144,18 +145,28 @@ Supported options:
 --token-file
 --save-oauth-token / --no-save-oauth-token
 --auto-refresh-oauth-token / --no-auto-refresh-oauth-token
+--force / -F
+--no-ui
+--quiz
 ```
 
 Examples:
 
 ```bash
-yt-study process "URL" -m gemini/gemini-2.0-flash
+yt-study process "URL" -m gemini/gemini-2.5-flash
 yt-study process "URL" -o ./course-notes
 yt-study process "URL" -l hi -l en
 yt-study process "URL" -t 0.4 -k 2500
 yt-study process "URL" --use-oauth --save-oauth-token
 yt-study process "URL" --cookies ./cookies.txt
+yt-study process "URL" --force --quiz
+yt-study process "URL" --no-ui
 ```
+
+Exit behavior:
+
+- invalid input, unreadable batch files, and any failed video now return a non-zero exit code
+- successful runs, including cache skips, return exit code `0`
 
 ## How It Works
 
@@ -199,6 +210,9 @@ output/
     03_Implementation.md
 ```
 
+When duplicate chapter titles occur, later files are disambiguated as
+`Title (2)`, `Title (3)`, and so on.
+
 Playlist output:
 
 ```text
@@ -212,6 +226,13 @@ output/
 ```
 
 Filenames are sanitized to remove filesystem-unsafe characters and trimmed to a safe length.
+If two videos sanitize to the same output name, later outputs are kept by
+appending ` (VIDEO_ID)` before the file extension or chapter folder name.
+
+When `--quiz` is enabled:
+
+- single-file runs write `Video Title_quiz.md` beside `Video Title.md`
+- chapter-mode runs write `Video Title/Video Title_quiz.md` inside the chapter folder
 
 ## Configuration
 
@@ -247,12 +268,22 @@ Config behavior:
 - loads `~/.yt-study/config.env`
 - applies environment variable overrides
 - syncs supported provider keys into `os.environ` for LiteLLM
+- defaults `DEFAULT_MODEL` to `gemini/gemini-2.5-flash`
 - throttles YouTube request rate globally (default `10` requests/minute)
 - supports OAuth auth for metadata/playlist fetches and optional token caching
+- when `--use-oauth` is combined with `--no-save-oauth-token`, the CLI uses a
+  temporary session token cache so device login happens once and no token file
+  remains after exit
 - supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
 - stores local processing cache in `~/.yt-study/.yt_study_cache.db`
 - prints a Cost Summary table with prompt/completion/total tokens, estimated
   USD cost (from LiteLLM pricing), and timing
+
+Setup wizard model selection:
+
+- shows only native provider models
+- hides deprecated and non-text models
+- uses curated stable fallback lists when LiteLLM discovery is unavailable or incomplete
 
 Local cache behavior:
 

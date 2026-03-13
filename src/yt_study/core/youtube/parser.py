@@ -2,7 +2,7 @@
 
 import re
 from dataclasses import dataclass
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import ParseResult, parse_qs, urlparse
 
 
 @dataclass
@@ -19,6 +19,9 @@ class ParsedURL:
     url_type: str  # 'video' or 'playlist'
     video_id: str | None = None
     playlist_id: str | None = None
+
+
+_VIDEO_ID_PATTERN = re.compile(r"^[0-9A-Za-z_-]{11}$")
 
 
 def extract_video_id(url: str) -> str | None:
@@ -38,18 +41,27 @@ def extract_video_id(url: str) -> str | None:
     Returns:
         The 11-character video ID if found, else None.
     """
-    # Common patterns for YouTube Video IDs (11 chars, alphanumeric + _ -)
-    patterns = [
-        r"(?:v=|\/)([0-9A-Za-z_-]{11}).*",
-        r"youtu\.be\/([0-9A-Za-z_-]{11})",
-        r"embed\/([0-9A-Za-z_-]{11})",
-        r"shorts\/([0-9A-Za-z_-]{11})",
-    ]
+    parsed = _parse_supported_youtube_url(url)
+    if parsed is None:
+        return None
 
-    for pattern in patterns:
-        match = re.search(pattern, url)
-        if match:
-            return match.group(1)
+    host = _normalized_hostname(parsed)
+    if host == "youtu.be":
+        candidate = parsed.path.strip("/").split("/", 1)[0]
+        return candidate if _is_video_id(candidate) else None
+
+    path_parts = [part for part in parsed.path.split("/") if part]
+    if not path_parts:
+        return None
+
+    if path_parts[0] == "watch":
+        query_params = parse_qs(parsed.query)
+        query_candidate = _first_query_value(query_params, "v")
+        return query_candidate if _is_video_id(query_candidate) else None
+
+    if path_parts[0] in {"embed", "v", "shorts"} and len(path_parts) >= 2:
+        candidate = path_parts[1]
+        return candidate if _is_video_id(candidate) else None
 
     return None
 
@@ -69,11 +81,13 @@ def extract_playlist_id(url: str) -> str | None:
         The playlist ID if found, else None.
     """
     try:
-        parsed = urlparse(url)
+        parsed = _parse_supported_youtube_url(url)
+        if parsed is None:
+            return None
         query_params = parse_qs(parsed.query)
 
         if "list" in query_params:
-            return query_params["list"][0]
+            return _first_query_value(query_params, "list")
     except Exception:
         # Fail gracefully on malformed URLs
         pass
@@ -115,3 +129,39 @@ def parse_youtube_url(url: str) -> ParsedURL:
         return ParsedURL(url_type="video", video_id=video_id)
 
     raise ValueError(f"Invalid YouTube URL: {url}")
+
+
+def _parse_supported_youtube_url(url: str) -> ParseResult | None:
+    """Parse a URL only when it targets a supported YouTube host."""
+    parsed = urlparse(url)
+    host = _normalized_hostname(parsed)
+    if host is None:
+        return None
+    if host == "youtu.be" or host == "youtube.com" or host.endswith(".youtube.com"):
+        return parsed
+    return None
+
+
+def _normalized_hostname(parsed: ParseResult) -> str | None:
+    """Return a lower-cased hostname without a leading www. prefix."""
+    hostname = parsed.hostname
+    if not hostname:
+        return None
+    normalized = hostname.lower()
+    return normalized.removeprefix("www.")
+
+
+def _is_video_id(candidate: str | None) -> bool:
+    """Return True when a candidate string looks like a YouTube video ID."""
+    return bool(candidate and _VIDEO_ID_PATTERN.fullmatch(candidate))
+
+
+def _first_query_value(
+    query_params: dict[str, list[str]],
+    key: str,
+) -> str | None:
+    """Return the first parsed query value for a key, if present."""
+    values = query_params.get(key)
+    if not values:
+        return None
+    return values[0]

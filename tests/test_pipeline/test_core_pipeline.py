@@ -1,5 +1,6 @@
 """Tests for CorePipeline (zero-UI core pipeline)."""
 
+import asyncio
 import json
 import time
 from contextlib import contextmanager
@@ -69,6 +70,15 @@ def test_sanitize_filename_preserves_leading_dot():
 def test_sanitize_filename_trailing_spaces_removed():
     """Trailing spaces are illegal on Windows and must be stripped."""
     assert sanitize_filename("filename   ") == "filename"
+
+
+def test_sanitize_filename_truncation_restrips_trailing_spaces():
+    """Truncation must not leave an illegal trailing space behind."""
+    raw_name = ("a" * 99) + " " + ("b" * 10)
+    result = sanitize_filename(raw_name)
+
+    assert len(result) <= 100
+    assert not result.endswith(" ")
 
 
 def test_sanitize_filename_reserved_name_stays_within_100_chars():
@@ -818,6 +828,138 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
         assert event.total_chapters == 3
 
 
+@pytest.mark.asyncio
+async def test_run_chapter_generation_emits_internal_chapter_progress(
+    temp_output_dir, mock_llm_provider
+):
+    """Chunked chapter generation should emit chapter part and combine events."""
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    async def _generate_chapter(
+        chapter_title,
+        chapter_text,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert chapter_title
+        assert chapter_text
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Chapter Notes"
+
+    p.generator.generate_single_chapter_notes.side_effect = _generate_chapter
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Long Chapter Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[
+                {"title": "Chapter 1", "start_seconds": 0},
+                {"title": "Chapter 2", "start_seconds": 300},
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            return_value={"Chapter 1": "text1", "Chapter 2": "text2"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-events"], on_event=events.append)
+
+    assert result.success_count == 1
+    chapter_chunk_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_CHUNK_GENERATING
+    ]
+    assert len(chapter_chunk_events) == 4
+    assert [e.chapter_number for e in chapter_chunk_events] == [1, 1, 2, 2]
+
+    chapter_combine_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_COMBINING
+    ]
+    assert len(chapter_combine_events) == 2
+    assert [e.chapter_number for e in chapter_combine_events] == [1, 2]
+    assert all(e.total_chunks == 2 for e in chapter_combine_events)
+
+
+@pytest.mark.asyncio
+async def test_run_empty_chapter_split_falls_back_to_single_file(
+    temp_output_dir, mock_llm_provider
+):
+    """Empty chapter splits should fall back to normal single-file generation."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Fallback Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[{"title": "Intro", "start_seconds": 0}],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch("yt_study.core.pipeline.split_transcript_by_chapters", return_value={}),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "fallback transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-fallback"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Fallback Video.md").exists()
+    p.generator.generate_study_notes.assert_awaited_once()
+    p.generator.generate_single_chapter_notes.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Chapter-mode quizzes should live inside the per-video chapter folder."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Long Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[
+                {"title": "Intro", "start_seconds": 0},
+                {"title": "Part 2", "start_seconds": 120},
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            return_value={"Intro": "intro text", "Part 2": "body text"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-quiz"])
+
+    assert result.success_count == 1
+    chapter_dir = temp_output_dir / "Long Video"
+    assert (chapter_dir / "Long Video_quiz.md").exists()
+    assert not (temp_output_dir / "Long Video_quiz.md").exists()
+
+
 # ---------------------------------------------------------------------------
 # CorePipeline – playlist checkpointing (#38)
 # ---------------------------------------------------------------------------
@@ -990,7 +1132,93 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     assert (temp_output_dir / "Study Subject_quiz.md").read_text(encoding="utf-8") == (
         "# Quiz"
     )
-    p.generator.generate_quiz.assert_awaited_once_with("full transcript")
+    p.generator.generate_quiz.assert_awaited_once()
+    assert p.generator.generate_quiz.await_args.args == ("full transcript",)
+
+
+@pytest.mark.asyncio
+async def test_run_emits_internal_generation_and_quiz_events(
+    temp_output_dir, mock_llm_provider
+):
+    """Chunked notes and quiz generation should emit internal progress events."""
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    async def _generate_notes(
+        transcript,
+        video_title="Video",
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert transcript == "full transcript"
+        assert video_title == "Study Subject"
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Notes"
+
+    async def _generate_quiz(
+        transcript,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert transcript == "full transcript"
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Quiz"
+
+    p.generator.generate_study_notes.side_effect = _generate_notes
+    p.generator.generate_quiz.side_effect = _generate_quiz
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-internal-events"], on_event=events.append)
+
+    assert result.success_count == 1
+    event_types = [event.event_type for event in events]
+    expected_sequence = [
+        EventType.METADATA_START,
+        EventType.METADATA_FETCHED,
+        EventType.TRANSCRIPT_FETCHING,
+        EventType.TRANSCRIPT_FETCHED,
+        EventType.GENERATION_START,
+        EventType.CHUNK_GENERATING,
+        EventType.CHUNK_GENERATING,
+        EventType.GENERATION_COMBINING,
+        EventType.QUIZ_GENERATING,
+        EventType.QUIZ_CHUNK_GENERATING,
+        EventType.QUIZ_CHUNK_GENERATING,
+        EventType.QUIZ_COMBINING,
+        EventType.QUIZ_COMPLETE,
+        EventType.GENERATION_COMPLETE,
+        EventType.VIDEO_SUCCESS,
+        EventType.PIPELINE_COMPLETE,
+    ]
+    positions = [event_types.index(event_type) for event_type in expected_sequence]
+    assert positions == sorted(positions)
+
+    generation_combine = next(
+        e for e in events if e.event_type == EventType.GENERATION_COMBINING
+    )
+    assert generation_combine.total_chunks == 2
+
+    quiz_combine = next(e for e in events if e.event_type == EventType.QUIZ_COMBINING)
+    assert quiz_combine.total_chunks == 2
 
 
 @pytest.mark.asyncio
@@ -1020,6 +1248,114 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     # vid2 must NOT have been skipped — cache key is the video ID, not title.
     assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
     mock_fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
+    temp_output_dir, mock_llm_provider
+):
+    """Same-title videos should not overwrite each other's note or quiz files."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], side_effect=["Shared Title", "Shared Title"]),
+        patch(_COMMON_PATCHES["duration"], side_effect=[100, 100]),
+        patch(_COMMON_PATCHES["chapters"], side_effect=[[], []]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        first_transcript = MagicMock()
+        first_transcript.to_text.return_value = "first transcript"
+        first_transcript.language_code = "en"
+
+        second_transcript = MagicMock()
+        second_transcript.to_text.return_value = "second transcript"
+        second_transcript.language_code = "en"
+
+        mock_fetch.side_effect = [first_transcript, second_transcript]
+
+        result = await p.run(["vid1", "vid2"])
+
+    assert result.success_count == 2
+    assert (temp_output_dir / "Shared Title.md").exists()
+    assert (temp_output_dir / "Shared Title_quiz.md").exists()
+    assert (temp_output_dir / "Shared Title (vid2).md").exists()
+    assert (temp_output_dir / "Shared Title (vid2)_quiz.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_run_deduplicates_duplicate_video_ids(temp_output_dir, mock_llm_provider):
+    """One pipeline run should only process each video ID once."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=False)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Unique Once"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        transcript = MagicMock()
+        transcript.to_text.return_value = "transcript"
+        transcript.language_code = "en"
+        mock_fetch.return_value = transcript
+
+        result = await p.run(["dup-id", "dup-id"])
+
+    assert result.total_count == 1
+    assert result.success_count == 1
+    mock_fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_chapter_video_titles_get_unique_folders(
+    temp_output_dir, mock_llm_provider
+):
+    """Same-title long videos should get separate chapter folders and quiz files."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], side_effect=["Shared Long", "Shared Long"]),
+        patch(_COMMON_PATCHES["duration"], side_effect=[7200, 7200]),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            side_effect=[
+                [{"title": "Intro", "start_seconds": 0}],
+                [{"title": "Intro", "start_seconds": 0}],
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            side_effect=[
+                {"Intro": "first chapter"},
+                {"Intro": "second chapter"},
+            ],
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        first_transcript = MagicMock()
+        first_transcript.to_text.return_value = "first long transcript"
+        first_transcript.language_code = "en"
+
+        second_transcript = MagicMock()
+        second_transcript.to_text.return_value = "second long transcript"
+        second_transcript.language_code = "en"
+
+        mock_fetch.side_effect = [first_transcript, second_transcript]
+
+        result = await p.run(["vid1", "vid2"])
+
+    assert result.success_count == 2
+    first_dir = temp_output_dir / "Shared Long"
+    second_dir = temp_output_dir / "Shared Long (vid2)"
+    assert (first_dir / "01_Intro.md").exists()
+    assert (first_dir / "Shared Long_quiz.md").exists()
+    assert (second_dir / "01_Intro.md").exists()
+    assert (second_dir / "Shared Long (vid2)_quiz.md").exists()
 
 
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(

@@ -21,49 +21,112 @@ PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
         "env_var": "GEMINI_API_KEY",
         "api_url": "https://aistudio.google.com/app/apikey",
         "keywords": ["gemini", "vertex"],
+        "litellm_providers": ["gemini"],
     },
     "openai": {
         "name": "OpenAI (ChatGPT)",
         "env_var": "OPENAI_API_KEY",
         "api_url": "https://platform.openai.com/api-keys",
-        "keywords": ["gpt", "openai", "o1"],
+        "keywords": ["gpt", "openai", "o1", "o3", "o4"],
+        "litellm_providers": ["openai"],
     },
     "anthropic": {
         "name": "Anthropic (Claude)",
         "env_var": "ANTHROPIC_API_KEY",
         "api_url": "https://console.anthropic.com/settings/keys",
         "keywords": ["claude", "anthropic"],
+        "litellm_providers": ["anthropic"],
     },
     "groq": {
         "name": "Groq",
         "env_var": "GROQ_API_KEY",
         "api_url": "https://console.groq.com/keys",
         "keywords": ["groq"],
+        "litellm_providers": ["groq"],
     },
     "xai": {
         "name": "xAI (Grok)",
         "env_var": "XAI_API_KEY",
         "api_url": "https://console.x.ai/",
         "keywords": ["grok", "xai"],
+        "litellm_providers": ["xai"],
     },
     "mistral": {
         "name": "Mistral AI",
         "env_var": "MISTRAL_API_KEY",
         "api_url": "https://console.mistral.ai/api-keys/",
         "keywords": ["mistral"],
+        "litellm_providers": ["mistral"],
     },
     "cohere": {
         "name": "Cohere",
         "env_var": "COHERE_API_KEY",
         "api_url": "https://dashboard.cohere.com/api-keys",
         "keywords": ["cohere", "command"],
+        "litellm_providers": ["cohere_chat", "cohere"],
     },
     "deepseek": {
         "name": "DeepSeek",
         "env_var": "DEEPSEEK_API_KEY",
         "api_url": "https://platform.deepseek.com/api_keys",
         "keywords": ["deepseek"],
+        "litellm_providers": ["deepseek"],
     },
+}
+
+CURATED_FALLBACK_MODELS: dict[str, list[str]] = {
+    "gemini": [
+        "gemini/gemini-2.5-flash",
+        "gemini/gemini-2.5-flash-lite",
+        "gemini/gemini-2.5-pro",
+    ],
+    "openai": [
+        "gpt-4o-mini",
+        "gpt-4o",
+        "o3-mini",
+    ],
+    "anthropic": [
+        "claude-haiku-4-5-20251001",
+        "claude-sonnet-4-5-20250929",
+        "claude-4-opus-20250514",
+    ],
+    "groq": [
+        "groq/llama-3.1-8b-instant",
+        "groq/llama-3.3-70b-versatile",
+        "groq/meta-llama/llama-4-scout-17b-16e-instruct",
+    ],
+    "xai": [
+        "xai/grok-3",
+        "xai/grok-3-mini-latest",
+        "xai/grok-4-0709",
+    ],
+    "mistral": [
+        "mistral/mistral-small-latest",
+        "mistral/mistral-medium-latest",
+        "mistral/mistral-large-latest",
+    ],
+    "cohere": [
+        "command-a-03-2025",
+        "command-r-plus-08-2024",
+        "command-r-08-2024",
+    ],
+    "deepseek": [
+        "deepseek/deepseek-chat",
+        "deepseek/deepseek-v3",
+        "deepseek/deepseek-reasoner",
+    ],
+}
+
+_ALLOWED_SETUP_MODEL_MODES = {"chat", "completion"}
+_NATIVE_PROVIDER_PREFIXES = {
+    "anthropic",
+    "cohere",
+    "deepseek",
+    "gemini",
+    "groq",
+    "mistral",
+    "openai",
+    "xai",
 }
 
 
@@ -138,80 +201,106 @@ def save_config(new_config: dict[str, str]) -> None:
 def get_available_models() -> dict[str, list[str]]:
     """Fetch available models from LiteLLM."""
     try:
-        from litellm import model_list
+        from litellm import model_cost, model_list
 
         provider_models: dict[str, list[str]] = {}
 
         for model in model_list:
-            provider = None
-            model_lower = model.lower()
+            metadata = _get_model_metadata(model, model_cost)
+            provider = _classify_provider(metadata)
+            if provider is None:
+                continue
+            if not _is_setup_safe_model(model, metadata):
+                continue
 
-            for prov_key, prov_config in PROVIDER_CONFIG.items():
-                if any(keyword in model_lower for keyword in prov_config["keywords"]):
-                    provider = prov_key
-                    break
+            if provider not in provider_models:
+                provider_models[provider] = []
+            provider_models[provider].append(model)
 
-            if provider:
-                if provider not in provider_models:
-                    provider_models[provider] = []
-                provider_models[provider].append(model)
-
-        for provider in provider_models:
-            provider_models[provider] = sorted(set(provider_models[provider]))
+        for provider, fallback_models in CURATED_FALLBACK_MODELS.items():
+            unique_models = sorted(set(provider_models.get(provider, [])))
+            provider_models[provider] = unique_models or list(fallback_models)
 
         return provider_models
 
     except Exception as e:
         console.print(f"[yellow]⚠ Could not fetch models from LiteLLM: {e}[/yellow]")
         console.print("[yellow]Using fallback model list...[/yellow]")
-
         return {
-            "gemini": [
-                "gemini/gemini-2.0-flash-exp",
-                "gemini/gemini-2.0-flash",
-                "gemini/gemini-1.5-pro",
-                "gemini/gemini-1.5-flash",
-            ],
-            "openai": [
-                "gpt-4o",
-                "gpt-4o-mini",
-                "gpt-4-turbo",
-                "o1",
-                "o1-mini",
-            ],
-            "anthropic": [
-                "anthropic/claude-3-5-sonnet-20241022",
-                "anthropic/claude-3-5-haiku-20241022",
-                "anthropic/claude-3-opus-20240229",
-            ],
-            "groq": [
-                "groq/llama-3.3-70b-versatile",
-                "groq/llama-3.1-8b-instant",
-                "groq/mixtral-8x7b-32768",
-            ],
-            "xai": [
-                "xai/grok-2-latest",
-                "xai/grok-2-vision-latest",
-            ],
-            "mistral": [
-                "mistral/mistral-large-latest",
-                "mistral/mistral-small-latest",
-                "mistral/open-mixtral-8x22b",
-            ],
-            "cohere": [
-                "cohere/command-r-plus",
-                "cohere/command-r",
-            ],
-            "deepseek": [
-                "deepseek/deepseek-chat",
-                "deepseek/deepseek-reasoner",
-            ],
+            provider: list(models)
+            for provider, models in CURATED_FALLBACK_MODELS.items()
         }
+
+
+def _get_model_metadata(
+    model: str,
+    model_cost: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Return normalized LiteLLM metadata for a model when available."""
+    for candidate in _iter_model_metadata_keys(model):
+        metadata = model_cost.get(candidate)
+        if isinstance(metadata, dict):
+            return metadata
+    return {}
+
+
+def _iter_model_metadata_keys(model: str) -> list[str]:
+    """Build safe metadata lookup keys without normalizing gateway models."""
+    candidates = [model]
+    provider_prefix, separator, remainder = model.partition("/")
+    if separator and provider_prefix in _NATIVE_PROVIDER_PREFIXES and remainder:
+        candidates.append(remainder)
+    return candidates
+
+
+def _classify_provider(metadata: dict[str, Any]) -> str | None:
+    """Map a model to one of the setup providers using LiteLLM provider metadata."""
+    litellm_provider = metadata.get("litellm_provider")
+    if not isinstance(litellm_provider, str):
+        return None
+
+    for provider_key, provider_config in PROVIDER_CONFIG.items():
+        if litellm_provider in provider_config.get("litellm_providers", []):
+            return provider_key
+    return None
+
+
+def _is_setup_safe_model(_model: str, metadata: dict[str, Any]) -> bool:
+    """Return True when a model is safe to show in setup."""
+    if not metadata:
+        return False
+    if metadata.get("deprecation_date"):
+        return False
+
+    mode = metadata.get("mode")
+    if not isinstance(mode, str) or mode not in _ALLOWED_SETUP_MODEL_MODES:
+        return False
+
+    output_modalities = metadata.get("supported_output_modalities")
+    if isinstance(output_modalities, list):
+        normalized_modalities = {
+            str(modality).lower() for modality in output_modalities
+        }
+        if normalized_modalities != {"text"}:
+            return False
+
+    return True
 
 
 def _parse_bool_config(value: str | None, default: bool) -> bool:
     """Parse a boolean config string using shared config helpers."""
     return parse_bool_setting(value, default)
+
+
+def _prompt_positive_int(prompt: str, default: str) -> str:
+    """Prompt until the user enters a positive integer string."""
+    while True:
+        value = Prompt.ask(prompt, default=default).strip()
+        if value.isdigit() and int(value) >= 1:
+            return value
+        console.print(
+            "[red]Please enter a whole number greater than or equal to 1.[/red]"
+        )
 
 
 def select_provider(available_models: dict[str, list[str]]) -> str:
@@ -396,8 +485,9 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
 
     console.print("\n[bold cyan]Concurrency:[/bold cyan]")
     default_concurrency = current_config.get("MAX_CONCURRENT_VIDEOS", "5")
-    concurrency = Prompt.ask(
-        "Max concurrent videos to process?", default=default_concurrency
+    concurrency = _prompt_positive_int(
+        "Max concurrent videos to process?",
+        default_concurrency,
     )
 
     console.print("\n[bold cyan]YouTube Authentication (Optional):[/bold cyan]")
@@ -439,6 +529,9 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
             )
         else:
             oauth_token_file = ""
+    else:
+        save_oauth_token = False
+        oauth_token_file = ""
 
     new_config = {
         "DEFAULT_MODEL": model,

@@ -75,6 +75,11 @@ def _get_global_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
     return limiter
 
 
+def dedupe_video_ids(video_ids: list[str]) -> list[str]:
+    """Return video IDs in first-seen order with duplicates removed."""
+    return list(dict.fromkeys(video_ids))
+
+
 class EventType(Enum):
     """Event types emitted by the pipeline."""
 
@@ -84,8 +89,14 @@ class EventType(Enum):
     TRANSCRIPT_FETCHED = "transcript_fetched"
     GENERATION_START = "generation_start"
     CHUNK_GENERATING = "chunk_generating"
+    GENERATION_COMBINING = "generation_combining"
     CHAPTER_GENERATING = "chapter_generating"
     CHAPTER_CHUNK_GENERATING = "chapter_chunk_generating"
+    CHAPTER_COMBINING = "chapter_combining"
+    QUIZ_GENERATING = "quiz_generating"
+    QUIZ_CHUNK_GENERATING = "quiz_chunk_generating"
+    QUIZ_COMBINING = "quiz_combining"
+    QUIZ_COMPLETE = "quiz_complete"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
     VIDEO_SKIPPED = "video_skipped"
@@ -182,12 +193,16 @@ def sanitize_filename(name: str) -> str:
     name = name.rstrip(".")
     # Truncate to 100 characters
     name = name[:100]
+    # Truncation can reintroduce a trailing space or dot.
+    name = name.rstrip(" .")
     # Reject empty or dot-only names
     if not name:
         return "untitled"
     # Reject Windows reserved device names (case-insensitive, with or without extension)
     if _RESERVED.match(name):
-        name = f"_{name}"[:100]
+        name = f"_{name}"[:100].rstrip(" .")
+        if not name:
+            return "untitled"
     return name
 
 
@@ -203,7 +218,7 @@ class CorePipeline:
 
     def __init__(
         self,
-        model: str = "gemini/gemini-2.0-flash",
+        model: str = "gemini/gemini-2.5-flash",
         output_dir: Path | None = None,
         languages: list[str] | None = None,
         temperature: float | None = None,
@@ -275,7 +290,9 @@ class CorePipeline:
             self.oauth_token_file = default_youtube_oauth_token_file()
         self.errors: dict[str, str] = {}
         self._metrics_lock = asyncio.Lock()
+        self._output_lock = asyncio.Lock()
         self._run_metrics = PipelineMetrics()
+        self._reserved_output_targets: set[Path] = set()
         self.db = DatabaseManager.get_instance(self._cache_db_path())
 
     def _get_youtube_request_limiter(self) -> AsyncLimiter:
@@ -431,6 +448,32 @@ class CorePipeline:
             self._run_metrics.add_from(metrics)
 
     @staticmethod
+    def _suffix_output_target(base: Path, video_id: str) -> Path:
+        """Append a stable video-id suffix to an output file or directory name."""
+        suffix = f" ({sanitize_filename(video_id)})"
+        if base.suffix:
+            return base.with_name(f"{base.stem}{suffix}{base.suffix}")
+        return base.with_name(f"{base.name}{suffix}")
+
+    async def _reserve_output_target(
+        self,
+        base: Path,
+        video_id: str,
+        *,
+        allow_existing_base: bool = False,
+    ) -> Path:
+        """Reserve a unique output target for this run to avoid title collisions."""
+        async with self._output_lock:
+            base_available = base not in self._reserved_output_targets and (
+                allow_existing_base or not base.exists()
+            )
+            target = (
+                base if base_available else self._suffix_output_target(base, video_id)
+            )
+            self._reserved_output_targets.add(target)
+            return target
+
+    @staticmethod
     def _coerce_usage_int(value: Any) -> int:
         """Convert usage values to non-negative ints without trusting mock objects."""
         if isinstance(value, bool):
@@ -486,11 +529,45 @@ class CorePipeline:
     # Quiz helper
     # ------------------------------------------------------------------
 
-    async def _generate_and_write_quiz(self, transcript_text: str, title: str) -> None:
-        """Generate a quiz from *transcript_text* and write ``<title>_quiz.md``."""
-        quiz_notes = await self.generator.generate_quiz(transcript_text)
-        quiz_path = self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+    async def _generate_and_write_quiz(
+        self,
+        transcript_text: str,
+        quiz_name: str,
+        output_dir: Path | None = None,
+        *,
+        emit: Callable[..., None],
+        video_id: str,
+        title: str,
+    ) -> None:
+        """Generate a quiz and write it using the resolved output target name."""
+        emit(EventType.QUIZ_GENERATING, video_id, title=title)
+
+        def _on_quiz_chunk(chunk_num: int, total: int) -> None:
+            emit(
+                EventType.QUIZ_CHUNK_GENERATING,
+                video_id,
+                title=title,
+                chunk_number=chunk_num,
+                total_chunks=total,
+            )
+
+        def _on_quiz_combine(total_parts: int) -> None:
+            emit(
+                EventType.QUIZ_COMBINING,
+                video_id,
+                title=title,
+                total_chunks=total_parts,
+            )
+
+        quiz_notes = await self.generator.generate_quiz(
+            transcript_text,
+            on_chunk=_on_quiz_chunk,
+            on_combine=_on_quiz_combine,
+        )
+        target_dir = output_dir or self.output_dir
+        quiz_path = target_dir / f"{sanitize_filename(quiz_name)}_quiz.md"
         quiz_path.write_text(quiz_notes, encoding="utf-8")
+        emit(EventType.QUIZ_COMPLETE, video_id, title=title)
 
     async def _process_single_video(
         self,
@@ -525,6 +602,9 @@ class CorePipeline:
                         title=cached_video.title or video_id,
                     )
                     return True
+                current_cached_video = cached_video
+                if self.force:
+                    current_cached_video = await self._get_cached_video(video_id)
 
                 self._check_oauth_token_cache()
                 auth_kwargs = self._youtube_auth_kwargs()
@@ -600,8 +680,20 @@ class CorePipeline:
                             transcript_obj, chapters
                         )
 
+                        if not chapter_transcripts:
+                            logger.warning(
+                                f"No usable chapter transcripts found for {video_id}; "
+                                "falling back to single-file generation."
+                            )
+                            use_chapters = False
+
+                    if use_chapters:
                         safe_title = sanitize_filename(title)
-                        output_target = self.output_dir / safe_title
+                        output_target = await self._reserve_output_target(
+                            self.output_dir / safe_title,
+                            video_id,
+                            allow_existing_base=current_cached_video is not None,
+                        )
                         output_target.mkdir(parents=True, exist_ok=True)
 
                         total_chapters = len(chapter_transcripts)
@@ -640,10 +732,23 @@ class CorePipeline:
                                     total_chunks=total,
                                 )
 
+                            def _on_chapter_combine(
+                                total_parts: int, _i: int = i
+                            ) -> None:
+                                emit(
+                                    EventType.CHAPTER_COMBINING,
+                                    video_id,
+                                    title=title,
+                                    chapter_number=_i,
+                                    total_chapters=total_chapters,
+                                    total_chunks=total_parts,
+                                )
+
                             notes = await self.generator.generate_single_chapter_notes(
                                 chapter_title=chap_title,
                                 chapter_text=chap_text,
                                 on_chunk=_on_chapter_chunk,
+                                on_combine=_on_chapter_combine,
                             )
                             chapter_file.write_text(notes, encoding="utf-8")
                     else:
@@ -659,20 +764,44 @@ class CorePipeline:
                                 total_chunks=total,
                             )
 
+                        def _on_combine(total_parts: int) -> None:
+                            emit(
+                                EventType.GENERATION_COMBINING,
+                                video_id,
+                                title=title,
+                                total_chunks=total_parts,
+                            )
+
                         notes = await self.generator.generate_study_notes(
                             transcript_text,
                             video_title=title,
                             on_chunk=_on_chunk,
+                            on_combine=_on_combine,
                         )
 
-                        output_target = (
-                            self.output_dir / f"{sanitize_filename(title)}.md"
+                        output_target = await self._reserve_output_target(
+                            self.output_dir / f"{sanitize_filename(title)}.md",
+                            video_id,
+                            allow_existing_base=current_cached_video is not None,
                         )
                         output_target.parent.mkdir(parents=True, exist_ok=True)
                         output_target.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
-                        await self._generate_and_write_quiz(transcript_text, title)
+                        quiz_output_dir = (
+                            output_target if use_chapters else self.output_dir
+                        )
+                        quiz_name = (
+                            output_target.name if use_chapters else output_target.stem
+                        )
+                        await self._generate_and_write_quiz(
+                            transcript_text,
+                            quiz_name,
+                            output_dir=quiz_output_dir,
+                            emit=emit,
+                            video_id=video_id,
+                            title=title,
+                        )
 
                 usage_totals = self._coerce_usage_totals(raw_usage_totals)
                 generation_seconds = time.perf_counter() - generation_start
@@ -761,6 +890,8 @@ class CorePipeline:
         Returns:
             PipelineResult with success count, failures, and detailed errors.
         """
+        video_ids = dedupe_video_ids(video_ids)
+
         # --- Validation ---
         if not self._check_api_key():
             errors = {vid: "Missing API key" for vid in video_ids}
@@ -824,7 +955,7 @@ class CorePipeline:
 async def run_pipeline(
     video_ids: list[str],
     output_dir: Path | None = None,
-    model: str = "gemini/gemini-2.0-flash",
+    model: str = "gemini/gemini-2.5-flash",
     cookies_path: Path | None = None,
     use_oauth: bool | None = None,
     oauth_token_file: Path | None = None,

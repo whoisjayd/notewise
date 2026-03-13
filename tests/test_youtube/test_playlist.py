@@ -19,16 +19,16 @@ class TestPlaylistExtraction:
         # Use PropertyMock for video_urls since it's a property
         type(mock_pl).video_urls = PropertyMock(
             return_value=[
-                "https://youtube.com/watch?v=vid1",
-                "https://youtube.com/watch?v=vid2&list=pl1",
-                "https://youtube.com/watch?v=vid3",
+                "https://youtube.com/watch?v=dQw4w9WgXcQ",
+                "https://youtube.com/watch?v=J---aiyznGQ&list=pl1",
+                "https://youtube.com/watch?v=9bZkp7q19f0",
             ]
         )
 
         video_ids = await extract_playlist_videos("pl123")
 
         assert len(video_ids) == 3
-        assert video_ids == ["vid1", "vid2", "vid3"]
+        assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ", "9bZkp7q19f0"]
 
     @pytest.mark.asyncio
     async def test_extract_playlist_retry_success(self, mock_pytube):
@@ -46,14 +46,14 @@ class TestPlaylistExtraction:
 
         mock_success = MagicMock()
         type(mock_success).video_urls = PropertyMock(
-            return_value=["https://youtube.com/watch?v=vid1"]
+            return_value=["https://youtube.com/watch?v=dQw4w9WgXcQ"]
         )
 
         # side_effect on the constructor (mock_pl_cls)
         mock_pl_cls.side_effect = [mock_fail, mock_success]
 
         video_ids = await extract_playlist_videos("pl123")
-        assert video_ids == ["vid1"]
+        assert video_ids == ["dQw4w9WgXcQ"]
         assert mock_pl_cls.call_count == 2
 
     @pytest.mark.asyncio
@@ -78,14 +78,32 @@ class TestPlaylistExtraction:
 
         type(mock_pl).video_urls = PropertyMock(
             return_value=[
-                "https://youtube.com/watch?v=vid1",
+                "https://youtube.com/watch?v=dQw4w9WgXcQ",
                 "https://broken.com/video",  # Should be skipped
-                "https://youtube.com/watch?v=vid2",
+                "https://youtube.com/watch?v=J---aiyznGQ",
             ]
         )
 
         video_ids = await extract_playlist_videos("pl123")
-        assert video_ids == ["vid1", "vid2"]
+        assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ"]
+
+    @pytest.mark.asyncio
+    async def test_extract_playlist_supports_short_and_shorts_urls(self, mock_pytube):
+        """Playlist extraction should keep valid youtu.be and shorts entries."""
+        _, mock_pl_cls = mock_pytube
+        mock_pl = mock_pl_cls.return_value
+
+        type(mock_pl).video_urls = PropertyMock(
+            return_value=[
+                "https://youtu.be/dQw4w9WgXcQ?si=abc",
+                "https://www.youtube.com/shorts/9bZkp7q19f0",
+                "https://youtube.com/watch?v=J---aiyznGQ&list=pl1",
+            ]
+        )
+
+        video_ids = await extract_playlist_videos("pl123")
+
+        assert video_ids == ["dQw4w9WgXcQ", "9bZkp7q19f0", "J---aiyznGQ"]
 
     @pytest.mark.asyncio
     async def test_extract_playlist_forwards_oauth_kwargs(self, mock_pytube):
@@ -93,7 +111,7 @@ class TestPlaylistExtraction:
         _, mock_pl_cls = mock_pytube
         mock_pl = mock_pl_cls.return_value
         type(mock_pl).video_urls = PropertyMock(
-            return_value=["https://youtube.com/watch?v=vid1"]
+            return_value=["https://youtube.com/watch?v=dQw4w9WgXcQ"]
         )
 
         video_ids = await extract_playlist_videos(
@@ -103,7 +121,7 @@ class TestPlaylistExtraction:
             allow_oauth_cache=False,
         )
 
-        assert video_ids == ["vid1"]
+        assert video_ids == ["dQw4w9WgXcQ"]
         mock_pl_cls.assert_called_once_with(
             "https://www.youtube.com/playlist?list=pl123",
             use_oauth=True,
@@ -119,7 +137,7 @@ class TestPlaylistExtraction:
         _, mock_pl_cls = mock_pytube
         mock_pl = MagicMock()
         type(mock_pl).video_urls = PropertyMock(
-            return_value=["https://youtube.com/watch?v=vid1"]
+            return_value=["https://youtube.com/watch?v=dQw4w9WgXcQ"]
         )
 
         token_file = tmp_path / "token.json"
@@ -134,6 +152,6 @@ class TestPlaylistExtraction:
             allow_oauth_cache=True,
         )
 
-        assert video_ids == ["vid1"]
+        assert video_ids == ["dQw4w9WgXcQ"]
         assert mock_pl_cls.call_count == 2
         assert not token_file.exists()
