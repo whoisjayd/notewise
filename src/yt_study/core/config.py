@@ -95,34 +95,15 @@ class Config:
         if env_output:
             self.default_output_dir = Path(env_output)
 
-        env_concurrency = os.getenv("MAX_CONCURRENT_VIDEOS")
-        if env_concurrency:
-            try:
-                self.max_concurrent_videos = int(env_concurrency)
-            except ValueError:
-                logger.warning(
-                    f"Invalid MAX_CONCURRENT_VIDEOS value: {env_concurrency}. "
-                    f"Using default {self.max_concurrent_videos}"
-                )
+        self.max_concurrent_videos = self._load_positive_int_env(
+            "MAX_CONCURRENT_VIDEOS",
+            self.max_concurrent_videos,
+        )
 
-        env_youtube_rpm = os.getenv("YOUTUBE_REQUESTS_PER_MINUTE")
-        if env_youtube_rpm:
-            try:
-                youtube_rpm_value = int(env_youtube_rpm)
-                if youtube_rpm_value < 1:
-                    logger.warning(
-                        "YOUTUBE_REQUESTS_PER_MINUTE must be >= 1: "
-                        f"{env_youtube_rpm}. Using default "
-                        f"{self.youtube_requests_per_minute}"
-                    )
-                else:
-                    self.youtube_requests_per_minute = youtube_rpm_value
-            except ValueError:
-                logger.warning(
-                    "Invalid YOUTUBE_REQUESTS_PER_MINUTE value: "
-                    f"{env_youtube_rpm}. Using default "
-                    f"{self.youtube_requests_per_minute}"
-                )
+        self.youtube_requests_per_minute = self._load_positive_int_env(
+            "YOUTUBE_REQUESTS_PER_MINUTE",
+            self.youtube_requests_per_minute,
+        )
 
         env_temperature = os.getenv("TEMPERATURE")
         if env_temperature:
@@ -162,6 +143,29 @@ class Config:
                 )
 
         self._sync_env_vars()
+
+    def _load_positive_int_env(self, key: str, default: int) -> int:
+        """
+        Load a positive integer from environment.
+
+        Returns the provided default when the variable is absent, non-numeric,
+        or less than 1.
+        """
+        raw_value = os.getenv(key)
+        if raw_value is None:
+            return default
+
+        try:
+            parsed = int(raw_value)
+        except ValueError:
+            logger.warning(f"Invalid {key} value: {raw_value}. Using default {default}")
+            return default
+
+        if parsed < 1:
+            logger.warning(f"{key} must be >= 1: {raw_value}. Using default {default}")
+            return default
+
+        return parsed
 
     def _load_from_user_config(self) -> None:
         """Load configuration from user's config file."""
