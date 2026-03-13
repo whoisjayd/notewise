@@ -170,7 +170,7 @@ Input URL or batch file
      - chunked mode for everything else
   -> LLM generation
   -> Markdown write to output directory
-  -> cache metadata/transcript/run stats in .yt_study_cache.db
+  -> cache metadata/transcript/run stats in ~/.yt-study/.yt_study_cache.db
 ```
 
 Chapter mode activates when:
@@ -250,13 +250,14 @@ Config behavior:
 - throttles YouTube request rate globally (default `10` requests/minute)
 - supports OAuth auth for metadata/playlist fetches and optional token caching
 - supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
-- stores local processing cache in `{output_dir}/.yt_study_cache.db`
+- stores local processing cache in `~/.yt-study/.yt_study_cache.db`
+- prints a Cost Summary table with prompt/completion/total tokens, estimated
+  USD cost (from LiteLLM pricing), and timing
 
 Local cache behavior:
 
 - processed videos are skipped on reruns when cached
 - use `--force` to bypass cache and reprocess
-- legacy `.yt_study_processed.json` entries are auto-migrated into SQLite cache
 
 Important:
 

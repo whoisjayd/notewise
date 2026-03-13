@@ -327,12 +327,13 @@ Supported:
 
 ### Local SQLite cache
 
-- each output directory maintains a cache database at `.yt_study_cache.db`
+- one global cache DB is stored at `~/.yt-study/.yt_study_cache.db`
 - cache includes `Video`, `Transcript`, and `RunStats` tables
 - pipeline checks cached `Video` rows first and emits `VIDEO_SKIPPED` when found
 - successful runs persist metadata, transcript content/language, and run stats
+- `RunStats` captures prompt/completion/total tokens, LiteLLM-estimated USD cost,
+  and transcript/generation timings
 - `--force` bypasses cache checks and reprocesses videos
-- legacy `.yt_study_processed.json` entries are auto-migrated into SQLite cache
 
 ### IP block handling
 
@@ -367,7 +368,7 @@ output/
 Cache file:
 
 ```text
-output/
+~/.yt-study/
   .yt_study_cache.db
 ```
 
