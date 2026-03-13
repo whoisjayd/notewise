@@ -71,6 +71,15 @@ def test_sanitize_filename_trailing_spaces_removed():
     assert sanitize_filename("filename   ") == "filename"
 
 
+def test_sanitize_filename_truncation_restrips_trailing_spaces():
+    """Truncation must not leave an illegal trailing space behind."""
+    raw_name = ("a" * 99) + " " + ("b" * 10)
+    result = sanitize_filename(raw_name)
+
+    assert len(result) <= 100
+    assert not result.endswith(" ")
+
+
 def test_sanitize_filename_reserved_name_stays_within_100_chars():
     """Reserved names at the 100-char limit stay within 100 chars after prefixing."""
     # "NUL." + 96 x "a" = 100 chars total; matches _RESERVED because of "NUL."
@@ -816,6 +825,74 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
     for i, event in enumerate(chapter_events, 1):
         assert event.chapter_number == i
         assert event.total_chapters == 3
+
+
+@pytest.mark.asyncio
+async def test_run_empty_chapter_split_falls_back_to_single_file(
+    temp_output_dir, mock_llm_provider
+):
+    """Empty chapter splits should fall back to normal single-file generation."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Fallback Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[{"title": "Intro", "start_seconds": 0}],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch("yt_study.core.pipeline.split_transcript_by_chapters", return_value={}),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "fallback transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-fallback"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Fallback Video.md").exists()
+    p.generator.generate_study_notes.assert_awaited_once()
+    p.generator.generate_single_chapter_notes.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Chapter-mode quizzes should live inside the per-video chapter folder."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Long Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[
+                {"title": "Intro", "start_seconds": 0},
+                {"title": "Part 2", "start_seconds": 120},
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            return_value={"Intro": "intro text", "Part 2": "body text"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-quiz"])
+
+    assert result.success_count == 1
+    chapter_dir = temp_output_dir / "Long Video"
+    assert (chapter_dir / "Long Video_quiz.md").exists()
+    assert not (temp_output_dir / "Long Video_quiz.md").exists()
 
 
 # ---------------------------------------------------------------------------

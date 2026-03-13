@@ -59,6 +59,23 @@ class TestStudyMaterialGenerator:
         finally:
             config.chunk_size = orig_size
 
+    def test_chunk_transcript_preserves_sentence_punctuation(self, generator):
+        """Sentence splitting should keep punctuation attached to each sentence."""
+        orig_size = config.chunk_size
+        config.chunk_size = 3
+
+        try:
+            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
+                mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
+
+                text = "Sentence one. Sentence two. Sentence three."
+                chunks = generator._chunk_transcript(text)
+
+                assert len(chunks) > 1
+                assert all(chunk.endswith(".") for chunk in chunks)
+        finally:
+            config.chunk_size = orig_size
+
     def test_chunk_transcript_newlines(self, generator):
         """Test splitting by newlines when sentences fail."""
         orig_size = config.chunk_size

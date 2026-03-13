@@ -1,6 +1,7 @@
 """Study material generator with chunking and combining logic."""
 
 import logging
+import re
 from collections.abc import Callable
 
 from litellm import token_counter
@@ -24,6 +25,7 @@ from .providers import LLMProvider
 CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
+_SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
 
 
 class StudyMaterialGenerator:
@@ -91,8 +93,8 @@ class StudyMaterialGenerator:
 
         chunks: list[str] = []
 
-        # Strategy 1: Split by sentences
-        sentences = transcript.split(". ")
+        # Strategy 1: Split by sentences without dropping punctuation
+        sentences = _SENTENCE_SPLIT_PATTERN.split(transcript)
 
         # Strategy 2: Split by newlines if sentences fail
         if len(sentences) < 2 and token_count > config.chunk_size:
@@ -110,8 +112,8 @@ class StudyMaterialGenerator:
             if not sentence:
                 continue
 
-            # Approximate token count including the '. ' delimiter
-            term = sentence + ". "
+            # Count the segment as-is; sentence punctuation stays attached.
+            term = sentence
             term_tokens = self._count_tokens(term)
 
             # Handle oversized single segment: flush buffer and hard-split

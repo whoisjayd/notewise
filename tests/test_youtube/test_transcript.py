@@ -145,6 +145,51 @@ class TestFetchTranscript:
         assert result.segments[0].text == "Hello"
 
     @pytest.mark.asyncio
+    async def test_fetch_transcript_prefers_translatable_option_over_first_foreign(
+        self, mock_transcript_api_instance
+    ):
+        """Later translatable transcripts should beat the first unusable foreign one."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        mock_list.find_manually_created_transcript.side_effect = NoTranscriptFound(
+            "id", [], []
+        )
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "id", [], []
+        )
+
+        non_translatable = MagicMock()
+        non_translatable.language = "German"
+        non_translatable.language_code = "de"
+        non_translatable.is_translatable = False
+        non_translatable.fetch.return_value = [
+            {"text": "Hallo", "start": 0.0, "duration": 1.0}
+        ]
+
+        translatable = MagicMock()
+        translatable.language = "Spanish"
+        translatable.language_code = "es"
+        translatable.is_translatable = True
+
+        translated = MagicMock()
+        translated.language = "English"
+        translated.language_code = "en"
+        translated.is_generated = True
+        translated.fetch.return_value = [
+            {"text": "Hello", "start": 0.0, "duration": 1.0}
+        ]
+        translatable.translate.return_value = translated
+
+        mock_list.__iter__.return_value = [non_translatable, translatable]
+
+        result = await fetch_transcript("video123", ["en"])
+
+        translatable.translate.assert_called_once_with("en")
+        assert result.language_code == "en"
+        assert result.segments[0].text == "Hello"
+
+    @pytest.mark.asyncio
     async def test_fetch_transcript_unavailable(self, mock_transcript_api_instance):
         """Test fatal error when video is unavailable."""
         # Mock the instance method to raise error
@@ -291,3 +336,28 @@ class TestSplitTranscript:
         assert "Empty Chapter" not in result
         assert "Real Chapter" in result
         assert "Part 3" in result["Real Chapter"]
+
+    def test_split_transcript_disambiguates_duplicate_titles(self):
+        """Duplicate chapter titles should preserve all chapter transcript slices."""
+        segments = [
+            MagicMock(text="First intro", start=10, duration=5),
+            MagicMock(text="Second intro", start=70, duration=5),
+        ]
+
+        transcript = VideoTranscript(
+            video_id="id",
+            segments=segments,
+            language="en",
+            language_code="en",
+            is_generated=False,
+        )
+
+        chapters = [
+            VideoChapter(title="Intro", start_seconds=0, end_seconds=60),
+            VideoChapter(title="Intro", start_seconds=60, end_seconds=None),
+        ]
+
+        result = split_transcript_by_chapters(transcript, chapters)
+
+        assert result["Intro"] == "First intro"
+        assert result["Intro (2)"] == "Second intro"

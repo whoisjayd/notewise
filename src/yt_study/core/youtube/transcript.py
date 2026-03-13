@@ -250,20 +250,32 @@ def _fetch_sync(
             if not available:
                 raise NoTranscriptFound(video_id, languages, [])
 
-            first_available = available[0]
-
-            # Try to translate to English if not English already and requested
-            if "en" in languages and first_available.language_code != "en":
-                if first_available.is_translatable:
-                    transcript = first_available.translate("en")
-                    found_msg = f"Translated {first_available.language} -> English"
+            first_preferred = next(
+                (item for item in available if item.language_code in languages),
+                None,
+            )
+            if first_preferred is not None:
+                transcript = first_preferred
+                found_msg = f"Using {transcript.language}"
+            elif "en" in languages:
+                translatable = next(
+                    (
+                        item
+                        for item in available
+                        if item.language_code != "en" and item.is_translatable
+                    ),
+                    None,
+                )
+                if translatable is not None:
+                    transcript = translatable.translate("en")
+                    found_msg = f"Translated {translatable.language} -> English"
                 else:
-                    transcript = first_available
+                    transcript = available[0]
                     found_msg = (
                         f"Using {transcript.language} (translation not available)"
                     )
             else:
-                transcript = first_available
+                transcript = available[0]
                 found_msg = f"Using {transcript.language}"
 
         except Exception as e:
@@ -316,6 +328,7 @@ def split_transcript_by_chapters(
         Dictionary mapping chapter titles to their transcript text.
     """
     chapter_transcripts = {}
+    seen_titles: dict[str, int] = {}
 
     for chapter in chapters:
         # Filter segments for this chapter
@@ -344,6 +357,11 @@ def split_transcript_by_chapters(
                 f"No transcript segments found for chapter: {chapter.title!r}"
             )
             continue
-        chapter_transcripts[chapter.title] = chapter_text
+        seen_titles[chapter.title] = seen_titles.get(chapter.title, 0) + 1
+        occurrence = seen_titles[chapter.title]
+        unique_title = (
+            chapter.title if occurrence == 1 else f"{chapter.title} ({occurrence})"
+        )
+        chapter_transcripts[unique_title] = chapter_text
 
     return chapter_transcripts

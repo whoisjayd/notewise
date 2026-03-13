@@ -200,6 +200,9 @@ output/
     03_Implementation.md
 ```
 
+When duplicate chapter titles occur, later files are disambiguated as
+`Title (2)`, `Title (3)`, and so on.
+
 Playlist output:
 
 ```text
@@ -213,6 +216,11 @@ output/
 ```
 
 Filenames are sanitized to remove filesystem-unsafe characters and trimmed to a safe length.
+
+When `--quiz` is enabled:
+
+- single-file runs write `Video Title_quiz.md` beside `Video Title.md`
+- chapter-mode runs write `Video Title/Video Title_quiz.md` inside the chapter folder
 
 ## Configuration
 

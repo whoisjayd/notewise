@@ -182,12 +182,16 @@ def sanitize_filename(name: str) -> str:
     name = name.rstrip(".")
     # Truncate to 100 characters
     name = name[:100]
+    # Truncation can reintroduce a trailing space or dot.
+    name = name.rstrip(" .")
     # Reject empty or dot-only names
     if not name:
         return "untitled"
     # Reject Windows reserved device names (case-insensitive, with or without extension)
     if _RESERVED.match(name):
-        name = f"_{name}"[:100]
+        name = f"_{name}"[:100].rstrip(" .")
+        if not name:
+            return "untitled"
     return name
 
 
@@ -486,10 +490,16 @@ class CorePipeline:
     # Quiz helper
     # ------------------------------------------------------------------
 
-    async def _generate_and_write_quiz(self, transcript_text: str, title: str) -> None:
+    async def _generate_and_write_quiz(
+        self,
+        transcript_text: str,
+        title: str,
+        output_dir: Path | None = None,
+    ) -> None:
         """Generate a quiz from *transcript_text* and write ``<title>_quiz.md``."""
         quiz_notes = await self.generator.generate_quiz(transcript_text)
-        quiz_path = self.output_dir / f"{sanitize_filename(title)}_quiz.md"
+        target_dir = output_dir or self.output_dir
+        quiz_path = target_dir / f"{sanitize_filename(title)}_quiz.md"
         quiz_path.write_text(quiz_notes, encoding="utf-8")
 
     async def _process_single_video(
@@ -600,6 +610,14 @@ class CorePipeline:
                             transcript_obj, chapters
                         )
 
+                        if not chapter_transcripts:
+                            logger.warning(
+                                f"No usable chapter transcripts found for {video_id}; "
+                                "falling back to single-file generation."
+                            )
+                            use_chapters = False
+
+                    if use_chapters:
                         safe_title = sanitize_filename(title)
                         output_target = self.output_dir / safe_title
                         output_target.mkdir(parents=True, exist_ok=True)
@@ -672,7 +690,14 @@ class CorePipeline:
                         output_target.write_text(notes, encoding="utf-8")
 
                     if self.quiz:
-                        await self._generate_and_write_quiz(transcript_text, title)
+                        quiz_output_dir = (
+                            output_target if use_chapters else self.output_dir
+                        )
+                        await self._generate_and_write_quiz(
+                            transcript_text,
+                            title,
+                            output_dir=quiz_output_dir,
+                        )
 
                 usage_totals = self._coerce_usage_totals(raw_usage_totals)
                 generation_seconds = time.perf_counter() - generation_start
