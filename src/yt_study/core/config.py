@@ -43,6 +43,12 @@ class Config:
     max_concurrent_videos: int = 5
     youtube_requests_per_minute: int = 10
 
+    # YouTube Authentication
+    youtube_use_oauth: bool = False
+    youtube_save_oauth_token: bool = False
+    youtube_oauth_token_file: Path | None = None
+    youtube_auto_refresh_oauth_token: bool = True
+
     # Output Configuration
     default_output_dir: Path = Path("./output")
 
@@ -64,6 +70,10 @@ class Config:
             "OUTPUT_DIR",
             "MAX_CONCURRENT_VIDEOS",
             "YOUTUBE_REQUESTS_PER_MINUTE",
+            "YOUTUBE_USE_OAUTH",
+            "YOUTUBE_SAVE_OAUTH_TOKEN",
+            "YOUTUBE_OAUTH_TOKEN_FILE",
+            "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN",
             "TEMPERATURE",
             "MAX_TOKENS",
         }
@@ -104,6 +114,32 @@ class Config:
             "YOUTUBE_REQUESTS_PER_MINUTE",
             self.youtube_requests_per_minute,
         )
+
+        self.youtube_use_oauth = self._load_bool_env(
+            "YOUTUBE_USE_OAUTH",
+            self.youtube_use_oauth,
+        )
+        self.youtube_save_oauth_token = self._load_bool_env(
+            "YOUTUBE_SAVE_OAUTH_TOKEN",
+            self.youtube_save_oauth_token,
+        )
+        env_oauth_token_file = os.getenv("YOUTUBE_OAUTH_TOKEN_FILE")
+        if env_oauth_token_file:
+            self.youtube_oauth_token_file = Path(env_oauth_token_file).expanduser()
+
+        self.youtube_auto_refresh_oauth_token = self._load_bool_env(
+            "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN",
+            self.youtube_auto_refresh_oauth_token,
+        )
+
+        if (
+            self.youtube_use_oauth
+            and self.youtube_save_oauth_token
+            and self.youtube_oauth_token_file is None
+        ):
+            self.youtube_oauth_token_file = (
+                Path.home() / ".yt-study" / "youtube_token.json"
+            )
 
         env_temperature = os.getenv("TEMPERATURE")
         if env_temperature:
@@ -166,6 +202,26 @@ class Config:
             return default
 
         return parsed
+
+    def _load_bool_env(self, key: str, default: bool) -> bool:
+        """
+        Load a boolean from environment.
+
+        Accepted truthy values: `1`, `true`, `yes`, `on`
+        Accepted falsy values: `0`, `false`, `no`, `off`
+        """
+        raw_value = os.getenv(key)
+        if raw_value is None:
+            return default
+
+        normalized = raw_value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+
+        logger.warning(f"Invalid {key} value: {raw_value}. Using default {default}")
+        return default
 
     def _load_from_user_config(self) -> None:
         """Load configuration from user's config file."""

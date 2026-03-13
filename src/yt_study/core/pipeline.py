@@ -22,6 +22,7 @@ from aiolimiter import AsyncLimiter
 from .config import config
 from .llm.generator import StudyMaterialGenerator
 from .llm.providers import get_provider
+from .youtube.auth import clear_oauth_token_file, inspect_oauth_token_file
 from .youtube.metadata import (
     get_video_chapters,
     get_video_duration,
@@ -166,6 +167,11 @@ class CorePipeline:
         languages: list[str] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        cookies_path: Path | None = None,
+        use_oauth: bool | None = None,
+        oauth_token_file: Path | None = None,
+        save_oauth_token: bool | None = None,
+        auto_refresh_oauth_token: bool | None = None,
         force: bool = False,
         quiz: bool = False,
     ):
@@ -178,6 +184,11 @@ class CorePipeline:
             languages: Preferred transcript languages.
             temperature: LLM temperature.
             max_tokens: Max tokens for generation.
+            cookies_path: Optional Netscape cookies.txt file for transcript requests.
+            use_oauth: Enable pytubefix OAuth for metadata/playlist calls.
+            oauth_token_file: Optional OAuth token cache file path.
+            save_oauth_token: Whether OAuth tokens may be cached on disk.
+            auto_refresh_oauth_token: Whether stale OAuth cache should auto-reset.
             force: Re-process videos that already have saved output.
             quiz: Also generate a multiple-choice quiz file.
         """
@@ -199,6 +210,28 @@ class CorePipeline:
         self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
+        self.cookies_path = cookies_path
+        self.use_oauth = config.youtube_use_oauth if use_oauth is None else use_oauth
+        self.save_oauth_token = (
+            config.youtube_save_oauth_token
+            if save_oauth_token is None
+            else save_oauth_token
+        )
+        configured_token_file = (
+            oauth_token_file
+            if oauth_token_file is not None
+            else config.youtube_oauth_token_file
+        )
+        self.oauth_token_file = (
+            configured_token_file.expanduser() if configured_token_file else None
+        )
+        self.auto_refresh_oauth_token = (
+            config.youtube_auto_refresh_oauth_token
+            if auto_refresh_oauth_token is None
+            else auto_refresh_oauth_token
+        )
+        if self.use_oauth and self.save_oauth_token and self.oauth_token_file is None:
+            self.oauth_token_file = Path.home() / ".yt-study" / "youtube_token.json"
         self.errors: dict[str, str] = {}
         self._manifest_lock = asyncio.Lock()
 
@@ -225,6 +258,56 @@ class CorePipeline:
         """
         await self._acquire_youtube_request_slot()
         return await asyncio.to_thread(func, *args, **kwargs)
+
+    def _youtube_auth_kwargs(self) -> dict[str, Any]:
+        """Build kwargs used for pytubefix metadata/playlist auth calls."""
+        return {
+            "use_oauth": self.use_oauth,
+            "token_file": (
+                str(self.oauth_token_file)
+                if self.oauth_token_file is not None
+                else None
+            ),
+            "allow_oauth_cache": self.save_oauth_token,
+        }
+
+    def _check_oauth_token_cache(self) -> None:
+        """Inspect cached OAuth token status and apply safe recovery when needed."""
+        if not (
+            self.use_oauth
+            and self.save_oauth_token
+            and self.oauth_token_file is not None
+        ):
+            return
+
+        token_file = str(self.oauth_token_file)
+        status = inspect_oauth_token_file(token_file)
+        if not status.exists:
+            return
+
+        if status.parse_error:
+            logger.warning("Cached YouTube OAuth token file is invalid JSON.")
+            if self.auto_refresh_oauth_token and clear_oauth_token_file(token_file):
+                logger.warning(
+                    "Removed invalid YouTube OAuth token cache. "
+                    "Next request will re-authenticate."
+                )
+            return
+
+        if not status.expired:
+            return
+
+        if status.has_refresh_token:
+            logger.info(
+                "Cached YouTube OAuth token is expired; pytubefix will refresh it."
+            )
+            return
+
+        if self.auto_refresh_oauth_token and clear_oauth_token_file(token_file):
+            logger.warning(
+                "Cached YouTube OAuth token expired without refresh token. "
+                "Removed cache so next request can mint a new token."
+            )
 
     def _check_api_key(self) -> bool:
         """
@@ -311,11 +394,20 @@ class CorePipeline:
                     emit(EventType.VIDEO_SKIPPED, video_id, title=video_id)
                     return True
 
+                self._check_oauth_token_cache()
+                auth_kwargs = self._youtube_auth_kwargs()
+
                 # Fetch all metadata concurrently; title failure is non-fatal
                 meta_results = await asyncio.gather(
-                    self._rate_limited_to_thread(get_video_title, video_id),
-                    self._rate_limited_to_thread(get_video_duration, video_id),
-                    self._rate_limited_to_thread(get_video_chapters, video_id),
+                    self._rate_limited_to_thread(
+                        get_video_title, video_id, **auth_kwargs
+                    ),
+                    self._rate_limited_to_thread(
+                        get_video_duration, video_id, **auth_kwargs
+                    ),
+                    self._rate_limited_to_thread(
+                        get_video_chapters, video_id, **auth_kwargs
+                    ),
                     return_exceptions=True,
                 )
                 raw_title, duration, chapters = meta_results
@@ -346,6 +438,7 @@ class CorePipeline:
                 transcript_obj = await fetch_transcript(
                     video_id,
                     self.languages,
+                    cookies_path=self.cookies_path,
                     on_request=self._acquire_youtube_request_slot,
                 )
 
@@ -581,6 +674,11 @@ async def run_pipeline(
     video_ids: list[str],
     output_dir: Path | None = None,
     model: str = "gemini/gemini-2.0-flash",
+    cookies_path: Path | None = None,
+    use_oauth: bool | None = None,
+    oauth_token_file: Path | None = None,
+    save_oauth_token: bool | None = None,
+    auto_refresh_oauth_token: bool | None = None,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
     """
@@ -592,10 +690,23 @@ async def run_pipeline(
         video_ids: List of YouTube video IDs to process.
         output_dir: Optional output directory.
         model: LLM model string.
+        cookies_path: Optional Netscape cookies.txt file for transcript requests.
+        use_oauth: Enable pytubefix OAuth for metadata/playlist calls.
+        oauth_token_file: Optional OAuth token cache file path.
+        save_oauth_token: Whether OAuth tokens may be cached on disk.
+        auto_refresh_oauth_token: Whether stale OAuth cache should auto-reset.
         on_event: Optional callback for progress events.
 
     Returns:
         PipelineResult with success/failure counts.
     """
-    pipeline = CorePipeline(model=model, output_dir=output_dir)
+    pipeline = CorePipeline(
+        model=model,
+        output_dir=output_dir,
+        cookies_path=cookies_path,
+        use_oauth=use_oauth,
+        oauth_token_file=oauth_token_file,
+        save_oauth_token=save_oauth_token,
+        auto_refresh_oauth_token=auto_refresh_oauth_token,
+    )
     return await pipeline.run(video_ids, on_event=on_event)
