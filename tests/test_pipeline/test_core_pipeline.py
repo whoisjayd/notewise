@@ -236,6 +236,42 @@ async def test_run_single_video_events_emitted(pipeline):
 
 
 @pytest.mark.asyncio
+async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
+    """Each metadata request and transcript fetch should acquire the shared limiter."""
+    acquire_mock = AsyncMock()
+    pipeline._acquire_youtube_request_slot = acquire_mock
+
+    async def _fetch_with_request_hook(
+        _video_id, _languages, on_request=None
+    ):  # pragma: no cover - signature exercise
+        assert on_request is not None
+        await on_request()
+        transcript = MagicMock()
+        transcript.to_text.return_value = "text"
+        return transcript
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_fetch.side_effect = _fetch_with_request_hook
+        result = await pipeline.run(["abc"])
+
+    assert result.success_count == 1
+    # 3 metadata calls + 1 transcript call
+    assert acquire_mock.await_count == 4
+
+
+@pytest.mark.asyncio
 async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline):
     """METADATA_FETCHED event must set total_chapters, not chapter_number."""
     events: list[PipelineEvent] = []

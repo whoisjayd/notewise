@@ -21,6 +21,7 @@ class TestConfig:
             cfg = Config()
             assert cfg.default_model == "gemini/gemini-2.0-flash"
             assert cfg.max_concurrent_videos == 5
+            assert cfg.youtube_requests_per_minute == 10
 
     def test_load_from_env(self, monkeypatch):
         """Test loading from environment variables."""
@@ -132,3 +133,30 @@ class TestConfig:
         with patch.object(Config, "_load_from_user_config"):
             cfg = Config()
             assert cfg.max_tokens is None
+
+    def test_youtube_requests_per_minute_valid(self, monkeypatch):
+        """YOUTUBE_REQUESTS_PER_MINUTE is loaded when valid and >= 1."""
+        monkeypatch.delenv("YOUTUBE_REQUESTS_PER_MINUTE", raising=False)
+        monkeypatch.setenv("YOUTUBE_REQUESTS_PER_MINUTE", "25")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.youtube_requests_per_minute == 25
+
+    def test_youtube_requests_per_minute_invalid_string(self, monkeypatch):
+        """Invalid YOUTUBE_REQUESTS_PER_MINUTE falls back to default."""
+        monkeypatch.delenv("YOUTUBE_REQUESTS_PER_MINUTE", raising=False)
+        monkeypatch.setenv("YOUTUBE_REQUESTS_PER_MINUTE", "abc")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.youtube_requests_per_minute == 10
+
+    def test_youtube_requests_per_minute_lt_one(self, monkeypatch):
+        """YOUTUBE_REQUESTS_PER_MINUTE < 1 falls back to default."""
+        monkeypatch.delenv("YOUTUBE_REQUESTS_PER_MINUTE", raising=False)
+        monkeypatch.setenv("YOUTUBE_REQUESTS_PER_MINUTE", "0")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.youtube_requests_per_minute == 10

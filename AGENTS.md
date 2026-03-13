@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Updated:** 2026-03-08
+**Updated:** 2026-03-13
 **Branch:** main
 
 ## OVERVIEW
@@ -140,6 +140,9 @@ Supported runtime keys today:
 - `GROQ_API_KEY`
 - `XAI_API_KEY`
 - `MISTRAL_API_KEY`
+- `COHERE_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `YOUTUBE_REQUESTS_PER_MINUTE`
 
 Important distinction:
 
@@ -156,6 +159,8 @@ Provider mapping implemented in `Config.get_api_key_name_for_model()`:
 | `groq` | `GROQ_API_KEY` |
 | `grok`, `xai` | `XAI_API_KEY` |
 | `mistral` | `MISTRAL_API_KEY` |
+| `cohere`, `command` | `COHERE_API_KEY` |
+| `deepseek` | `DEEPSEEK_API_KEY` |
 
 ## ARCHITECTURE RULES
 

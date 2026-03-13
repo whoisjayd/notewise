@@ -26,6 +26,7 @@ dependencies = [
     "litellm>=1.81.1",
     "typer>=0.21.1",
     "rich>=13.9.4",
+    "aiolimiter>=1.2.1",
 ]
 
 [project.urls]

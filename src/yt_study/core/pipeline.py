@@ -17,6 +17,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any
 
+from aiolimiter import AsyncLimiter
+
 from .config import config
 from .llm.generator import StudyMaterialGenerator
 from .llm.providers import get_provider
@@ -173,8 +175,31 @@ class CorePipeline:
         self.force = force
         self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
+        self.youtube_request_limiter = AsyncLimiter(
+            max_rate=config.youtube_requests_per_minute,
+            time_period=60,
+        )
         self.errors: dict[str, str] = {}
         self._manifest_lock = asyncio.Lock()
+
+    async def _acquire_youtube_request_slot(self) -> None:
+        """Acquire one slot from the global YouTube request rate limiter."""
+        async with self.youtube_request_limiter:
+            return
+
+    async def _rate_limited_to_thread(
+        self,
+        func: Callable[..., Any],
+        *args: Any,
+    ) -> Any:
+        """
+        Run blocking YouTube work in a thread after passing the global limiter.
+
+        The limiter controls request rate while `asyncio.to_thread` keeps
+        blocking I/O off the event loop.
+        """
+        await self._acquire_youtube_request_slot()
+        return await asyncio.to_thread(func, *args)
 
     def _check_api_key(self) -> bool:
         """
@@ -257,9 +282,9 @@ class CorePipeline:
 
                 # Fetch all metadata concurrently; title failure is non-fatal
                 meta_results = await asyncio.gather(
-                    asyncio.to_thread(get_video_title, video_id),
-                    asyncio.to_thread(get_video_duration, video_id),
-                    asyncio.to_thread(get_video_chapters, video_id),
+                    self._rate_limited_to_thread(get_video_title, video_id),
+                    self._rate_limited_to_thread(get_video_duration, video_id),
+                    self._rate_limited_to_thread(get_video_chapters, video_id),
                     return_exceptions=True,
                 )
                 raw_title, duration, chapters = meta_results
@@ -293,7 +318,11 @@ class CorePipeline:
                 # --- Transcript Phase ---
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
 
-                transcript_obj = await fetch_transcript(video_id, self.languages)
+                transcript_obj = await fetch_transcript(
+                    video_id,
+                    self.languages,
+                    on_request=self._acquire_youtube_request_slot,
+                )
 
                 emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
 

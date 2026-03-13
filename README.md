@@ -225,12 +225,16 @@ Common supported keys:
 - `GROQ_API_KEY`
 - `XAI_API_KEY`
 - `MISTRAL_API_KEY`
+- `COHERE_API_KEY`
+- `DEEPSEEK_API_KEY`
+- `YOUTUBE_REQUESTS_PER_MINUTE`
 
 Config behavior:
 
 - loads `~/.yt-study/config.env`
 - applies environment variable overrides
 - syncs supported provider keys into `os.environ` for LiteLLM
+- throttles YouTube request rate globally (default `10` requests/minute)
 
 Important:
 
@@ -263,7 +267,8 @@ Try:
 
 1. waiting and retrying later
 2. lowering `MAX_CONCURRENT_VIDEOS`
-3. retrying from another network or IP
+3. lowering `YOUTUBE_REQUESTS_PER_MINUTE`
+4. retrying from another network or IP
 
 ### Windows Unicode console issues
 

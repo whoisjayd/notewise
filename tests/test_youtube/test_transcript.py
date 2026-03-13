@@ -1,6 +1,6 @@
 """Tests for transcript fetching and processing."""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from youtube_transcript_api._errors import NoTranscriptFound, VideoUnavailable
@@ -81,6 +81,29 @@ class TestFetchTranscript:
         result = await fetch_transcript("video123")
         assert result.is_generated is True
         assert result.segments[0].text == "Hi"
+
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_calls_on_request_callback(
+        self, mock_transcript_api_instance
+    ):
+        """on_request callback should be awaited before the network attempt."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        mock_transcript_obj = MagicMock()
+        mock_transcript_obj.language = "English"
+        mock_transcript_obj.language_code = "en"
+        mock_transcript_obj.is_generated = False
+        mock_transcript_obj.fetch.return_value = [
+            {"text": "Hello", "start": 0.0, "duration": 1.0}
+        ]
+        mock_list.find_manually_created_transcript.return_value = mock_transcript_obj
+
+        on_request = AsyncMock()
+
+        await fetch_transcript("video123", ["en"], on_request=on_request)
+
+        on_request.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_fetch_transcript_fallback_translation(
