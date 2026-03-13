@@ -109,6 +109,13 @@ def inspect_oauth_token_file(token_file: str | None) -> OAuthTokenStatus:
             has_refresh_token=False,
             parse_error=True,
         )
+    if not isinstance(data, dict):
+        return OAuthTokenStatus(
+            exists=True,
+            expired=False,
+            has_refresh_token=False,
+            parse_error=True,
+        )
 
     expires_epoch = _coerce_expires_epoch(data.get("expires"))
     has_access_token = bool(data.get("access_token"))

@@ -56,6 +56,17 @@ def test_inspect_oauth_token_file_parse_error(tmp_path):
     assert status.expired is False
 
 
+def test_inspect_oauth_token_file_non_object_json_is_parse_error(tmp_path):
+    """Valid JSON with the wrong root type should not crash token inspection."""
+    token_file = tmp_path / "broken-shape-token.json"
+    token_file.write_text(json.dumps([]), encoding="utf-8")
+
+    status = inspect_oauth_token_file(str(token_file))
+    assert status.exists is True
+    assert status.parse_error is True
+    assert status.expired is False
+
+
 def test_inspect_oauth_token_file_accepts_string_expiry(tmp_path):
     """String-form expiry should be parsed to detect expired caches."""
     token_file = tmp_path / "token.json"
