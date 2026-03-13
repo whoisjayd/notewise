@@ -5,6 +5,12 @@ import os
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from .config_helpers import (
+    default_youtube_oauth_token_file,
+    is_valid_bool_setting,
+    parse_bool_setting,
+)
+
 
 logger = logging.getLogger(__name__)
 
@@ -137,9 +143,7 @@ class Config:
             and self.youtube_save_oauth_token
             and self.youtube_oauth_token_file is None
         ):
-            self.youtube_oauth_token_file = (
-                Path.home() / ".yt-study" / "youtube_token.json"
-            )
+            self.youtube_oauth_token_file = default_youtube_oauth_token_file()
 
         env_temperature = os.getenv("TEMPERATURE")
         if env_temperature:
@@ -211,17 +215,10 @@ class Config:
         Accepted falsy values: `0`, `false`, `no`, `off`
         """
         raw_value = os.getenv(key)
-        if raw_value is None:
-            return default
-
-        normalized = raw_value.strip().lower()
-        if normalized in {"1", "true", "yes", "on"}:
-            return True
-        if normalized in {"0", "false", "no", "off"}:
-            return False
-
-        logger.warning(f"Invalid {key} value: {raw_value}. Using default {default}")
-        return default
+        parsed = parse_bool_setting(raw_value, default)
+        if not is_valid_bool_setting(raw_value):
+            logger.warning(f"Invalid {key} value: {raw_value}. Using default {default}")
+        return parsed
 
     def _load_from_user_config(self) -> None:
         """Load configuration from user's config file."""

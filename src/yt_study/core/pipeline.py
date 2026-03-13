@@ -20,6 +20,7 @@ from typing import Any
 from aiolimiter import AsyncLimiter
 
 from .config import config
+from .config_helpers import default_youtube_oauth_token_file
 from .llm.generator import StudyMaterialGenerator
 from .llm.providers import get_provider
 from .youtube.auth import clear_oauth_token_file, inspect_oauth_token_file
@@ -231,7 +232,7 @@ class CorePipeline:
             else auto_refresh_oauth_token
         )
         if self.use_oauth and self.save_oauth_token and self.oauth_token_file is None:
-            self.oauth_token_file = Path.home() / ".yt-study" / "youtube_token.json"
+            self.oauth_token_file = default_youtube_oauth_token_file()
         self.errors: dict[str, str] = {}
         self._manifest_lock = asyncio.Lock()
 

@@ -268,6 +268,7 @@ def process(
         from rich.table import Table
 
         from .core.config import config
+        from .core.config_helpers import default_youtube_oauth_token_file
         from .core.pipeline import (
             CorePipeline,
             EventType,
@@ -310,7 +311,7 @@ def process(
             and selected_save_oauth_token
             and selected_token_file is None
         ):
-            selected_token_file = Path.home() / ".yt-study" / "youtube_token.json"
+            selected_token_file = default_youtube_oauth_token_file()
         oauth_token_file = (
             str(selected_token_file) if selected_token_file is not None else None
         )

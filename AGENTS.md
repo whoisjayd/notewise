@@ -36,6 +36,7 @@ yt-study/
 │   ├── setup_wizard.py         # Interactive config writer
 │   ├── core/
 │   │   ├── config.py           # Runtime config dataclass + env sync
+│   │   ├── config_helpers.py   # Shared config parsing/default helpers
 │   │   ├── pipeline.py         # CorePipeline, PipelineEvent, EventType
 │   │   ├── llm/
 │   │   │   ├── generator.py    # Chunking + generation orchestration
@@ -68,6 +69,7 @@ yt-study/
 | CLI | `src/yt_study/cli.py` | Defines commands, logging, batch handling, dashboard bridge |
 | Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
 | Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
+| Config | `src/yt_study/core/config_helpers.py` | Shared bool parsing and OAuth token-path defaults |
 | Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
 | LLM | `src/yt_study/core/llm/generator.py` | Chunking strategy and note generation |
 | Provider | `src/yt_study/core/llm/providers.py` | LiteLLM async completion wrapper |

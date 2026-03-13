@@ -8,6 +8,8 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
+from .core.config_helpers import default_youtube_oauth_token_file, parse_bool_setting
+
 
 console = Console()
 
@@ -208,16 +210,8 @@ def get_available_models() -> dict[str, list[str]]:
 
 
 def _parse_bool_config(value: str | None, default: bool) -> bool:
-    """Parse a boolean config string with sensible defaults."""
-    if value is None:
-        return default
-
-    normalized = value.strip().lower()
-    if normalized in {"1", "true", "yes", "on"}:
-        return True
-    if normalized in {"0", "false", "no", "off"}:
-        return False
-    return default
+    """Parse a boolean config string using shared config helpers."""
+    return parse_bool_setting(value, default)
 
 
 def select_provider(available_models: dict[str, list[str]]) -> str:
@@ -433,7 +427,7 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
         )
         if save_oauth_token:
             default_token_path = oauth_token_file or str(
-                get_config_path().parent / "youtube_token.json"
+                default_youtube_oauth_token_file()
             )
             oauth_token_file = Prompt.ask(
                 "OAuth token file path",

@@ -288,7 +288,7 @@ def _build_http_client(cookies_path: Path | None) -> Session | None:
         raise TranscriptError(f"Invalid cookies path: {e}") from e
 
     if not resolved_path.exists():
-        raise TranscriptError(f"Cookies file does not exist: {resolved_path.name}")
+        raise TranscriptError(f"Cookies file does not exist: {resolved_path}")
 
     cookie_jar = MozillaCookieJar(str(resolved_path))
     try:

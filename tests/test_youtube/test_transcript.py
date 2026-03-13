@@ -218,6 +218,15 @@ class TestFetchTranscript:
         with pytest.raises(TranscriptError, match="Cookies file does not exist"):
             await fetch_transcript("video123", cookies_path=missing)
 
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_invalid_cookies_file_raises(self, tmp_path):
+        """Invalid cookies format should raise a parse-specific TranscriptError."""
+        bad_cookies = tmp_path / "bad-cookies.txt"
+        bad_cookies.write_text("definitely-not-netscape-format", encoding="utf-8")
+
+        with pytest.raises(TranscriptError, match="Failed to parse cookies file"):
+            await fetch_transcript("video123", cookies_path=bad_cookies)
+
 
 class TestSplitTranscript:
     """Test splitting transcript by chapters."""
