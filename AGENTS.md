@@ -185,7 +185,7 @@ Setup wizard model selection is intentionally strict for non-technical users:
 
 - native provider models only
 - deprecated models hidden
-- preview/beta/exp models hidden
+- preview/beta/exp models kept when still current
 - non-text models hidden
 - curated stable fallback lists used when LiteLLM discovery is unavailable or incomplete
 

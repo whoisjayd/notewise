@@ -129,8 +129,8 @@ class TestModelFetching:
         # Let's skip complex import mocking and assume fallback works if we can't fetch.
         pass
 
-    def test_get_available_models_filters_setup_to_stable_native_text_models(self):
-        """Setup should hide deprecated, preview, gateway, and non-text models."""
+    def test_get_available_models_filters_only_deprecated_gateway_and_non_text(self):
+        """Setup should keep preview models while still hiding deprecated ones."""
         mock_models = [
             "gpt-4o-mini",
             "o3-mini",
@@ -138,6 +138,8 @@ class TestModelFetching:
             "azure/gpt-4o",
             "gpt-4o-mini-preview",
             "gemini/gemini-2.5-flash",
+            "gemini/gemini-3-flash-preview",
+            "gemini/gemini-3.1-pro-preview",
             "gemini/gemini-2.0-flash",
             "gemini/imagen-4.0-generate-001",
             "openrouter/google/gemini-2.5-flash",
@@ -150,6 +152,14 @@ class TestModelFetching:
             "azure/gpt-4o": {"litellm_provider": "azure", "mode": "chat"},
             "gpt-4o-mini-preview": {"litellm_provider": "openai", "mode": "chat"},
             "gemini/gemini-2.5-flash": {"litellm_provider": "gemini", "mode": "chat"},
+            "gemini/gemini-3-flash-preview": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+            },
+            "gemini/gemini-3.1-pro-preview": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+            },
             "gemini/gemini-2.0-flash": {
                 "litellm_provider": "gemini",
                 "mode": "chat",
@@ -175,8 +185,17 @@ class TestModelFetching:
         ):
             models = get_available_models()
 
-        assert models["openai"] == ["gpt-4o-mini", "o3-mini", "o4-mini"]
-        assert models["gemini"] == ["gemini/gemini-2.5-flash"]
+        assert models["openai"] == [
+            "gpt-4o-mini",
+            "gpt-4o-mini-preview",
+            "o3-mini",
+            "o4-mini",
+        ]
+        assert models["gemini"] == [
+            "gemini/gemini-2.5-flash",
+            "gemini/gemini-3-flash-preview",
+            "gemini/gemini-3.1-pro-preview",
+        ]
         assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
         assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
 

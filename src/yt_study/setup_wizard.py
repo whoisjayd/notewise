@@ -1,6 +1,5 @@
 """Configuration wizard for yt-study."""
 
-import re
 from pathlib import Path
 from typing import Any
 
@@ -129,10 +128,6 @@ _NATIVE_PROVIDER_PREFIXES = {
     "openai",
     "xai",
 }
-_UNSTABLE_MODEL_MARKER = re.compile(
-    r"(^|[-_/])(preview|beta|experimental|exp)($|[-_/])",
-    re.IGNORECASE,
-)
 
 
 def get_config_path() -> Path:
@@ -270,8 +265,8 @@ def _classify_provider(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
-    """Return True when a model is safe to show to non-technical setup users."""
+def _is_setup_safe_model(_model: str, metadata: dict[str, Any]) -> bool:
+    """Return True when a model is safe to show in setup."""
     if not metadata:
         return False
     if metadata.get("deprecation_date"):
@@ -289,7 +284,7 @@ def _is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
         if normalized_modalities != {"text"}:
             return False
 
-    return not _UNSTABLE_MODEL_MARKER.search(model)
+    return True
 
 
 def _parse_bool_config(value: str | None, default: bool) -> bool:

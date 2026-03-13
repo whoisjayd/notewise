@@ -279,7 +279,7 @@ Config behavior:
 Setup wizard model selection:
 
 - shows only native provider models
-- hides deprecated, preview/beta/exp, and non-text models
+- hides deprecated and non-text models
 - uses curated stable fallback lists when LiteLLM discovery is unavailable or incomplete
 
 Local cache behavior:
