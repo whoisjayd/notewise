@@ -996,6 +996,38 @@ async def test_checkpoint_different_video_same_title_not_skipped(
 
 
 @pytest.mark.asyncio
+async def test_checkpoint_migrates_legacy_manifest_entries(
+    temp_output_dir, mock_llm_provider
+):
+    """Legacy JSON manifest entries should be migrated and reused for skips."""
+    (temp_output_dir / ".yt_study_processed.json").write_text(
+        json.dumps({"legacy-video-id": True}),
+        encoding="utf-8",
+    )
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"]) as mock_title,
+        patch(_COMMON_PATCHES["duration"]) as mock_duration,
+        patch(_COMMON_PATCHES["chapters"]) as mock_chapters,
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        result = await p.run(["legacy-video-id"], on_event=events.append)
+
+    assert result.success_count == 1
+    assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
+    mock_title.assert_not_called()
+    mock_duration.assert_not_called()
+    mock_chapters.assert_not_called()
+    mock_fetch.assert_not_awaited()
+    db = DatabaseManager.get_instance(temp_output_dir / ".yt_study_cache.db")
+    assert db.has_video("legacy-video-id") is True
+
+
+@pytest.mark.asyncio
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     temp_output_dir, mock_llm_provider
 ):

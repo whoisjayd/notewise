@@ -106,3 +106,14 @@ def test_database_manager_close_instance_evicts_singleton(tmp_path):
     manager_two = DatabaseManager.get_instance(db_path)
 
     assert manager_one is not manager_two
+
+
+def test_mark_video_processed_creates_minimal_video_row(tmp_path):
+    """Legacy processed IDs should be representable as minimal cached videos."""
+    db = DatabaseManager.get_instance(tmp_path / "cache.db")
+    db.mark_video_processed("legacy-video-id")
+
+    video = db.get_video("legacy-video-id")
+    assert video is not None
+    assert video.title == "legacy-video-id"
+    assert video.duration == 0
