@@ -14,6 +14,7 @@ from yt_study.core.pipeline import (
     sanitize_filename,
 )
 from yt_study.core.youtube.transcript import YouTubeIPBlockError
+from yt_study.db import DatabaseManager
 
 
 # ---------------------------------------------------------------------------
@@ -841,17 +842,31 @@ def _make_pipeline(
         return p
 
 
+def _seed_cached_video(
+    output_dir,
+    video_id: str,
+    title: str = "Cached Video",
+    duration: int = 100,
+) -> None:
+    """Seed SQLite cache with one processed video entry."""
+    db = DatabaseManager.get_instance(output_dir / ".yt_study_cache.db")
+    db.upsert_video_cache(
+        video_id=video_id,
+        title=title,
+        duration=duration,
+        transcript_content="cached transcript",
+        language="en",
+        tokens_used=50,
+        model="mock-model",
+    )
+
+
 @pytest.mark.asyncio
 async def test_checkpoint_skips_existing_single_file(
     temp_output_dir, mock_llm_provider
 ):
-    """VIDEO_SKIPPED is emitted when the video ID is in the manifest and force=False."""
-    import json
-
-    # Write a manifest entry for "vid1" to simulate a previously processed video.
-    (temp_output_dir / ".yt_study_processed.json").write_text(
-        json.dumps({"vid1": True}), encoding="utf-8"
-    )
+    """VIDEO_SKIPPED is emitted when video is already present in SQLite cache."""
+    _seed_cached_video(temp_output_dir, "vid1", title="Test Video")
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
@@ -878,13 +893,8 @@ async def test_checkpoint_skips_existing_single_file(
 async def test_checkpoint_force_reprocesses_existing(
     temp_output_dir, mock_llm_provider
 ):
-    """With force=True an existing manifest entry is ignored; video is reprocessed."""
-    import json
-
-    # Simulate a previously processed video in the manifest.
-    (temp_output_dir / ".yt_study_processed.json").write_text(
-        json.dumps({"vid1": True}), encoding="utf-8"
-    )
+    """With force=True a cached video is ignored and reprocessed."""
+    _seed_cached_video(temp_output_dir, "vid1", title="Test Video")
 
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
 
@@ -960,13 +970,8 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
 async def test_checkpoint_different_video_same_title_not_skipped(
     temp_output_dir, mock_llm_provider
 ):
-    """Two videos sharing a title must not collide — checkpoint is keyed by video ID."""
-    import json
-
-    # vid1 was already processed; vid2 shares the same title but is a different video.
-    (temp_output_dir / ".yt_study_processed.json").write_text(
-        json.dumps({"vid1": True}), encoding="utf-8"
-    )
+    """Two videos sharing a title must not collide — cache is keyed by video ID."""
+    _seed_cached_video(temp_output_dir, "vid1", title="Shared Title")
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
@@ -985,6 +990,43 @@ async def test_checkpoint_different_video_same_title_not_skipped(
         result = await p.run(["vid2"], on_event=events.append)
 
     assert result.success_count == 1
-    # vid2 must NOT have been skipped — the manifest key is the video ID, not the title.
+    # vid2 must NOT have been skipped — cache key is the video ID, not title.
     assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
     mock_fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_pipeline_persists_video_metadata_in_sqlite_cache(
+    temp_output_dir, mock_llm_provider
+):
+    """Successful runs should persist metadata/transcript/run-stats into SQLite."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="DB Cached Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=321),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "persisted transcript text"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-db"])
+
+    assert result.success_count == 1
+    db = DatabaseManager.get_instance(temp_output_dir / ".yt_study_cache.db")
+    cached_video = db.get_video("vid-db")
+    cached_transcript = db.get_transcript("vid-db")
+    stats = db.get_run_stats("vid-db")
+
+    assert cached_video is not None
+    assert cached_video.title == "DB Cached Video"
+    assert cached_video.duration == 321
+    assert cached_transcript is not None
+    assert cached_transcript.content == "persisted transcript text"
+    assert cached_transcript.language == "en"
+    assert len(stats) >= 1
+    assert stats[0].model == "mock-model"
