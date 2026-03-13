@@ -848,13 +848,12 @@ def _make_pipeline(
 
 
 def _seed_cached_video(
-    output_dir,
     video_id: str,
     title: str = "Cached Video",
     duration: int = 100,
 ) -> None:
     """Seed SQLite cache with one processed video entry."""
-    db = DatabaseManager.get_instance(build_cache_db_path(output_dir))
+    db = DatabaseManager.get_instance(build_cache_db_path())
     db.upsert_video_cache(
         video_id=video_id,
         title=title,
@@ -894,7 +893,7 @@ async def test_checkpoint_skips_existing_single_file(
     temp_output_dir, mock_llm_provider
 ):
     """VIDEO_SKIPPED is emitted when video is already present in SQLite cache."""
-    _seed_cached_video(temp_output_dir, "vid1", title="Test Video")
+    _seed_cached_video("vid1", title="Test Video")
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
@@ -922,7 +921,7 @@ async def test_checkpoint_force_reprocesses_existing(
     temp_output_dir, mock_llm_provider
 ):
     """With force=True a cached video is ignored and reprocessed."""
-    _seed_cached_video(temp_output_dir, "vid1", title="Test Video")
+    _seed_cached_video("vid1", title="Test Video")
 
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
 
@@ -999,7 +998,7 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     temp_output_dir, mock_llm_provider
 ):
     """Two videos sharing a title must not collide — cache is keyed by video ID."""
-    _seed_cached_video(temp_output_dir, "vid1", title="Shared Title")
+    _seed_cached_video("vid1", title="Shared Title")
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
@@ -1044,7 +1043,7 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
         result = await p.run(["vid-db"])
 
     assert result.success_count == 1
-    db = DatabaseManager.get_instance(build_cache_db_path(temp_output_dir))
+    db = DatabaseManager.get_instance(build_cache_db_path())
     cached_video = db.get_video("vid-db")
     cached_transcript = db.get_transcript("vid-db")
     stats = db.get_run_stats("vid-db")
@@ -1098,7 +1097,7 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
     assert result.metrics.transcript_seconds >= 0
     assert result.metrics.generation_seconds >= 0
 
-    db = DatabaseManager.get_instance(build_cache_db_path(temp_output_dir))
+    db = DatabaseManager.get_instance(build_cache_db_path())
     stats = db.get_run_stats("vid-metrics")
     latest = stats[-1]
     assert latest.prompt_tokens == 40

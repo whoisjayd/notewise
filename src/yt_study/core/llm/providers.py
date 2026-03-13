@@ -157,11 +157,19 @@ class LLMProvider:
     def collect_usage(self) -> Generator[UsageTotals, None, None]:
         """Collect prompt/completion token usage during enclosed generation calls."""
         totals = UsageTotals()
+        parent_collector = _USAGE_COLLECTOR.get()
         token = _USAGE_COLLECTOR.set(totals)
         try:
             yield totals
         finally:
             _USAGE_COLLECTOR.reset(token)
+            if parent_collector is not None:
+                parent_collector.add(
+                    totals.prompt_tokens,
+                    totals.completion_tokens,
+                    totals.total_tokens,
+                    totals.cost_usd,
+                )
 
     def _extract_usage(self, response: Any) -> tuple[int, int, int]:
         """Extract usage tuple from LiteLLM response object or dict-like payload."""

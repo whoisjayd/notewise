@@ -20,19 +20,18 @@ def test_database_manager_singleton_for_same_path(tmp_path):
     assert manager_one is manager_two
 
 
-def test_build_cache_db_path_scopes_under_user_config_dir(tmp_path):
+def test_build_cache_db_path_scopes_under_user_config_dir():
     """Cache DB path should be stable and stored under ~/.yt-study."""
-    output_dir = tmp_path / "output"
-    cache_path = build_cache_db_path(output_dir)
+    cache_path = build_cache_db_path()
 
     assert cache_path.parent == Path(os.environ["YT_STUDY_HOME"])
     assert cache_path.name == CACHE_DB_FILENAME
 
 
-def test_build_cache_db_path_is_global_for_all_output_dirs(tmp_path):
-    """All output directories should resolve to the same global cache DB."""
-    cache_one = build_cache_db_path(tmp_path / "one")
-    cache_two = build_cache_db_path(tmp_path / "two")
+def test_build_cache_db_path_is_stable_across_calls():
+    """Cache DB path should remain stable across repeated calls."""
+    cache_one = build_cache_db_path()
+    cache_two = build_cache_db_path()
 
     assert cache_one == cache_two
 

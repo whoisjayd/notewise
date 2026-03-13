@@ -22,14 +22,13 @@ def get_state_dir() -> Path:
     return Path.home() / ".yt-study"
 
 
-def build_cache_db_path(output_dir: Path | None = None) -> Path:
+def build_cache_db_path() -> Path:
     """
     Return the canonical global cache DB path under the user config directory.
 
     A single database is shared across runs so processed videos and run metrics
     live in one place.
     """
-    _ = output_dir
     return get_state_dir() / CACHE_DB_FILENAME
 
 

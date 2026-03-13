@@ -111,6 +111,36 @@ class TestLLMProvider:
             assert usage == UsageTotals()
 
     @pytest.mark.asyncio
+    async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
+        """Nested usage scopes should preserve inner totals in the outer collector."""
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0025),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage.prompt_tokens = 10
+            mock_response.usage.completion_tokens = 20
+            mock_response.usage.total_tokens = 30
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+
+            with (
+                provider.collect_usage() as outer,
+                provider.collect_usage() as inner,
+            ):
+                await provider.generate("sys", "user")
+
+            assert inner == UsageTotals(
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+                cost_usd=0.0025,
+            )
+            assert outer == inner
+
+    @pytest.mark.asyncio
     async def test_generate_failure(self):
         """Test generation failure raises custom exception."""
         with (

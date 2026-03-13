@@ -369,7 +369,7 @@ class CorePipeline:
 
     def _cache_db_path(self) -> Path:
         """Return the global SQLite cache path used for pipeline state."""
-        return build_cache_db_path(self.output_dir)
+        return build_cache_db_path()
 
     async def _get_cached_video(self, video_id: str) -> Video | None:
         """Return cached metadata for a video when present."""
