@@ -242,9 +242,13 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
     pipeline._acquire_youtube_request_slot = acquire_mock
 
     async def _fetch_with_request_hook(
-        _video_id, _languages, on_request=None
+        _video_id,
+        _languages,
+        cookies_path=None,
+        on_request=None,
     ):  # pragma: no cover - signature exercise
         assert on_request is not None
+        assert cookies_path is None
         await on_request()
         transcript = MagicMock()
         transcript.to_text.return_value = "text"
@@ -298,6 +302,115 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
         pipeline_one._get_youtube_request_limiter()
         is pipeline_two._get_youtube_request_limiter()
     )
+
+
+@pytest.mark.asyncio
+async def test_run_forwards_oauth_and_cookie_settings(
+    temp_output_dir, mock_llm_provider, tmp_path
+):
+    """Pipeline should forward auth settings to metadata and transcript calls."""
+    cookies_file = tmp_path / "cookies.txt"
+    cookies_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    token_file = tmp_path / "youtube_token.json"
+
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            cookies_path=cookies_file,
+            use_oauth=True,
+            oauth_token_file=token_file,
+            save_oauth_token=False,
+            auto_refresh_oauth_token=True,
+        )
+        pipeline.generator = MagicMock()
+        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        pipeline.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+
+    with (
+        patch(
+            "yt_study.core.pipeline.get_video_title", return_value="Video Title"
+        ) as mock_title,
+        patch(
+            "yt_study.core.pipeline.get_video_duration", return_value=100
+        ) as mock_duration,
+        patch(
+            "yt_study.core.pipeline.get_video_chapters", return_value=[]
+        ) as mock_chapters,
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "text"
+        mock_fetch.return_value = mock_transcript
+        result = await pipeline.run(["vid-auth"])
+
+    assert result.success_count == 1
+    expected_kwargs = {
+        "use_oauth": True,
+        "token_file": str(token_file),
+        "allow_oauth_cache": False,
+    }
+    mock_title.assert_called_once_with("vid-auth", **expected_kwargs)
+    mock_duration.assert_called_once_with("vid-auth", **expected_kwargs)
+    mock_chapters.assert_called_once_with("vid-auth", **expected_kwargs)
+
+    fetch_kwargs = mock_fetch.await_args.kwargs
+    assert fetch_kwargs["cookies_path"] == cookies_file
+    assert fetch_kwargs["on_request"] is not None
+
+
+@pytest.mark.asyncio
+async def test_run_clears_malformed_oauth_token_cache(
+    temp_output_dir, mock_llm_provider, tmp_path
+):
+    """Malformed OAuth token JSON should be removed before metadata fetch."""
+    token_file = tmp_path / "broken_token.json"
+    token_file.write_text("{not-json", encoding="utf-8")
+
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            use_oauth=True,
+            oauth_token_file=token_file,
+            save_oauth_token=True,
+            auto_refresh_oauth_token=True,
+        )
+        pipeline.generator = MagicMock()
+        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        pipeline.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "text"
+        mock_fetch.return_value = mock_transcript
+        result = await pipeline.run(["vid-token"])
+
+    assert result.success_count == 1
+    assert not token_file.exists()
 
 
 @pytest.mark.asyncio

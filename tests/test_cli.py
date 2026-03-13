@@ -34,6 +34,15 @@ def _make_pipeline_result(total: int = 1, success: int = 1):
     return result
 
 
+def _make_parsed_playlist(playlist_id: str = "PL123"):
+    """Return a mock ParsedURL for a playlist."""
+    parsed = MagicMock()
+    parsed.url_type = "playlist"
+    parsed.video_id = None
+    parsed.playlist_id = playlist_id
+    return parsed
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -83,6 +92,10 @@ def mock_pipeline(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None  # no key needed
         yield mock_cls, pipeline_instance
 
@@ -349,6 +362,10 @@ def test_process_no_ui_prints_done_summary(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
@@ -373,3 +390,108 @@ def test_process_quiz_flag_passed_to_pipeline(
     assert result.exit_code == 0
     call_kwargs = mock_cls.call_args.kwargs
     assert call_kwargs.get("quiz") is True
+
+
+def test_process_forwards_auth_flags_to_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+    tmp_path,
+):
+    """CLI auth flags should be forwarded into CorePipeline constructor."""
+    mock_cls, pipeline_instance = mock_pipeline
+
+    cookies_file = tmp_path / "cookies.txt"
+    cookies_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
+    token_file = tmp_path / "oauth-token.json"
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            _VIDEO_URL,
+            "--cookies",
+            str(cookies_file),
+            "--use-oauth",
+            "--token-file",
+            str(token_file),
+            "--save-oauth-token",
+            "--auto-refresh-oauth-token",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs["cookies_path"] == cookies_file
+    assert call_kwargs["use_oauth"] is True
+    assert call_kwargs["oauth_token_file"] == token_file
+    assert call_kwargs["save_oauth_token"] is True
+    assert call_kwargs["auto_refresh_oauth_token"] is True
+    pipeline_instance.run.assert_awaited_once()
+
+
+def test_process_playlist_forwards_oauth_to_playlist_helpers(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Playlist metadata/extraction should receive OAuth kwargs from CLI."""
+    pipeline_result = _make_pipeline_result()
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=pipeline_result)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_AUTH"),
+        ),
+        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_info,
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+        ) as mock_extract,
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_info.return_value = ("Playlist", 1)
+        mock_extract.return_value = ["vid1"]
+        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        token_file = tmp_path / "playlist-token.json"
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                "https://youtube.com/playlist?list=PL_AUTH",
+                "--use-oauth",
+                "--token-file",
+                str(token_file),
+                "--no-save-oauth-token",
+            ],
+        )
+
+    assert result.exit_code == 0
+    expected_kwargs = {
+        "use_oauth": True,
+        "token_file": str(token_file),
+        "allow_oauth_cache": False,
+    }
+    mock_info.assert_called_once_with("PL_AUTH", **expected_kwargs)
+    mock_extract.assert_awaited_once_with("PL_AUTH", **expected_kwargs)

@@ -157,6 +157,64 @@ def process(
             min=1,
         ),
     ] = None,
+    cookies: Annotated[
+        Path | None,
+        typer.Option(
+            "--cookies",
+            help=(
+                "Path to cookies.txt in Netscape format for best-effort "
+                "authenticated transcript requests."
+            ),
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
+    use_oauth: Annotated[
+        bool | None,
+        typer.Option(
+            "--use-oauth/--no-use-oauth",
+            help=(
+                "Enable pytubefix OAuth flow for metadata/playlist requests. "
+                "Falls back to config when omitted."
+            ),
+        ),
+    ] = None,
+    token_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--token-file",
+            help=(
+                "OAuth token cache path used with --use-oauth. "
+                "Overrides config when provided."
+            ),
+            exists=False,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
+    save_oauth_token: Annotated[
+        bool | None,
+        typer.Option(
+            "--save-oauth-token/--no-save-oauth-token",
+            help=(
+                "Allow/disallow writing OAuth token cache to disk. "
+                "Falls back to config when omitted."
+            ),
+        ),
+    ] = None,
+    auto_refresh_oauth_token: Annotated[
+        bool | None,
+        typer.Option(
+            "--auto-refresh-oauth-token/--no-auto-refresh-oauth-token",
+            help=(
+                "When token cache is stale/invalid, reset and retry once. "
+                "Falls back to config when omitted."
+            ),
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option(
@@ -210,6 +268,7 @@ def process(
         from rich.table import Table
 
         from .core.config import config
+        from .core.config_helpers import default_youtube_oauth_token_file
         from .core.pipeline import (
             CorePipeline,
             EventType,
@@ -230,6 +289,31 @@ def process(
         )
         selected_max_tokens = (
             max_tokens if max_tokens is not None else config.max_tokens
+        )
+        selected_use_oauth = (
+            use_oauth if use_oauth is not None else config.youtube_use_oauth
+        )
+        selected_save_oauth_token = (
+            save_oauth_token
+            if save_oauth_token is not None
+            else config.youtube_save_oauth_token
+        )
+        selected_auto_refresh_oauth_token = (
+            auto_refresh_oauth_token
+            if auto_refresh_oauth_token is not None
+            else config.youtube_auto_refresh_oauth_token
+        )
+        selected_token_file = (
+            token_file if token_file is not None else config.youtube_oauth_token_file
+        )
+        if (
+            selected_use_oauth
+            and selected_save_oauth_token
+            and selected_token_file is None
+        ):
+            selected_token_file = default_youtube_oauth_token_file()
+        oauth_token_file = (
+            str(selected_token_file) if selected_token_file is not None else None
         )
 
         # Validate API key before launching UI
@@ -364,9 +448,18 @@ def process(
                     console.print("[red]Error: Could not extract playlist ID[/red]")
                     return
                 playlist_name, _ = await asyncio.to_thread(
-                    get_playlist_info, parsed.playlist_id
+                    get_playlist_info,
+                    parsed.playlist_id,
+                    use_oauth=selected_use_oauth,
+                    token_file=oauth_token_file,
+                    allow_oauth_cache=selected_save_oauth_token,
                 )
-                video_ids = await extract_playlist_videos(parsed.playlist_id)
+                video_ids = await extract_playlist_videos(
+                    parsed.playlist_id,
+                    use_oauth=selected_use_oauth,
+                    token_file=oauth_token_file,
+                    allow_oauth_cache=selected_save_oauth_token,
+                )
                 out_dir = selected_output / sanitize_filename(playlist_name)
                 out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -376,6 +469,11 @@ def process(
                 languages=selected_languages,
                 temperature=selected_temperature,
                 max_tokens=selected_max_tokens,
+                cookies_path=cookies,
+                use_oauth=selected_use_oauth,
+                oauth_token_file=selected_token_file,
+                save_oauth_token=selected_save_oauth_token,
+                auto_refresh_oauth_token=selected_auto_refresh_oauth_token,
                 force=force,
                 quiz=quiz,
             )

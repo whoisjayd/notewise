@@ -5,6 +5,8 @@ import logging
 
 from pytubefix import Playlist
 
+from .auth import build_oauth_kwargs, maybe_reset_oauth_token_for_retry
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +17,12 @@ class PlaylistError(Exception):
     pass
 
 
-async def extract_playlist_videos(playlist_id: str) -> list[str]:
+async def extract_playlist_videos(
+    playlist_id: str,
+    use_oauth: bool = False,
+    token_file: str | None = None,
+    allow_oauth_cache: bool = True,
+) -> list[str]:
     """
     Extract all video IDs from a YouTube playlist with retry logic.
 
@@ -24,6 +31,9 @@ async def extract_playlist_videos(playlist_id: str) -> list[str]:
 
     Args:
         playlist_id: YouTube playlist ID.
+        use_oauth: Whether to use pytubefix OAuth flow.
+        token_file: Optional pytubefix OAuth token file path.
+        allow_oauth_cache: Whether pytubefix may store cached OAuth tokens.
 
     Returns:
         List of video IDs.
@@ -33,11 +43,19 @@ async def extract_playlist_videos(playlist_id: str) -> list[str]:
     """
     max_retries = 3
     last_error = None
+    oauth_retry_used = False
 
     for attempt in range(max_retries):
         try:
             # Wrap blocking pytubefix logic in a thread
-            video_ids = await asyncio.to_thread(_extract_sync, playlist_id, attempt)
+            video_ids = await asyncio.to_thread(
+                _extract_sync,
+                playlist_id,
+                attempt,
+                use_oauth,
+                token_file,
+                allow_oauth_cache,
+            )
 
             if not video_ids:
                 # Should have been raised in _extract_sync if empty, but double check
@@ -50,6 +68,17 @@ async def extract_playlist_videos(playlist_id: str) -> list[str]:
 
         except Exception as e:
             last_error = e
+
+            if maybe_reset_oauth_token_for_retry(
+                error=e,
+                use_oauth=use_oauth,
+                allow_oauth_cache=allow_oauth_cache,
+                token_file=token_file,
+                already_retried=oauth_retry_used,
+            ):
+                oauth_retry_used = True
+                continue
+
             logger.warning(f"Playlist extraction attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
                 wait_time = 2**attempt  # Exponential backoff
@@ -62,10 +91,23 @@ async def extract_playlist_videos(playlist_id: str) -> list[str]:
     raise PlaylistError(f"Could not access playlist {playlist_id}: {str(last_error)}")
 
 
-def _extract_sync(playlist_id: str, attempt: int) -> list[str]:
+def _extract_sync(
+    playlist_id: str,
+    attempt: int,
+    use_oauth: bool,
+    token_file: str | None,
+    allow_oauth_cache: bool,
+) -> list[str]:
     """Blocking helper to extract videos using pytubefix."""
     playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-    playlist = Playlist(playlist_url)
+    playlist = Playlist(
+        playlist_url,
+        **build_oauth_kwargs(
+            use_oauth=use_oauth,
+            allow_oauth_cache=allow_oauth_cache,
+            token_file=token_file,
+        ),
+    )
 
     # Access playlist title to trigger loading
     try:

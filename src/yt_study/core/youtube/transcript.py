@@ -4,8 +4,11 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from http.cookiejar import MozillaCookieJar
+from pathlib import Path
 from typing import Any
 
+from requests import Session
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api._errors import (
     IpBlocked,
@@ -76,6 +79,7 @@ class YouTubeIPBlockError(TranscriptError):
 async def fetch_transcript(
     video_id: str,
     languages: list[str] | None = None,
+    cookies_path: Path | None = None,
     on_request: Callable[[], Awaitable[None]] | None = None,
 ) -> VideoTranscript:
     """
@@ -91,6 +95,7 @@ async def fetch_transcript(
     Args:
         video_id: YouTube video ID.
         languages: Preferred language codes (e.g., ['en', 'hi']). Defaults to ['en'].
+        cookies_path: Optional path to Netscape cookies.txt file.
         on_request: Optional async callback to invoke before each network attempt.
 
     Returns:
@@ -103,95 +108,107 @@ async def fetch_transcript(
         languages = ["en"]
 
     retries = 3
+    http_client = _build_http_client(cookies_path)
+    try:
+        for attempt in range(retries):
+            try:
+                if on_request is not None:
+                    await on_request()
 
-    for attempt in range(retries):
-        try:
-            if on_request is not None:
-                await on_request()
-
-            # Wrap blocking YouTubeTranscriptApi calls in a thread
-            # This is critical to prevent blocking the asyncio event loop
-            # during concurrency
-            raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
-                _fetch_sync, video_id, languages
-            )
-
-            logger.info(log_msg)
-
-            # Convert to our format
-            segments = []
-            for segment in raw_transcript:
-                # Handle both dict (standard) and object
-                # (FetchedTranscriptSnippet) formats
-                if isinstance(segment, dict):
-                    text = segment.get("text", "")
-                    start = segment.get("start", 0.0)
-                    duration = segment.get("duration", 0.0)
-                else:
-                    # Fallback for object-based returns
-                    text = getattr(segment, "text", "")
-                    start = getattr(segment, "start", 0.0)
-                    duration = getattr(segment, "duration", 0.0)
-
-                segments.append(
-                    TranscriptSegment(
-                        text=text, start=float(start), duration=float(duration)
-                    )
+                # Wrap blocking YouTubeTranscriptApi calls in a thread
+                # This is critical to prevent blocking the asyncio event loop
+                # during concurrency
+                raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
+                    _fetch_sync, video_id, languages, http_client
                 )
 
-            return VideoTranscript(
-                video_id=video_id,
-                segments=segments,
-                language=transcript_meta.language,
-                language_code=transcript_meta.language_code,
-                is_generated=transcript_meta.is_generated,
-            )
+                logger.info(log_msg)
 
-        except (TranscriptsDisabled, VideoUnavailable) as e:
-            # Fatal errors, do not retry
-            logger.error(f"Transcript unavailable for {video_id}: {e}")
-            raise TranscriptError(
-                f"Transcripts are disabled or video is unavailable: {video_id}"
-            ) from e
+                # Convert to our format
+                segments = []
+                for segment in raw_transcript:
+                    # Handle both dict (standard) and object
+                    # (FetchedTranscriptSnippet) formats
+                    if isinstance(segment, dict):
+                        text = segment.get("text", "")
+                        start = segment.get("start", 0.0)
+                        duration = segment.get("duration", 0.0)
+                    else:
+                        # Fallback for object-based returns
+                        text = getattr(segment, "text", "")
+                        start = getattr(segment, "start", 0.0)
+                        duration = getattr(segment, "duration", 0.0)
 
-        except (TranscriptError, NoTranscriptFound):
-            # Already handled or strictly not found, do not retry
-            raise
+                    segments.append(
+                        TranscriptSegment(
+                            text=text, start=float(start), duration=float(duration)
+                        )
+                    )
 
-        except (IpBlocked, RequestBlocked) as e:
-            # Specifically handle IP blocking
-            logger.error(f"YouTube IP Block detected for {video_id}")
-            raise YouTubeIPBlockError(
-                "YouTube is blocking requests from your IP. "
-                "Please try using a VPN, proxies, or wait a while."
-            ) from e
+                return VideoTranscript(
+                    video_id=video_id,
+                    segments=segments,
+                    language=transcript_meta.language,
+                    language_code=transcript_meta.language_code,
+                    is_generated=transcript_meta.is_generated,
+                )
 
-        except Exception as e:
-            err_str = str(e)
-            if "blocking requests from your IP" in err_str:
-                logger.error(f"YouTube IP Block detected for {video_id}: {e}")
+            except (TranscriptsDisabled, VideoUnavailable) as e:
+                # Fatal errors, do not retry
+                logger.error(f"Transcript unavailable for {video_id}: {e}")
+                raise TranscriptError(
+                    f"Transcripts are disabled or video is unavailable: {video_id}"
+                ) from e
+
+            except (TranscriptError, NoTranscriptFound):
+                # Already handled or strictly not found, do not retry
+                raise
+
+            except (IpBlocked, RequestBlocked) as e:
+                # Specifically handle IP blocking
+                logger.error(f"YouTube IP Block detected for {video_id}")
                 raise YouTubeIPBlockError(
                     "YouTube is blocking requests from your IP. "
                     "Please try using a VPN, proxies, or wait a while."
                 ) from e
 
-            if attempt < retries - 1:
-                wait_time = 2**attempt
-                logger.warning(
-                    f"Transcript fetch failed ({str(e)}), retrying in {wait_time}s..."
-                )
-                await asyncio.sleep(wait_time)
-            else:
-                logger.error(f"Failed to fetch transcript for {video_id}: {e}")
-                raise TranscriptError(f"Could not fetch transcript: {str(e)}") from e
+            except Exception as e:
+                err_str = str(e)
+                if "blocking requests from your IP" in err_str:
+                    logger.error(f"YouTube IP Block detected for {video_id}: {e}")
+                    raise YouTubeIPBlockError(
+                        "YouTube is blocking requests from your IP. "
+                        "Please try using a VPN, proxies, or wait a while."
+                    ) from e
 
-    # Should be unreachable due to raise in loop
-    raise TranscriptError(f"Failed to fetch transcript for {video_id}")
+                if attempt < retries - 1:
+                    wait_time = 2**attempt
+                    err_text = str(e)
+                    logger.warning(
+                        f"Transcript fetch failed ({err_text}), retrying in "
+                        f"{wait_time}s..."
+                    )
+                    await asyncio.sleep(wait_time)
+                else:
+                    logger.error(f"Failed to fetch transcript for {video_id}: {e}")
+                    raise TranscriptError(
+                        f"Could not fetch transcript: {str(e)}"
+                    ) from e
+
+        # Should be unreachable due to raise in loop
+        raise TranscriptError(f"Failed to fetch transcript for {video_id}")
+    finally:
+        if http_client is not None:
+            http_client.close()
 
 
-def _fetch_sync(video_id: str, languages: list[str]) -> tuple[Any, Any, str]:
+def _fetch_sync(
+    video_id: str,
+    languages: list[str],
+    http_client: Session | None = None,
+) -> tuple[Any, Any, str]:
     """Blocking helper to interact with YouTubeTranscriptApi."""
-    ytt_api = YouTubeTranscriptApi()
+    ytt_api = YouTubeTranscriptApi(http_client=http_client)
 
     # List all available transcripts
     # This list call can fail with TranscriptsDisabled or VideoUnavailable
@@ -258,6 +275,31 @@ def _fetch_sync(video_id: str, languages: list[str]) -> tuple[Any, Any, str]:
     # Fetch the actual transcript data
     raw_transcript = transcript.fetch()
     return raw_transcript, transcript, found_msg
+
+
+def _build_http_client(cookies_path: Path | None) -> Session | None:
+    """Build a requests Session with loaded Netscape cookies, if provided."""
+    if cookies_path is None:
+        return None
+
+    try:
+        resolved_path = cookies_path.expanduser().resolve()
+    except Exception as e:  # pragma: no cover - defensive guard
+        raise TranscriptError(f"Invalid cookies path: {e}") from e
+
+    if not resolved_path.exists():
+        raise TranscriptError(f"Cookies file does not exist: {resolved_path}")
+
+    cookie_jar = MozillaCookieJar(str(resolved_path))
+    try:
+        cookie_jar.load(ignore_discard=True, ignore_expires=True)
+    except Exception as e:
+        raise TranscriptError("Failed to parse cookies file.") from e
+
+    session = Session()
+    session.cookies.update(cookie_jar)
+    logger.info("Using authenticated transcript session from provided cookies file.")
+    return session
 
 
 def split_transcript_by_chapters(

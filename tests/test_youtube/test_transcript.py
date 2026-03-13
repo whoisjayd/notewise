@@ -178,6 +178,55 @@ class TestFetchTranscript:
         # Check call count
         assert mock_transcript_api_instance.list.call_count == 3
 
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_with_cookies_builds_http_client(
+        self, mocker, tmp_path
+    ):
+        """Passing cookies path should create YouTubeTranscriptApi with http_client."""
+        mock_cls = mocker.patch("yt_study.core.youtube.transcript.YouTubeTranscriptApi")
+        mock_instance = mock_cls.return_value
+        mock_list = MagicMock()
+        mock_instance.list.return_value = mock_list
+
+        mock_transcript_obj = MagicMock()
+        mock_transcript_obj.language = "English"
+        mock_transcript_obj.language_code = "en"
+        mock_transcript_obj.is_generated = False
+        mock_transcript_obj.fetch.return_value = [
+            {"text": "Hello", "start": 0.0, "duration": 1.0}
+        ]
+        mock_list.find_manually_created_transcript.return_value = mock_transcript_obj
+
+        cookies_file = tmp_path / "cookies.txt"
+        cookies_file.write_text(
+            "# Netscape HTTP Cookie File\n"
+            ".youtube.com\tTRUE\t/\tFALSE\t2145916800\tSID\tfake-session\n",
+            encoding="utf-8",
+        )
+
+        await fetch_transcript("video123", ["en"], cookies_path=cookies_file)
+
+        assert mock_cls.call_count >= 1
+        call_kwargs = mock_cls.call_args.kwargs
+        assert call_kwargs.get("http_client") is not None
+
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_missing_cookies_file_raises(self, tmp_path):
+        """Missing cookies file should fail fast with a clear error."""
+        missing = tmp_path / "missing-cookies.txt"
+
+        with pytest.raises(TranscriptError, match="Cookies file does not exist"):
+            await fetch_transcript("video123", cookies_path=missing)
+
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_invalid_cookies_file_raises(self, tmp_path):
+        """Invalid cookies format should raise a parse-specific TranscriptError."""
+        bad_cookies = tmp_path / "bad-cookies.txt"
+        bad_cookies.write_text("definitely-not-netscape-format", encoding="utf-8")
+
+        with pytest.raises(TranscriptError, match="Failed to parse cookies file"):
+            await fetch_transcript("video123", cookies_path=bad_cookies)
+
 
 class TestSplitTranscript:
     """Test splitting transcript by chapters."""

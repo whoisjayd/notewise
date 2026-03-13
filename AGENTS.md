@@ -36,6 +36,7 @@ yt-study/
 │   ├── setup_wizard.py         # Interactive config writer
 │   ├── core/
 │   │   ├── config.py           # Runtime config dataclass + env sync
+│   │   ├── config_helpers.py   # Shared config parsing/default helpers
 │   │   ├── pipeline.py         # CorePipeline, PipelineEvent, EventType
 │   │   ├── llm/
 │   │   │   ├── generator.py    # Chunking + generation orchestration
@@ -45,6 +46,7 @@ yt-study/
 │   │   │   └── chapter_notes.py# Chapter generation prompts
 │   │   └── youtube/
 │   │       ├── parser.py       # URL parsing
+│   │       ├── auth.py         # OAuth kwargs + token cache helpers
 │   │       ├── metadata.py     # Title, duration, chapters, playlist info
 │   │       ├── transcript.py   # Transcript fetch + fallback logic
 │   │       └── playlist.py     # Playlist expansion with retries
@@ -67,9 +69,11 @@ yt-study/
 | CLI | `src/yt_study/cli.py` | Defines commands, logging, batch handling, dashboard bridge |
 | Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
 | Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
+| Config | `src/yt_study/core/config_helpers.py` | Shared bool parsing and OAuth token-path defaults |
 | Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
 | LLM | `src/yt_study/core/llm/generator.py` | Chunking strategy and note generation |
 | Provider | `src/yt_study/core/llm/providers.py` | LiteLLM async completion wrapper |
+| YouTube | `src/yt_study/core/youtube/auth.py` | Shared OAuth kwargs and token-cache recovery |
 | YouTube | `src/yt_study/core/youtube/transcript.py` | Transcript fallback and retry logic |
 | YouTube | `src/yt_study/core/youtube/metadata.py` | Duration/title/chapters/playlist info |
 | YouTube | `src/yt_study/core/youtube/playlist.py` | Playlist ID expansion |
@@ -99,6 +103,11 @@ yt-study version
 --language / -l
 --temperature / -t
 --max-tokens / -k
+--cookies
+--use-oauth / --no-use-oauth
+--token-file
+--save-oauth-token / --no-save-oauth-token
+--auto-refresh-oauth-token / --no-auto-refresh-oauth-token
 ```
 
 Accepted input shapes for `process`:
@@ -143,6 +152,10 @@ Supported runtime keys today:
 - `COHERE_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `YOUTUBE_REQUESTS_PER_MINUTE`
+- `YOUTUBE_USE_OAUTH`
+- `YOUTUBE_SAVE_OAUTH_TOKEN`
+- `YOUTUBE_OAUTH_TOKEN_FILE`
+- `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN`
 
 Important distinction:
 
@@ -452,6 +465,7 @@ When behavior changes:
 
 - Do not document repo-root `.env` as the runtime config source.
 - Do not claim unsupported provider env keys are wired unless `Config` actually supports them.
+- `--cookies` transcript auth is best-effort because upstream `youtube-transcript-api` cookie support can break when YouTube internals change.
 - `yt-study --help` or other Rich-heavy output can hit Unicode issues on legacy Windows consoles; prefer Windows Terminal or UTF-8 mode when documenting support paths.
 - Avoid nested Rich progress bars; the current dashboard uses one overall bar plus worker status rows.
 
