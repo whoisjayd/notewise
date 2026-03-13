@@ -75,6 +75,11 @@ def _get_global_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
     return limiter
 
 
+def dedupe_video_ids(video_ids: list[str]) -> list[str]:
+    """Return video IDs in first-seen order with duplicates removed."""
+    return list(dict.fromkeys(video_ids))
+
+
 class EventType(Enum):
     """Event types emitted by the pipeline."""
 
@@ -826,6 +831,8 @@ class CorePipeline:
         Returns:
             PipelineResult with success count, failures, and detailed errors.
         """
+        video_ids = dedupe_video_ids(video_ids)
+
         # --- Validation ---
         if not self._check_api_key():
             errors = {vid: "Missing API key" for vid in video_ids}

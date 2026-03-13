@@ -303,6 +303,7 @@ def process(
             EventType,
             PipelineEvent,
             PipelineResult,
+            dedupe_video_ids,
             sanitize_filename,
         )
         from .core.youtube.metadata import get_playlist_info
@@ -556,6 +557,7 @@ def process(
                     token_file=oauth_token_file,
                     allow_oauth_cache=selected_save_oauth_token,
                 )
+                video_ids = dedupe_video_ids(video_ids)
                 out_dir = selected_output / sanitize_filename(playlist_name)
                 out_dir.mkdir(parents=True, exist_ok=True)
 

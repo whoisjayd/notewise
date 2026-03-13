@@ -1,6 +1,6 @@
 """Tests for CLI entry point."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -822,3 +822,61 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
 
     assert result.exit_code == 0
     dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+
+
+def test_process_playlist_deduplicates_video_ids_before_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Playlist duplicates should be removed before dashboard sizing and run."""
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(
+        return_value=_make_pipeline_result(total=2, success=2)
+    )
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_DEDUPE"),
+        ),
+        patch(
+            "yt_study.core.youtube.metadata.get_playlist_info",
+            return_value=("Playlist", 3),
+        ),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["vid1", "vid1", "vid2"],
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ) as mock_dashboard_cls,
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app,
+            ["process", "https://youtube.com/playlist?list=PL_DEDUPE"],
+        )
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once_with(["vid1", "vid2"], on_event=ANY)
+    assert mock_dashboard_cls.call_args.kwargs["total_videos"] == 2

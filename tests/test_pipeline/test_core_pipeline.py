@@ -1135,6 +1135,31 @@ async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
 
 
 @pytest.mark.asyncio
+async def test_run_deduplicates_duplicate_video_ids(temp_output_dir, mock_llm_provider):
+    """One pipeline run should only process each video ID once."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=False)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Unique Once"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        transcript = MagicMock()
+        transcript.to_text.return_value = "transcript"
+        transcript.language_code = "en"
+        mock_fetch.return_value = transcript
+
+        result = await p.run(["dup-id", "dup-id"])
+
+    assert result.total_count == 1
+    assert result.success_count == 1
+    mock_fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_duplicate_chapter_video_titles_get_unique_folders(
     temp_output_dir, mock_llm_provider
 ):
