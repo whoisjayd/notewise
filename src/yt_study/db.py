@@ -8,10 +8,26 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
 
-from sqlmodel import Field, Session, SQLModel, create_engine, select
+from sqlalchemy import inspect
+from sqlmodel import Field, Session, SQLModel, col, create_engine, select
 
 
 CACHE_DB_FILENAME = ".yt_study_cache.db"
+RUNSTATS_ADDITIVE_SCHEMA_UPDATES: dict[str, str] = {
+    "prompt_tokens": (
+        "ALTER TABLE runstats ADD COLUMN prompt_tokens INTEGER NOT NULL DEFAULT 0"
+    ),
+    "completion_tokens": (
+        "ALTER TABLE runstats ADD COLUMN completion_tokens INTEGER NOT NULL DEFAULT 0"
+    ),
+    "cost_usd": "ALTER TABLE runstats ADD COLUMN cost_usd FLOAT NOT NULL DEFAULT 0.0",
+    "transcript_seconds": (
+        "ALTER TABLE runstats ADD COLUMN transcript_seconds FLOAT NOT NULL DEFAULT 0.0"
+    ),
+    "generation_seconds": (
+        "ALTER TABLE runstats ADD COLUMN generation_seconds FLOAT NOT NULL DEFAULT 0.0"
+    ),
+}
 
 
 def get_state_dir() -> Path:
@@ -82,6 +98,26 @@ class DatabaseManager:
         )
         self._write_lock = threading.Lock()
         SQLModel.metadata.create_all(self.engine)
+        self._repair_runstats_schema()
+
+    def _repair_runstats_schema(self) -> None:
+        """Add newer RunStats metric columns to older SQLite cache files."""
+        schema = inspect(self.engine)
+        if not schema.has_table("runstats"):
+            return
+
+        existing_columns = {column["name"] for column in schema.get_columns("runstats")}
+        missing_columns = [
+            RUNSTATS_ADDITIVE_SCHEMA_UPDATES[name]
+            for name in RUNSTATS_ADDITIVE_SCHEMA_UPDATES
+            if name not in existing_columns
+        ]
+        if not missing_columns:
+            return
+
+        with self.engine.begin() as connection:
+            for statement in missing_columns:
+                connection.exec_driver_sql(statement)
 
     @classmethod
     def get_instance(cls, db_path: Path) -> DatabaseManager:
@@ -139,7 +175,9 @@ class DatabaseManager:
         """Load run stats for a video."""
         with Session(self.engine) as session:
             rows = session.exec(
-                select(RunStats).where(RunStats.video_id == video_id)
+                select(RunStats)
+                .where(RunStats.video_id == video_id)
+                .order_by(col(RunStats.timestamp), col(RunStats.id))
             ).all()
         return list(rows)
 
