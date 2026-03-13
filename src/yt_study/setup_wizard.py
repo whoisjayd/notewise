@@ -522,6 +522,9 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
             )
         else:
             oauth_token_file = ""
+    else:
+        save_oauth_token = False
+        oauth_token_file = ""
 
     new_config = {
         "DEFAULT_MODEL": model,

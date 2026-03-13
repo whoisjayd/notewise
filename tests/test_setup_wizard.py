@@ -327,6 +327,43 @@ class TestWizardOrchestration:
         assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "true"
         mock_save.assert_called_once()
 
+    def test_run_setup_wizard_oauth_disable_clears_existing_cache_settings(self):
+        """Reconfiguring away from OAuth should clear stale token-cache settings."""
+        existing_config = {
+            "DEFAULT_MODEL": "gemini/gemini-pro",
+            "GEMINI_API_KEY": "old-key",
+            "OUTPUT_DIR": "/existing/out",
+            "MAX_CONCURRENT_VIDEOS": "4",
+            "YOUTUBE_USE_OAUTH": "true",
+            "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
+            "YOUTUBE_OAUTH_TOKEN_FILE": "/existing/token.json",
+            "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": "false",
+        }
+
+        with (
+            patch("yt_study.setup_wizard.load_config", return_value=existing_config),
+            patch(
+                "yt_study.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ),
+            patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
+            patch(
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ),
+            patch("yt_study.setup_wizard.get_api_key", return_value="existing-key"),
+            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("yt_study.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config["YOUTUBE_USE_OAUTH"] == "false"
+        assert config["YOUTUBE_SAVE_OAUTH_TOKEN"] == "false"
+        assert config["YOUTUBE_OAUTH_TOKEN_FILE"] == ""
+        assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "false"
+        mock_save.assert_called_once()
+
     def test_run_setup_wizard_skip_existing(self):
         """Test skipping setup if config exists."""
         with (
