@@ -220,7 +220,7 @@ def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path): 
 
     result = runner.invoke(app, ["process", str(batch_file)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Batch file is empty" in result.stdout
     pipeline_instance.run.assert_not_awaited()
 
@@ -233,7 +233,7 @@ def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path): 
     with patch("pathlib.Path.read_text", side_effect=OSError("Access denied")):
         result = runner.invoke(app, ["process", str(batch_file)])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Error reading batch file" in result.stdout
 
 
@@ -313,14 +313,14 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
 
 
 def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
-    """Test that an invalid URL prints an error message but exits cleanly."""
+    """Invalid URLs should fail the command for shell automation."""
     with patch(
         "yt_study.core.youtube.parser.parse_youtube_url",
         side_effect=ValueError("Not a YouTube URL"),
     ):
         result = runner.invoke(app, ["process", "not-a-url"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Input Error" in result.stdout
 
 
@@ -329,7 +329,7 @@ def test_process_missing_batch_file_reports_file_error():
     with patch("yt_study.cli.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "missing_urls.txt"])
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Batch file does not exist" in result.stdout
     assert "Invalid YouTube URL" not in result.stdout
 
@@ -567,10 +567,57 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
             app, ["process", "https://youtube.com/playlist?list=PL_UI"]
         )
 
-    assert result.exit_code == 0
+    assert result.exit_code == 1
     assert "Processing Summary" in result.output
     assert "Cost Summary" in result.output
     assert "Estimated Cost (USD)" in result.output
+
+
+def test_process_no_ui_failure_exits_nonzero(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Headless runs should return a failing exit code when any video fails."""
+    failed_result = PipelineResult(
+        success_count=0,
+        failure_count=1,
+        total_count=1,
+        video_ids=["dQw4w9WgXcQ"],
+        errors={"dQw4w9WgXcQ": "boom"},
+        metrics=PipelineMetrics(),
+    )
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=failed_result)
+
+    with (
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.check_config_exists", return_value=True),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 1
+    assert "Done: 0/1 succeeded." in result.output
+    assert "FAILED dQw4w9WgXcQ: boom" in result.output
 
 
 # ---------------------------------------------------------------------------

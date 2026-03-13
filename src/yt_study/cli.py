@@ -512,25 +512,25 @@ def process(
             ),
         }
 
-        async def _run_single_url(single_url: str) -> None:
+        async def _run_single_url(single_url: str) -> bool:
             """Parse one URL and run the pipeline (Rich dashboard or headless)."""
             try:
                 parsed = parse_youtube_url(single_url)
             except ValueError as e:
                 console.print(f"[red]Input Error: {e}[/red]")
-                return
+                return False
 
             if parsed.url_type == "video":
                 if not parsed.video_id:
                     console.print("[red]Error: Could not extract video ID[/red]")
-                    return
+                    return False
                 video_ids = [parsed.video_id]
                 playlist_name = "Single Video"
                 out_dir = selected_output
             else:  # playlist
                 if not parsed.playlist_id:
                     console.print("[red]Error: Could not extract playlist ID[/red]")
-                    return
+                    return False
                 playlist_name, _ = await asyncio.to_thread(
                     get_playlist_info,
                     parsed.playlist_id,
@@ -619,7 +619,7 @@ def process(
                         for vid, err in result.errors.items():
                             console.print(f"  FAILED {vid}: {err}")
                     _print_cost_summary(result)
-                return
+                return result.failure_count == 0
 
             # ── Rich dashboard path ──────────────────────────────────────────
             concurrency = min(len(video_ids), config.max_concurrent_videos)
@@ -676,8 +676,9 @@ def process(
                 result = await pipeline.run(video_ids, on_event=on_event)
 
             _print_run_summary(result, dashboard)
+            return result.failure_count == 0
 
-        async def run_processing() -> None:
+        async def run_processing() -> bool:
             """Determine if input is URL or batch file and dispatch."""
             input_path = Path(url).expanduser()
 
@@ -687,7 +688,7 @@ def process(
                         "[red]Input Error: Batch file path is not a file: "
                         f"{input_path}[/red]"
                     )
-                    return
+                    return True
 
                 # Batch Mode: read one URL per non-comment line
                 try:
@@ -701,26 +702,34 @@ def process(
                     console.print(
                         f"[bold red]❌ Error reading batch file:[/bold red] {e}"
                     )
-                    return
+                    return True
 
                 if not urls:
                     console.print("[yellow]⚠ Batch file is empty.[/yellow]")
-                    return
+                    return True
+
+                had_failures = False
 
                 for i, batch_url in enumerate(urls, 1):
                     console.rule(f"[bold cyan]Batch Item {i}/{len(urls)}[/bold cyan]")
                     try:
-                        await _run_single_url(batch_url)
+                        run_failed = not await _run_single_url(batch_url)
+                        had_failures = run_failed or had_failures
                     except Exception as e:
                         console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
+                        had_failures = True
+                return had_failures
             elif looks_like_batch_file_path(url):
                 console.print(
                     f"[red]Input Error: Batch file does not exist: {input_path}[/red]"
                 )
+                return True
             else:
-                await _run_single_url(url)
+                return not await _run_single_url(url)
 
-        asyncio.run(run_processing())
+        had_failures = asyncio.run(run_processing())
+        if had_failures:
+            raise typer.Exit(code=1)
 
     except KeyboardInterrupt:
         console.print("\n[yellow]⚠ Process interrupted by user[/yellow]")
