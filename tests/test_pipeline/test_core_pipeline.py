@@ -414,6 +414,114 @@ async def test_run_clears_malformed_oauth_token_cache(
 
 
 @pytest.mark.asyncio
+async def test_run_clears_expired_oauth_token_without_refresh_token(
+    temp_output_dir, mock_llm_provider, tmp_path
+):
+    """Expired token caches without refresh token should be auto-cleared."""
+    import json
+    import time
+
+    token_file = tmp_path / "expired_token.json"
+    token_file.write_text(
+        json.dumps({"access_token": "access", "expires": str(time.time() - 30)}),
+        encoding="utf-8",
+    )
+
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            use_oauth=True,
+            oauth_token_file=token_file,
+            save_oauth_token=True,
+            auto_refresh_oauth_token=True,
+        )
+        pipeline.generator = MagicMock()
+        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        pipeline.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "text"
+        mock_fetch.return_value = mock_transcript
+        result = await pipeline.run(["vid-token-expired"])
+
+    assert result.success_count == 1
+    assert not token_file.exists()
+
+
+@pytest.mark.asyncio
+async def test_run_keeps_expired_oauth_token_when_refresh_token_exists(
+    temp_output_dir, mock_llm_provider, tmp_path
+):
+    """Expired caches with refresh token should be retained for pytubefix refresh."""
+    import json
+    import time
+
+    token_file = tmp_path / "refreshable_token.json"
+    token_file.write_text(
+        json.dumps(
+            {
+                "access_token": "access",
+                "refresh_token": "refresh",
+                "expires": str(time.time() - 30),
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            use_oauth=True,
+            oauth_token_file=token_file,
+            save_oauth_token=True,
+            auto_refresh_oauth_token=True,
+        )
+        pipeline.generator = MagicMock()
+        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        pipeline.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "text"
+        mock_fetch.return_value = mock_transcript
+        result = await pipeline.run(["vid-token-refresh"])
+
+    assert result.success_count == 1
+    assert token_file.exists()
+
+
+@pytest.mark.asyncio
 async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline):
     """METADATA_FETCHED event must set total_chapters, not chapter_number."""
     events: list[PipelineEvent] = []
