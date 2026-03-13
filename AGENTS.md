@@ -34,6 +34,7 @@ yt-study/
 │   ├── __init__.py             # Package version
 │   ├── cli.py                  # Typer app, logging, dashboard bridge
 │   ├── setup_wizard.py         # Interactive config writer
+│   ├── db.py                   # SQLite cache models + DatabaseManager
 │   ├── core/
 │   │   ├── config.py           # Runtime config dataclass + env sync
 │   │   ├── config_helpers.py   # Shared config parsing/default helpers
@@ -68,6 +69,7 @@ yt-study/
 | --- | --- | --- |
 | CLI | `src/yt_study/cli.py` | Defines commands, logging, batch handling, dashboard bridge |
 | Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
+| Storage | `src/yt_study/db.py` | SQLModel schema and SQLite cache singleton |
 | Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
 | Config | `src/yt_study/core/config_helpers.py` | Shared bool parsing and OAuth token-path defaults |
 | Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
@@ -323,6 +325,16 @@ Supported:
 - access-token caches with missing/invalid expiry are treated as stale
 - stale caches without a refresh token are auto-cleared when `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN=true`
 
+### Local SQLite cache
+
+- one global cache DB is stored at `~/.yt-study/.yt_study_cache.db`
+- cache includes `Video`, `Transcript`, and `RunStats` tables
+- pipeline checks cached `Video` rows first and emits `VIDEO_SKIPPED` when found
+- successful runs persist metadata, transcript content/language, and run stats
+- `RunStats` captures prompt/completion/total tokens, LiteLLM-estimated USD cost,
+  and transcript/generation timings
+- `--force` bypasses cache checks and reprocesses videos
+
 ### IP block handling
 
 `YouTubeIPBlockError` is surfaced when YouTube blocks requests. The pipeline records a failure and continues with other videos.
@@ -353,6 +365,13 @@ output/
       01_Intro.md
 ```
 
+Cache file:
+
+```text
+~/.yt-study/
+  .yt_study_cache.db
+```
+
 ## LOGGING
 
 Configured in `src/yt_study/cli.py`.
@@ -373,6 +392,7 @@ Configured in `src/yt_study/cli.py`.
 | `tests/test_llm/test_generator.py` | chunking and generation calls |
 | `tests/test_llm/test_providers.py` | LiteLLM wrapper behavior |
 | `tests/test_pipeline/test_core_pipeline.py` | event flow, output creation, chapter path |
+| `tests/test_db.py` | SQLite cache schema, singleton behavior, and upserts |
 | `tests/test_youtube/test_parser.py` | URL parsing |
 | `tests/test_youtube/test_transcript.py` | transcript fallback and retry logic |
 | `tests/test_youtube/test_auth.py` | OAuth token-file parsing and stale-cache recovery |

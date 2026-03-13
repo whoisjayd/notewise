@@ -2,14 +2,45 @@
 
 import logging
 import os
+from collections.abc import Generator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 from typing import Any
 
-from litellm import acompletion
+from litellm import acompletion, completion_cost
 
 from ..config import config
 
 
 logger = logging.getLogger(__name__)
+_USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
+    "yt_study_usage_collector",
+    default=None,
+)
+
+
+@dataclass
+class UsageTotals:
+    """Token usage totals accumulated over one logical generation scope."""
+
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+
+    def add(
+        self,
+        prompt_tokens: int,
+        completion_tokens: int,
+        total_tokens: int,
+        cost_usd: float = 0.0,
+    ) -> None:
+        """Accumulate usage counts."""
+        self.prompt_tokens += max(0, prompt_tokens)
+        self.completion_tokens += max(0, completion_tokens)
+        self.total_tokens += max(0, total_tokens)
+        self.cost_usd += max(0.0, float(cost_usd))
 
 
 class LLMGenerationError(Exception):
@@ -96,6 +127,18 @@ class LLMProvider:
 
             # LiteLLM's acompletion handles async requests to various providers
             response = await acompletion(**kwargs)
+            prompt_tokens, completion_tokens, total_tokens = self._extract_usage(
+                response
+            )
+            call_cost_usd = self._extract_cost(response)
+            collector = _USAGE_COLLECTOR.get()
+            if collector is not None:
+                collector.add(
+                    prompt_tokens,
+                    completion_tokens,
+                    total_tokens,
+                    call_cost_usd,
+                )
 
             # safely extract content
             if not response.choices or not response.choices[0].message.content:
@@ -109,6 +152,63 @@ class LLMProvider:
             raise LLMGenerationError(
                 f"Failed to generate with {self.model}: {str(e)}"
             ) from e
+
+    @contextmanager
+    def collect_usage(self) -> Generator[UsageTotals, None, None]:
+        """Collect prompt/completion token usage during enclosed generation calls."""
+        totals = UsageTotals()
+        parent_collector = _USAGE_COLLECTOR.get()
+        token = _USAGE_COLLECTOR.set(totals)
+        try:
+            yield totals
+        finally:
+            _USAGE_COLLECTOR.reset(token)
+            if parent_collector is not None:
+                parent_collector.add(
+                    totals.prompt_tokens,
+                    totals.completion_tokens,
+                    totals.total_tokens,
+                    totals.cost_usd,
+                )
+
+    def _extract_usage(self, response: Any) -> tuple[int, int, int]:
+        """Extract usage tuple from LiteLLM response object or dict-like payload."""
+        usage: Any | None = getattr(response, "usage", None)
+        if usage is None and isinstance(response, dict):
+            usage = response.get("usage")
+        if usage is None:
+            return (0, 0, 0)
+
+        if isinstance(usage, dict):
+            prompt_raw = usage.get("prompt_tokens")
+            completion_raw = usage.get("completion_tokens")
+            total_raw = usage.get("total_tokens")
+        else:
+            prompt_raw = getattr(usage, "prompt_tokens", None)
+            completion_raw = getattr(usage, "completion_tokens", None)
+            total_raw = getattr(usage, "total_tokens", None)
+
+        def _to_non_negative_int(value: Any) -> int:
+            try:
+                return max(0, int(value or 0))
+            except (TypeError, ValueError):
+                return 0
+
+        prompt_tokens = _to_non_negative_int(prompt_raw)
+        completion_tokens = _to_non_negative_int(completion_raw)
+        total_tokens = _to_non_negative_int(
+            total_raw or (prompt_tokens + completion_tokens)
+        )
+        return (prompt_tokens, completion_tokens, total_tokens)
+
+    def _extract_cost(self, response: Any) -> float:
+        """Extract estimated USD cost for a completion response via LiteLLM."""
+        try:
+            # Uses LiteLLM's model price map for provider-accurate cost estimation.
+            cost = completion_cost(completion_response=response)
+            return max(0.0, float(cost or 0.0))
+        except Exception:
+            return 0.0
 
     def _clean_content(self, content: str) -> str:
         """

@@ -4,7 +4,12 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_study.core.llm.providers import LLMGenerationError, LLMProvider, get_provider
+from yt_study.core.llm.providers import (
+    LLMGenerationError,
+    LLMProvider,
+    UsageTotals,
+    get_provider,
+)
 
 
 class TestLLMProvider:
@@ -20,7 +25,10 @@ class TestLLMProvider:
     @pytest.mark.asyncio
     async def test_generate_success(self):
         """Test successful generation."""
-        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+        ):
             # Setup mock response
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -43,7 +51,10 @@ class TestLLMProvider:
     @pytest.mark.asyncio
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
-        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+        ):
             mock_response = MagicMock()
             # LLM returns content wrapped in ```markdown ... ```
             mock_response.choices[
@@ -57,9 +68,85 @@ class TestLLMProvider:
             assert result == "# Title\nContent"
 
     @pytest.mark.asyncio
+    async def test_generate_collects_usage_from_litellm_response(self):
+        """Provider should accumulate prompt/completion metrics from response usage."""
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0042),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage.prompt_tokens = 12
+            mock_response.usage.completion_tokens = 34
+            mock_response.usage.total_tokens = 46
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            with provider.collect_usage() as usage:
+                await provider.generate("sys", "user")
+
+            assert usage == UsageTotals(
+                prompt_tokens=12,
+                completion_tokens=34,
+                total_tokens=46,
+                cost_usd=0.0042,
+            )
+
+    @pytest.mark.asyncio
+    async def test_generate_usage_defaults_to_zero_when_missing(self):
+        """Missing usage metadata should not break generation metrics collection."""
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage = None
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            with provider.collect_usage() as usage:
+                await provider.generate("sys", "user")
+
+            assert usage == UsageTotals()
+
+    @pytest.mark.asyncio
+    async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
+        """Nested usage scopes should preserve inner totals in the outer collector."""
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0025),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage.prompt_tokens = 10
+            mock_response.usage.completion_tokens = 20
+            mock_response.usage.total_tokens = 30
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+
+            with (
+                provider.collect_usage() as outer,
+                provider.collect_usage() as inner,
+            ):
+                await provider.generate("sys", "user")
+
+            assert inner == UsageTotals(
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+                cost_usd=0.0025,
+            )
+            assert outer == inner
+
+    @pytest.mark.asyncio
     async def test_generate_failure(self):
         """Test generation failure raises custom exception."""
-        with patch("yt_study.core.llm.providers.acompletion") as mock_acompletion:
+        with (
+            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
+            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+        ):
             mock_acompletion.side_effect = Exception("API Error")
 
             provider = LLMProvider("gpt-4o")
@@ -72,3 +159,29 @@ class TestLLMProvider:
         provider = get_provider("claude-3")
         assert isinstance(provider, LLMProvider)
         assert provider.model == "claude-3"
+
+    def test_extract_usage_supports_dict_payloads(self):
+        """Usage extraction should work for dict-like LiteLLM responses too."""
+        provider = LLMProvider("gpt-4o")
+        prompt, completion, total = provider._extract_usage(
+            {
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 8,
+                }
+            }
+        )
+
+        assert prompt == 4
+        assert completion == 8
+        assert total == 12
+
+    def test_extract_cost_returns_zero_when_litellm_raises(self):
+        """Cost extraction should fail closed when LiteLLM pricing lookup fails."""
+        provider = LLMProvider("gpt-4o")
+        response = MagicMock()
+        with patch(
+            "yt_study.core.llm.providers.completion_cost",
+            side_effect=RuntimeError("missing price map"),
+        ):
+            assert provider._extract_cost(response) == 0.0

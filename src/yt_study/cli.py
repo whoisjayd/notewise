@@ -350,7 +350,74 @@ def process(
                 f"\n[bold]Total Completed:[/bold] "
                 f"{result.success_count}/{result.total_count}"
             )
+            _print_cost_summary(result)
             console.print("[dim]Check logs for detailed error reports.[/dim]\n")
+
+        def _print_cost_summary(result: PipelineResult) -> None:
+            """Render token/time metrics collected during the pipeline run."""
+            metrics = result.metrics
+            if not metrics:
+                return
+
+            def _safe_int(value: object) -> int:
+                if isinstance(value, bool):
+                    return int(value)
+                if isinstance(value, int):
+                    return value
+                if isinstance(value, float):
+                    return int(value)
+                if isinstance(value, str):
+                    try:
+                        return int(value.strip())
+                    except ValueError:
+                        return 0
+                return 0
+
+            def _safe_float(value: object) -> float:
+                if isinstance(value, bool):
+                    return float(value)
+                if isinstance(value, (int, float)):
+                    return float(value)
+                if isinstance(value, str):
+                    try:
+                        return float(value.strip())
+                    except ValueError:
+                        return 0.0
+                return 0.0
+
+            prompt_tokens = _safe_int(getattr(metrics, "prompt_tokens", 0))
+            completion_tokens = _safe_int(getattr(metrics, "completion_tokens", 0))
+            total_tokens = _safe_int(getattr(metrics, "total_tokens", 0))
+            cost_usd = _safe_float(getattr(metrics, "cost_usd", 0.0))
+            transcript_seconds = _safe_float(
+                getattr(metrics, "transcript_seconds", 0.0)
+            )
+            generation_seconds = _safe_float(
+                getattr(metrics, "generation_seconds", 0.0)
+            )
+
+            cost_table = Table(
+                title="💸 Cost Summary",
+                border_style="green",
+                show_header=True,
+                header_style="bold green",
+            )
+            cost_table.add_column("Metric", style="cyan")
+            cost_table.add_column("Value", justify="right")
+            cost_table.add_row("Prompt Tokens", f"{prompt_tokens:,}")
+            cost_table.add_row("Completion Tokens", f"{completion_tokens:,}")
+            cost_table.add_row("Total Tokens", f"{total_tokens:,}")
+            cost_table.add_row("Estimated Cost (USD)", f"${cost_usd:.6f}")
+            cost_table.add_row(
+                "Transcript Time (s)",
+                f"{transcript_seconds:.2f}",
+            )
+            cost_table.add_row(
+                "Generation Time (s)",
+                f"{generation_seconds:.2f}",
+            )
+            console.print("\n")
+            console.print(cost_table)
 
         class WorkerSlotManager:
             """Manages worker slot assignment and release for concurrent processing."""
@@ -534,6 +601,7 @@ def process(
                     if result.failure_count:
                         for vid, err in result.errors.items():
                             console.print(f"  FAILED {vid}: {err}")
+                    _print_cost_summary(result)
                 return
 
             # ── Rich dashboard path ──────────────────────────────────────────
