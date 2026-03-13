@@ -272,6 +272,35 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
 
 
 @pytest.mark.asyncio
+async def test_rate_limited_to_thread_supports_kwargs(pipeline):
+    """Internal helper should pass through keyword arguments to thread targets."""
+    acquire_mock = AsyncMock()
+    pipeline._acquire_youtube_request_slot = acquire_mock
+
+    def _kw_only(*, value: str) -> str:
+        return value
+
+    result = await pipeline._rate_limited_to_thread(_kw_only, value="ok")
+
+    assert result == "ok"
+    acquire_mock.assert_awaited_once()
+
+
+def test_core_pipeline_instances_share_global_youtube_limiter(
+    temp_output_dir, mock_llm_provider
+):
+    """Pipelines in one process should share a single limiter by configured rate."""
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline_one = CorePipeline(model="mock-model", output_dir=temp_output_dir)
+        pipeline_two = CorePipeline(model="mock-model", output_dir=temp_output_dir)
+
+    assert (
+        pipeline_one._get_youtube_request_limiter()
+        is pipeline_two._get_youtube_request_limiter()
+    )
+
+
+@pytest.mark.asyncio
 async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline):
     """METADATA_FETCHED event must set total_chapters, not chapter_number."""
     events: list[PipelineEvent] = []

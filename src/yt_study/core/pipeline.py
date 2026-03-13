@@ -41,6 +41,29 @@ _RESERVED = re.compile(
     r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)",
     re.IGNORECASE,
 )
+_GLOBAL_YOUTUBE_LIMITERS: dict[tuple[int, int], AsyncLimiter] = {}
+
+
+def _get_global_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
+    """
+    Return a shared AsyncLimiter for the current loop and rate cap.
+
+    Sharing by `(loop, rate)` lets concurrent CorePipeline instances in the
+    same event loop throttle together while avoiding undefined cross-loop reuse.
+    """
+    try:
+        loop_key = id(asyncio.get_running_loop())
+    except RuntimeError:
+        # Fallback for synchronous contexts (for example, object construction in
+        # tests before an event loop is running).
+        loop_key = -1
+
+    key = (loop_key, requests_per_minute)
+    limiter = _GLOBAL_YOUTUBE_LIMITERS.get(key)
+    if limiter is None:
+        limiter = AsyncLimiter(max_rate=requests_per_minute, time_period=60)
+        _GLOBAL_YOUTUBE_LIMITERS[key] = limiter
+    return limiter
 
 
 class EventType(Enum):
@@ -175,22 +198,24 @@ class CorePipeline:
         self.force = force
         self.quiz = quiz
         self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
-        self.youtube_request_limiter = AsyncLimiter(
-            max_rate=config.youtube_requests_per_minute,
-            time_period=60,
-        )
+        self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}
         self._manifest_lock = asyncio.Lock()
 
+    def _get_youtube_request_limiter(self) -> AsyncLimiter:
+        """Return the shared limiter for this pipeline's configured rate."""
+        return _get_global_youtube_limiter(self.youtube_requests_per_minute)
+
     async def _acquire_youtube_request_slot(self) -> None:
         """Acquire one slot from the global YouTube request rate limiter."""
-        async with self.youtube_request_limiter:
+        async with self._get_youtube_request_limiter():
             return
 
     async def _rate_limited_to_thread(
         self,
         func: Callable[..., Any],
         *args: Any,
+        **kwargs: Any,
     ) -> Any:
         """
         Run blocking YouTube work in a thread after passing the global limiter.
@@ -199,7 +224,7 @@ class CorePipeline:
         blocking I/O off the event loop.
         """
         await self._acquire_youtube_request_slot()
-        return await asyncio.to_thread(func, *args)
+        return await asyncio.to_thread(func, *args, **kwargs)
 
     def _check_api_key(self) -> bool:
         """
