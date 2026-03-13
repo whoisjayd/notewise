@@ -299,6 +299,8 @@ yt-study process "URL" --auto-refresh-oauth-token
 Note:
 
 - OAuth token cache stores an expiry timestamp and is refreshed by `pytubefix`.
+- `yt-study` inspects token cache expiry before processing; stale caches without a
+  refresh token are auto-cleared when auto-refresh is enabled.
 - `youtube-transcript-api` cookie auth is best-effort and can break when YouTube
   changes internals.
 

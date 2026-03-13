@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -109,14 +110,39 @@ def inspect_oauth_token_file(token_file: str | None) -> OAuthTokenStatus:
             parse_error=True,
         )
 
-    raw_expires = data.get("expires")
-    expires_epoch = float(raw_expires) if isinstance(raw_expires, (int, float)) else 0.0
+    expires_epoch = _coerce_expires_epoch(data.get("expires"))
+    has_access_token = bool(data.get("access_token"))
+    # Treat cache entries with an access token but missing/invalid expiry as stale.
+    expired = has_access_token and (
+        expires_epoch is None or expires_epoch <= time.time()
+    )
     return OAuthTokenStatus(
         exists=True,
-        expired=expires_epoch > 0 and expires_epoch <= time.time(),
+        expired=expired,
         has_refresh_token=bool(data.get("refresh_token")),
         parse_error=False,
     )
+
+
+def _coerce_expires_epoch(raw_expires: Any) -> float | None:
+    """Best-effort parse for token expiry epoch values."""
+    if isinstance(raw_expires, (int, float)):
+        value = float(raw_expires)
+        if not math.isfinite(value):
+            return None
+        return value
+    if isinstance(raw_expires, str):
+        candidate = raw_expires.strip()
+        if not candidate:
+            return None
+        try:
+            value = float(candidate)
+        except ValueError:
+            return None
+        if not math.isfinite(value):
+            return None
+        return value
+    return None
 
 
 def maybe_reset_oauth_token_for_retry(

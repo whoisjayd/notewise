@@ -316,6 +316,13 @@ Supported:
 - playlist extraction retries up to 3 times
 - backoff uses `2**attempt`
 
+### OAuth token cache handling
+
+- before metadata fetches, the pipeline inspects the OAuth token cache file
+- token `expires` supports numeric and string epoch values
+- access-token caches with missing/invalid expiry are treated as stale
+- stale caches without a refresh token are auto-cleared when `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN=true`
+
 ### IP block handling
 
 `YouTubeIPBlockError` is surfaced when YouTube blocks requests. The pipeline records a failure and continues with other videos.
@@ -368,6 +375,7 @@ Configured in `src/yt_study/cli.py`.
 | `tests/test_pipeline/test_core_pipeline.py` | event flow, output creation, chapter path |
 | `tests/test_youtube/test_parser.py` | URL parsing |
 | `tests/test_youtube/test_transcript.py` | transcript fallback and retry logic |
+| `tests/test_youtube/test_auth.py` | OAuth token-file parsing and stale-cache recovery |
 | `tests/test_youtube/test_metadata.py` | metadata extraction |
 | `tests/test_youtube/test_playlist.py` | playlist extraction retries |
 
