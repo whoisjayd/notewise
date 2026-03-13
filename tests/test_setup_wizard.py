@@ -239,7 +239,11 @@ class TestWizardOrchestration:
                 return_value="gemini/gemini-pro",
             ),
             patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
-            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["/custom/out", "10", "/custom/oauth-token.json"],
+            ),
+            patch("rich.prompt.Confirm.ask", side_effect=[True, True, True]),
             patch("yt_study.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True)
@@ -248,8 +252,38 @@ class TestWizardOrchestration:
             assert config["GEMINI_API_KEY"] == "new-key"
             assert config["OUTPUT_DIR"] == "/custom/out"
             assert config["MAX_CONCURRENT_VIDEOS"] == "10"
+            assert config["YOUTUBE_USE_OAUTH"] == "true"
+            assert config["YOUTUBE_SAVE_OAUTH_TOKEN"] == "true"
+            assert config["YOUTUBE_OAUTH_TOKEN_FILE"] == "/custom/oauth-token.json"
+            assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "true"
 
             mock_save.assert_called_once()
+
+    def test_run_setup_wizard_oauth_disabled(self):
+        """Wizard stores OAuth settings as disabled when user opts out."""
+        with (
+            patch("yt_study.setup_wizard.load_config", return_value={}),
+            patch(
+                "yt_study.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ),
+            patch("yt_study.setup_wizard.select_provider", return_value="gemini"),
+            patch(
+                "yt_study.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ),
+            patch("yt_study.setup_wizard.get_api_key", return_value="new-key"),
+            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("yt_study.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config["YOUTUBE_USE_OAUTH"] == "false"
+        assert config["YOUTUBE_SAVE_OAUTH_TOKEN"] == "false"
+        assert config["YOUTUBE_OAUTH_TOKEN_FILE"] == ""
+        assert config["YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"] == "true"
+        mock_save.assert_called_once()
 
     def test_run_setup_wizard_skip_existing(self):
         """Test skipping setup if config exists."""

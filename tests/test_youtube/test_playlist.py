@@ -86,3 +86,54 @@ class TestPlaylistExtraction:
 
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["vid1", "vid2"]
+
+    @pytest.mark.asyncio
+    async def test_extract_playlist_forwards_oauth_kwargs(self, mock_pytube):
+        """OAuth options should be forwarded into Playlist constructor."""
+        _, mock_pl_cls = mock_pytube
+        mock_pl = mock_pl_cls.return_value
+        type(mock_pl).video_urls = PropertyMock(
+            return_value=["https://youtube.com/watch?v=vid1"]
+        )
+
+        video_ids = await extract_playlist_videos(
+            "pl123",
+            use_oauth=True,
+            token_file="token.json",
+            allow_oauth_cache=False,
+        )
+
+        assert video_ids == ["vid1"]
+        mock_pl_cls.assert_called_once_with(
+            "https://www.youtube.com/playlist?list=pl123",
+            use_oauth=True,
+            allow_oauth_cache=False,
+            token_file="token.json",
+        )
+
+    @pytest.mark.asyncio
+    async def test_extract_playlist_clears_stale_oauth_token_once(
+        self, mock_pytube, tmp_path
+    ):
+        """Stale token cache should be removed and retried once."""
+        _, mock_pl_cls = mock_pytube
+        mock_pl = MagicMock()
+        type(mock_pl).video_urls = PropertyMock(
+            return_value=["https://youtube.com/watch?v=vid1"]
+        )
+
+        token_file = tmp_path / "token.json"
+        token_file.write_text("{}", encoding="utf-8")
+
+        mock_pl_cls.side_effect = [KeyError("access_token"), mock_pl]
+
+        video_ids = await extract_playlist_videos(
+            "pl123",
+            use_oauth=True,
+            token_file=str(token_file),
+            allow_oauth_cache=True,
+        )
+
+        assert video_ids == ["vid1"]
+        assert mock_pl_cls.call_count == 2
+        assert not token_file.exists()

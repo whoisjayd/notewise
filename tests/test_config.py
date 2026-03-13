@@ -160,3 +160,30 @@ class TestConfig:
         with patch.object(Config, "_load_from_user_config"):
             cfg = Config()
             assert cfg.youtube_requests_per_minute == 10
+
+    def test_youtube_oauth_config_valid(self, monkeypatch):
+        """YouTube OAuth boolean and token-file settings load correctly."""
+        monkeypatch.setenv("YOUTUBE_USE_OAUTH", "true")
+        monkeypatch.setenv("YOUTUBE_SAVE_OAUTH_TOKEN", "yes")
+        monkeypatch.setenv("YOUTUBE_OAUTH_TOKEN_FILE", "~/tokens/yt-token.json")
+        monkeypatch.setenv("YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN", "1")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.youtube_use_oauth is True
+            assert cfg.youtube_save_oauth_token is True
+            assert cfg.youtube_oauth_token_file is not None
+            assert "yt-token.json" in str(cfg.youtube_oauth_token_file)
+            assert cfg.youtube_auto_refresh_oauth_token is True
+
+    def test_youtube_oauth_config_invalid_bool_fallback(self, monkeypatch):
+        """Invalid OAuth boolean values should fall back to defaults."""
+        monkeypatch.setenv("YOUTUBE_USE_OAUTH", "maybe")
+        monkeypatch.setenv("YOUTUBE_SAVE_OAUTH_TOKEN", "wat")
+        monkeypatch.setenv("YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN", "sometimes")
+
+        with patch.object(Config, "_load_from_user_config"):
+            cfg = Config()
+            assert cfg.youtube_use_oauth is False
+            assert cfg.youtube_save_oauth_token is False
+            assert cfg.youtube_auto_refresh_oauth_token is True
