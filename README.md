@@ -139,6 +139,11 @@ Supported options:
 --language / -l
 --temperature / -t
 --max-tokens / -k
+--cookies
+--use-oauth / --no-use-oauth
+--token-file
+--save-oauth-token / --no-save-oauth-token
+--auto-refresh-oauth-token / --no-auto-refresh-oauth-token
 ```
 
 Examples:
@@ -148,6 +153,8 @@ yt-study process "URL" -m gemini/gemini-2.0-flash
 yt-study process "URL" -o ./course-notes
 yt-study process "URL" -l hi -l en
 yt-study process "URL" -t 0.4 -k 2500
+yt-study process "URL" --use-oauth --save-oauth-token
+yt-study process "URL" --cookies ./cookies.txt
 ```
 
 ## How It Works
@@ -228,6 +235,10 @@ Common supported keys:
 - `COHERE_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `YOUTUBE_REQUESTS_PER_MINUTE`
+- `YOUTUBE_USE_OAUTH`
+- `YOUTUBE_SAVE_OAUTH_TOKEN`
+- `YOUTUBE_OAUTH_TOKEN_FILE`
+- `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN`
 
 Config behavior:
 
@@ -235,6 +246,8 @@ Config behavior:
 - applies environment variable overrides
 - syncs supported provider keys into `os.environ` for LiteLLM
 - throttles YouTube request rate globally (default `10` requests/minute)
+- supports OAuth auth for metadata/playlist fetches and optional token caching
+- supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
 
 Important:
 
@@ -260,6 +273,34 @@ Try:
 1. `-l en` or your preferred language order
 2. verifying captions exist on YouTube
 3. retrying another public video to isolate the issue
+
+### Private or age-gated YouTube content
+
+Try:
+
+1. enable OAuth for metadata and playlist fetches:
+
+```bash
+yt-study process "URL" --use-oauth --save-oauth-token
+```
+
+2. optionally pass a cookies file for transcript requests:
+
+```bash
+yt-study process "URL" --cookies ./cookies.txt
+```
+
+3. if cached OAuth tokens are stale, enable auto-refresh reset:
+
+```bash
+yt-study process "URL" --auto-refresh-oauth-token
+```
+
+Note:
+
+- OAuth token cache stores an expiry timestamp and is refreshed by `pytubefix`.
+- `youtube-transcript-api` cookie auth is best-effort and can break when YouTube
+  changes internals.
 
 ### YouTube IP block or rate limiting
 
