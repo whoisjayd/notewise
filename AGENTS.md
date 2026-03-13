@@ -110,6 +110,9 @@ yt-study version
 --token-file
 --save-oauth-token / --no-save-oauth-token
 --auto-refresh-oauth-token / --no-auto-refresh-oauth-token
+--force / -F
+--no-ui
+--quiz
 ```
 
 Accepted input shapes for `process`:
@@ -123,6 +126,7 @@ Batch-file behavior:
 - blank lines ignored
 - lines beginning with `#` ignored
 - each remaining line processed sequentially as its own input
+- unreadable or missing batch-file paths fail fast instead of falling through to URL parsing
 
 ## CURRENT CONFIG MODEL
 
@@ -169,13 +173,21 @@ Provider mapping implemented in `Config.get_api_key_name_for_model()`:
 | Model family | Required env key |
 | --- | --- |
 | `gemini`, `vertex` | `GEMINI_API_KEY` |
-| `gpt`, `openai` | `OPENAI_API_KEY` |
+| `gpt`, `openai`, `o1`, `o3`, `o4` | `OPENAI_API_KEY` |
 | `claude`, `anthropic` | `ANTHROPIC_API_KEY` |
 | `groq` | `GROQ_API_KEY` |
 | `grok`, `xai` | `XAI_API_KEY` |
 | `mistral` | `MISTRAL_API_KEY` |
 | `cohere`, `command` | `COHERE_API_KEY` |
 | `deepseek` | `DEEPSEEK_API_KEY` |
+
+Setup wizard model selection is intentionally strict for non-technical users:
+
+- native provider models only
+- deprecated models hidden
+- preview/beta/exp models hidden
+- non-text models hidden
+- curated stable fallback lists used when LiteLLM discovery is unavailable or incomplete
 
 ## ARCHITECTURE RULES
 
@@ -215,8 +227,10 @@ Event enum: `src/yt_study/core/pipeline.py`
 - `GENERATION_START`
 - `CHUNK_GENERATING`
 - `CHAPTER_GENERATING`
+- `CHAPTER_CHUNK_GENERATING`
 - `GENERATION_COMPLETE`
 - `VIDEO_SUCCESS`
+- `VIDEO_SKIPPED`
 - `VIDEO_FAILED`
 - `PIPELINE_COMPLETE`
 

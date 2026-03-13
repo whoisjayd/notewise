@@ -176,6 +176,12 @@ Test map:
 
 Use deterministic tests. Network and provider interactions should be mocked.
 
+If you touch `.github/workflows/`, also run:
+
+```bash
+go run github.com/rhysd/actionlint/cmd/actionlint@latest
+```
+
 ## Pre-commit and Hooks
 
 The repo uses `.pre-commit-config.yaml` with:
@@ -242,6 +248,12 @@ Current workflows:
   - builds distributions
   - publishes to PyPI on `v*` tags
   - creates a GitHub release
+
+Workflow maintenance expectations:
+
+- prefer current supported action majors
+- avoid deprecated JavaScript action runtimes
+- validate syntax locally with `actionlint` when workflows change
 
 ## Pull Requests
 

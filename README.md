@@ -145,6 +145,9 @@ Supported options:
 --token-file
 --save-oauth-token / --no-save-oauth-token
 --auto-refresh-oauth-token / --no-auto-refresh-oauth-token
+--force / -F
+--no-ui
+--quiz
 ```
 
 Examples:
@@ -156,7 +159,14 @@ yt-study process "URL" -l hi -l en
 yt-study process "URL" -t 0.4 -k 2500
 yt-study process "URL" --use-oauth --save-oauth-token
 yt-study process "URL" --cookies ./cookies.txt
+yt-study process "URL" --force --quiz
+yt-study process "URL" --no-ui
 ```
+
+Exit behavior:
+
+- invalid input, unreadable batch files, and any failed video now return a non-zero exit code
+- successful runs, including cache skips, return exit code `0`
 
 ## How It Works
 
