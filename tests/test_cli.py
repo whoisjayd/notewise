@@ -751,3 +751,74 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
     }
     mock_info.assert_called_once_with("PL_AUTH", **expected_kwargs)
     mock_extract.assert_awaited_once_with("PL_AUTH", **expected_kwargs)
+
+
+def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Skipped dashboard entries should be plain text instead of raw markup."""
+
+    async def _run_with_skip(video_ids, on_event=None):  # noqa: ARG001
+        if on_event is not None:
+            on_event(PipelineEvent(event_type=EventType.PIPELINE_START, video_id=""))
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SKIPPED,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(PipelineEvent(event_type=EventType.PIPELINE_COMPLETE, video_id=""))
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=["vid1"],
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_skip)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 0
+    dashboard_instance.add_completion.assert_called_with("Video One (skipped)")

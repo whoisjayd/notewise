@@ -226,6 +226,8 @@ output/
 ```
 
 Filenames are sanitized to remove filesystem-unsafe characters and trimmed to a safe length.
+If two videos sanitize to the same output name, later outputs are kept by
+appending ` (VIDEO_ID)` before the file extension or chapter folder name.
 
 When `--quiz` is enabled:
 

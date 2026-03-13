@@ -279,7 +279,9 @@ class CorePipeline:
             self.oauth_token_file = default_youtube_oauth_token_file()
         self.errors: dict[str, str] = {}
         self._metrics_lock = asyncio.Lock()
+        self._output_lock = asyncio.Lock()
         self._run_metrics = PipelineMetrics()
+        self._reserved_output_targets: set[Path] = set()
         self.db = DatabaseManager.get_instance(self._cache_db_path())
 
     def _get_youtube_request_limiter(self) -> AsyncLimiter:
@@ -435,6 +437,32 @@ class CorePipeline:
             self._run_metrics.add_from(metrics)
 
     @staticmethod
+    def _suffix_output_target(base: Path, video_id: str) -> Path:
+        """Append a stable video-id suffix to an output file or directory name."""
+        suffix = f" ({sanitize_filename(video_id)})"
+        if base.suffix:
+            return base.with_name(f"{base.stem}{suffix}{base.suffix}")
+        return base.with_name(f"{base.name}{suffix}")
+
+    async def _reserve_output_target(
+        self,
+        base: Path,
+        video_id: str,
+        *,
+        allow_existing_base: bool = False,
+    ) -> Path:
+        """Reserve a unique output target for this run to avoid title collisions."""
+        async with self._output_lock:
+            base_available = base not in self._reserved_output_targets and (
+                allow_existing_base or not base.exists()
+            )
+            target = (
+                base if base_available else self._suffix_output_target(base, video_id)
+            )
+            self._reserved_output_targets.add(target)
+            return target
+
+    @staticmethod
     def _coerce_usage_int(value: Any) -> int:
         """Convert usage values to non-negative ints without trusting mock objects."""
         if isinstance(value, bool):
@@ -493,13 +521,13 @@ class CorePipeline:
     async def _generate_and_write_quiz(
         self,
         transcript_text: str,
-        title: str,
+        quiz_name: str,
         output_dir: Path | None = None,
     ) -> None:
-        """Generate a quiz from *transcript_text* and write ``<title>_quiz.md``."""
+        """Generate a quiz and write it using the resolved output target name."""
         quiz_notes = await self.generator.generate_quiz(transcript_text)
         target_dir = output_dir or self.output_dir
-        quiz_path = target_dir / f"{sanitize_filename(title)}_quiz.md"
+        quiz_path = target_dir / f"{sanitize_filename(quiz_name)}_quiz.md"
         quiz_path.write_text(quiz_notes, encoding="utf-8")
 
     async def _process_single_video(
@@ -535,6 +563,9 @@ class CorePipeline:
                         title=cached_video.title or video_id,
                     )
                     return True
+                current_cached_video = cached_video
+                if self.force:
+                    current_cached_video = await self._get_cached_video(video_id)
 
                 self._check_oauth_token_cache()
                 auth_kwargs = self._youtube_auth_kwargs()
@@ -619,7 +650,11 @@ class CorePipeline:
 
                     if use_chapters:
                         safe_title = sanitize_filename(title)
-                        output_target = self.output_dir / safe_title
+                        output_target = await self._reserve_output_target(
+                            self.output_dir / safe_title,
+                            video_id,
+                            allow_existing_base=current_cached_video is not None,
+                        )
                         output_target.mkdir(parents=True, exist_ok=True)
 
                         total_chapters = len(chapter_transcripts)
@@ -683,8 +718,10 @@ class CorePipeline:
                             on_chunk=_on_chunk,
                         )
 
-                        output_target = (
-                            self.output_dir / f"{sanitize_filename(title)}.md"
+                        output_target = await self._reserve_output_target(
+                            self.output_dir / f"{sanitize_filename(title)}.md",
+                            video_id,
+                            allow_existing_base=current_cached_video is not None,
                         )
                         output_target.parent.mkdir(parents=True, exist_ok=True)
                         output_target.write_text(notes, encoding="utf-8")
@@ -693,9 +730,12 @@ class CorePipeline:
                         quiz_output_dir = (
                             output_target if use_chapters else self.output_dir
                         )
+                        quiz_name = (
+                            output_target.name if use_chapters else output_target.stem
+                        )
                         await self._generate_and_write_quiz(
                             transcript_text,
-                            title,
+                            quiz_name,
                             output_dir=quiz_output_dir,
                         )
 

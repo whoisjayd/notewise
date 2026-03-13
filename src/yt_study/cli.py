@@ -678,9 +678,7 @@ def process(
                     if event.event_type == EventType.VIDEO_SUCCESS:
                         dashboard.add_completion(event.title or vid)
                     elif event.event_type == EventType.VIDEO_SKIPPED:
-                        dashboard.add_completion(
-                            f"{event.title or vid} [dim](skipped)[/dim]"
-                        )
+                        dashboard.add_completion(f"{event.title or vid} (skipped)")
                     else:
                         dashboard.add_failure(event.title or vid)
 

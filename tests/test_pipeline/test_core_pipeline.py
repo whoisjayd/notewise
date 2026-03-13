@@ -1,5 +1,6 @@
 """Tests for CorePipeline (zero-UI core pipeline)."""
 
+import asyncio
 import json
 import time
 from contextlib import contextmanager
@@ -1097,6 +1098,89 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     # vid2 must NOT have been skipped — cache key is the video ID, not title.
     assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
     mock_fetch.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
+    temp_output_dir, mock_llm_provider
+):
+    """Same-title videos should not overwrite each other's note or quiz files."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], side_effect=["Shared Title", "Shared Title"]),
+        patch(_COMMON_PATCHES["duration"], side_effect=[100, 100]),
+        patch(_COMMON_PATCHES["chapters"], side_effect=[[], []]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        first_transcript = MagicMock()
+        first_transcript.to_text.return_value = "first transcript"
+        first_transcript.language_code = "en"
+
+        second_transcript = MagicMock()
+        second_transcript.to_text.return_value = "second transcript"
+        second_transcript.language_code = "en"
+
+        mock_fetch.side_effect = [first_transcript, second_transcript]
+
+        result = await p.run(["vid1", "vid2"])
+
+    assert result.success_count == 2
+    assert (temp_output_dir / "Shared Title.md").exists()
+    assert (temp_output_dir / "Shared Title_quiz.md").exists()
+    assert (temp_output_dir / "Shared Title (vid2).md").exists()
+    assert (temp_output_dir / "Shared Title (vid2)_quiz.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_duplicate_chapter_video_titles_get_unique_folders(
+    temp_output_dir, mock_llm_provider
+):
+    """Same-title long videos should get separate chapter folders and quiz files."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p.semaphore = asyncio.Semaphore(1)
+
+    with (
+        patch(_COMMON_PATCHES["title"], side_effect=["Shared Long", "Shared Long"]),
+        patch(_COMMON_PATCHES["duration"], side_effect=[7200, 7200]),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            side_effect=[
+                [{"title": "Intro", "start_seconds": 0}],
+                [{"title": "Intro", "start_seconds": 0}],
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            side_effect=[
+                {"Intro": "first chapter"},
+                {"Intro": "second chapter"},
+            ],
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        first_transcript = MagicMock()
+        first_transcript.to_text.return_value = "first long transcript"
+        first_transcript.language_code = "en"
+
+        second_transcript = MagicMock()
+        second_transcript.to_text.return_value = "second long transcript"
+        second_transcript.language_code = "en"
+
+        mock_fetch.side_effect = [first_transcript, second_transcript]
+
+        result = await p.run(["vid1", "vid2"])
+
+    assert result.success_count == 2
+    first_dir = temp_output_dir / "Shared Long"
+    second_dir = temp_output_dir / "Shared Long (vid2)"
+    assert (first_dir / "01_Intro.md").exists()
+    assert (first_dir / "Shared Long_quiz.md").exists()
+    assert (second_dir / "01_Intro.md").exists()
+    assert (second_dir / "Shared Long (vid2)_quiz.md").exists()
 
 
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(

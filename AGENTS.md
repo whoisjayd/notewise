@@ -285,6 +285,9 @@ Output path:
 {output_dir}/{safe_video_title}/{i:02d}_{safe_chapter}.md
 ```
 
+If two videos sanitize to the same base output name, later outputs are
+disambiguated by appending ` (VIDEO_ID)` to the note filename or chapter folder.
+
 ### Chunking algorithm
 
 Priority order:
