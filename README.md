@@ -162,6 +162,7 @@ yt-study process "URL" --cookies ./cookies.txt
 ```text
 Input URL or batch file
   -> URL parsing
+  -> local SQLite cache check (skip if already processed, unless --force)
   -> metadata fetch (title, duration, chapters)
   -> transcript fetch with fallback logic
   -> strategy selection
@@ -169,6 +170,7 @@ Input URL or batch file
      - chunked mode for everything else
   -> LLM generation
   -> Markdown write to output directory
+  -> cache metadata/transcript/run stats in .yt_study_cache.db
 ```
 
 Chapter mode activates when:
@@ -248,6 +250,12 @@ Config behavior:
 - throttles YouTube request rate globally (default `10` requests/minute)
 - supports OAuth auth for metadata/playlist fetches and optional token caching
 - supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
+- stores local processing cache in `{output_dir}/.yt_study_cache.db`
+
+Local cache behavior:
+
+- processed videos are skipped on reruns when cached
+- use `--force` to bypass cache and reprocess
 
 Important:
 
