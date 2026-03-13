@@ -58,11 +58,15 @@ def get_video_chapters(
             url = f"https://www.youtube.com/watch?v={video_id}"
             yt = YouTube(url, **auth_kwargs)
 
-            # Access chapters if available
-            # pytubefix properties trigger network calls
-            if hasattr(yt, "chapters") and yt.chapters:
-                chapters: list[VideoChapter] = []
+            # Read the chapter property once because pytubefix properties can
+            # trigger network calls on access.
+            try:
                 chapter_data = yt.chapters
+            except AttributeError:
+                chapter_data = None
+
+            if chapter_data:
+                chapters: list[VideoChapter] = []
 
                 for i, chapter in enumerate(chapter_data):
                     # Handle pytubefix chapter object structure (dict or object)
@@ -84,7 +88,6 @@ def get_video_chapters(
                             end_seconds=int(end_time) if end_time is not None else None,
                         )
                     )
-
                 return chapters
             return []
         except Exception as e:
@@ -226,7 +229,10 @@ def get_playlist_info(
             playlist = Playlist(url, **auth_kwargs)
 
             # Pytube's title might fail if playlist is private/invalid
-            title = getattr(playlist, "title", f"playlist_{playlist_id}")
+            try:
+                title = playlist.title
+            except Exception:
+                title = f"playlist_{playlist_id}"
 
             # Getting length requires fetching the page
             # list(playlist.video_urls) is robust but slow for huge playlists

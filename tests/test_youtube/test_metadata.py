@@ -61,6 +61,26 @@ class TestVideoMetadata:
         chapters = get_video_chapters("video123")
         assert chapters == []
 
+    def test_get_video_chapters_reads_property_once(self, mock_pytube):
+        """Chapter extraction should not re-fetch the chapters property repeatedly."""
+        mock_yt_cls, _ = mock_pytube
+        mock_yt_instance = mock_yt_cls.return_value
+
+        chap1 = MagicMock()
+        chap1.title = "Intro"
+        chap1.start_seconds = 0
+        chap2 = MagicMock()
+        chap2.title = "Middle"
+        chap2.start_seconds = 60
+
+        type(mock_yt_instance).chapters = PropertyMock(
+            side_effect=[[chap1, chap2], RuntimeError("property fetched twice")]
+        )
+
+        chapters = get_video_chapters("video123")
+
+        assert [chapter.title for chapter in chapters] == ["Intro", "Middle"]
+
     def test_get_video_chapters_error(self, mock_pytube):
         """Test error handling during chapter extraction."""
         mock_yt_cls, _ = mock_pytube
@@ -185,6 +205,21 @@ class TestPlaylistMetadata:
 
         assert title == "playlist_pl123"
         assert count == 0
+
+    def test_get_playlist_info_keeps_count_when_title_lookup_fails(self, mock_pytube):
+        """A broken title property should not block playlist video counting."""
+        _, mock_pl_cls = mock_pytube
+        mock_pl_instance = mock_pl_cls.return_value
+
+        type(mock_pl_instance).title = PropertyMock(
+            side_effect=Exception("title failed")
+        )
+        type(mock_pl_instance).video_urls = PropertyMock(return_value=["url1", "url2"])
+
+        title, count = get_playlist_info("pl123")
+
+        assert title == "playlist_pl123"
+        assert count == 2
 
     def test_get_playlist_info_oauth_kwargs(self, mock_pytube):
         """Playlist info should forward OAuth kwargs to pytubefix Playlist."""
