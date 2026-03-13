@@ -332,6 +332,7 @@ Supported:
 - pipeline checks cached `Video` rows first and emits `VIDEO_SKIPPED` when found
 - successful runs persist metadata, transcript content/language, and run stats
 - `--force` bypasses cache checks and reprocesses videos
+- legacy `.yt_study_processed.json` entries are auto-migrated into SQLite cache
 
 ### IP block handling
 

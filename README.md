@@ -256,6 +256,7 @@ Local cache behavior:
 
 - processed videos are skipped on reruns when cached
 - use `--force` to bypass cache and reprocess
+- legacy `.yt_study_processed.json` entries are auto-migrated into SQLite cache
 
 Important:
 
