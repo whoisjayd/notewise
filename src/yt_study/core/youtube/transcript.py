@@ -2,6 +2,7 @@
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -73,7 +74,9 @@ class YouTubeIPBlockError(TranscriptError):
 
 
 async def fetch_transcript(
-    video_id: str, languages: list[str] | None = None
+    video_id: str,
+    languages: list[str] | None = None,
+    on_request: Callable[[], Awaitable[None]] | None = None,
 ) -> VideoTranscript:
     """
     Fetch transcript for a YouTube video with language fallback and retry logic.
@@ -88,6 +91,7 @@ async def fetch_transcript(
     Args:
         video_id: YouTube video ID.
         languages: Preferred language codes (e.g., ['en', 'hi']). Defaults to ['en'].
+        on_request: Optional async callback to invoke before each network attempt.
 
     Returns:
         VideoTranscript object.
@@ -102,6 +106,9 @@ async def fetch_transcript(
 
     for attempt in range(retries):
         try:
+            if on_request is not None:
+                await on_request()
+
             # Wrap blocking YouTubeTranscriptApi calls in a thread
             # This is critical to prevent blocking the asyncio event loop
             # during concurrency
