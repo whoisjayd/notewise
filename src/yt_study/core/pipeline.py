@@ -305,6 +305,12 @@ class CorePipeline:
                 # --- Metadata Phase ---
                 emit(EventType.METADATA_START, video_id)
 
+                # --- Checkpoint: skip already-processed videos (unless --force) ---
+                if not self.force and self._load_manifest().get(video_id):
+                    logger.info(f"Skipping already-processed video: {video_id}")
+                    emit(EventType.VIDEO_SKIPPED, video_id, title=video_id)
+                    return True
+
                 # Fetch all metadata concurrently; title failure is non-fatal
                 meta_results = await asyncio.gather(
                     self._rate_limited_to_thread(get_video_title, video_id),
@@ -333,12 +339,6 @@ class CorePipeline:
                     title=title,
                     total_chapters=len(chapters) if chapters else 0,
                 )
-
-                # --- Checkpoint: skip already-processed videos (unless --force) ---
-                if not self.force and self._load_manifest().get(video_id):
-                    logger.info(f"Skipping already-processed video: {title}")
-                    emit(EventType.VIDEO_SKIPPED, video_id, title=title)
-                    return True
 
                 # --- Transcript Phase ---
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)

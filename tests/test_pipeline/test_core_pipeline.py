@@ -640,9 +640,9 @@ async def test_checkpoint_skips_existing_single_file(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["title"], return_value="Test Video") as mock_title,
+        patch(_COMMON_PATCHES["duration"], return_value=100) as mock_duration,
+        patch(_COMMON_PATCHES["chapters"], return_value=[]) as mock_chapters,
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(_COMMON_PATCHES["api_key"], return_value=None),
     ):
@@ -650,7 +650,10 @@ async def test_checkpoint_skips_existing_single_file(
 
     assert result.success_count == 1
     assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
-    # Transcript should NOT have been fetched
+    # No metadata or transcript calls should run for skipped videos.
+    mock_title.assert_not_called()
+    mock_duration.assert_not_called()
+    mock_chapters.assert_not_called()
     mock_fetch.assert_not_awaited()
 
 
