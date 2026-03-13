@@ -324,6 +324,16 @@ def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # no
     assert "Input Error" in result.stdout
 
 
+def test_process_missing_batch_file_reports_file_error():
+    """Missing batch-file paths should not be misreported as invalid YouTube URLs."""
+    with patch("yt_study.cli.check_config_exists", return_value=True):
+        result = runner.invoke(app, ["process", "missing_urls.txt"])
+
+    assert result.exit_code == 0
+    assert "Batch file does not exist" in result.stdout
+    assert "Invalid YouTube URL" not in result.stdout
+
+
 # ---------------------------------------------------------------------------
 # process command — headless / --no-ui mode (#37)
 # ---------------------------------------------------------------------------

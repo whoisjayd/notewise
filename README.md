@@ -46,6 +46,7 @@ Design priorities:
 
 - Accepts single video URLs, playlist URLs, and batch files.
 - Supports common YouTube URL forms including `watch`, `youtu.be`, `embed`, and `shorts`.
+- Validates that inputs target real YouTube hosts before parsing video or playlist IDs.
 - Expands playlists into per-video jobs automatically.
 
 ### Transcript Reliability

@@ -7,6 +7,7 @@ from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlparse
 
 import typer
 from rich.console import Console
@@ -85,6 +86,22 @@ def ensure_setup() -> None:
         except ImportError as e:
             console.print("[red]Critical: Could not import setup wizard.[/red]")
             raise typer.Exit(code=1) from e
+
+
+def looks_like_batch_file_path(value: str) -> bool:
+    """Heuristic for path-like batch-file inputs that should not be parsed as URLs."""
+    parsed = urlparse(value)
+    if parsed.scheme in {"http", "https"} and parsed.netloc:
+        return False
+
+    input_path = Path(value).expanduser()
+    return (
+        input_path.suffix.lower() == ".txt"
+        or input_path.is_absolute()
+        or bool(input_path.drive)
+        or value.startswith((".", "~"))
+        or ("\\" in value)
+    )
 
 
 @app.command()
@@ -662,9 +679,16 @@ def process(
 
         async def run_processing() -> None:
             """Determine if input is URL or batch file and dispatch."""
-            input_path = Path(url)
+            input_path = Path(url).expanduser()
 
-            if input_path.exists() and input_path.is_file():
+            if input_path.exists():
+                if not input_path.is_file():
+                    console.print(
+                        "[red]Input Error: Batch file path is not a file: "
+                        f"{input_path}[/red]"
+                    )
+                    return
+
                 # Batch Mode: read one URL per non-comment line
                 try:
                     content = input_path.read_text(encoding="utf-8")
@@ -689,6 +713,10 @@ def process(
                         await _run_single_url(batch_url)
                     except Exception as e:
                         console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
+            elif looks_like_batch_file_path(url):
+                console.print(
+                    f"[red]Input Error: Batch file does not exist: {input_path}[/red]"
+                )
             else:
                 await _run_single_url(url)
 
