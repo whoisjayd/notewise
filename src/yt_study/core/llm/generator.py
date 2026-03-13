@@ -60,6 +60,10 @@ class StudyMaterialGenerator:
             # Fallback: ~4 chars per token
             return len(text) // 4
 
+    def count_tokens(self, text: str) -> int:
+        """Public token-counting API used by pipeline stats and tests."""
+        return self._count_tokens(text)
+
     def _chunk_transcript(self, transcript: str) -> list[str]:
         """
         Split transcript into chunks with overlap.

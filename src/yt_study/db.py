@@ -2,12 +2,35 @@
 
 from __future__ import annotations
 
+import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import ClassVar
 
 from sqlmodel import Field, Session, SQLModel, create_engine, select
+
+
+CACHE_DB_FILENAME = ".yt_study_cache.db"
+
+
+def get_state_dir() -> Path:
+    """Return the base directory for yt-study persistent state files."""
+    override = os.getenv("YT_STUDY_HOME")
+    if override:
+        return Path(override).expanduser()
+    return Path.home() / ".yt-study"
+
+
+def build_cache_db_path(output_dir: Path | None = None) -> Path:
+    """
+    Return the canonical global cache DB path under the user config directory.
+
+    A single database is shared across runs so processed videos and run metrics
+    live in one place.
+    """
+    _ = output_dir
+    return get_state_dir() / CACHE_DB_FILENAME
 
 
 class Video(SQLModel, table=True):
@@ -33,7 +56,12 @@ class RunStats(SQLModel, table=True):
     id: int | None = Field(default=None, primary_key=True)
     video_id: str = Field(foreign_key="video.id", index=True)
     tokens_used: int
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost_usd: float = 0.0
     model: str
+    transcript_seconds: float = 0.0
+    generation_seconds: float = 0.0
     timestamp: datetime = Field(
         default_factory=lambda: datetime.now(timezone.utc),
         index=True,
@@ -101,15 +129,6 @@ class DatabaseManager:
         with Session(self.engine) as session:
             return session.get(Video, video_id)
 
-    def mark_video_processed(self, video_id: str, title: str | None = None) -> None:
-        """Create a minimal cached video row when only processed state is known."""
-        with self._write_lock, Session(self.engine) as session:
-            existing = session.get(Video, video_id)
-            if existing is not None:
-                return
-            session.add(Video(id=video_id, title=title or video_id, duration=0))
-            session.commit()
-
     def get_transcript(self, video_id: str) -> Transcript | None:
         """Load cached transcript row for a video."""
         with Session(self.engine) as session:
@@ -134,7 +153,12 @@ class DatabaseManager:
         transcript_content: str,
         language: str,
         tokens_used: int,
+        prompt_tokens: int = 0,
+        completion_tokens: int = 0,
+        cost_usd: float = 0.0,
         model: str,
+        transcript_seconds: float = 0.0,
+        generation_seconds: float = 0.0,
     ) -> None:
         """Persist metadata, transcript, and run stats in one transaction."""
         with self._write_lock, Session(self.engine) as session:
@@ -145,7 +169,6 @@ class DatabaseManager:
             else:
                 video.title = title
                 video.duration = duration
-                session.add(video)
 
             transcript = session.exec(
                 select(Transcript).where(Transcript.video_id == video_id)
@@ -160,13 +183,17 @@ class DatabaseManager:
             else:
                 transcript.content = transcript_content
                 transcript.language = language
-                session.add(transcript)
 
             session.add(
                 RunStats(
                     video_id=video_id,
                     tokens_used=tokens_used,
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost_usd=cost_usd,
                     model=model,
+                    transcript_seconds=transcript_seconds,
+                    generation_seconds=generation_seconds,
                 )
             )
 
