@@ -583,17 +583,24 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
     assert "Estimated Cost (USD)" in result.output
 
 
-def test_process_ui_hides_internal_generation_phase_labels(
+def test_process_ui_shows_detailed_pipeline_states(
     mock_config_exists,  # noqa: ARG001
     tmp_path,
 ):
-    """Rich UI should collapse chunk/chapter generation to one label."""
+    """Rich UI should show the detailed pipeline event phases."""
 
     async def _run_with_generation_events(_video_ids, on_event=None):  # noqa: ANN001
         if on_event:
             on_event(
                 PipelineEvent(
                     event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.TRANSCRIPT_FETCHED,
                     video_id="vid1",
                     title="Video One",
                 )
@@ -616,6 +623,13 @@ def test_process_ui_hides_internal_generation_phase_labels(
                     total_chapters=5,
                     chunk_number=1,
                     total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.GENERATION_COMPLETE,
+                    video_id="vid1",
+                    title="Video One",
                 )
             )
             on_event(
@@ -672,11 +686,10 @@ def test_process_ui_hides_internal_generation_phase_labels(
     statuses = [
         call.args[1] for call in dashboard_instance.update_worker.call_args_list
     ]
-    assert "[cyan]🤖 Video One... (Generating)[/cyan]" in statuses
-    assert all("Chunk" not in status for status in statuses)
-    assert all("Part" not in status for status in statuses)
-    assert all("Quiz" not in status for status in statuses)
-    assert all("Combin" not in status for status in statuses)
+    assert "[green]✓ Video One... (Transcript Ready)[/green]" in statuses
+    assert "[cyan]🤖 Video One... (Chunk 1/3)[/cyan]" in statuses
+    assert "[cyan]🤖 Video One... (Ch 2/5, Part 1/2)[/cyan]" in statuses
+    assert "[green]✓ Video One... (Generated)[/green]" in statuses
 
 
 def test_process_no_ui_failure_exits_nonzero(

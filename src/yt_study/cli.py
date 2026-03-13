@@ -501,8 +501,7 @@ def process(
                 """
                 return self.video_slots.get(video_id)
 
-        # Keep the live dashboard high-signal: show broad progress phases and
-        # collapse chunk/chapter internals into one generating state.
+        # Mirror the pipeline's user-visible event stream in the live dashboard.
         DASHBOARD_STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
             EventType.METADATA_START: lambda t, _: (
                 f"[yellow]{t}... (Metadata)[/yellow]"
@@ -511,17 +510,24 @@ def process(
             EventType.TRANSCRIPT_FETCHING: lambda t, _: (
                 f"[cyan]📥 {t}... (Transcript)[/cyan]"
             ),
+            EventType.TRANSCRIPT_FETCHED: lambda t, _: (
+                f"[green]✓ {t}... (Transcript Ready)[/green]"
+            ),
             EventType.GENERATION_START: lambda t, _: (
                 f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
-            EventType.CHUNK_GENERATING: lambda t, _: (
-                f"[cyan]🤖 {t}... (Generating)[/cyan]"
+            EventType.CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
             ),
-            EventType.CHAPTER_GENERATING: lambda t, _: (
-                f"[cyan]🤖 {t}... (Generating)[/cyan]"
+            EventType.CHAPTER_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
-            EventType.CHAPTER_CHUNK_GENERATING: lambda t, _: (
-                f"[cyan]🤖 {t}... (Generating)[/cyan]"
+            EventType.CHAPTER_CHUNK_GENERATING: lambda t, e: (
+                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
+                f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
+            EventType.GENERATION_COMPLETE: lambda t, _: (
+                f"[green]✓ {t}... (Generated)[/green]"
             ),
         }
 
