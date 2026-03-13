@@ -2,10 +2,12 @@
 
 import json
 import time
+from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from yt_study.core.llm.providers import UsageTotals
 from yt_study.core.pipeline import (
     CorePipeline,
     EventType,
@@ -14,7 +16,10 @@ from yt_study.core.pipeline import (
     sanitize_filename,
 )
 from yt_study.core.youtube.transcript import YouTubeIPBlockError
-from yt_study.db import DatabaseManager
+from yt_study.db import (
+    DatabaseManager,
+    build_cache_db_path,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -849,7 +854,7 @@ def _seed_cached_video(
     duration: int = 100,
 ) -> None:
     """Seed SQLite cache with one processed video entry."""
-    db = DatabaseManager.get_instance(output_dir / ".yt_study_cache.db")
+    db = DatabaseManager.get_instance(build_cache_db_path(output_dir))
     db.upsert_video_cache(
         video_id=video_id,
         title=title,
@@ -859,6 +864,29 @@ def _seed_cached_video(
         tokens_used=50,
         model="mock-model",
     )
+
+
+def test_usage_coercion_helpers_handle_non_numeric_values(
+    temp_output_dir, mock_llm_provider
+):
+    """Usage coercion should ignore non-numeric mock values safely."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    assert p._coerce_usage_int("12") == 12
+    assert p._coerce_usage_int("not-a-number") == 0
+    assert p._coerce_usage_int(MagicMock()) == 0
+
+    raw = MagicMock()
+    raw.prompt_tokens = MagicMock()
+    raw.completion_tokens = "9"
+    raw.total_tokens = 4.8
+    raw.cost_usd = "0.0025"
+    totals = p._coerce_usage_totals(raw)
+
+    assert totals.prompt_tokens == 0
+    assert totals.completion_tokens == 9
+    assert totals.total_tokens == 4
+    assert totals.cost_usd == 0.0025
 
 
 @pytest.mark.asyncio
@@ -995,39 +1023,6 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     mock_fetch.assert_awaited_once()
 
 
-@pytest.mark.asyncio
-async def test_checkpoint_migrates_legacy_manifest_entries(
-    temp_output_dir, mock_llm_provider
-):
-    """Legacy JSON manifest entries should be migrated and reused for skips."""
-    (temp_output_dir / ".yt_study_processed.json").write_text(
-        json.dumps({"legacy-video-id": True}),
-        encoding="utf-8",
-    )
-
-    events: list[PipelineEvent] = []
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
-
-    with (
-        patch(_COMMON_PATCHES["title"]) as mock_title,
-        patch(_COMMON_PATCHES["duration"]) as mock_duration,
-        patch(_COMMON_PATCHES["chapters"]) as mock_chapters,
-        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
-    ):
-        result = await p.run(["legacy-video-id"], on_event=events.append)
-
-    assert result.success_count == 1
-    assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
-    mock_title.assert_not_called()
-    mock_duration.assert_not_called()
-    mock_chapters.assert_not_called()
-    mock_fetch.assert_not_awaited()
-    db = DatabaseManager.get_instance(temp_output_dir / ".yt_study_cache.db")
-    assert db.has_video("legacy-video-id") is True
-
-
-@pytest.mark.asyncio
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     temp_output_dir, mock_llm_provider
 ):
@@ -1049,7 +1044,7 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
         result = await p.run(["vid-db"])
 
     assert result.success_count == 1
-    db = DatabaseManager.get_instance(temp_output_dir / ".yt_study_cache.db")
+    db = DatabaseManager.get_instance(build_cache_db_path(temp_output_dir))
     cached_video = db.get_video("vid-db")
     cached_transcript = db.get_transcript("vid-db")
     stats = db.get_run_stats("vid-db")
@@ -1062,6 +1057,55 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     assert cached_transcript.language == "en"
     assert len(stats) >= 1
     assert stats[0].model == "mock-model"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_collects_litellm_usage_and_step_timings(
+    temp_output_dir, mock_llm_provider
+):
+    """Run result and DB stats should include prompt/completion + timing metrics."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    @contextmanager
+    def _collect_usage():
+        yield UsageTotals(
+            prompt_tokens=40,
+            completion_tokens=15,
+            total_tokens=55,
+            cost_usd=0.0055,
+        )
+
+    p.provider.collect_usage = _collect_usage
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Metrics Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=222),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "metrics transcript text"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+        result = await p.run(["vid-metrics"])
+
+    assert result.success_count == 1
+    assert result.metrics.prompt_tokens == 40
+    assert result.metrics.completion_tokens == 15
+    assert result.metrics.total_tokens == 55
+    assert result.metrics.cost_usd == 0.0055
+    assert result.metrics.transcript_seconds >= 0
+    assert result.metrics.generation_seconds >= 0
+
+    db = DatabaseManager.get_instance(build_cache_db_path(temp_output_dir))
+    stats = db.get_run_stats("vid-metrics")
+    latest = stats[-1]
+    assert latest.prompt_tokens == 40
+    assert latest.completion_tokens == 15
+    assert latest.cost_usd == 0.0055
+    assert latest.transcript_seconds >= 0
+    assert latest.generation_seconds >= 0
 
 
 @pytest.mark.asyncio

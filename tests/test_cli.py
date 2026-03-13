@@ -6,6 +6,12 @@ import pytest
 from typer.testing import CliRunner
 
 from yt_study.cli import app
+from yt_study.core.pipeline import (
+    EventType,
+    PipelineEvent,
+    PipelineMetrics,
+    PipelineResult,
+)
 
 
 runner = CliRunner()
@@ -26,12 +32,22 @@ def _make_parsed_video(video_id: str = "dQw4w9WgXcQ"):
     return parsed
 
 
-def _make_pipeline_result(total: int = 1, success: int = 1):
-    result = MagicMock()
-    result.total_count = total
-    result.success_count = success
-    result.failure_count = total - success
-    return result
+def _make_pipeline_result(total: int = 1, success: int = 1) -> PipelineResult:
+    return PipelineResult(
+        success_count=success,
+        failure_count=total - success,
+        total_count=total,
+        video_ids=["dQw4w9WgXcQ"],
+        errors={},
+        metrics=PipelineMetrics(
+            prompt_tokens=100,
+            completion_tokens=50,
+            total_tokens=150,
+            cost_usd=0.015,
+            transcript_seconds=1.2,
+            generation_seconds=2.3,
+        ),
+    )
 
 
 def _make_parsed_playlist(playlist_id: str = "PL123"):
@@ -332,14 +348,20 @@ def test_process_no_ui_prints_done_summary(
     tmp_path,
 ):
     """--no-ui prints a plain 'Done: N/N succeeded.' summary line."""
-    from yt_study.core.pipeline import PipelineResult
-
     real_result = PipelineResult(
         success_count=1,
         failure_count=0,
         total_count=1,
         video_ids=["dQw4w9WgXcQ"],
         errors={},
+        metrics=PipelineMetrics(
+            prompt_tokens=11,
+            completion_tokens=7,
+            total_tokens=18,
+            cost_usd=0.0018,
+            transcript_seconds=0.5,
+            generation_seconds=0.8,
+        ),
     )
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(return_value=real_result)
@@ -372,6 +394,173 @@ def test_process_no_ui_prints_done_summary(
     assert result.exit_code == 0
     assert "Done:" in result.output
     assert "1/1 succeeded" in result.output
+
+
+def test_process_no_ui_cost_summary_handles_string_metrics(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Cost summary should tolerate string metrics without crashing."""
+
+    class StringMetrics:
+        prompt_tokens = "9"
+        completion_tokens = "6"
+        total_tokens = "15"
+        cost_usd = "0.0045"
+        transcript_seconds = "1.5"
+        generation_seconds = "2.5"
+
+    result_obj = PipelineResult(
+        success_count=1,
+        failure_count=0,
+        total_count=1,
+        video_ids=["dQw4w9WgXcQ"],
+        errors={},
+        metrics=StringMetrics(),  # type: ignore[arg-type]
+    )
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=result_obj)
+
+    with (
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.check_config_exists", return_value=True),
+    ):
+        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 0
+    assert "Cost Summary" in result.output
+    assert "Estimated Cost (USD)" in result.output
+
+
+def test_process_ui_event_bridge_and_cost_summary_coercion(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """UI path should exercise worker slot updates and robust metric coercion."""
+
+    class MixedMetrics:
+        prompt_tokens = True
+        completion_tokens = 5.7
+        total_tokens = "not-an-int"
+        cost_usd = "not-a-float"
+        transcript_seconds = "bad-float"
+        generation_seconds = True
+
+    async def _run_with_events(_video_ids, on_event=None):  # noqa: ANN001
+        if on_event:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid2",
+                    title="Video Two",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_FAILED,
+                    video_id="vid2",
+                    title="Video Two",
+                    error="boom",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=1,
+            total_count=2,
+            video_ids=["vid1", "vid2"],
+            errors={"vid2": "boom"},
+            metrics=MixedMetrics(),  # type: ignore[arg-type]
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_events)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_UI"),
+        ),
+        patch(
+            "yt_study.core.youtube.metadata.get_playlist_info", return_value=("P", 2)
+        ),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["vid1", "vid2"],
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard", return_value=dashboard_instance
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app, ["process", "https://youtube.com/playlist?list=PL_UI"]
+        )
+
+    assert result.exit_code == 0
+    assert "Processing Summary" in result.output
+    assert "Cost Summary" in result.output
+    assert "Estimated Cost (USD)" in result.output
 
 
 # ---------------------------------------------------------------------------

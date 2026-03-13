@@ -4,6 +4,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from yt_study.db import DatabaseManager
+
 
 @pytest.fixture
 def sample_video_id():
@@ -15,6 +17,14 @@ def sample_video_id():
 def sample_playlist_id():
     """Sample YouTube playlist ID for testing."""
     return "PLrAXtmErZgOeiKm4sgNOknGvNjby9efdf"
+
+
+@pytest.fixture(autouse=True)
+def isolate_state_dir(tmp_path, monkeypatch):
+    """Isolate yt-study state files (including SQLite cache) per test."""
+    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    yield
+    DatabaseManager.close_all_instances()
 
 
 @pytest.fixture

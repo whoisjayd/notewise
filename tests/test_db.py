@@ -1,15 +1,40 @@
 """Tests for SQLite cache database manager."""
 
-from yt_study.db import DatabaseManager
+import os
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+from yt_study.db import (
+    CACHE_DB_FILENAME,
+    DatabaseManager,
+    build_cache_db_path,
+)
 
 
 def test_database_manager_singleton_for_same_path(tmp_path):
     """Same db path should return the same singleton instance."""
-    db_path = tmp_path / ".yt_study_cache.db"
+    db_path = tmp_path / CACHE_DB_FILENAME
     manager_one = DatabaseManager.get_instance(db_path)
     manager_two = DatabaseManager.get_instance(db_path)
 
     assert manager_one is manager_two
+
+
+def test_build_cache_db_path_scopes_under_user_config_dir(tmp_path):
+    """Cache DB path should be stable and stored under ~/.yt-study."""
+    output_dir = tmp_path / "output"
+    cache_path = build_cache_db_path(output_dir)
+
+    assert cache_path.parent == Path(os.environ["YT_STUDY_HOME"])
+    assert cache_path.name == CACHE_DB_FILENAME
+
+
+def test_build_cache_db_path_is_global_for_all_output_dirs(tmp_path):
+    """All output directories should resolve to the same global cache DB."""
+    cache_one = build_cache_db_path(tmp_path / "one")
+    cache_two = build_cache_db_path(tmp_path / "two")
+
+    assert cache_one == cache_two
 
 
 def test_database_manager_singleton_normalizes_equivalent_paths(tmp_path):
@@ -31,6 +56,20 @@ def test_database_manager_uses_distinct_instances_per_path(tmp_path):
     assert manager_one is not manager_two
 
 
+def test_database_manager_singleton_thread_safe_under_concurrency(tmp_path):
+    """Concurrent get_instance calls should return the same singleton."""
+    db_path = tmp_path / "threadsafe.db"
+
+    def get_manager(_: int) -> DatabaseManager:
+        return DatabaseManager.get_instance(db_path)
+
+    with ThreadPoolExecutor(max_workers=8) as executor:
+        managers = list(executor.map(get_manager, range(24)))
+
+    first = managers[0]
+    assert all(manager is first for manager in managers)
+
+
 def test_upsert_video_cache_persists_video_transcript_and_run_stats(tmp_path):
     """Upsert should persist core records for a processed video."""
     db = DatabaseManager.get_instance(tmp_path / "cache.db")
@@ -42,7 +81,12 @@ def test_upsert_video_cache_persists_video_transcript_and_run_stats(tmp_path):
         transcript_content="hello world transcript",
         language="en",
         tokens_used=42,
+        prompt_tokens=30,
+        completion_tokens=12,
+        cost_usd=0.123456,
         model="gemini/gemini-2.0-flash",
+        transcript_seconds=1.5,
+        generation_seconds=2.5,
     )
 
     assert db.has_video("video-1") is True
@@ -58,6 +102,11 @@ def test_upsert_video_cache_persists_video_transcript_and_run_stats(tmp_path):
     assert transcript.language == "en"
     assert len(stats) == 1
     assert stats[0].tokens_used == 42
+    assert stats[0].prompt_tokens == 30
+    assert stats[0].completion_tokens == 12
+    assert stats[0].cost_usd == 0.123456
+    assert stats[0].transcript_seconds == 1.5
+    assert stats[0].generation_seconds == 2.5
 
 
 def test_upsert_video_cache_updates_existing_video_and_transcript(tmp_path):
@@ -71,7 +120,12 @@ def test_upsert_video_cache_updates_existing_video_and_transcript(tmp_path):
         transcript_content="old transcript",
         language="en",
         tokens_used=10,
+        prompt_tokens=7,
+        completion_tokens=3,
+        cost_usd=0.01,
         model="old-model",
+        transcript_seconds=0.5,
+        generation_seconds=1.0,
     )
     db.upsert_video_cache(
         video_id="video-1",
@@ -80,7 +134,12 @@ def test_upsert_video_cache_updates_existing_video_and_transcript(tmp_path):
         transcript_content="new transcript",
         language="hi",
         tokens_used=30,
+        prompt_tokens=20,
+        completion_tokens=10,
+        cost_usd=0.02,
         model="new-model",
+        transcript_seconds=0.7,
+        generation_seconds=1.4,
     )
 
     video = db.get_video("video-1")
@@ -95,6 +154,38 @@ def test_upsert_video_cache_updates_existing_video_and_transcript(tmp_path):
     assert transcript.language == "hi"
     assert len(stats) == 2
     assert any(row.model == "new-model" for row in stats)
+    assert any(row.prompt_tokens == 20 for row in stats)
+    assert any(row.completion_tokens == 10 for row in stats)
+    assert any(row.cost_usd == 0.02 for row in stats)
+
+
+def test_upsert_video_cache_thread_safe_under_concurrency(tmp_path):
+    """Concurrent upserts should remain consistent and avoid race failures."""
+    db = DatabaseManager.get_instance(tmp_path / "concurrent.db")
+
+    def write_row(index: int) -> None:
+        db.upsert_video_cache(
+            video_id="shared-video-id",
+            title=f"Title {index}",
+            duration=100 + index,
+            transcript_content=f"transcript {index}",
+            language="en",
+            tokens_used=index + 1,
+            model="mock-model",
+        )
+
+    with ThreadPoolExecutor(max_workers=10) as executor:
+        list(executor.map(write_row, range(30)))
+
+    video = db.get_video("shared-video-id")
+    transcript = db.get_transcript("shared-video-id")
+    stats = db.get_run_stats("shared-video-id")
+
+    assert video is not None
+    assert transcript is not None
+    assert video.title.startswith("Title ")
+    assert transcript.content.startswith("transcript ")
+    assert len(stats) == 30
 
 
 def test_database_manager_close_instance_evicts_singleton(tmp_path):
@@ -106,14 +197,3 @@ def test_database_manager_close_instance_evicts_singleton(tmp_path):
     manager_two = DatabaseManager.get_instance(db_path)
 
     assert manager_one is not manager_two
-
-
-def test_mark_video_processed_creates_minimal_video_row(tmp_path):
-    """Legacy processed IDs should be representable as minimal cached videos."""
-    db = DatabaseManager.get_instance(tmp_path / "cache.db")
-    db.mark_video_processed("legacy-video-id")
-
-    video = db.get_video("legacy-video-id")
-    assert video is not None
-    assert video.title == "legacy-video-id"
-    assert video.duration == 0
