@@ -1,5 +1,7 @@
 """Tests for CorePipeline (zero-UI core pipeline)."""
 
+import json
+import time
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -418,9 +420,6 @@ async def test_run_clears_expired_oauth_token_without_refresh_token(
     temp_output_dir, mock_llm_provider, tmp_path
 ):
     """Expired token caches without refresh token should be auto-cleared."""
-    import json
-    import time
-
     token_file = tmp_path / "expired_token.json"
     token_file.write_text(
         json.dumps({"access_token": "access", "expires": str(time.time() - 30)}),
@@ -469,9 +468,6 @@ async def test_run_keeps_expired_oauth_token_when_refresh_token_exists(
     temp_output_dir, mock_llm_provider, tmp_path
 ):
     """Expired caches with refresh token should be retained for pytubefix refresh."""
-    import json
-    import time
-
     token_file = tmp_path / "refreshable_token.json"
     token_file.write_text(
         json.dumps(

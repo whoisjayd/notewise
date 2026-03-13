@@ -1,6 +1,7 @@
 """Tests for YouTube OAuth helper utilities."""
 
 import json
+import math
 import time
 
 from yt_study.core.youtube.auth import (
@@ -95,6 +96,27 @@ def test_inspect_oauth_token_file_invalid_expiry_is_stale_when_access_present(tm
     assert status.expired is True
     assert status.has_refresh_token is True
     assert status.parse_error is False
+
+
+def test_inspect_oauth_token_file_non_finite_expiry_is_stale(tmp_path):
+    """Non-finite expiry values should be treated as invalid/stale."""
+    token_file = tmp_path / "token.json"
+
+    for expiry in (math.inf, "inf", "nan"):
+        token_file.write_text(
+            json.dumps(
+                {
+                    "access_token": "access",
+                    "refresh_token": "refresh",
+                    "expires": expiry,
+                }
+            ),
+            encoding="utf-8",
+        )
+        status = inspect_oauth_token_file(str(token_file))
+        assert status.exists is True
+        assert status.expired is True
+        assert status.has_refresh_token is True
 
 
 def test_maybe_reset_oauth_token_for_retry_clears_once(tmp_path):

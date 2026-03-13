@@ -2,6 +2,7 @@
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -112,10 +113,8 @@ def inspect_oauth_token_file(token_file: str | None) -> OAuthTokenStatus:
     expires_epoch = _coerce_expires_epoch(data.get("expires"))
     has_access_token = bool(data.get("access_token"))
     # Treat cache entries with an access token but missing/invalid expiry as stale.
-    expired = (
-        has_access_token
-        if expires_epoch is None
-        else has_access_token and (expires_epoch <= time.time())
+    expired = has_access_token and (
+        expires_epoch is None or expires_epoch <= time.time()
     )
     return OAuthTokenStatus(
         exists=True,
@@ -128,15 +127,21 @@ def inspect_oauth_token_file(token_file: str | None) -> OAuthTokenStatus:
 def _coerce_expires_epoch(raw_expires: Any) -> float | None:
     """Best-effort parse for token expiry epoch values."""
     if isinstance(raw_expires, (int, float)):
-        return float(raw_expires)
+        value = float(raw_expires)
+        if not math.isfinite(value):
+            return None
+        return value
     if isinstance(raw_expires, str):
         candidate = raw_expires.strip()
         if not candidate:
             return None
         try:
-            return float(candidate)
+            value = float(candidate)
         except ValueError:
             return None
+        if not math.isfinite(value):
+            return None
+        return value
     return None
 
 
