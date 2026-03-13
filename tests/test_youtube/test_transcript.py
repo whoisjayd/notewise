@@ -361,3 +361,26 @@ class TestSplitTranscript:
 
         assert result["Intro"] == "First intro"
         assert result["Intro (2)"] == "Second intro"
+
+    def test_split_transcript_keeps_boundary_overlaps(self):
+        """Segments spanning a boundary should remain in any chapter they overlap."""
+        transcript = VideoTranscript(
+            video_id="id",
+            segments=[
+                MagicMock(text="Intro tail", start=58, duration=5),
+                MagicMock(text="Chapter two", start=61, duration=4),
+            ],
+            language="en",
+            language_code="en",
+            is_generated=False,
+        )
+        chapters = [
+            VideoChapter(title="Intro", start_seconds=0, end_seconds=60),
+            VideoChapter(title="Deep Dive", start_seconds=60, end_seconds=None),
+        ]
+
+        result = split_transcript_by_chapters(transcript, chapters)
+
+        assert "Intro tail" in result["Intro"]
+        assert "Intro tail" in result["Deep Dive"]
+        assert "Chapter two" in result["Deep Dive"]

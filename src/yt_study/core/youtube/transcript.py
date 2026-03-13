@@ -336,16 +336,15 @@ def split_transcript_by_chapters(
 
         for segment in transcript.segments:
             segment_start = segment.start
+            segment_end = segment.start + max(segment.duration, 0.0)
 
-            # Check if segment start is within chapter range
+            # Include any segment that overlaps the chapter window.
             if chapter.end_seconds is None:
-                # Last chapter - include everything after start
-                if segment_start >= chapter.start_seconds:
+                if segment_end > chapter.start_seconds:
                     chapter_segments.append(segment.text)
             else:
-                # Middle chapters - include if in range
                 if (
-                    segment_start >= chapter.start_seconds
+                    segment_end > chapter.start_seconds
                     and segment_start < chapter.end_seconds
                 ):
                     chapter_segments.append(segment.text)
