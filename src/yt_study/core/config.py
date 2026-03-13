@@ -2,6 +2,7 @@
 
 import logging
 import os
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from .config_helpers import (
 
 
 logger = logging.getLogger(__name__)
+_OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
 
 
 @dataclass
@@ -24,7 +26,7 @@ class Config:
     """
 
     # LLM Configuration
-    default_model: str = "gemini/gemini-2.0-flash"
+    default_model: str = "gemini/gemini-2.5-flash"
     gemini_api_key: str | None = None
     openai_api_key: str | None = None
     anthropic_api_key: str | None = None
@@ -281,7 +283,11 @@ class Config:
 
         if "gemini" in model_lower or "vertex" in model_lower:
             return "GEMINI_API_KEY"
-        elif "gpt" in model_lower or "openai" in model_lower:
+        elif (
+            "gpt" in model_lower
+            or "openai" in model_lower
+            or _OPENAI_REASONING_MODEL.search(model_lower) is not None
+        ):
             return "OPENAI_API_KEY"
         elif "claude" in model_lower or "anthropic" in model_lower:
             return "ANTHROPIC_API_KEY"

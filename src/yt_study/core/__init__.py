@@ -6,7 +6,7 @@ by any frontend (CLI, web API, GUI, etc.) without any UI dependencies.
 Usage:
     >>> from yt_study.core import CorePipeline, EventType
     >>>
-    >>> pipeline = CorePipeline(model="gemini/gemini-2.0-flash")
+    >>> pipeline = CorePipeline(model="gemini/gemini-2.5-flash")
     >>>
     >>> def on_progress(event):
     ...     if event.event_type == EventType.VIDEO_SUCCESS:

@@ -3,6 +3,7 @@
 from unittest.mock import mock_open, patch
 
 from yt_study.setup_wizard import (
+    CURATED_FALLBACK_MODELS,
     get_api_key,
     get_available_models,
     load_config,
@@ -111,17 +112,7 @@ class TestModelFetching:
             # and return the fallback list.
             models = get_available_models()
 
-            # Verify we got the fallback list (check for 'gemini' and
-            # specific structure)
-            assert "gemini" in models
-            assert len(models["gemini"]) > 0
-            # Fallback list has "gemini/gemini-1.5-flash"
-            assert "gemini/gemini-1.5-flash" in models["gemini"]
-            # Cohere, DeepSeek, and Mistral must be present so the wizard
-            # offers them even when LiteLLM is unavailable.
-            assert "cohere" in models
-            assert "deepseek" in models
-            assert "mistral" in models
+            assert models == CURATED_FALLBACK_MODELS
 
     def test_get_available_models_fallback_trigger(self):
         """Trigger fallback manually by raising exception during processing."""
@@ -137,6 +128,57 @@ class TestModelFetching:
 
         # Let's skip complex import mocking and assume fallback works if we can't fetch.
         pass
+
+    def test_get_available_models_filters_setup_to_stable_native_text_models(self):
+        """Setup should hide deprecated, preview, gateway, and non-text models."""
+        mock_models = [
+            "gpt-4o-mini",
+            "o3-mini",
+            "o4-mini",
+            "azure/gpt-4o",
+            "gpt-4o-mini-preview",
+            "gemini/gemini-2.5-flash",
+            "gemini/gemini-2.0-flash",
+            "gemini/imagen-4.0-generate-001",
+            "openrouter/google/gemini-2.5-flash",
+            "claude-sonnet-4-5-20250929",
+        ]
+        mock_cost = {
+            "gpt-4o-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "o3-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "o4-mini": {"litellm_provider": "openai", "mode": "chat"},
+            "azure/gpt-4o": {"litellm_provider": "azure", "mode": "chat"},
+            "gpt-4o-mini-preview": {"litellm_provider": "openai", "mode": "chat"},
+            "gemini/gemini-2.5-flash": {"litellm_provider": "gemini", "mode": "chat"},
+            "gemini/gemini-2.0-flash": {
+                "litellm_provider": "gemini",
+                "mode": "chat",
+                "deprecation_date": "2026-06-01",
+            },
+            "gemini/imagen-4.0-generate-001": {
+                "litellm_provider": "gemini",
+                "mode": "image_generation",
+            },
+            "openrouter/google/gemini-2.5-flash": {
+                "litellm_provider": "openrouter",
+                "mode": "chat",
+            },
+            "claude-sonnet-4-5-20250929": {
+                "litellm_provider": "anthropic",
+                "mode": "chat",
+            },
+        }
+
+        with (
+            patch("litellm.model_list", mock_models, create=True),
+            patch("litellm.model_cost", mock_cost, create=True),
+        ):
+            models = get_available_models()
+
+        assert models["openai"] == ["gpt-4o-mini", "o3-mini", "o4-mini"]
+        assert models["gemini"] == ["gemini/gemini-2.5-flash"]
+        assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
+        assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
 
 
 class TestInteractiveFlow:

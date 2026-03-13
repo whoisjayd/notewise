@@ -149,7 +149,7 @@ Supported options:
 Examples:
 
 ```bash
-yt-study process "URL" -m gemini/gemini-2.0-flash
+yt-study process "URL" -m gemini/gemini-2.5-flash
 yt-study process "URL" -o ./course-notes
 yt-study process "URL" -l hi -l en
 yt-study process "URL" -t 0.4 -k 2500
@@ -247,12 +247,19 @@ Config behavior:
 - loads `~/.yt-study/config.env`
 - applies environment variable overrides
 - syncs supported provider keys into `os.environ` for LiteLLM
+- defaults `DEFAULT_MODEL` to `gemini/gemini-2.5-flash`
 - throttles YouTube request rate globally (default `10` requests/minute)
 - supports OAuth auth for metadata/playlist fetches and optional token caching
 - supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
 - stores local processing cache in `~/.yt-study/.yt_study_cache.db`
 - prints a Cost Summary table with prompt/completion/total tokens, estimated
   USD cost (from LiteLLM pricing), and timing
+
+Setup wizard model selection:
+
+- shows only native provider models
+- hides deprecated, preview/beta/exp, and non-text models
+- uses curated stable fallback lists when LiteLLM discovery is unavailable or incomplete
 
 Local cache behavior:
 

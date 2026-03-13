@@ -105,7 +105,7 @@ def process(
             "-m",
             help=(
                 "LLM model (overrides config). Example: [green]gpt-4o[/green] "
-                "or [green]gemini/gemini-2.0-flash[/green]"
+                "or [green]gemini/gemini-2.5-flash[/green]"
             ),
         ),
     ] = None,

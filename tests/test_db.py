@@ -83,7 +83,7 @@ def test_upsert_video_cache_persists_video_transcript_and_run_stats(tmp_path):
         prompt_tokens=30,
         completion_tokens=12,
         cost_usd=0.123456,
-        model="gemini/gemini-2.0-flash",
+        model="gemini/gemini-2.5-flash",
         transcript_seconds=1.5,
         generation_seconds=2.5,
     )

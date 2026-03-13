@@ -102,7 +102,7 @@ def mock_pipeline(tmp_path):
         patch("rich.live.Live.__enter__", return_value=None),
         patch("rich.live.Live.__exit__", return_value=False),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -378,7 +378,7 @@ def test_process_no_ui_prints_done_summary(
         patch("yt_study.core.config.config") as mock_config,
         patch("yt_study.cli.check_config_exists", return_value=True),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -433,7 +433,7 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
         patch("yt_study.core.config.config") as mock_config,
         patch("yt_study.cli.check_config_exists", return_value=True),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -541,7 +541,7 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         patch("rich.live.Live.__enter__", return_value=None),
         patch("rich.live.Live.__exit__", return_value=False),
     ):
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
@@ -651,7 +651,7 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
     ):
         mock_info.return_value = ("Playlist", 1)
         mock_extract.return_value = ["vid1"]
-        mock_config.default_model = "gemini/gemini-2.0-flash"
+        mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7

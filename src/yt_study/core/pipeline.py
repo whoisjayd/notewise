@@ -203,7 +203,7 @@ class CorePipeline:
 
     def __init__(
         self,
-        model: str = "gemini/gemini-2.0-flash",
+        model: str = "gemini/gemini-2.5-flash",
         output_dir: Path | None = None,
         languages: list[str] | None = None,
         temperature: float | None = None,
@@ -824,7 +824,7 @@ class CorePipeline:
 async def run_pipeline(
     video_ids: list[str],
     output_dir: Path | None = None,
-    model: str = "gemini/gemini-2.0-flash",
+    model: str = "gemini/gemini-2.5-flash",
     cookies_path: Path | None = None,
     use_oauth: bool | None = None,
     oauth_token_file: Path | None = None,
