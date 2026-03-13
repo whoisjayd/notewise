@@ -7,6 +7,7 @@ No Rich, no Console, no Dashboard imports here.
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -235,6 +236,7 @@ class CorePipeline:
             self.oauth_token_file = default_youtube_oauth_token_file()
         self.errors: dict[str, str] = {}
         self.db = DatabaseManager.get_instance(self._cache_db_path())
+        self._migrate_legacy_manifest_if_present()
 
     def _get_youtube_request_limiter(self) -> AsyncLimiter:
         """Return the shared limiter for this pipeline's configured rate."""
@@ -328,6 +330,47 @@ class CorePipeline:
     def _cache_db_path(self) -> Path:
         """Return SQLite cache path for this pipeline output directory."""
         return self.output_dir / ".yt_study_cache.db"
+
+    def _legacy_manifest_path(self) -> Path:
+        """Return legacy JSON manifest path used before SQLite cache migration."""
+        return self.output_dir / ".yt_study_processed.json"
+
+    def _migrate_legacy_manifest_if_present(self) -> None:
+        """
+        Backfill legacy processed-video manifest entries into SQLite cache.
+
+        Older releases tracked checkpoint state in `.yt_study_processed.json`.
+        We import these IDs so upgrades keep skip behavior without forced reruns.
+        """
+        manifest_path = self._legacy_manifest_path()
+        if not manifest_path.exists():
+            return
+
+        try:
+            raw = manifest_path.read_text(encoding="utf-8")
+            data = json.loads(raw)
+        except Exception as exc:
+            logger.warning(
+                f"Failed to read legacy manifest at {manifest_path}: {exc}",
+                exc_info=True,
+            )
+            return
+
+        if not isinstance(data, dict):
+            return
+
+        for video_id, processed in data.items():
+            if not processed:
+                continue
+            if not isinstance(video_id, str):
+                continue
+            try:
+                self.db.mark_video_processed(video_id, title=video_id)
+            except Exception as exc:
+                logger.warning(
+                    f"Failed to migrate legacy manifest entry for {video_id}: {exc}",
+                    exc_info=True,
+                )
 
     async def _get_cached_video(self, video_id: str) -> Video | None:
         """Return cached metadata for a video when present."""

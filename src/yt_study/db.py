@@ -101,6 +101,15 @@ class DatabaseManager:
         with Session(self.engine) as session:
             return session.get(Video, video_id)
 
+    def mark_video_processed(self, video_id: str, title: str | None = None) -> None:
+        """Create a minimal cached video row when only processed state is known."""
+        with self._write_lock, Session(self.engine) as session:
+            existing = session.get(Video, video_id)
+            if existing is not None:
+                return
+            session.add(Video(id=video_id, title=title or video_id, duration=0))
+            session.commit()
+
     def get_transcript(self, video_id: str) -> Transcript | None:
         """Load cached transcript row for a video."""
         with Session(self.engine) as session:
