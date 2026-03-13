@@ -6,6 +6,7 @@ import logging
 from pytubefix import Playlist
 
 from .auth import build_oauth_kwargs, maybe_reset_oauth_token_for_retry
+from .parser import extract_video_id
 
 
 logger = logging.getLogger(__name__)
@@ -123,13 +124,9 @@ def _extract_sync(
     # Extract video IDs from URLs (waits for internal generator)
     # This loop triggers network requests
     for url in playlist.video_urls:
-        if "v=" in url:
-            try:
-                # Robust ID extraction
-                video_id = url.split("v=")[1].split("&")[0]
-                video_ids.append(video_id)
-            except IndexError:
-                continue
+        video_id = extract_video_id(url)
+        if video_id:
+            video_ids.append(video_id)
 
     if not video_ids:
         raise ValueError("No videos found in playlist")
