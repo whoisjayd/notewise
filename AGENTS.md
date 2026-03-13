@@ -353,6 +353,10 @@ Supported:
 - token `expires` supports numeric and string epoch values
 - access-token caches with missing/invalid expiry are treated as stale
 - stale caches without a refresh token are auto-cleared when `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN=true`
+- the CLI primes OAuth once before single-video processing starts so Rich Live
+  does not trap the device-flow prompt
+- `--use-oauth` with `--no-save-oauth-token` uses a temporary session token
+  file so repeated metadata calls reuse one login without leaving a cache file
 
 ### Local SQLite cache
 

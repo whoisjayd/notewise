@@ -6,6 +6,7 @@ import os
 from collections.abc import Callable
 from datetime import datetime
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Annotated
 from urllib.parse import urlparse
 
@@ -306,7 +307,7 @@ def process(
             dedupe_video_ids,
             sanitize_filename,
         )
-        from .core.youtube.metadata import get_playlist_info
+        from .core.youtube.metadata import get_playlist_info, get_video_title
         from .core.youtube.parser import parse_youtube_url
         from .core.youtube.playlist import extract_playlist_videos
         from .ui.dashboard import PipelineDashboard
@@ -336,15 +337,21 @@ def process(
         selected_token_file = (
             token_file if token_file is not None else config.youtube_oauth_token_file
         )
-        if (
-            selected_use_oauth
-            and selected_save_oauth_token
-            and selected_token_file is None
-        ):
-            selected_token_file = default_youtube_oauth_token_file()
+        oauth_temp_dir: TemporaryDirectory[str] | None = None
+        effective_save_oauth_token = selected_save_oauth_token
+        effective_token_file = selected_token_file
+        if selected_use_oauth and not selected_save_oauth_token:
+            oauth_temp_dir = TemporaryDirectory(prefix="yt-study-oauth-")
+            effective_save_oauth_token = True
+            effective_token_file = (
+                Path(oauth_temp_dir.name) / "youtube-oauth-session.json"
+            )
+        elif selected_use_oauth and effective_token_file is None:
+            effective_token_file = default_youtube_oauth_token_file()
         oauth_token_file = (
-            str(selected_token_file) if selected_token_file is not None else None
+            str(effective_token_file) if effective_token_file is not None else None
         )
+        oauth_preflight_complete = False
 
         # Validate API key before launching UI
         key_name = config.get_api_key_name_for_model(selected_model)
@@ -448,6 +455,21 @@ def process(
             )
             console.print("\n")
             console.print(cost_table)
+
+        async def _ensure_oauth_ready_for_video(video_id: str) -> None:
+            """Acquire OAuth once before the live UI starts for a single video."""
+            nonlocal oauth_preflight_complete
+            if not selected_use_oauth or oauth_preflight_complete:
+                return
+
+            await asyncio.to_thread(
+                get_video_title,
+                video_id,
+                use_oauth=True,
+                token_file=oauth_token_file,
+                allow_oauth_cache=effective_save_oauth_token,
+            )
+            oauth_preflight_complete = True
 
         class WorkerSlotManager:
             """Manages worker slot assignment and release for concurrent processing."""
@@ -553,6 +575,7 @@ def process(
 
         async def _run_single_url(single_url: str) -> bool:
             """Parse one URL and run the pipeline (Rich dashboard or headless)."""
+            nonlocal oauth_preflight_complete
             try:
                 parsed = parse_youtube_url(single_url)
             except ValueError as e:
@@ -563,6 +586,7 @@ def process(
                 if not parsed.video_id:
                     console.print("[red]Error: Could not extract video ID[/red]")
                     return False
+                await _ensure_oauth_ready_for_video(parsed.video_id)
                 video_ids = [parsed.video_id]
                 playlist_name = "Single Video"
                 out_dir = selected_output
@@ -575,13 +599,15 @@ def process(
                     parsed.playlist_id,
                     use_oauth=selected_use_oauth,
                     token_file=oauth_token_file,
-                    allow_oauth_cache=selected_save_oauth_token,
+                    allow_oauth_cache=effective_save_oauth_token,
                 )
+                if selected_use_oauth:
+                    oauth_preflight_complete = True
                 video_ids = await extract_playlist_videos(
                     parsed.playlist_id,
                     use_oauth=selected_use_oauth,
                     token_file=oauth_token_file,
-                    allow_oauth_cache=selected_save_oauth_token,
+                    allow_oauth_cache=effective_save_oauth_token,
                 )
                 video_ids = dedupe_video_ids(video_ids)
                 out_dir = selected_output / sanitize_filename(playlist_name)
@@ -595,8 +621,8 @@ def process(
                 max_tokens=selected_max_tokens,
                 cookies_path=cookies,
                 use_oauth=selected_use_oauth,
-                oauth_token_file=selected_token_file,
-                save_oauth_token=selected_save_oauth_token,
+                oauth_token_file=effective_token_file,
+                save_oauth_token=effective_save_oauth_token,
                 auto_refresh_oauth_token=selected_auto_refresh_oauth_token,
                 force=force,
                 quiz=quiz,
@@ -777,7 +803,11 @@ def process(
             else:
                 return not await _run_single_url(url)
 
-        had_failures = asyncio.run(run_processing())
+        try:
+            had_failures = asyncio.run(run_processing())
+        finally:
+            if oauth_temp_dir is not None:
+                oauth_temp_dir.cleanup()
         if had_failures:
             raise typer.Exit(code=1)
 

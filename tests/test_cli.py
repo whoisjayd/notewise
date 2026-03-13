@@ -853,7 +853,7 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
     mock_config_exists,  # noqa: ARG001
     tmp_path,
 ):
-    """Playlist metadata/extraction should receive OAuth kwargs from CLI."""
+    """Playlist OAuth without persistence should use a temporary session cache."""
     pipeline_result = _make_pipeline_result()
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(return_value=pipeline_result)
@@ -908,13 +908,49 @@ def test_process_playlist_forwards_oauth_to_playlist_helpers(
         )
 
     assert result.exit_code == 0
-    expected_kwargs = {
-        "use_oauth": True,
-        "token_file": str(token_file),
-        "allow_oauth_cache": False,
-    }
-    mock_info.assert_called_once_with("PL_AUTH", **expected_kwargs)
-    mock_extract.assert_awaited_once_with("PL_AUTH", **expected_kwargs)
+    info_kwargs = mock_info.call_args.kwargs
+    extract_kwargs = mock_extract.await_args.kwargs
+    assert info_kwargs["use_oauth"] is True
+    assert extract_kwargs["use_oauth"] is True
+    assert info_kwargs["allow_oauth_cache"] is True
+    assert extract_kwargs["allow_oauth_cache"] is True
+    assert info_kwargs["token_file"] == extract_kwargs["token_file"]
+    assert info_kwargs["token_file"] != str(token_file)
+
+
+def test_process_video_oauth_preflight_uses_temporary_session_cache(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """Single-video OAuth should prompt before Live and reuse a temp session token."""
+    mock_cls, pipeline_instance = mock_pipeline
+
+    with patch("yt_study.core.youtube.metadata.get_video_title") as mock_title:
+        mock_title.return_value = "Warmup Title"
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                _VIDEO_URL,
+                "--use-oauth",
+                "--no-save-oauth-token",
+            ],
+        )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    runtime_token_file = call_kwargs["oauth_token_file"]
+    assert call_kwargs["save_oauth_token"] is True
+    assert runtime_token_file is not None
+    assert runtime_token_file.name == "youtube-oauth-session.json"
+    mock_title.assert_called_once_with(
+        "dQw4w9WgXcQ",
+        use_oauth=True,
+        token_file=str(runtime_token_file),
+        allow_oauth_cache=True,
+    )
+    assert not runtime_token_file.exists()
+    pipeline_instance.run.assert_awaited_once()
 
 
 def test_process_rich_ui_formats_skipped_videos_without_markup_leak(

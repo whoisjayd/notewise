@@ -271,6 +271,9 @@ Config behavior:
 - defaults `DEFAULT_MODEL` to `gemini/gemini-2.5-flash`
 - throttles YouTube request rate globally (default `10` requests/minute)
 - supports OAuth auth for metadata/playlist fetches and optional token caching
+- when `--use-oauth` is combined with `--no-save-oauth-token`, the CLI uses a
+  temporary session token cache so device login happens once and no token file
+  remains after exit
 - supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
 - stores local processing cache in `~/.yt-study/.yt_study_cache.db`
 - prints a Cost Summary table with prompt/completion/total tokens, estimated
