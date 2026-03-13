@@ -519,12 +519,32 @@ def process(
             EventType.CHUNK_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
             ),
+            EventType.GENERATION_COMBINING: lambda t, e: (
+                f"[cyan]🧩 {t}... (Combining {e.total_chunks} note parts)[/cyan]"
+            ),
             EventType.CHAPTER_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
             ),
             EventType.CHAPTER_CHUNK_GENERATING: lambda t, e: (
                 f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
                 f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
+            ),
+            EventType.CHAPTER_COMBINING: lambda t, e: (
+                f"[cyan]🧩 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
+                f" Combining {e.total_chunks} parts)[/cyan]"
+            ),
+            EventType.QUIZ_GENERATING: lambda t, _: (
+                f"[magenta]📝 {t}... (Quiz)[/magenta]"
+            ),
+            EventType.QUIZ_CHUNK_GENERATING: lambda t, e: (
+                "[magenta]📝 "
+                f"{t}... (Quiz Part {e.chunk_number}/{e.total_chunks})[/magenta]"
+            ),
+            EventType.QUIZ_COMBINING: lambda t, e: (
+                f"[magenta]🧩 {t}... (Combining {e.total_chunks} quiz parts)[/magenta]"
+            ),
+            EventType.QUIZ_COMPLETE: lambda t, _: (
+                f"[green]✓ {t}... (Quiz Ready)[/green]"
             ),
             EventType.GENERATION_COMPLETE: lambda t, _: (
                 f"[green]✓ {t}... (Generated)[/green]"
@@ -591,8 +611,14 @@ def process(
                     EventType.TRANSCRIPT_FETCHED: "Transcript ready",
                     EventType.GENERATION_START: "Generating notes",
                     EventType.CHUNK_GENERATING: "Generating chunk",
+                    EventType.GENERATION_COMBINING: "Combining notes",
                     EventType.CHAPTER_GENERATING: "Generating chapter",
                     EventType.CHAPTER_CHUNK_GENERATING: "Generating chapter part",
+                    EventType.CHAPTER_COMBINING: "Combining chapter",
+                    EventType.QUIZ_GENERATING: "Generating quiz",
+                    EventType.QUIZ_CHUNK_GENERATING: "Generating quiz part",
+                    EventType.QUIZ_COMBINING: "Combining quiz",
+                    EventType.QUIZ_COMPLETE: "Quiz ready",
                     EventType.GENERATION_COMPLETE: "Generation complete",
                     EventType.VIDEO_SUCCESS: "Done",
                     EventType.VIDEO_SKIPPED: "Skipped (already processed)",
@@ -625,6 +651,12 @@ def process(
                         extra = f" [{event.chunk_number}/{event.total_chunks}]"
                     elif event.chapter_number and event.total_chapters:
                         extra = f" [{event.chapter_number}/{event.total_chapters}]"
+                    elif event.total_chunks and event.event_type in (
+                        EventType.GENERATION_COMBINING,
+                        EventType.QUIZ_COMBINING,
+                        EventType.CHAPTER_COMBINING,
+                    ):
+                        extra = f" [{event.total_chunks} parts]"
                     elif event.error:
                         extra = f": {event.error}"
                     console.print(f"{label}: {title}{extra}", markup=False)

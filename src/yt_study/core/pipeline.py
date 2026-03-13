@@ -89,8 +89,14 @@ class EventType(Enum):
     TRANSCRIPT_FETCHED = "transcript_fetched"
     GENERATION_START = "generation_start"
     CHUNK_GENERATING = "chunk_generating"
+    GENERATION_COMBINING = "generation_combining"
     CHAPTER_GENERATING = "chapter_generating"
     CHAPTER_CHUNK_GENERATING = "chapter_chunk_generating"
+    CHAPTER_COMBINING = "chapter_combining"
+    QUIZ_GENERATING = "quiz_generating"
+    QUIZ_CHUNK_GENERATING = "quiz_chunk_generating"
+    QUIZ_COMBINING = "quiz_combining"
+    QUIZ_COMPLETE = "quiz_complete"
     GENERATION_COMPLETE = "generation_complete"
     VIDEO_SUCCESS = "video_success"
     VIDEO_SKIPPED = "video_skipped"
@@ -528,12 +534,40 @@ class CorePipeline:
         transcript_text: str,
         quiz_name: str,
         output_dir: Path | None = None,
+        *,
+        emit: Callable[..., None],
+        video_id: str,
+        title: str,
     ) -> None:
         """Generate a quiz and write it using the resolved output target name."""
-        quiz_notes = await self.generator.generate_quiz(transcript_text)
+        emit(EventType.QUIZ_GENERATING, video_id, title=title)
+
+        def _on_quiz_chunk(chunk_num: int, total: int) -> None:
+            emit(
+                EventType.QUIZ_CHUNK_GENERATING,
+                video_id,
+                title=title,
+                chunk_number=chunk_num,
+                total_chunks=total,
+            )
+
+        def _on_quiz_combine(total_parts: int) -> None:
+            emit(
+                EventType.QUIZ_COMBINING,
+                video_id,
+                title=title,
+                total_chunks=total_parts,
+            )
+
+        quiz_notes = await self.generator.generate_quiz(
+            transcript_text,
+            on_chunk=_on_quiz_chunk,
+            on_combine=_on_quiz_combine,
+        )
         target_dir = output_dir or self.output_dir
         quiz_path = target_dir / f"{sanitize_filename(quiz_name)}_quiz.md"
         quiz_path.write_text(quiz_notes, encoding="utf-8")
+        emit(EventType.QUIZ_COMPLETE, video_id, title=title)
 
     async def _process_single_video(
         self,
@@ -698,10 +732,23 @@ class CorePipeline:
                                     total_chunks=total,
                                 )
 
+                            def _on_chapter_combine(
+                                total_parts: int, _i: int = i
+                            ) -> None:
+                                emit(
+                                    EventType.CHAPTER_COMBINING,
+                                    video_id,
+                                    title=title,
+                                    chapter_number=_i,
+                                    total_chapters=total_chapters,
+                                    total_chunks=total_parts,
+                                )
+
                             notes = await self.generator.generate_single_chapter_notes(
                                 chapter_title=chap_title,
                                 chapter_text=chap_text,
                                 on_chunk=_on_chapter_chunk,
+                                on_combine=_on_chapter_combine,
                             )
                             chapter_file.write_text(notes, encoding="utf-8")
                     else:
@@ -717,10 +764,19 @@ class CorePipeline:
                                 total_chunks=total,
                             )
 
+                        def _on_combine(total_parts: int) -> None:
+                            emit(
+                                EventType.GENERATION_COMBINING,
+                                video_id,
+                                title=title,
+                                total_chunks=total_parts,
+                            )
+
                         notes = await self.generator.generate_study_notes(
                             transcript_text,
                             video_title=title,
                             on_chunk=_on_chunk,
+                            on_combine=_on_combine,
                         )
 
                         output_target = await self._reserve_output_target(
@@ -742,6 +798,9 @@ class CorePipeline:
                             transcript_text,
                             quiz_name,
                             output_dir=quiz_output_dir,
+                            emit=emit,
+                            video_id=video_id,
+                            title=title,
                         )
 
                 usage_totals = self._coerce_usage_totals(raw_usage_totals)

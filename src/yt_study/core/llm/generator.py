@@ -168,6 +168,7 @@ class StudyMaterialGenerator:
         transcript: str,
         video_title: str = "Video",
         on_chunk: Callable[[int, int], None] | None = None,
+        on_combine: Callable[[int], None] | None = None,
     ) -> str:
         """
         Generate study notes from transcript.
@@ -208,6 +209,8 @@ class StudyMaterialGenerator:
             chunk_notes.append(note)
 
         logger.info(f"{video_title}: Combining {len(chunk_notes)} chunks...")
+        if on_combine:
+            on_combine(len(chunk_notes))
         final_notes = await self.provider.generate(
             system_prompt=SYSTEM_PROMPT,
             user_prompt=get_combine_prompt(chunk_notes),
@@ -222,6 +225,7 @@ class StudyMaterialGenerator:
         chapter_title: str,
         chapter_text: str,
         on_chunk: Callable[[int, int], None] | None = None,
+        on_combine: Callable[[int], None] | None = None,
     ) -> str:
         """
         Generate study notes for a single chapter.
@@ -276,6 +280,8 @@ class StudyMaterialGenerator:
         )
         if len(chunk_notes) == 1:
             return chunk_notes[0]
+        if on_combine:
+            on_combine(len(chunk_notes))
         return await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
             user_prompt=get_combine_prompt(chunk_notes),
@@ -325,7 +331,12 @@ class StudyMaterialGenerator:
         logger.info(f"Completed chapter-based notes for {video_title}")
         return final_notes
 
-    async def generate_quiz(self, transcript: str) -> str:
+    async def generate_quiz(
+        self,
+        transcript: str,
+        on_chunk: Callable[[int, int], None] | None = None,
+        on_combine: Callable[[int], None] | None = None,
+    ) -> str:
         """Generate a multiple-choice quiz from a transcript.
 
         If the transcript fits within the configured chunk size, a single
@@ -353,6 +364,8 @@ class StudyMaterialGenerator:
         partial_quizzes: list[str] = []
         for i, chunk in enumerate(chunks, 1):
             logger.info(f"Quiz: generating part {i}/{len(chunks)}")
+            if on_chunk:
+                on_chunk(i, len(chunks))
             partial = await self.provider.generate(
                 system_prompt=QUIZ_SYSTEM_PROMPT,
                 user_prompt=get_quiz_prompt(chunk),
@@ -365,6 +378,8 @@ class StudyMaterialGenerator:
             return partial_quizzes[0]
 
         logger.info(f"Quiz: combining {len(partial_quizzes)} partial quizzes.")
+        if on_combine:
+            on_combine(len(partial_quizzes))
         return await self.provider.generate(
             system_prompt=QUIZ_SYSTEM_PROMPT,
             user_prompt=get_quiz_combine_prompt(partial_quizzes),

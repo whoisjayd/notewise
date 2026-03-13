@@ -155,6 +155,20 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_generate_study_notes_on_combine_callback(self, generator):
+        """Chunked note generation should signal when combine begins."""
+        chunks = ["Part 1", "Part 2"]
+
+        with patch.object(generator, "_chunk_transcript", return_value=chunks):
+            on_combine = MagicMock()
+            await generator.generate_study_notes(
+                transcript="Long text",
+                on_combine=on_combine,
+            )
+
+        on_combine.assert_called_once_with(2)
+
+    @pytest.mark.asyncio
     async def test_generate_chapter_notes(self, generator):
         """Test generating chapter-based notes."""
         chapters = {"Intro": "Intro text", "Body": "Body text"}
@@ -199,6 +213,27 @@ class TestStudyMaterialGenerator:
         assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_generate_single_chapter_callbacks(self, generator):
+        """Chunked chapter generation should signal part and combine callbacks."""
+        two_chunks = ["chunk A", "chunk B"]
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            on_chunk = MagicMock()
+            on_combine = MagicMock()
+            await generator.generate_single_chapter_notes(
+                "Ch1",
+                "very long text",
+                on_chunk=on_chunk,
+                on_combine=on_combine,
+            )
+
+        assert [call.args for call in on_chunk.call_args_list] == [(1, 2), (2, 2)]
+        on_combine.assert_called_once_with(2)
+
+    @pytest.mark.asyncio
     async def test_generate_single_chapter_oversized_single_chunk(self, generator):
         """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
@@ -229,6 +264,26 @@ class TestStudyMaterialGenerator:
         # 2 chunk calls + 1 combine call = 3
         assert generator.provider.generate.call_count == 3
         assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_callbacks_for_chunked_quiz(self, generator):
+        """Chunked quiz generation should signal part and combine callbacks."""
+        chunks = ["chunk A", "chunk B"]
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=chunks),
+            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+        ):
+            on_chunk = MagicMock()
+            on_combine = MagicMock()
+            await generator.generate_quiz(
+                "very long transcript",
+                on_chunk=on_chunk,
+                on_combine=on_combine,
+            )
+
+        assert [call.args for call in on_chunk.call_args_list] == [(1, 2), (2, 2)]
+        on_combine.assert_called_once_with(2)
 
     @pytest.mark.asyncio
     async def test_generate_quiz_chunked_single_chunk_no_combine(self, generator):

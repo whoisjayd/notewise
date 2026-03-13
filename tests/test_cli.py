@@ -587,7 +587,7 @@ def test_process_ui_shows_detailed_pipeline_states(
     mock_config_exists,  # noqa: ARG001
     tmp_path,
 ):
-    """Rich UI should show the detailed pipeline event phases."""
+    """Rich UI should show detailed internal pipeline phases."""
 
     async def _run_with_generation_events(_video_ids, on_event=None):  # noqa: ANN001
         if on_event:
@@ -616,6 +616,14 @@ def test_process_ui_shows_detailed_pipeline_states(
             )
             on_event(
                 PipelineEvent(
+                    event_type=EventType.GENERATION_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    total_chunks=3,
+                )
+            )
+            on_event(
+                PipelineEvent(
                     event_type=EventType.CHAPTER_CHUNK_GENERATING,
                     video_id="vid1",
                     title="Video One",
@@ -623,6 +631,47 @@ def test_process_ui_shows_detailed_pipeline_states(
                     total_chapters=5,
                     chunk_number=1,
                     total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_COMBINING,
+                    video_id="vid1",
+                    title="Video One",
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.QUIZ_COMPLETE,
+                    video_id="vid1",
+                    title="Video One",
                 )
             )
             on_event(
@@ -688,7 +737,13 @@ def test_process_ui_shows_detailed_pipeline_states(
     ]
     assert "[green]✓ Video One... (Transcript Ready)[/green]" in statuses
     assert "[cyan]🤖 Video One... (Chunk 1/3)[/cyan]" in statuses
+    assert "[cyan]🧩 Video One... (Combining 3 note parts)[/cyan]" in statuses
     assert "[cyan]🤖 Video One... (Ch 2/5, Part 1/2)[/cyan]" in statuses
+    assert "[cyan]🧩 Video One... (Ch 2/5, Combining 2 parts)[/cyan]" in statuses
+    assert "[magenta]📝 Video One... (Quiz)[/magenta]" in statuses
+    assert "[magenta]📝 Video One... (Quiz Part 1/2)[/magenta]" in statuses
+    assert "[magenta]🧩 Video One... (Combining 2 quiz parts)[/magenta]" in statuses
+    assert "[green]✓ Video One... (Quiz Ready)[/green]" in statuses
     assert "[green]✓ Video One... (Generated)[/green]" in statuses
 
 

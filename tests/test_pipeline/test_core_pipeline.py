@@ -829,6 +829,70 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
 
 
 @pytest.mark.asyncio
+async def test_run_chapter_generation_emits_internal_chapter_progress(
+    temp_output_dir, mock_llm_provider
+):
+    """Chunked chapter generation should emit chapter part and combine events."""
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    async def _generate_chapter(
+        chapter_title,
+        chapter_text,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert chapter_title
+        assert chapter_text
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Chapter Notes"
+
+    p.generator.generate_single_chapter_notes.side_effect = _generate_chapter
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Long Chapter Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=7200),
+        patch(
+            _COMMON_PATCHES["chapters"],
+            return_value=[
+                {"title": "Chapter 1", "start_seconds": 0},
+                {"title": "Chapter 2", "start_seconds": 300},
+            ],
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.split_transcript_by_chapters",
+            return_value={"Chapter 1": "text1", "Chapter 2": "text2"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-events"], on_event=events.append)
+
+    assert result.success_count == 1
+    chapter_chunk_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_CHUNK_GENERATING
+    ]
+    assert len(chapter_chunk_events) == 4
+    assert [e.chapter_number for e in chapter_chunk_events] == [1, 1, 2, 2]
+
+    chapter_combine_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_COMBINING
+    ]
+    assert len(chapter_combine_events) == 2
+    assert [e.chapter_number for e in chapter_combine_events] == [1, 2]
+    assert all(e.total_chunks == 2 for e in chapter_combine_events)
+
+
+@pytest.mark.asyncio
 async def test_run_empty_chapter_split_falls_back_to_single_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -1068,7 +1132,93 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     assert (temp_output_dir / "Study Subject_quiz.md").read_text(encoding="utf-8") == (
         "# Quiz"
     )
-    p.generator.generate_quiz.assert_awaited_once_with("full transcript")
+    p.generator.generate_quiz.assert_awaited_once()
+    assert p.generator.generate_quiz.await_args.args == ("full transcript",)
+
+
+@pytest.mark.asyncio
+async def test_run_emits_internal_generation_and_quiz_events(
+    temp_output_dir, mock_llm_provider
+):
+    """Chunked notes and quiz generation should emit internal progress events."""
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    async def _generate_notes(
+        transcript,
+        video_title="Video",
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert transcript == "full transcript"
+        assert video_title == "Study Subject"
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Notes"
+
+    async def _generate_quiz(
+        transcript,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        assert transcript == "full transcript"
+        if on_chunk:
+            on_chunk(1, 2)
+            on_chunk(2, 2)
+        if on_combine:
+            on_combine(2)
+        return "# Quiz"
+
+    p.generator.generate_study_notes.side_effect = _generate_notes
+    p.generator.generate_quiz.side_effect = _generate_quiz
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
+        patch(_COMMON_PATCHES["duration"], return_value=100),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-internal-events"], on_event=events.append)
+
+    assert result.success_count == 1
+    event_types = [event.event_type for event in events]
+    expected_sequence = [
+        EventType.METADATA_START,
+        EventType.METADATA_FETCHED,
+        EventType.TRANSCRIPT_FETCHING,
+        EventType.TRANSCRIPT_FETCHED,
+        EventType.GENERATION_START,
+        EventType.CHUNK_GENERATING,
+        EventType.CHUNK_GENERATING,
+        EventType.GENERATION_COMBINING,
+        EventType.QUIZ_GENERATING,
+        EventType.QUIZ_CHUNK_GENERATING,
+        EventType.QUIZ_CHUNK_GENERATING,
+        EventType.QUIZ_COMBINING,
+        EventType.QUIZ_COMPLETE,
+        EventType.GENERATION_COMPLETE,
+        EventType.VIDEO_SUCCESS,
+        EventType.PIPELINE_COMPLETE,
+    ]
+    positions = [event_types.index(event_type) for event_type in expected_sequence]
+    assert positions == sorted(positions)
+
+    generation_combine = next(
+        e for e in events if e.event_type == EventType.GENERATION_COMBINING
+    )
+    assert generation_combine.total_chunks == 2
+
+    quiz_combine = next(e for e in events if e.event_type == EventType.QUIZ_COMBINING)
+    assert quiz_combine.total_chunks == 2
 
 
 @pytest.mark.asyncio
