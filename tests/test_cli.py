@@ -324,6 +324,28 @@ def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # no
     assert "Input Error" in result.stdout
 
 
+def test_process_invalid_url_reports_input_error_before_api_key(monkeypatch):
+    """Invalid inputs should not be masked by missing model credentials."""
+    monkeypatch.delenv("FAKE_KEY", raising=False)
+
+    with (
+        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch(
+            "yt_study.core.config.config.get_api_key_name_for_model",
+            return_value="FAKE_KEY",
+        ),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            side_effect=ValueError("Not a YouTube URL"),
+        ),
+    ):
+        result = runner.invoke(app, ["process", "not-a-url"])
+
+    assert result.exit_code == 1
+    assert "Input Error" in result.stdout
+    assert "Missing API Key" not in result.stdout
+
+
 def test_process_missing_batch_file_reports_file_error():
     """Missing batch-file paths should not be misreported as invalid YouTube URLs."""
     with patch("yt_study.cli.check_config_exists", return_value=True):

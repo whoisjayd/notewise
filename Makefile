@@ -55,7 +55,7 @@ PIP := $(UV) pip
 PRE_COMMIT := $(UV_RUN) pre-commit
 RUFF := $(UV_RUN) ruff
 MYPY := $(UV_RUN) mypy
-PYTEST := $(UV_RUN) pytest
+PYTEST := $(UV) run --no-sync python -m pytest
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
 

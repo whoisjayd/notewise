@@ -353,15 +353,30 @@ def process(
         )
         oauth_preflight_complete = False
 
-        # Validate API key before launching UI
-        key_name = config.get_api_key_name_for_model(selected_model)
-        if key_name and not os.environ.get(key_name):
-            console.print(
-                f"\n[red bold]✗ Missing API Key for {selected_model}[/red bold]"
-            )
-            console.print(f"[yellow]Expected environment variable: {key_name}[/yellow]")
-            console.print("[dim]Run [cyan]yt-study setup[/cyan] to configure.[/dim]\n")
-            raise typer.Exit(code=1)
+        api_key_checked: bool | None = None
+
+        def _ensure_api_key_available() -> bool:
+            """Validate the selected model's API key after input preflight succeeds."""
+            nonlocal api_key_checked
+            if api_key_checked is not None:
+                return api_key_checked
+
+            key_name = config.get_api_key_name_for_model(selected_model)
+            if key_name and not os.environ.get(key_name):
+                console.print(
+                    f"\n[red bold]✗ Missing API Key for {selected_model}[/red bold]"
+                )
+                console.print(
+                    f"[yellow]Expected environment variable: {key_name}[/yellow]"
+                )
+                console.print(
+                    "[dim]Run [cyan]yt-study setup[/cyan] to configure.[/dim]\n"
+                )
+                api_key_checked = False
+                return False
+
+            api_key_checked = True
+            return True
 
         def _print_run_summary(
             result: PipelineResult, dashboard: PipelineDashboard
@@ -582,6 +597,9 @@ def process(
                 console.print(f"[red]Input Error: {e}[/red]")
                 return False
 
+            if not _ensure_api_key_available():
+                return False
+
             if parsed.url_type == "video":
                 if not parsed.video_id:
                     console.print("[red]Error: Could not extract video ID[/red]")
@@ -791,6 +809,8 @@ def process(
                     try:
                         run_failed = not await _run_single_url(batch_url)
                         had_failures = run_failed or had_failures
+                        if api_key_checked is False:
+                            break
                     except Exception as e:
                         console.print(f"[bold red]❌ Batch item failed:[/bold red] {e}")
                         had_failures = True

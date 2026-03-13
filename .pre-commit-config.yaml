@@ -57,7 +57,7 @@ repos:
         pass_filenames: false
       - id: pytest-fast
         name: pytest fast (pre-push)
-        entry: uv run pytest tests -q
+        entry: uv run --no-sync python -m pytest tests -q
         language: system
         pass_filenames: false
         stages: [pre-push]
