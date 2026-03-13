@@ -334,7 +334,10 @@ class CorePipeline:
         try:
             return await asyncio.to_thread(self.db.get_video, video_id)
         except Exception as exc:
-            logger.warning(f"Failed to read SQLite cache for {video_id}: {exc}")
+            logger.warning(
+                f"Failed to read SQLite cache for {video_id}: {exc}",
+                exc_info=True,
+            )
             return None
 
     async def _persist_video_cache(
@@ -359,11 +362,17 @@ class CorePipeline:
                 model=self.model,
             )
         except Exception as exc:
-            logger.warning(f"Failed to persist SQLite cache for {video_id}: {exc}")
+            logger.warning(
+                f"Failed to persist SQLite cache for {video_id}: {exc}",
+                exc_info=True,
+            )
 
     def _estimate_tokens_used(self, transcript_text: str) -> int:
-        """Estimate token usage for run stats when provider usage is unavailable."""
-        return max(1, len(transcript_text) // 4)
+        """Estimate token usage for run stats using generator token counting."""
+        try:
+            return max(1, int(self.generator._count_tokens(transcript_text)))
+        except Exception:
+            return max(1, len(transcript_text) // 4)
 
     # ------------------------------------------------------------------
     # Quiz helper

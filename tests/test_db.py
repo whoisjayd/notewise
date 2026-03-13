@@ -12,6 +12,17 @@ def test_database_manager_singleton_for_same_path(tmp_path):
     assert manager_one is manager_two
 
 
+def test_database_manager_singleton_normalizes_equivalent_paths(tmp_path):
+    """Equivalent paths should map to the same singleton instance."""
+    normalized = tmp_path / "cache.db"
+    alternate = tmp_path / "subdir" / ".." / "cache.db"
+
+    manager_one = DatabaseManager.get_instance(normalized)
+    manager_two = DatabaseManager.get_instance(alternate)
+
+    assert manager_one is manager_two
+
+
 def test_database_manager_uses_distinct_instances_per_path(tmp_path):
     """Different db paths should not share singleton instances."""
     manager_one = DatabaseManager.get_instance(tmp_path / "one.db")
@@ -84,3 +95,14 @@ def test_upsert_video_cache_updates_existing_video_and_transcript(tmp_path):
     assert transcript.language == "hi"
     assert len(stats) == 2
     assert any(row.model == "new-model" for row in stats)
+
+
+def test_database_manager_close_instance_evicts_singleton(tmp_path):
+    """close_instance should dispose and recreate singleton cleanly."""
+    db_path = tmp_path / "cache.db"
+    manager_one = DatabaseManager.get_instance(db_path)
+
+    DatabaseManager.close_instance(db_path)
+    manager_two = DatabaseManager.get_instance(db_path)
+
+    assert manager_one is not manager_two

@@ -1030,3 +1030,52 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     assert cached_transcript.language == "en"
     assert len(stats) >= 1
     assert stats[0].model == "mock-model"
+
+
+@pytest.mark.asyncio
+async def test_pipeline_reuses_sqlite_cache_across_runs(
+    temp_output_dir, mock_llm_provider
+):
+    """Second run should skip when first run already persisted SQLite cache."""
+    p_first = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    first_events: list[PipelineEvent] = []
+
+    with (
+        patch(_COMMON_PATCHES["title"], return_value="Cached Video"),
+        patch(_COMMON_PATCHES["duration"], return_value=123),
+        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch_first,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        first_transcript = MagicMock()
+        first_transcript.to_text.return_value = "cached transcript text"
+        first_transcript.language_code = "en"
+        mock_fetch_first.return_value = first_transcript
+        first_result = await p_first.run(
+            ["cached-video-id"], on_event=first_events.append
+        )
+
+    assert first_result.success_count == 1
+    assert EventType.VIDEO_SKIPPED not in [e.event_type for e in first_events]
+    mock_fetch_first.assert_awaited_once()
+
+    p_second = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    second_events: list[PipelineEvent] = []
+
+    with (
+        patch(_COMMON_PATCHES["title"]) as mock_title_second,
+        patch(_COMMON_PATCHES["duration"]) as mock_duration_second,
+        patch(_COMMON_PATCHES["chapters"]) as mock_chapters_second,
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch_second,
+        patch(_COMMON_PATCHES["api_key"], return_value=None),
+    ):
+        second_result = await p_second.run(
+            ["cached-video-id"], on_event=second_events.append
+        )
+
+    assert second_result.success_count == 1
+    assert EventType.VIDEO_SKIPPED in [e.event_type for e in second_events]
+    mock_title_second.assert_not_called()
+    mock_duration_second.assert_not_called()
+    mock_chapters_second.assert_not_called()
+    mock_fetch_second.assert_not_awaited()

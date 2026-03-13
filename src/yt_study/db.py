@@ -69,6 +69,28 @@ class DatabaseManager:
             cls._instances[resolved_path] = instance
             return instance
 
+    @classmethod
+    def close_instance(cls, db_path: Path) -> None:
+        """Dispose and evict a singleton instance for the given DB path."""
+        resolved_path = db_path.expanduser().resolve()
+        with cls._instances_lock:
+            instance = cls._instances.pop(resolved_path, None)
+        if instance is not None:
+            instance.close()
+
+    @classmethod
+    def close_all_instances(cls) -> None:
+        """Dispose and evict all singleton instances."""
+        with cls._instances_lock:
+            instances = list(cls._instances.values())
+            cls._instances.clear()
+        for instance in instances:
+            instance.close()
+
+    def close(self) -> None:
+        """Close pooled DB resources for this manager."""
+        self.engine.dispose()
+
     def has_video(self, video_id: str) -> bool:
         """Return True when cached metadata exists for the video."""
         with Session(self.engine) as session:
