@@ -583,6 +583,102 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
     assert "Estimated Cost (USD)" in result.output
 
 
+def test_process_ui_hides_internal_generation_phase_labels(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Rich UI should collapse chunk/chapter generation to one label."""
+
+    async def _run_with_generation_events(_video_ids, on_event=None):  # noqa: ANN001
+        if on_event:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chunk_number=1,
+                    total_chunks=3,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_CHUNK_GENERATING,
+                    video_id="vid1",
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id="vid1",
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=["vid1"],
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_generation_events)
+    dashboard_instance = MagicMock()
+    dashboard_instance.recent_completions = []
+    dashboard_instance.recent_failures = []
+
+    with (
+        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.ui.dashboard.PipelineDashboard",
+            return_value=dashboard_instance,
+        ),
+        patch("rich.live.Live.__enter__", return_value=None),
+        patch("rich.live.Live.__exit__", return_value=False),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_use_oauth = False
+        mock_config.youtube_save_oauth_token = False
+        mock_config.youtube_auto_refresh_oauth_token = True
+        mock_config.youtube_oauth_token_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 0
+    statuses = [
+        call.args[1] for call in dashboard_instance.update_worker.call_args_list
+    ]
+    assert "[cyan]🤖 Video One... (Generating)[/cyan]" in statuses
+    assert all("Chunk" not in status for status in statuses)
+    assert all("Part" not in status for status in statuses)
+    assert all("Quiz" not in status for status in statuses)
+    assert all("Combin" not in status for status in statuses)
+
+
 def test_process_no_ui_failure_exits_nonzero(
     mock_config_exists,  # noqa: ARG001
     tmp_path,

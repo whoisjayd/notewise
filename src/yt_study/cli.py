@@ -501,8 +501,9 @@ def process(
                 """
                 return self.video_slots.get(video_id)
 
-        # Status message templates for different event types
-        STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
+        # Keep the live dashboard high-signal: show broad progress phases and
+        # collapse chunk/chapter internals into one generating state.
+        DASHBOARD_STATUS_MAP: dict[EventType, Callable[[str, PipelineEvent], str]] = {
             EventType.METADATA_START: lambda t, _: (
                 f"[yellow]{t}... (Metadata)[/yellow]"
             ),
@@ -513,15 +514,14 @@ def process(
             EventType.GENERATION_START: lambda t, _: (
                 f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
-            EventType.CHUNK_GENERATING: lambda t, e: (
-                f"[cyan]🤖 {t}... (Chunk {e.chunk_number}/{e.total_chunks})[/cyan]"
+            EventType.CHUNK_GENERATING: lambda t, _: (
+                f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
-            EventType.CHAPTER_GENERATING: lambda t, e: (
-                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters})[/cyan]"
+            EventType.CHAPTER_GENERATING: lambda t, _: (
+                f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
-            EventType.CHAPTER_CHUNK_GENERATING: lambda t, e: (
-                f"[cyan]🤖 {t}... (Ch {e.chapter_number}/{e.total_chapters},"
-                f" Part {e.chunk_number}/{e.total_chunks})[/cyan]"
+            EventType.CHAPTER_CHUNK_GENERATING: lambda t, _: (
+                f"[cyan]🤖 {t}... (Generating)[/cyan]"
             ),
         }
 
@@ -658,13 +658,13 @@ def process(
                     assigned = slot_manager.acquire_slot(vid)
                     if assigned is not None:
                         slot = assigned
-                        status_fn = STATUS_MAP.get(event.event_type)
+                        status_fn = DASHBOARD_STATUS_MAP.get(event.event_type)
                         if status_fn:
                             dashboard.update_worker(assigned, status_fn(title, event))
 
                 # Handle standard status updates
-                elif event.event_type in STATUS_MAP and slot is not None:
-                    status_fn = STATUS_MAP[event.event_type]
+                elif event.event_type in DASHBOARD_STATUS_MAP and slot is not None:
+                    status_fn = DASHBOARD_STATUS_MAP[event.event_type]
                     dashboard.update_worker(slot, status_fn(title, event))
 
                 # Handle completion/failure events (release slots)
