@@ -1034,22 +1034,25 @@ def test_process_quiz_flag_passed_to_pipeline(
 
 
 @pytest.mark.parametrize(
-    ("args", "expected_snippet"),
+    "args",
     [
-        (["--cookies", "cookies.txt"], "--cookies"),
-        (["--use-oauth"], "--use-oauth"),
-        (["--token-file", "token.json"], "--token-file"),
-        (["--save-oauth-token"], "--save-oauth-token"),
-        (["--auto-refresh-oauth-token"], "--auto-refresh-oauth-token"),
+        ["--cookies", "cookies.txt"],
+        ["--use-oauth"],
+        ["--token-file", "token.json"],
+        ["--save-oauth-token"],
+        ["--auto-refresh-oauth-token"],
     ],
 )
-def test_process_rejects_removed_youtube_auth_flags(args, expected_snippet):
-    """Removed YouTube auth flags should fail fast as unknown options."""
+def test_process_rejects_removed_youtube_auth_flags(args):
+    """Removed YouTube auth flags should fail fast as unknown options.
+
+    Typer/Rich does not consistently echo the rejected option text across
+    platforms, so assert only the stable unknown-option behavior.
+    """
     result = runner.invoke(app, ["process", _VIDEO_URL, *args])
 
     assert result.exit_code != 0
     assert "No such option" in result.output
-    assert expected_snippet in result.output
 
 
 def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
