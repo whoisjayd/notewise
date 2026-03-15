@@ -1,5 +1,6 @@
 """Tests for CLI entry point."""
 
+import asyncio
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -12,6 +13,7 @@ from yt_study.core.pipeline import (
     PipelineMetrics,
     PipelineResult,
 )
+from yt_study.core.youtube.metadata import PublicAccessRequiredError
 
 
 runner = CliRunner()
@@ -108,10 +110,6 @@ def mock_pipeline(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None  # no key needed
         yield mock_cls, pipeline_instance
 
@@ -212,6 +210,219 @@ def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):  # noq
     assert pipeline_instance.run.await_count == 2
 
 
+def test_process_batch_file_runs_items_concurrently(tmp_path):
+    """Batch-file entries should start in parallel up to the configured worker count."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(
+        "https://youtube.com/watch?v=vid1\nhttps://youtube.com/watch?v=vid2"
+    )
+
+    first_started = None
+    second_started = None
+
+    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+        nonlocal first_started, second_started
+        if first_started is None or second_started is None:
+            first_started = asyncio.Event()
+            second_started = asyncio.Event()
+
+        current_id = video_ids[0]
+        if current_id == "vid1":
+            first_started.set()
+            await asyncio.wait_for(second_started.wait(), timeout=0.2)
+        else:
+            await asyncio.wait_for(first_started.wait(), timeout=0.2)
+            second_started.set()
+
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    def _parse(url):  # noqa: ANN001
+        return _make_parsed_video(url.rsplit("=", 1)[-1])
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run)
+
+    with (
+        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
+        patch("yt_study.core.config.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
+
+    assert result.exit_code == 0
+    assert pipeline_instance.run.await_count == 2
+
+
+def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
+    """Batch playlist URLs should enqueue per-video jobs into the shared pool."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(
+        "\n".join(
+            [
+                "https://youtube.com/playlist?list=PL_BATCH",
+                "https://youtube.com/watch?v=solo123",
+            ]
+        )
+    )
+
+    def _parse(url):  # noqa: ANN001
+        if "playlist" in url:
+            return _make_parsed_playlist("PL_BATCH")
+        return _make_parsed_video(url.rsplit("=", 1)[-1])
+
+    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run)
+
+    with (
+        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["pl_vid1", "pl_vid2"],
+        ),
+        patch(
+            "yt_study.core.youtube.metadata.get_playlist_info",
+            return_value=("Batch Playlist", 2),
+        ),
+        patch("yt_study.core.config.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
+
+    assert result.exit_code == 0
+    assert pipeline_instance.run.await_count == 3
+    queued_video_ids = sorted(
+        call.args[0][0] for call in pipeline_instance.run.await_args_list
+    )
+    assert queued_video_ids == ["pl_vid1", "pl_vid2", "solo123"]
+
+
+def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_path):
+    """Private batch entries should not block other items."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(
+        "\n".join(
+            [
+                "https://youtube.com/watch?v=public123",
+                "https://youtube.com/watch?v=private123",
+                "https://youtube.com/playlist?list=PL_PRIVATE",
+            ]
+        )
+    )
+
+    def _parse(url):  # noqa: ANN001
+        if "playlist" in url:
+            return _make_parsed_playlist("PL_PRIVATE")
+        return _make_parsed_video(url.rsplit("=", 1)[-1])
+
+    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+        video_id = video_ids[0]
+        if video_id == "private123":
+            return PipelineResult(
+                success_count=0,
+                failure_count=1,
+                total_count=1,
+                video_ids=video_ids,
+                errors={
+                    "private123": (
+                        "Private YouTube videos are not supported. "
+                        "Make the video unlisted or public to process it."
+                    )
+                },
+                metrics=PipelineMetrics(),
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run)
+
+    with (
+        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch(
+            "yt_study.core.pipeline.CorePipeline",
+            return_value=pipeline_instance,
+        ),
+        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            side_effect=PublicAccessRequiredError(
+                "Private YouTube playlists are not supported. "
+                "Make the playlist unlisted or public to process it."
+            ),
+        ),
+        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_playlist_info,
+        patch("yt_study.core.config.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 3
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
+
+    assert result.exit_code == 1
+    assert "Batch Completed with Failures" in result.output
+    assert "private123" in result.output
+    assert "Private YouTube videos are not supported" in result.output
+    assert "PL_PRIVATE" in result.output
+    assert "Private YouTube playlists are not supported" in result.output
+    assert "Videos completed successfully: 1/2" in result.output
+    assert pipeline_instance.run.await_count == 2
+    mock_playlist_info.assert_not_called()
+
+
 def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
     """Test processing an empty batch file prints a warning."""
     _, pipeline_instance = mock_pipeline
@@ -221,7 +432,7 @@ def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path): 
     result = runner.invoke(app, ["process", str(batch_file)])
 
     assert result.exit_code == 1
-    assert "Batch file is empty" in result.stdout
+    assert "The batch file is empty." in result.stdout
     pipeline_instance.run.assert_not_awaited()
 
 
@@ -234,7 +445,7 @@ def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path): 
         result = runner.invoke(app, ["process", str(batch_file)])
 
     assert result.exit_code == 1
-    assert "Error reading batch file" in result.stdout
+    assert "Could not read the batch file" in result.stdout
 
 
 def test_process_with_temperature_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
@@ -297,7 +508,8 @@ def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):  # noqa:
     result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 1
-    assert "Process interrupted by user" in result.stdout
+    assert "Processing Stopped" in result.stdout
+    assert "interrupted before it finished" in result.stdout
 
 
 def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: ARG001
@@ -308,8 +520,9 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
     result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 1
-    assert "Fatal Error" in result.stdout
-    assert "Boom" in result.stdout
+    assert "Unexpected Error" in result.stdout
+    assert "internal error" in result.stdout
+    assert "Current log:" in result.stdout
 
 
 def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
@@ -426,10 +639,6 @@ def test_process_no_ui_prints_done_summary(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
@@ -481,10 +690,6 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
@@ -589,10 +794,6 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(
@@ -600,9 +801,12 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         )
 
     assert result.exit_code == 1
-    assert "Processing Summary" in result.output
-    assert "Cost Summary" in result.output
-    assert "Estimated Cost (USD)" in result.output
+    assert "Processing Failed" in result.output
+    assert "Completed successfully: 1/2" in result.output
+    assert "Processing Summary" not in result.output
+    assert "Cost Summary" not in result.output
+    assert "boom" in result.output
+    assert "Current log:" in result.output
 
 
 def test_process_ui_shows_detailed_pipeline_states(
@@ -745,10 +949,6 @@ def test_process_ui_shows_detailed_pipeline_states(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -803,17 +1003,16 @@ def test_process_no_ui_failure_exits_nonzero(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
     assert result.exit_code == 1
-    assert "Done: 0/1 succeeded." in result.output
-    assert "FAILED dQw4w9WgXcQ: boom" in result.output
+    assert "Processing Failed" in result.output
+    assert "dQw4w9WgXcQ" in result.output
+    assert "boom" in result.output
+    assert "Done: 0/1 succeeded." not in result.output
+    assert "Cost Summary" not in result.output
 
 
 # ---------------------------------------------------------------------------
@@ -834,145 +1033,23 @@ def test_process_quiz_flag_passed_to_pipeline(
     assert call_kwargs.get("quiz") is True
 
 
-def test_process_forwards_auth_flags_to_pipeline(
-    mock_config_exists,  # noqa: ARG001
-    mock_pipeline,
-    tmp_path,
-):
-    """CLI auth flags should be forwarded into CorePipeline constructor."""
-    mock_cls, pipeline_instance = mock_pipeline
+@pytest.mark.parametrize(
+    ("args", "expected_snippet"),
+    [
+        (["--cookies", "cookies.txt"], "--cookies"),
+        (["--use-oauth"], "--use-oauth"),
+        (["--token-file", "token.json"], "--token-file"),
+        (["--save-oauth-token"], "--save-oauth-token"),
+        (["--auto-refresh-oauth-token"], "--auto-refresh-oauth-token"),
+    ],
+)
+def test_process_rejects_removed_youtube_auth_flags(args, expected_snippet):
+    """Removed YouTube auth flags should fail fast as unknown options."""
+    result = runner.invoke(app, ["process", _VIDEO_URL, *args])
 
-    cookies_file = tmp_path / "cookies.txt"
-    cookies_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
-    token_file = tmp_path / "oauth-token.json"
-
-    result = runner.invoke(
-        app,
-        [
-            "process",
-            _VIDEO_URL,
-            "--cookies",
-            str(cookies_file),
-            "--use-oauth",
-            "--token-file",
-            str(token_file),
-            "--save-oauth-token",
-            "--auto-refresh-oauth-token",
-        ],
-    )
-
-    assert result.exit_code == 0
-    call_kwargs = mock_cls.call_args.kwargs
-    assert call_kwargs["cookies_path"] == cookies_file
-    assert call_kwargs["use_oauth"] is True
-    assert call_kwargs["oauth_token_file"] == token_file
-    assert call_kwargs["save_oauth_token"] is True
-    assert call_kwargs["auto_refresh_oauth_token"] is True
-    pipeline_instance.run.assert_awaited_once()
-
-
-def test_process_playlist_forwards_oauth_to_playlist_helpers(
-    mock_config_exists,  # noqa: ARG001
-    tmp_path,
-):
-    """Playlist OAuth without persistence should use a temporary session cache."""
-    pipeline_result = _make_pipeline_result()
-    pipeline_instance = MagicMock()
-    pipeline_instance.run = AsyncMock(return_value=pipeline_result)
-    dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
-
-    with (
-        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
-        patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
-            return_value=_make_parsed_playlist("PL_AUTH"),
-        ),
-        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_info,
-        patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
-            new_callable=AsyncMock,
-        ) as mock_extract,
-        patch("yt_study.core.config.config") as mock_config,
-        patch(
-            "yt_study.ui.dashboard.PipelineDashboard",
-            return_value=dashboard_instance,
-        ),
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
-    ):
-        mock_info.return_value = ("Playlist", 1)
-        mock_extract.return_value = ["vid1"]
-        mock_config.default_model = "gemini/gemini-2.5-flash"
-        mock_config.default_output_dir = tmp_path
-        mock_config.default_languages = ["en"]
-        mock_config.temperature = 0.7
-        mock_config.max_tokens = None
-        mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
-        mock_config.get_api_key_name_for_model.return_value = None
-
-        token_file = tmp_path / "playlist-token.json"
-        result = runner.invoke(
-            app,
-            [
-                "process",
-                "https://youtube.com/playlist?list=PL_AUTH",
-                "--use-oauth",
-                "--token-file",
-                str(token_file),
-                "--no-save-oauth-token",
-            ],
-        )
-
-    assert result.exit_code == 0
-    info_kwargs = mock_info.call_args.kwargs
-    extract_kwargs = mock_extract.await_args.kwargs
-    assert info_kwargs["use_oauth"] is True
-    assert extract_kwargs["use_oauth"] is True
-    assert info_kwargs["allow_oauth_cache"] is True
-    assert extract_kwargs["allow_oauth_cache"] is True
-    assert info_kwargs["token_file"] == extract_kwargs["token_file"]
-    assert info_kwargs["token_file"] != str(token_file)
-
-
-def test_process_video_oauth_preflight_uses_temporary_session_cache(
-    mock_config_exists,  # noqa: ARG001
-    mock_pipeline,
-):
-    """Single-video OAuth should prompt before Live and reuse a temp session token."""
-    mock_cls, pipeline_instance = mock_pipeline
-
-    with patch("yt_study.core.youtube.metadata.get_video_title") as mock_title:
-        mock_title.return_value = "Warmup Title"
-        result = runner.invoke(
-            app,
-            [
-                "process",
-                _VIDEO_URL,
-                "--use-oauth",
-                "--no-save-oauth-token",
-            ],
-        )
-
-    assert result.exit_code == 0
-    call_kwargs = mock_cls.call_args.kwargs
-    runtime_token_file = call_kwargs["oauth_token_file"]
-    assert call_kwargs["save_oauth_token"] is True
-    assert runtime_token_file is not None
-    assert runtime_token_file.name == "youtube-oauth-session.json"
-    mock_title.assert_called_once_with(
-        "dQw4w9WgXcQ",
-        use_oauth=True,
-        token_file=str(runtime_token_file),
-        allow_oauth_cache=True,
-    )
-    assert not runtime_token_file.exists()
-    pipeline_instance.run.assert_awaited_once()
+    assert result.exit_code != 0
+    assert "No such option" in result.output
+    assert expected_snippet in result.output
 
 
 def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
@@ -1034,10 +1111,6 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -1088,10 +1161,6 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
-        mock_config.youtube_use_oauth = False
-        mock_config.youtube_save_oauth_token = False
-        mock_config.youtube_auto_refresh_oauth_token = True
-        mock_config.youtube_oauth_token_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(
@@ -1102,3 +1171,42 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
     assert result.exit_code == 0
     pipeline_instance.run.assert_awaited_once_with(["vid1", "vid2"], on_event=ANY)
     assert mock_dashboard_cls.call_args.kwargs["total_videos"] == 2
+
+
+def test_process_private_playlist_shows_clean_error(
+    mock_config_exists,  # noqa: ARG001
+    tmp_path,
+):
+    """Private playlists should fail cleanly instead of falling into Fatal Error."""
+    with (
+        patch(
+            "yt_study.core.youtube.parser.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_PRIVATE"),
+        ),
+        patch(
+            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            new_callable=AsyncMock,
+            side_effect=PublicAccessRequiredError(
+                "Private YouTube playlists are not supported. "
+                "Make the playlist unlisted or public to process it."
+            ),
+        ),
+        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_info,
+        patch("yt_study.core.config.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app, ["process", "https://youtube.com/playlist?list=PL_PRIVATE"]
+        )
+
+    assert result.exit_code == 1
+    assert "Private YouTube playlists are not supported" in result.output
+    assert "Fatal Error" not in result.output
+    mock_info.assert_not_called()

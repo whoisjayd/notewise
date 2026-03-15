@@ -3,15 +3,99 @@
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from youtube_transcript_api._errors import NoTranscriptFound, VideoUnavailable
+from youtube_transcript_api._errors import (
+    IpBlocked,
+    NoTranscriptFound,
+    RequestBlocked,
+    TranscriptsDisabled,
+    VideoUnavailable,
+    VideoUnplayable,
+)
 
-from yt_study.core.youtube.metadata import VideoChapter
+from yt_study.core.youtube.metadata import PublicAccessRequiredError, VideoChapter
 from yt_study.core.youtube.transcript import (
     TranscriptError,
+    TranscriptSegment,
     VideoTranscript,
+    YouTubeIPBlockError,
+    _describe_video_unplayable,
+    _fetch_sync,
+    _raise_if_public_access_required,
     fetch_transcript,
     split_transcript_by_chapters,
 )
+
+
+class TestTranscriptHelpers:
+    """Helper-level coverage for transcript utilities."""
+
+    def test_video_transcript_to_text_joins_segment_text(self):
+        """VideoTranscript.to_text should join segment text with spaces."""
+        transcript = VideoTranscript(
+            video_id="vid",
+            segments=[
+                TranscriptSegment(text="Hello", start=0.0, duration=1.0),
+                TranscriptSegment(text="world", start=1.0, duration=1.0),
+            ],
+            language="English",
+            language_code="en",
+            is_generated=False,
+        )
+
+        assert transcript.to_text() == "Hello world"
+
+    @pytest.mark.parametrize(
+        ("error", "expected_message"),
+        [
+            (
+                Exception("This video is members only"),
+                "Members-only YouTube videos are not supported",
+            ),
+            (
+                Exception("This video is age restricted"),
+                "Age-restricted YouTube videos are not supported",
+            ),
+            (
+                Exception("Please sign in to continue"),
+                "Sign-in-only YouTube videos are not supported",
+            ),
+            (
+                VideoUnplayable(
+                    "vid",
+                    None,
+                    ["If the owner granted access, please", "sign in"],
+                ),
+                "Sign-in-only YouTube videos are not supported",
+            ),
+        ],
+    )
+    def test_raise_if_public_access_required_detects_restricted_access(
+        self,
+        error,
+        expected_message,
+    ):
+        """Known sign-in-only restrictions should map to one clean user error."""
+        with pytest.raises(PublicAccessRequiredError, match=expected_message):
+            _raise_if_public_access_required(error)
+
+    def test_raise_if_public_access_required_ignores_public_errors(self):
+        """Non-access errors should be left untouched for normal handling."""
+        _raise_if_public_access_required(Exception("captions missing"))
+
+    def test_describe_video_unplayable_prefers_reason(self):
+        """A populated reason should win over sub-reasons."""
+        error = VideoUnplayable("vid", "Playback restricted", ["sign in"])
+        assert _describe_video_unplayable(error) == "Playback restricted"
+
+    def test_describe_video_unplayable_joins_sub_reasons(self):
+        """Sub-reasons should be joined when no primary reason is present."""
+        error = VideoUnplayable("vid", None, ["First detail", "Second detail"])
+        assert _describe_video_unplayable(error) == "First detail; Second detail"
+
+    def test_describe_video_unplayable_falls_back_to_generic_message(self):
+        """An empty unplayable error should still produce a readable reason."""
+        error = VideoUnplayable("vid", None, [])
+        assert _describe_video_unplayable(error) == "video is unplayable"
 
 
 class TestFetchTranscript:
@@ -199,6 +283,29 @@ class TestFetchTranscript:
             await fetch_transcript("video123")
 
     @pytest.mark.asyncio
+    async def test_fetch_transcript_private_video_fails_without_retry(
+        self, mock_transcript_api_instance
+    ):
+        """Private videos should surface a clean fatal error on the first attempt."""
+        mock_transcript_api_instance.list.side_effect = VideoUnplayable(
+            "video123",
+            "This video is private",
+            [
+                "If the owner of this video has granted you access, please",
+                "sign in",
+                ".",
+            ],
+        )
+
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="Private YouTube videos are not supported",
+        ):
+            await fetch_transcript("video123")
+
+        mock_transcript_api_instance.list.assert_called_once_with("video123")
+
+    @pytest.mark.asyncio
     async def test_fetch_transcript_retry_logic(self, mock_transcript_api_instance):
         """Test retry logic on transient errors."""
         # Setup Success Mock
@@ -224,10 +331,8 @@ class TestFetchTranscript:
         assert mock_transcript_api_instance.list.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_fetch_transcript_with_cookies_builds_http_client(
-        self, mocker, tmp_path
-    ):
-        """Passing cookies path should create YouTubeTranscriptApi with http_client."""
+    async def test_fetch_transcript_uses_default_client(self, mocker):
+        """Transcript fetch should construct YouTubeTranscriptApi plainly."""
         mock_cls = mocker.patch("yt_study.core.youtube.transcript.YouTubeTranscriptApi")
         mock_instance = mock_cls.return_value
         mock_list = MagicMock()
@@ -242,35 +347,246 @@ class TestFetchTranscript:
         ]
         mock_list.find_manually_created_transcript.return_value = mock_transcript_obj
 
-        cookies_file = tmp_path / "cookies.txt"
-        cookies_file.write_text(
-            "# Netscape HTTP Cookie File\n"
-            ".youtube.com\tTRUE\t/\tFALSE\t2145916800\tSID\tfake-session\n",
-            encoding="utf-8",
-        )
-
-        await fetch_transcript("video123", ["en"], cookies_path=cookies_file)
+        await fetch_transcript("video123", ["en"])
 
         assert mock_cls.call_count >= 1
-        call_kwargs = mock_cls.call_args.kwargs
-        assert call_kwargs.get("http_client") is not None
+        assert mock_cls.call_args.kwargs == {}
 
     @pytest.mark.asyncio
-    async def test_fetch_transcript_missing_cookies_file_raises(self, tmp_path):
-        """Missing cookies file should fail fast with a clear error."""
-        missing = tmp_path / "missing-cookies.txt"
+    async def test_fetch_transcript_supports_object_segment_results(
+        self, mock_transcript_api_instance
+    ):
+        """Object-style transcript snippets should be normalized too."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
 
-        with pytest.raises(TranscriptError, match="Cookies file does not exist"):
-            await fetch_transcript("video123", cookies_path=missing)
+        mock_transcript_obj = MagicMock()
+        mock_transcript_obj.language = "English"
+        mock_transcript_obj.language_code = "en"
+        mock_transcript_obj.is_generated = False
+        mock_transcript_obj.fetch.return_value = [
+            MagicMock(text="Hello", start=0.5, duration=1.25),
+        ]
+        mock_list.find_manually_created_transcript.return_value = mock_transcript_obj
+
+        result = await fetch_transcript("video123", ["en"])
+
+        assert result.segments[0].text == "Hello"
+        assert result.segments[0].start == 0.5
+        assert result.segments[0].duration == 1.25
 
     @pytest.mark.asyncio
-    async def test_fetch_transcript_invalid_cookies_file_raises(self, tmp_path):
-        """Invalid cookies format should raise a parse-specific TranscriptError."""
-        bad_cookies = tmp_path / "bad-cookies.txt"
-        bad_cookies.write_text("definitely-not-netscape-format", encoding="utf-8")
+    async def test_fetch_transcript_transcripts_disabled_is_fatal(
+        self, mock_transcript_api_instance
+    ):
+        """Disabled transcripts should raise a clean non-retryable error."""
+        mock_transcript_api_instance.list.side_effect = TranscriptsDisabled("video123")
 
-        with pytest.raises(TranscriptError, match="Failed to parse cookies file"):
-            await fetch_transcript("video123", cookies_path=bad_cookies)
+        with pytest.raises(TranscriptError, match="Transcripts are disabled"):
+            await fetch_transcript("video123")
+
+        mock_transcript_api_instance.list.assert_called_once_with("video123")
+
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_video_unplayable_uses_short_reason(
+        self, mock_transcript_api_instance
+    ):
+        """Non-private unplayable videos should surface the condensed reason."""
+        mock_transcript_api_instance.list.side_effect = VideoUnplayable(
+            "video123",
+            "Playback restricted",
+            [],
+        )
+
+        with pytest.raises(
+            TranscriptError,
+            match="Could not fetch transcript: Playback restricted",
+        ):
+            await fetch_transcript("video123")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("error_cls", [RequestBlocked, IpBlocked])
+    async def test_fetch_transcript_request_blocked_raises_ip_block(
+        self, mock_transcript_api_instance, error_cls
+    ):
+        """Request-level blocking should map to the IP-block guidance error."""
+        mock_transcript_api_instance.list.side_effect = error_cls("video123")
+
+        with pytest.raises(YouTubeIPBlockError, match="blocking requests from your IP"):
+            await fetch_transcript("video123")
+
+    @pytest.mark.asyncio
+    async def test_fetch_transcript_ip_block_message_in_generic_error(
+        self, mock_transcript_api_instance
+    ):
+        """String-based IP block errors should also map to YouTubeIPBlockError."""
+        mock_transcript_api_instance.list.side_effect = RuntimeError(
+            "YouTube is blocking requests from your IP address"
+        )
+
+        with pytest.raises(YouTubeIPBlockError, match="blocking requests from your IP"):
+            await fetch_transcript("video123")
+
+
+class TestFetchSync:
+    """Synchronous transcript strategy coverage."""
+
+    @pytest.fixture
+    def mock_transcript_api_instance(self, mocker):
+        """Mock the YouTubeTranscriptApi class and its instance."""
+        mock_cls = mocker.patch("yt_study.core.youtube.transcript.YouTubeTranscriptApi")
+        return mock_cls.return_value
+
+    def test_fetch_sync_uses_any_manual_transcript_when_preferred_missing(
+        self, mock_transcript_api_instance
+    ):
+        """A manual transcript in another language should beat last-resort fallback."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        manual_other = MagicMock()
+        manual_other.language = "French"
+        manual_other.language_code = "fr"
+        manual_other.fetch.return_value = [{"text": "Bonjour"}]
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["en"], []),
+            manual_other,
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["en"], []
+        )
+        mock_list.__iter__.return_value = [manual_other]
+
+        raw_transcript, transcript_meta, found_msg = _fetch_sync("vid", ["en"])
+
+        assert raw_transcript == [{"text": "Bonjour"}]
+        assert transcript_meta is manual_other
+        assert found_msg == "Using manual transcript in French"
+
+    def test_fetch_sync_prefers_matching_language_from_available_list(
+        self, mock_transcript_api_instance
+    ):
+        """A preferred language from the available list should be used directly."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        preferred = MagicMock()
+        preferred.language = "Hindi"
+        preferred.language_code = "hi"
+        preferred.fetch.return_value = [{"text": "Namaste"}]
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["hi"], []),
+            NoTranscriptFound("vid", ["hi"], []),
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["hi"], []
+        )
+        mock_list.__iter__.return_value = [preferred]
+
+        raw_transcript, transcript_meta, found_msg = _fetch_sync("vid", ["hi"])
+
+        assert raw_transcript == [{"text": "Namaste"}]
+        assert transcript_meta is preferred
+        assert found_msg == "Using Hindi"
+
+    def test_fetch_sync_uses_first_available_when_translation_unavailable(
+        self, mock_transcript_api_instance
+    ):
+        """English fallback should use the first transcript when it cannot translate."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        fallback = MagicMock()
+        fallback.language = "German"
+        fallback.language_code = "de"
+        fallback.is_translatable = False
+        fallback.fetch.return_value = [{"text": "Hallo"}]
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["en"], []),
+            NoTranscriptFound("vid", ["en"], []),
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["en"], []
+        )
+        mock_list.__iter__.return_value = [fallback]
+
+        raw_transcript, transcript_meta, found_msg = _fetch_sync("vid", ["en"])
+
+        assert raw_transcript == [{"text": "Hallo"}]
+        assert transcript_meta is fallback
+        assert found_msg == "Using German (translation not available)"
+
+    def test_fetch_sync_uses_first_available_when_english_is_not_requested(
+        self, mock_transcript_api_instance
+    ):
+        """Non-English requests should fall back to the first available transcript."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        fallback = MagicMock()
+        fallback.language = "French"
+        fallback.language_code = "fr"
+        fallback.fetch.return_value = [{"text": "Bonjour"}]
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["es"], []),
+            NoTranscriptFound("vid", ["es"], []),
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["es"], []
+        )
+        mock_list.__iter__.return_value = [fallback]
+
+        raw_transcript, transcript_meta, found_msg = _fetch_sync("vid", ["es"])
+
+        assert raw_transcript == [{"text": "Bonjour"}]
+        assert transcript_meta is fallback
+        assert found_msg == "Using French"
+
+    def test_fetch_sync_raises_when_no_transcripts_are_available(
+        self, mock_transcript_api_instance
+    ):
+        """An empty available-transcript list should re-raise NoTranscriptFound."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["en"], []),
+            NoTranscriptFound("vid", ["en"], []),
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["en"], []
+        )
+        mock_list.__iter__.return_value = []
+
+        with pytest.raises(NoTranscriptFound):
+            _fetch_sync("vid", ["en"])
+
+    def test_fetch_sync_wraps_last_resort_errors(self, mock_transcript_api_instance):
+        """Unexpected last-resort failures should be wrapped as TranscriptError."""
+        mock_list = MagicMock()
+        mock_transcript_api_instance.list.return_value = mock_list
+
+        translatable = MagicMock()
+        translatable.language = "Spanish"
+        translatable.language_code = "es"
+        translatable.is_translatable = True
+        translatable.translate.side_effect = RuntimeError("translation boom")
+
+        mock_list.find_manually_created_transcript.side_effect = [
+            NoTranscriptFound("vid", ["en"], []),
+            NoTranscriptFound("vid", ["en"], []),
+        ]
+        mock_list.find_generated_transcript.side_effect = NoTranscriptFound(
+            "vid", ["en"], []
+        )
+        mock_list.__iter__.return_value = [translatable]
+
+        with pytest.raises(TranscriptError, match="No usable transcript found"):
+            _fetch_sync("vid", ["en"])
 
 
 class TestSplitTranscript:

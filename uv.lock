@@ -2541,18 +2541,6 @@ wheels = [
 ]
 
 [[package]]
-name = "types-requests"
-version = "2.32.4.20260107"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "urllib3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/f3/a0663907082280664d745929205a89d41dffb29e89a50f753af7d57d0a96/types_requests-2.32.4.20260107.tar.gz", hash = "sha256:018a11ac158f801bfa84857ddec1650750e393df8a004a8a9ae2a9bec6fcb24f", size = 23165, upload-time = "2026-01-07T03:20:54.091Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/1c/12/709ea261f2bf91ef0a26a9eed20f2623227a8ed85610c1e54c5805692ecb/types_requests-2.32.4.20260107-py3-none-any.whl", hash = "sha256:b703fe72f8ce5b31ef031264fe9395cac8f46a04661a79f7ed31a80fb308730d", size = 20676, upload-time = "2026-01-07T03:20:52.929Z" },
-]
-
-[[package]]
 name = "types-setuptools"
 version = "80.10.0.20260124"
 source = { registry = "https://pypi.org/simple" }
@@ -2753,7 +2741,6 @@ dependencies = [
     { name = "aiolimiter" },
     { name = "litellm" },
     { name = "pytubefix" },
-    { name = "requests" },
     { name = "rich" },
     { name = "sqlalchemy" },
     { name = "sqlmodel" },
@@ -2772,7 +2759,6 @@ dev = [
     { name = "pytest-cov" },
     { name = "pytest-mock" },
     { name = "ruff" },
-    { name = "types-requests" },
     { name = "types-setuptools" },
 ]
 
@@ -2781,7 +2767,6 @@ requires-dist = [
     { name = "aiolimiter", specifier = ">=1.2.1" },
     { name = "litellm", specifier = ">=1.81.1" },
     { name = "pytubefix", specifier = ">=10.3.6" },
-    { name = "requests", specifier = ">=2.32.0" },
     { name = "rich", specifier = ">=13.9.4" },
     { name = "sqlalchemy", specifier = ">=2.0.0" },
     { name = "sqlmodel", specifier = ">=0.0.37" },
@@ -2800,7 +2785,6 @@ dev = [
     { name = "pytest-cov", specifier = ">=7.0.0" },
     { name = "pytest-mock", specifier = ">=3.15.1" },
     { name = "ruff", specifier = ">=0.15.0" },
-    { name = "types-requests" },
     { name = "types-setuptools" },
 ]
 

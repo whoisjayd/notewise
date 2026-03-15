@@ -27,7 +27,6 @@ dependencies = [
     "typer>=0.21.1",
     "rich>=13.9.4",
     "aiolimiter>=1.2.1",
-    "requests>=2.32.0",
     "sqlmodel>=0.0.37",
     "sqlalchemy>=2.0.0",
 ]
@@ -68,7 +67,6 @@ dev = [
     "mypy>=1.19.1",
     "bandit[toml]>=1.9.3",
     "deptry>=0.24.0",
-    "types-requests",
     "types-setuptools",
 ]
 

@@ -8,10 +8,14 @@ from rich.panel import Panel
 from rich.prompt import Confirm, Prompt
 from rich.table import Table
 
-from .core.config_helpers import default_youtube_oauth_token_file, parse_bool_setting
-
 
 console = Console()
+LEGACY_CONFIG_KEYS = {
+    "YOUTUBE_USE_OAUTH",
+    "YOUTUBE_SAVE_OAUTH_TOKEN",
+    "YOUTUBE_OAUTH_TOKEN_FILE",
+    "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN",
+}
 
 
 # API key configuration for different providers
@@ -167,6 +171,8 @@ def save_config(new_config: dict[str, str]) -> None:
     current_config = load_config()
 
     current_config.update(new_config)
+    for key in LEGACY_CONFIG_KEYS:
+        current_config.pop(key, None)
 
     # Ensure file exists and set restrictive permissions (owner-only read/write)
     config_path.touch(exist_ok=True)
@@ -180,10 +186,6 @@ def save_config(new_config: dict[str, str]) -> None:
             "DEFAULT_MODEL",
             "OUTPUT_DIR",
             "MAX_CONCURRENT_VIDEOS",
-            "YOUTUBE_USE_OAUTH",
-            "YOUTUBE_SAVE_OAUTH_TOKEN",
-            "YOUTUBE_OAUTH_TOKEN_FILE",
-            "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN",
         ]
         for key in priority_keys:
             if key in current_config:
@@ -285,11 +287,6 @@ def _is_setup_safe_model(_model: str, metadata: dict[str, Any]) -> bool:
             return False
 
     return True
-
-
-def _parse_bool_config(value: str | None, default: bool) -> bool:
-    """Parse a boolean config string using shared config helpers."""
-    return parse_bool_setting(value, default)
 
 
 def _prompt_positive_int(prompt: str, default: str) -> str:
@@ -490,58 +487,11 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
         default_concurrency,
     )
 
-    console.print("\n[bold cyan]YouTube Authentication (Optional):[/bold cyan]")
-    default_use_oauth = _parse_bool_config(
-        current_config.get("YOUTUBE_USE_OAUTH"),
-        False,
-    )
-    use_oauth = Confirm.ask(
-        "Enable YouTube OAuth for age-restricted/private content?",
-        default=default_use_oauth,
-    )
-
-    save_oauth_token = _parse_bool_config(
-        current_config.get("YOUTUBE_SAVE_OAUTH_TOKEN"),
-        False,
-    )
-    oauth_token_file = current_config.get("YOUTUBE_OAUTH_TOKEN_FILE", "")
-    auto_refresh_oauth_token = _parse_bool_config(
-        current_config.get("YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN"),
-        True,
-    )
-
-    if use_oauth:
-        save_oauth_token = Confirm.ask(
-            "Save YouTube OAuth token to disk for future runs?",
-            default=save_oauth_token,
-        )
-        if save_oauth_token:
-            default_token_path = oauth_token_file or str(
-                default_youtube_oauth_token_file()
-            )
-            oauth_token_file = Prompt.ask(
-                "OAuth token file path",
-                default=default_token_path,
-            )
-            auto_refresh_oauth_token = Confirm.ask(
-                "If OAuth token cache looks stale, reset it and retry once?",
-                default=auto_refresh_oauth_token,
-            )
-        else:
-            oauth_token_file = ""
-    else:
-        save_oauth_token = False
-        oauth_token_file = ""
-
     new_config = {
         "DEFAULT_MODEL": model,
         provider_info["env_var"]: api_key,
         "OUTPUT_DIR": output_dir,
         "MAX_CONCURRENT_VIDEOS": concurrency,
-        "YOUTUBE_USE_OAUTH": str(use_oauth).lower(),
-        "YOUTUBE_SAVE_OAUTH_TOKEN": str(save_oauth_token).lower(),
-        "YOUTUBE_OAUTH_TOKEN_FILE": oauth_token_file,
-        "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": str(auto_refresh_oauth_token).lower(),
     }
 
     save_config(new_config)
@@ -559,4 +509,6 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
     )
 
     current_config.update(new_config)
+    for key in LEGACY_CONFIG_KEYS:
+        current_config.pop(key, None)
     return current_config

@@ -5,7 +5,7 @@ import logging
 
 from pytubefix import Playlist
 
-from .auth import build_oauth_kwargs, maybe_reset_oauth_token_for_retry
+from .metadata import PublicAccessRequiredError
 from .parser import extract_video_id
 
 
@@ -18,11 +18,30 @@ class PlaylistError(Exception):
     pass
 
 
+def _raise_if_public_access_required(error: Exception) -> None:
+    """Convert private or sign-in-only playlist failures into user-facing errors."""
+    error_text = str(error).lower()
+
+    if "private playlist" in error_text or "this playlist is private" in error_text:
+        raise PublicAccessRequiredError(
+            "Private YouTube playlists are not supported. "
+            "Make the playlist unlisted or public to process it."
+        ) from error
+
+    if (
+        "requires login to view" in error_text
+        or "please sign in" in error_text
+        or "sign-in" in error_text
+        or "sign in" in error_text
+    ):
+        raise PublicAccessRequiredError(
+            "Sign-in-only YouTube playlists are not supported. "
+            "Use a public or unlisted playlist to process it."
+        ) from error
+
+
 async def extract_playlist_videos(
     playlist_id: str,
-    use_oauth: bool = False,
-    token_file: str | None = None,
-    allow_oauth_cache: bool = True,
 ) -> list[str]:
     """
     Extract all video IDs from a YouTube playlist with retry logic.
@@ -32,9 +51,6 @@ async def extract_playlist_videos(
 
     Args:
         playlist_id: YouTube playlist ID.
-        use_oauth: Whether to use pytubefix OAuth flow.
-        token_file: Optional pytubefix OAuth token file path.
-        allow_oauth_cache: Whether pytubefix may store cached OAuth tokens.
 
     Returns:
         List of video IDs.
@@ -44,19 +60,11 @@ async def extract_playlist_videos(
     """
     max_retries = 3
     last_error = None
-    oauth_retry_used = False
 
     for attempt in range(max_retries):
         try:
             # Wrap blocking pytubefix logic in a thread
-            video_ids = await asyncio.to_thread(
-                _extract_sync,
-                playlist_id,
-                attempt,
-                use_oauth,
-                token_file,
-                allow_oauth_cache,
-            )
+            video_ids = await asyncio.to_thread(_extract_sync, playlist_id, attempt)
 
             if not video_ids:
                 # Should have been raised in _extract_sync if empty, but double check
@@ -67,18 +75,11 @@ async def extract_playlist_videos(
             logger.info(f"Found {len(video_ids)} videos in playlist")
             return video_ids
 
+        except PublicAccessRequiredError:
+            raise
         except Exception as e:
+            _raise_if_public_access_required(e)
             last_error = e
-
-            if maybe_reset_oauth_token_for_retry(
-                error=e,
-                use_oauth=use_oauth,
-                allow_oauth_cache=allow_oauth_cache,
-                token_file=token_file,
-                already_retried=oauth_retry_used,
-            ):
-                oauth_retry_used = True
-                continue
 
             logger.warning(f"Playlist extraction attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
@@ -95,27 +96,18 @@ async def extract_playlist_videos(
 def _extract_sync(
     playlist_id: str,
     attempt: int,
-    use_oauth: bool,
-    token_file: str | None,
-    allow_oauth_cache: bool,
 ) -> list[str]:
     """Blocking helper to extract videos using pytubefix."""
     playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-    playlist = Playlist(
-        playlist_url,
-        **build_oauth_kwargs(
-            use_oauth=use_oauth,
-            allow_oauth_cache=allow_oauth_cache,
-            token_file=token_file,
-        ),
-    )
+    playlist = Playlist(playlist_url)
 
     # Access playlist title to trigger loading
     try:
         title = playlist.title
         if attempt == 0:
             logger.info(f"Found playlist: {title}")
-    except Exception:
+    except Exception as e:
+        _raise_if_public_access_required(e)
         # Title fetch might fail but video extraction might still work
         logger.warning(f"Could not fetch playlist title on attempt {attempt + 1}")
 

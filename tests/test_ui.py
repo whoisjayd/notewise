@@ -57,6 +57,15 @@ def test_dashboard_failure():
     assert dash.overall_progress.tasks[0].completed == 1  # Failures count as done
 
 
+def test_dashboard_total_update():
+    """Batch mode should be able to expand the overall total at runtime."""
+    dash = PipelineDashboard(0, 1, "List", "Model")
+
+    dash.set_total_videos(4)
+
+    assert dash.overall_progress.tasks[0].total == 4
+
+
 def test_dashboard_rendering():
     """Test that __rich__ returns a renderable Panel."""
     dash = PipelineDashboard(10, 1, "List", "Model")

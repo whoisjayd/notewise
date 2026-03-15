@@ -2,7 +2,11 @@
 
 from unittest.mock import MagicMock, PropertyMock
 
+import pytest
+from pytubefix.exceptions import VideoPrivate
+
 from yt_study.core.youtube.metadata import (
+    PublicAccessRequiredError,
     get_playlist_info,
     get_video_chapters,
     get_video_duration,
@@ -128,49 +132,47 @@ class TestVideoMetadata:
         duration = get_video_duration("video123")
         assert duration == 0
 
-    def test_get_video_title_oauth_kwargs(self, mock_pytube):
-        """OAuth-enabled title fetch should forward auth kwargs to pytubefix."""
+    def test_get_video_duration_private_video_raises_clear_error(self, mock_pytube):
+        """Private videos should raise a user-facing public-access error."""
         mock_yt_cls, _ = mock_pytube
         mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).title = PropertyMock(return_value="Private Video")
+        mock_yt_instance.check_availability.side_effect = VideoPrivate("video123")
 
-        title = get_video_title(
-            "video123",
-            use_oauth=True,
-            token_file="token.json",
-            allow_oauth_cache=False,
-        )
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="Make the video unlisted or public to process it",
+        ):
+            get_video_duration("video123")
 
-        assert title == "Private Video"
-        mock_yt_cls.assert_called_once_with(
-            "https://www.youtube.com/watch?v=video123",
-            use_oauth=True,
-            allow_oauth_cache=False,
-            token_file="token.json",
-        )
-
-    def test_get_video_duration_retries_after_stale_oauth_token(
-        self, mock_pytube, tmp_path
+    def test_get_video_title_login_required_private_reason_raises_clear_error(
+        self, mock_pytube
     ):
-        """Stale OAuth token cache should be cleared and retried once."""
+        """Private playability details should beat generic login-required text."""
         mock_yt_cls, _ = mock_pytube
         mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).length = PropertyMock(return_value=120)
-
-        token_file = tmp_path / "youtube_token.json"
-        token_file.write_text("{}", encoding="utf-8")
-        mock_yt_cls.side_effect = [KeyError("access_token"), mock_yt_instance]
-
-        duration = get_video_duration(
-            "video123",
-            use_oauth=True,
-            token_file=str(token_file),
-            allow_oauth_cache=True,
+        mock_yt_instance.check_availability.side_effect = Exception(
+            "video123 requires login to view, YouTube reason: Please sign in"
         )
+        mock_yt_instance.vid_info = {
+            "playabilityStatus": {
+                "status": "LOGIN_REQUIRED",
+                "messages": [
+                    "This is a private video. Please sign in to verify that you "
+                    "may see it."
+                ],
+                "errorScreen": {
+                    "playerErrorMessageRenderer": {
+                        "reason": {"simpleText": "Private video"},
+                    }
+                },
+            }
+        }
 
-        assert duration == 120
-        assert mock_yt_cls.call_count == 2
-        assert not token_file.exists()
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="Make the video unlisted or public to process it",
+        ):
+            get_video_title("video123")
 
 
 class TestPlaylistMetadata:
@@ -220,26 +222,3 @@ class TestPlaylistMetadata:
 
         assert title == "playlist_pl123"
         assert count == 2
-
-    def test_get_playlist_info_oauth_kwargs(self, mock_pytube):
-        """Playlist info should forward OAuth kwargs to pytubefix Playlist."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl_instance = mock_pl_cls.return_value
-        type(mock_pl_instance).title = PropertyMock(return_value="Private Playlist")
-        type(mock_pl_instance).video_urls = PropertyMock(return_value=["url1"])
-
-        title, count = get_playlist_info(
-            "pl123",
-            use_oauth=True,
-            token_file="token.json",
-            allow_oauth_cache=False,
-        )
-
-        assert title == "Private Playlist"
-        assert count == 1
-        mock_pl_cls.assert_called_once_with(
-            "https://www.youtube.com/playlist?list=pl123",
-            use_oauth=True,
-            allow_oauth_cache=False,
-            token_file="token.json",
-        )

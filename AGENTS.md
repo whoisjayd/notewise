@@ -1,6 +1,6 @@
 # PROJECT KNOWLEDGE BASE
 
-**Updated:** 2026-03-13
+**Updated:** 2026-03-15
 **Branch:** main
 
 ## OVERVIEW
@@ -37,7 +37,7 @@ yt-study/
 │   ├── db.py                   # SQLite cache models + DatabaseManager
 │   ├── core/
 │   │   ├── config.py           # Runtime config dataclass + env sync
-│   │   ├── config_helpers.py   # Shared config parsing/default helpers
+│   │   ├── config_helpers.py   # Shared config parsing helpers
 │   │   ├── pipeline.py         # CorePipeline, PipelineEvent, EventType
 │   │   ├── llm/
 │   │   │   ├── generator.py    # Chunking + generation orchestration
@@ -47,7 +47,6 @@ yt-study/
 │   │   │   └── chapter_notes.py# Chapter generation prompts
 │   │   └── youtube/
 │   │       ├── parser.py       # URL parsing
-│   │       ├── auth.py         # OAuth kwargs + token cache helpers
 │   │       ├── metadata.py     # Title, duration, chapters, playlist info
 │   │       ├── transcript.py   # Transcript fetch + fallback logic
 │   │       └── playlist.py     # Playlist expansion with retries
@@ -71,11 +70,10 @@ yt-study/
 | Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
 | Storage | `src/yt_study/db.py` | SQLModel schema and SQLite cache singleton |
 | Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
-| Config | `src/yt_study/core/config_helpers.py` | Shared bool parsing and OAuth token-path defaults |
+| Config | `src/yt_study/core/config_helpers.py` | Shared config parsing helpers |
 | Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
 | LLM | `src/yt_study/core/llm/generator.py` | Chunking strategy and note generation |
 | Provider | `src/yt_study/core/llm/providers.py` | LiteLLM async completion wrapper |
-| YouTube | `src/yt_study/core/youtube/auth.py` | Shared OAuth kwargs and token-cache recovery |
 | YouTube | `src/yt_study/core/youtube/transcript.py` | Transcript fallback and retry logic |
 | YouTube | `src/yt_study/core/youtube/metadata.py` | Duration/title/chapters/playlist info |
 | YouTube | `src/yt_study/core/youtube/playlist.py` | Playlist ID expansion |
@@ -105,11 +103,6 @@ yt-study version
 --language / -l
 --temperature / -t
 --max-tokens / -k
---cookies
---use-oauth / --no-use-oauth
---token-file
---save-oauth-token / --no-save-oauth-token
---auto-refresh-oauth-token / --no-auto-refresh-oauth-token
 --force / -F
 --no-ui
 --quiz
@@ -125,7 +118,10 @@ Batch-file behavior:
 
 - blank lines ignored
 - lines beginning with `#` ignored
-- each remaining line processed sequentially as its own input
+- each remaining line is parsed as a video URL or playlist URL
+- playlist URLs inside batch files expand into per-video jobs
+- all batch video jobs share one worker pool capped by `MAX_CONCURRENT_VIDEOS`
+- batch failures are aggregated and shown after the batch finishes so one private item does not stop the rest
 - unreadable or missing batch-file paths fail fast instead of falling through to URL parsing
 
 ## CURRENT CONFIG MODEL
@@ -158,10 +154,6 @@ Supported runtime keys today:
 - `COHERE_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `YOUTUBE_REQUESTS_PER_MINUTE`
-- `YOUTUBE_USE_OAUTH`
-- `YOUTUBE_SAVE_OAUTH_TOKEN`
-- `YOUTUBE_OAUTH_TOKEN_FILE`
-- `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN`
 
 Important distinction:
 
@@ -347,16 +339,11 @@ Supported:
 - playlist extraction retries up to 3 times
 - backoff uses `2**attempt`
 
-### OAuth token cache handling
+### Authenticated content
 
-- before metadata fetches, the pipeline inspects the OAuth token cache file
-- token `expires` supports numeric and string epoch values
-- access-token caches with missing/invalid expiry are treated as stale
-- stale caches without a refresh token are auto-cleared when `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN=true`
-- the CLI primes OAuth once before single-video processing starts so Rich Live
-  does not trap the device-flow prompt
-- `--use-oauth` with `--no-save-oauth-token` uses a temporary session token
-  file so repeated metadata calls reuse one login without leaving a cache file
+- `yt-study` supports public or unlisted YouTube access paths
+- OAuth and cookie-based YouTube auth were removed because the upstream flows were unstable
+- legacy auth-related keys in old `config.env` files are ignored by runtime and stripped by the setup wizard on save
 
 ### Local SQLite cache
 
@@ -412,7 +399,9 @@ Configured in `src/yt_study/cli.py`.
 - LiteLLM logging suppressed early
 - session logs go to `~/.yt-study/logs`
 - fallback to `./logs` if the home directory is unavailable
-- console only shows warning-level output and higher
+- terminal failures are rendered by the CLI instead of raw logger output
+- detailed tracebacks stay in the session log file
+- failed runs print the current log path for follow-up troubleshooting
 
 ## TEST MAP
 
@@ -428,7 +417,6 @@ Configured in `src/yt_study/cli.py`.
 | `tests/test_db.py` | SQLite cache schema, singleton behavior, and upserts |
 | `tests/test_youtube/test_parser.py` | URL parsing |
 | `tests/test_youtube/test_transcript.py` | transcript fallback and retry logic |
-| `tests/test_youtube/test_auth.py` | OAuth token-file parsing and stale-cache recovery |
 | `tests/test_youtube/test_metadata.py` | metadata extraction |
 | `tests/test_youtube/test_playlist.py` | playlist extraction retries |
 
@@ -526,7 +514,7 @@ When behavior changes:
 
 - Do not document repo-root `.env` as the runtime config source.
 - Do not claim unsupported provider env keys are wired unless `Config` actually supports them.
-- `--cookies` transcript auth is best-effort because upstream `youtube-transcript-api` cookie support can break when YouTube internals change.
+- Private or age-gated YouTube content is not supported; recommend unlisted or public as the workaround when the user controls the video.
 - `yt-study --help` or other Rich-heavy output can hit Unicode issues on legacy Windows consoles; prefer Windows Terminal or UTF-8 mode when documenting support paths.
 - Avoid nested Rich progress bars; the current dashboard uses one overall bar plus worker status rows.
 

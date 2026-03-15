@@ -48,6 +48,8 @@ Design priorities:
 - Supports common YouTube URL forms including `watch`, `youtu.be`, `embed`, and `shorts`.
 - Validates that inputs target real YouTube hosts before parsing video or playlist IDs.
 - Expands playlists into per-video jobs automatically.
+- Processes batch videos concurrently up to the configured worker count.
+- Expands playlist URLs inside batch files into the same shared batch worker pool.
 
 ### Transcript Reliability
 
@@ -55,6 +57,7 @@ Design priorities:
 - Falls back to generated captions when needed.
 - Can use other available languages and translate to English when possible.
 - Retries transient failures and surfaces IP-block cases clearly.
+- Supports public or unlisted YouTube access paths; sign-in-only videos and playlists are not supported.
 
 ### Note Generation
 
@@ -65,7 +68,8 @@ Design priorities:
 ### Terminal Experience
 
 - Rich live dashboard for active worker status and total progress.
-- End-of-run summary for successes and failures.
+- Friendly end-of-run summaries that keep terminal failures non-technical.
+- Technical details and stack traces are written to the current session log file.
 - Batch mode support for repeated study queues.
 
 ### Engineering Quality
@@ -140,11 +144,6 @@ Supported options:
 --language / -l
 --temperature / -t
 --max-tokens / -k
---cookies
---use-oauth / --no-use-oauth
---token-file
---save-oauth-token / --no-save-oauth-token
---auto-refresh-oauth-token / --no-auto-refresh-oauth-token
 --force / -F
 --no-ui
 --quiz
@@ -157,8 +156,6 @@ yt-study process "URL" -m gemini/gemini-2.5-flash
 yt-study process "URL" -o ./course-notes
 yt-study process "URL" -l hi -l en
 yt-study process "URL" -t 0.4 -k 2500
-yt-study process "URL" --use-oauth --save-oauth-token
-yt-study process "URL" --cookies ./cookies.txt
 yt-study process "URL" --force --quiz
 yt-study process "URL" --no-ui
 ```
@@ -167,6 +164,7 @@ Exit behavior:
 
 - invalid input, unreadable batch files, and any failed video now return a non-zero exit code
 - successful runs, including cache skips, return exit code `0`
+- batch runs continue past private or failed entries and show the collected failures at the end
 
 ## How It Works
 
@@ -258,10 +256,6 @@ Common supported keys:
 - `COHERE_API_KEY`
 - `DEEPSEEK_API_KEY`
 - `YOUTUBE_REQUESTS_PER_MINUTE`
-- `YOUTUBE_USE_OAUTH`
-- `YOUTUBE_SAVE_OAUTH_TOKEN`
-- `YOUTUBE_OAUTH_TOKEN_FILE`
-- `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN`
 
 Config behavior:
 
@@ -270,14 +264,10 @@ Config behavior:
 - syncs supported provider keys into `os.environ` for LiteLLM
 - defaults `DEFAULT_MODEL` to `gemini/gemini-2.5-flash`
 - throttles YouTube request rate globally (default `10` requests/minute)
-- supports OAuth auth for metadata/playlist fetches and optional token caching
-- when `--use-oauth` is combined with `--no-save-oauth-token`, the CLI uses a
-  temporary session token cache so device login happens once and no token file
-  remains after exit
-- supports best-effort `--cookies` transcript requests via `youtube-transcript-api`
+- ignores removed legacy YouTube auth keys if they still exist in older config files
 - stores local processing cache in `~/.yt-study/.yt_study_cache.db`
-- prints a Cost Summary table with prompt/completion/total tokens, estimated
-  USD cost (from LiteLLM pricing), and timing
+- prints a Cost Summary table for successful runs with prompt/completion/total
+  tokens, estimated USD cost (from LiteLLM pricing), and timing
 
 Setup wizard model selection:
 
@@ -317,33 +307,23 @@ Try:
 
 ### Private or age-gated YouTube content
 
+`yt-study` now supports public or unlisted YouTube access paths. OAuth and cookie-based
+workflows were removed because the upstream auth paths were too unstable to rely on.
+
 Try:
 
-1. enable OAuth for metadata and playlist fetches:
+1. if you control the video, change it from private to unlisted or public and rerun
+2. confirming the video or playlist is viewable without signing in
+3. using a public mirror or public playlist copy
+4. exporting a transcript outside `yt-study` first, then working from that text
 
-```bash
-yt-study process "URL" --use-oauth --save-oauth-token
-```
+### Friendly failure output
 
-2. optionally pass a cookies file for transcript requests:
+`yt-study` now keeps terminal failures short and user-friendly:
 
-```bash
-yt-study process "URL" --cookies ./cookies.txt
-```
-
-3. if cached OAuth tokens are stale, enable auto-refresh reset:
-
-```bash
-yt-study process "URL" --auto-refresh-oauth-token
-```
-
-Note:
-
-- OAuth token cache stores an expiry timestamp and is refreshed by `pytubefix`.
-- `yt-study` inspects token cache expiry before processing; stale caches without a
-  refresh token are auto-cleared when auto-refresh is enabled.
-- `youtube-transcript-api` cookie auth is best-effort and can break when YouTube
-  changes internals.
+- failed runs show a simplified failure summary instead of raw tracebacks
+- the current session log path is printed so technical details are still easy to find
+- detailed stack traces stay in `~/.yt-study/logs/` instead of the terminal
 
 ### YouTube IP block or rate limiting
 

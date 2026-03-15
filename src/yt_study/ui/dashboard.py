@@ -121,6 +121,15 @@ class PipelineDashboard:
         # advance the bar.
         self.overall_progress.advance(self.overall_task)
 
+    def set_total_videos(self, total_videos: int) -> None:
+        """
+        Update the overall expected work count.
+
+        This is used by batch mode when playlist URLs expand into more videos
+        after processing has already started.
+        """
+        self.overall_progress.update(self.overall_task, total=total_videos)
+
     def update_overall_status(self, description: str) -> None:
         """
         Update the description of the overall progress bar.

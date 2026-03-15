@@ -1,12 +1,11 @@
 """Tests for CorePipeline (zero-UI core pipeline)."""
 
 import asyncio
-import json
-import time
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from sqlalchemy.exc import SQLAlchemyError
 
 from yt_study.core.llm.providers import UsageTotals
 from yt_study.core.pipeline import (
@@ -14,9 +13,13 @@ from yt_study.core.pipeline import (
     EventType,
     PipelineEvent,
     PipelineResult,
+    PipelineSharedState,
+    _format_user_error,
+    run_pipeline,
     sanitize_filename,
 )
-from yt_study.core.youtube.transcript import YouTubeIPBlockError
+from yt_study.core.youtube.metadata import PublicAccessRequiredError
+from yt_study.core.youtube.transcript import TranscriptError, YouTubeIPBlockError
 from yt_study.db import (
     DatabaseManager,
     build_cache_db_path,
@@ -262,11 +265,9 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
     async def _fetch_with_request_hook(
         _video_id,
         _languages,
-        cookies_path=None,
         on_request=None,
     ):  # pragma: no cover - signature exercise
         assert on_request is not None
-        assert cookies_path is None
         await on_request()
         transcript = MagicMock()
         transcript.to_text.return_value = "text"
@@ -323,24 +324,10 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
 
 
 @pytest.mark.asyncio
-async def test_run_forwards_oauth_and_cookie_settings(
-    temp_output_dir, mock_llm_provider, tmp_path
-):
-    """Pipeline should forward auth settings to metadata and transcript calls."""
-    cookies_file = tmp_path / "cookies.txt"
-    cookies_file.write_text("# Netscape HTTP Cookie File\n", encoding="utf-8")
-    token_file = tmp_path / "youtube_token.json"
-
+async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provider):
+    """Pipeline should call metadata helpers directly and pass transcript hook."""
     with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
-        pipeline = CorePipeline(
-            model="mock-model",
-            output_dir=temp_output_dir,
-            cookies_path=cookies_file,
-            use_oauth=True,
-            oauth_token_file=token_file,
-            save_oauth_token=False,
-            auto_refresh_oauth_token=True,
-        )
+        pipeline = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline.generator = MagicMock()
         pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
         pipeline.generator.generate_single_chapter_notes = AsyncMock(
@@ -372,45 +359,25 @@ async def test_run_forwards_oauth_and_cookie_settings(
         result = await pipeline.run(["vid-auth"])
 
     assert result.success_count == 1
-    expected_kwargs = {
-        "use_oauth": True,
-        "token_file": str(token_file),
-        "allow_oauth_cache": False,
-    }
-    mock_title.assert_called_once_with("vid-auth", **expected_kwargs)
-    mock_duration.assert_called_once_with("vid-auth", **expected_kwargs)
-    mock_chapters.assert_called_once_with("vid-auth", **expected_kwargs)
+    mock_title.assert_called_once_with("vid-auth")
+    mock_duration.assert_called_once_with("vid-auth")
+    mock_chapters.assert_called_once_with("vid-auth")
 
     fetch_kwargs = mock_fetch.await_args.kwargs
-    assert fetch_kwargs["cookies_path"] == cookies_file
     assert fetch_kwargs["on_request"] is not None
 
 
 @pytest.mark.asyncio
-async def test_run_clears_malformed_oauth_token_cache(
-    temp_output_dir, mock_llm_provider, tmp_path
-):
-    """Malformed OAuth token JSON should be removed before metadata fetch."""
-    token_file = tmp_path / "broken_token.json"
-    token_file.write_text("{not-json", encoding="utf-8")
-
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
-        pipeline = CorePipeline(
-            model="mock-model",
-            output_dir=temp_output_dir,
-            use_oauth=True,
-            oauth_token_file=token_file,
-            save_oauth_token=True,
-            auto_refresh_oauth_token=True,
-        )
-        pipeline.generator = MagicMock()
-        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
-        pipeline.generator.generate_single_chapter_notes = AsyncMock(
-            return_value="# Chapter Notes"
-        )
-
+async def test_run_fails_early_for_private_video(pipeline):
+    """Private videos should fail before transcript fetching starts."""
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch(
+            "yt_study.core.pipeline.get_video_title",
+            side_effect=PublicAccessRequiredError(
+                "Private YouTube videos are not supported. "
+                "Make the video unlisted or public to process it."
+            ),
+        ),
         patch("yt_study.core.pipeline.get_video_duration", return_value=100),
         patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
@@ -422,115 +389,46 @@ async def test_run_clears_malformed_oauth_token_cache(
             return_value=None,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
-        result = await pipeline.run(["vid-token"])
+        result = await pipeline.run(["private123"])
 
-    assert result.success_count == 1
-    assert not token_file.exists()
+    assert result.success_count == 0
+    assert result.failure_count == 1
+    assert result.errors["private123"] == (
+        "Private YouTube videos are not supported. "
+        "Make the video unlisted or public to process it."
+    )
+    mock_fetch.assert_not_awaited()
 
 
 @pytest.mark.asyncio
-async def test_run_clears_expired_oauth_token_without_refresh_token(
-    temp_output_dir, mock_llm_provider, tmp_path
-):
-    """Expired token caches without refresh token should be auto-cleared."""
-    token_file = tmp_path / "expired_token.json"
-    token_file.write_text(
-        json.dumps({"access_token": "access", "expires": str(time.time() - 30)}),
-        encoding="utf-8",
-    )
-
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
-        pipeline = CorePipeline(
-            model="mock-model",
-            output_dir=temp_output_dir,
-            use_oauth=True,
-            oauth_token_file=token_file,
-            save_oauth_token=True,
-            auto_refresh_oauth_token=True,
-        )
-        pipeline.generator = MagicMock()
-        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
-        pipeline.generator.generate_single_chapter_notes = AsyncMock(
-            return_value="# Chapter Notes"
-        )
-
+async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
+    """Transcript-level private video failures should keep the clean message."""
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
+        patch("yt_study.core.pipeline.get_video_title", return_value="Private Video"),
         patch("yt_study.core.pipeline.get_video_duration", return_value=100),
         patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
             "yt_study.core.pipeline.fetch_transcript",
             new_callable=AsyncMock,
+            side_effect=PublicAccessRequiredError(
+                "Private YouTube videos are not supported. "
+                "Make the video unlisted or public to process it."
+            ),
         ) as mock_fetch,
         patch(
             "yt_study.core.pipeline.config.get_api_key_name_for_model",
             return_value=None,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
-        result = await pipeline.run(["vid-token-expired"])
+        result = await pipeline.run(["private123"])
 
-    assert result.success_count == 1
-    assert not token_file.exists()
-
-
-@pytest.mark.asyncio
-async def test_run_keeps_expired_oauth_token_when_refresh_token_exists(
-    temp_output_dir, mock_llm_provider, tmp_path
-):
-    """Expired caches with refresh token should be retained for pytubefix refresh."""
-    token_file = tmp_path / "refreshable_token.json"
-    token_file.write_text(
-        json.dumps(
-            {
-                "access_token": "access",
-                "refresh_token": "refresh",
-                "expires": str(time.time() - 30),
-            }
-        ),
-        encoding="utf-8",
+    assert result.success_count == 0
+    assert result.failure_count == 1
+    assert result.errors["private123"] == (
+        "Private YouTube videos are not supported. "
+        "Make the video unlisted or public to process it."
     )
-
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
-        pipeline = CorePipeline(
-            model="mock-model",
-            output_dir=temp_output_dir,
-            use_oauth=True,
-            oauth_token_file=token_file,
-            save_oauth_token=True,
-            auto_refresh_oauth_token=True,
-        )
-        pipeline.generator = MagicMock()
-        pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
-        pipeline.generator.generate_single_chapter_notes = AsyncMock(
-            return_value="# Chapter Notes"
-        )
-
-    with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
-        patch(
-            "yt_study.core.pipeline.fetch_transcript",
-            new_callable=AsyncMock,
-        ) as mock_fetch,
-        patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
-        ),
-    ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
-        result = await pipeline.run(["vid-token-refresh"])
-
-    assert result.success_count == 1
-    assert token_file.exists()
+    mock_fetch.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -663,7 +561,7 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
     assert result.success_count == 0
     assert result.failure_count == 1
     assert "vid123" in result.errors
-    assert "IP blocked" in result.errors["vid123"]
+    assert "temporarily blocking requests" in result.errors["vid123"]
 
     # Check events
     event_types = [e.event_type for e in events]
@@ -671,7 +569,7 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
 
     failed_event = next(e for e in events if e.event_type == EventType.VIDEO_FAILED)
     assert failed_event.video_id == "vid123"
-    assert "IP blocked" in failed_event.error or "VPN" in failed_event.error
+    assert "temporarily blocking requests" in failed_event.error
 
 
 @pytest.mark.asyncio
@@ -699,7 +597,7 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
     assert result.success_count == 0
     assert result.failure_count == 1
     assert "vid456" in result.errors
-    assert "RuntimeError" in result.errors["vid456"]
+    assert "timed out" in result.errors["vid456"]
 
     # Check events
     event_types = [e.event_type for e in events]
@@ -707,7 +605,7 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
 
     failed_event = next(e for e in events if e.event_type == EventType.VIDEO_FAILED)
     assert failed_event.video_id == "vid456"
-    assert "RuntimeError" in failed_event.error
+    assert "timed out" in failed_event.error
 
 
 # ---------------------------------------------------------------------------
@@ -1028,6 +926,186 @@ def test_usage_coercion_helpers_handle_non_numeric_values(
     assert totals.completion_tokens == 9
     assert totals.total_tokens == 4
     assert totals.cost_usd == 0.0025
+
+
+@pytest.mark.parametrize(
+    ("error", "expected"),
+    [
+        (
+            PublicAccessRequiredError("Public access required"),
+            "Public access required",
+        ),
+        (
+            YouTubeIPBlockError("ip blocked"),
+            "YouTube is temporarily blocking requests from this network. "
+            "Try again later, lower the request rate, or switch networks.",
+        ),
+        (
+            TranscriptError("No transcript found"),
+            "We couldn't get a usable transcript for this video. "
+            "Make sure captions are available, try another language, "
+            "or use a different video.",
+        ),
+        (
+            TranscriptError("Different transcript failure"),
+            "We couldn't get a usable transcript for this video.",
+        ),
+        (
+            RuntimeError("network timeout"),
+            "The request timed out while processing this video. Please try again.",
+        ),
+        (
+            RuntimeError("Connection refused by host"),
+            "A network problem interrupted processing. Please try again.",
+        ),
+        (
+            RuntimeError("Too many requests"),
+            "The upstream service is rate-limiting requests right now. "
+            "Please try again later.",
+        ),
+        (
+            RuntimeError("Unauthorized request"),
+            "The selected model or provider is not configured correctly. "
+            "Check your API key and try again.",
+        ),
+        (
+            RuntimeError("Access is denied"),
+            "yt-study could not write the output files. "
+            "Check the output folder permissions and try again.",
+        ),
+        (
+            RuntimeError("mystery"),
+            "We couldn't process this video. "
+            "Check the current session log for technical details.",
+        ),
+    ],
+)
+def test_format_user_error_variants(error, expected):
+    """User-facing error formatting should map internal failures predictably."""
+    assert _format_user_error(error) == expected
+
+
+def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provider):
+    """Pipelines built for batch work should reuse the shared semaphore and locks."""
+    shared_state = PipelineSharedState(semaphore=asyncio.Semaphore(3))
+
+    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            shared_state=shared_state,
+        )
+
+    assert pipeline.semaphore is shared_state.semaphore
+    assert pipeline._output_lock is shared_state.output_lock
+    assert pipeline._reserved_output_targets is shared_state.reserved_output_targets
+
+
+@pytest.mark.asyncio
+async def test_get_cached_video_returns_none_on_sqlalchemy_error(
+    temp_output_dir, mock_llm_provider
+):
+    """Cache read failures should degrade gracefully instead of aborting the run."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p.db.get_video = MagicMock(side_effect=SQLAlchemyError("db down"))
+
+    assert await p._get_cached_video("vid-cache-fail") is None
+
+
+@pytest.mark.asyncio
+async def test_persist_video_cache_swallows_sqlalchemy_error(
+    temp_output_dir, mock_llm_provider
+):
+    """Cache write failures should be logged and ignored."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p.db.upsert_video_cache = MagicMock(side_effect=SQLAlchemyError("db down"))
+    p.generator.count_tokens.return_value = 12
+
+    await p._persist_video_cache(
+        video_id="vid-cache-fail",
+        title="Video",
+        duration=123,
+        transcript_text="hello world",
+        transcript_language="en",
+    )
+
+    p.db.upsert_video_cache.assert_called_once()
+
+
+def test_usage_coercion_helpers_cover_bool_float_and_passthrough(
+    temp_output_dir, mock_llm_provider
+):
+    """Usage coercion should handle bools, negatives, bad strings, and passthrough."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    totals = UsageTotals(
+        prompt_tokens=1,
+        completion_tokens=2,
+        total_tokens=3,
+        cost_usd=0.1,
+    )
+
+    assert p._coerce_usage_int(True) == 1
+    assert p._coerce_usage_int(-2) == 0
+    assert p._coerce_usage_float(True) == 1.0
+    assert p._coerce_usage_float(-2) == 0.0
+    assert p._coerce_usage_float("not-a-number") == 0.0
+    assert p._coerce_usage_totals(totals) is totals
+
+
+def test_estimate_tokens_used_falls_back_when_counter_raises(
+    temp_output_dir, mock_llm_provider
+):
+    """Token estimation should fall back to a char-count heuristic on failure."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p.generator.count_tokens.side_effect = RuntimeError("count failed")
+
+    assert p._estimate_tokens_used("") == 1
+    assert p._estimate_tokens_used("abcd" * 5) == 5
+
+
+def test_emit_event_swallows_event_handler_errors(temp_output_dir, mock_llm_provider):
+    """UI callback errors should not break the pipeline core."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    on_event = MagicMock(side_effect=RuntimeError("ui boom"))
+    emit = p._emit_event(on_event)
+
+    with patch("yt_study.core.pipeline.logger.warning") as mock_warning:
+        emit(EventType.PIPELINE_START, "vid", title="Video")
+
+    on_event.assert_called_once()
+    mock_warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_dir):
+    """run_pipeline should construct CorePipeline and delegate to run()."""
+    expected = PipelineResult(
+        success_count=1,
+        failure_count=0,
+        total_count=1,
+        video_ids=["vid1"],
+        errors={},
+    )
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=expected)
+
+    with patch(
+        "yt_study.core.pipeline.CorePipeline",
+        return_value=pipeline_instance,
+    ) as mock_pipeline_cls:
+        result = await run_pipeline(
+            ["vid1"],
+            output_dir=temp_output_dir,
+            model="demo-model",
+            on_event=None,
+        )
+
+    assert result is expected
+    mock_pipeline_cls.assert_called_once_with(
+        model="demo-model",
+        output_dir=temp_output_dir,
+    )
+    pipeline_instance.run.assert_awaited_once_with(["vid1"], on_event=None)
 
 
 @pytest.mark.asyncio

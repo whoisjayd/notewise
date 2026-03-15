@@ -27,7 +27,7 @@ flowchart TD
 
     C -->|single video| D[parser.py extracts video_id]
     C -->|playlist| E[playlist.py expands video IDs]
-    C -->|batch file| F[cli.py reads file line by line]
+    C -->|batch file| F[cli.py expands batch entries into shared video jobs]
 
     D --> G[CorePipeline.run]
     E --> G
@@ -55,7 +55,7 @@ flowchart TD
     end
 
     G --> S([PIPELINE_COMPLETE])
-    S --> T[cli.py prints summary]
+    S --> T[cli.py prints success summary or clean failure panel]
 ```
 
 ---
@@ -124,8 +124,15 @@ classDiagram
 
 ## Async concurrency model
 
-`CorePipeline.run()` processes multiple video IDs concurrently using `asyncio.gather` guarded by a shared semaphore (`config.max_concurrent_videos`).
-Each video slot corresponds to one worker in the Rich dashboard.
+`CorePipeline.run()` processes multiple video IDs concurrently using `asyncio.gather`
+guarded by a shared semaphore (`config.max_concurrent_videos`). Each video slot
+corresponds to one worker in the Rich dashboard.
+
+Concurrency depends on the entry shape:
+
+- direct playlist processing passes playlist video IDs into one concurrent pipeline run
+- batch-file processing expands playlist entries into per-video jobs inside one shared batch worker pool
+- failed or private batch entries are collected and reported after the batch finishes instead of stopping remaining work
 
 ```mermaid
 sequenceDiagram
@@ -197,5 +204,6 @@ src/yt_study/
 
 1. **`core/` is UI-free.** No Rich imports inside `src/yt_study/core/`.
 2. **Blocking I/O off the event loop.** `pytubefix` and `youtube-transcript-api` calls are wrapped in `asyncio.to_thread(...)`.
-3. **Progress via events.** `CorePipeline` emits `PipelineEvent` objects through a callback; the CLI converts them to either dashboard updates or plain console lines (`--no-ui`).
-4. **Config is a 3-part contract.** Adding a provider key requires updating `Config.ALLOWED_KEYS`, `Config.get_api_key_name_for_model()`, and `Config._sync_env_vars()`.
+3. **Progress via events.** `CorePipeline` emits `PipelineEvent` objects through a callback; the CLI converts them into dashboard updates, headless progress lines, and final summaries.
+4. **User-facing failures stay in the CLI.** The terminal shows simplified, non-technical failures while detailed tracebacks stay in the current session log.
+5. **Config is a 3-part contract.** Adding a provider key requires updating `Config.ALLOWED_KEYS`, `Config.get_api_key_name_for_model()`, and `Config._sync_env_vars()`.
