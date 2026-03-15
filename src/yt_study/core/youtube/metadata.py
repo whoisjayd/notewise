@@ -246,6 +246,15 @@ def _raise_from_public_access_text(error_text: str, cause: Exception) -> None:
     """Raise a user-facing access error when the text indicates restricted access."""
     normalized_text = error_text.lower()
 
+    # Detect Google OAuth consent 500 errors (upstream issue)
+    # See: https://github.com/whoisjayd/yt-study/issues/55
+    if _is_google_consent_500_error(normalized_text):
+        raise PublicAccessRequiredError(
+            "This video requires sign-in access, but OAuth support has been removed "
+            "due to upstream Google consent flow failures (500 Internal Server Error). "
+            "Use a public or unlisted video instead."
+        ) from cause
+
     if (
         "private video" in normalized_text
         or "this is a private video" in normalized_text
@@ -273,3 +282,35 @@ def _raise_from_public_access_text(error_text: str, cause: Exception) -> None:
             "Sign-in-only YouTube videos are not supported. "
             "Use a public or unlisted video to process it."
         ) from cause
+
+
+def _is_google_consent_500_error(error_text: str) -> bool:
+    """Detect Google OAuth consent 500 errors from upstream.
+
+    Google device-flow consent screen fails with 500 errors before token issuance
+    completes, making OAuth unreliable. This detects error messages indicating
+    that specific failure mode.
+
+    See: https://github.com/whoisjayd/yt-study/issues/55
+    """
+    # Core indicators of the consent 500 issue
+    has_500 = "500" in error_text or "internal server error" in error_text
+    has_consent = "consent" in error_text
+    has_oauth = "oauth" in error_text or "oauth" in error_text
+
+    # Combined patterns that indicate the specific Google consent failure
+    if has_500 and (has_consent or has_oauth):
+        return True
+
+    # Specific error patterns observed in the wild
+    consent_patterns = [
+        "consent/approval",
+        "oauth/consent",
+        "accounts.google.com/signin/oauth",
+        "device flow",
+    ]
+    for pattern in consent_patterns:
+        if pattern in error_text and has_500:
+            return True
+
+    return False
