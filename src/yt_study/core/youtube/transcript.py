@@ -4,6 +4,7 @@ import asyncio
 import logging
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -131,6 +132,7 @@ async def fetch_transcript(
     video_id: str,
     languages: list[str] | None = None,
     on_request: Callable[[], Awaitable[None]] | None = None,
+    cookies: Path | None = None,
 ) -> VideoTranscript:
     """
     Fetch transcript for a YouTube video with language fallback and retry logic.
@@ -146,6 +148,7 @@ async def fetch_transcript(
         video_id: YouTube video ID.
         languages: Preferred language codes (e.g., ['en', 'hi']). Defaults to ['en'].
         on_request: Optional async callback to invoke before each network attempt.
+        cookies: Optional path to Netscape format cookies.txt file for authenticated requests.
 
     Returns:
         VideoTranscript object.
@@ -166,7 +169,7 @@ async def fetch_transcript(
             # This is critical to prevent blocking the asyncio event loop
             # during concurrency
             raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
-                _fetch_sync, video_id, languages
+                _fetch_sync, video_id, languages, cookies
             )
 
             logger.info(log_msg)
@@ -255,13 +258,18 @@ async def fetch_transcript(
 def _fetch_sync(
     video_id: str,
     languages: list[str],
+    cookies: Path | None = None,
 ) -> tuple[Any, Any, str]:
     """Blocking helper to interact with YouTubeTranscriptApi."""
     ytt_api = YouTubeTranscriptApi()
 
     # List all available transcripts
     # This list call can fail with TranscriptsDisabled or VideoUnavailable
-    transcript_list = ytt_api.list(video_id)
+    # Use cookies for authenticated requests if provided
+    list_kwargs = {}
+    if cookies is not None:
+        list_kwargs["cookies"] = str(cookies)
+    transcript_list = ytt_api.list(video_id, **list_kwargs)
 
     transcript = None
     found_msg = ""
@@ -334,7 +342,11 @@ def _fetch_sync(
             raise TranscriptError(f"No usable transcript found: {e}") from e
 
     # Fetch the actual transcript data
-    raw_transcript = transcript.fetch()
+    # Use cookies for authenticated requests if provided
+    fetch_kwargs = {}
+    if cookies is not None:
+        fetch_kwargs["cookies"] = str(cookies)
+    raw_transcript = transcript.fetch(**fetch_kwargs)
     return raw_transcript, transcript, found_msg
 
 

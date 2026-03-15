@@ -217,6 +217,18 @@ def process(
             help="Also generate a multiple-choice quiz file alongside the study notes.",
         ),
     ] = False,
+    cookies: Annotated[
+        Path | None,
+        typer.Option(
+            "--cookies",
+            "-c",
+            help="Path to a Netscape format cookies.txt file for authenticated YouTube requests.",
+            exists=True,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -617,6 +629,7 @@ def process(
                 max_tokens=selected_max_tokens,
                 force=force,
                 quiz=quiz,
+                cookies=cookies,
                 shared_state=shared_state,
             )
 

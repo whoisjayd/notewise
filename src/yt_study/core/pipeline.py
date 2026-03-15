@@ -305,6 +305,7 @@ class CorePipeline:
         max_tokens: int | None = None,
         force: bool = False,
         quiz: bool = False,
+        cookies: Path | None = None,
         shared_state: PipelineSharedState | None = None,
     ):
         """
@@ -318,6 +319,7 @@ class CorePipeline:
             max_tokens: Max tokens for generation.
             force: Re-process videos that already have saved output.
             quiz: Also generate a multiple-choice quiz file.
+            cookies: Path to Netscape format cookies.txt for authenticated requests.
             shared_state: Optional shared semaphore/output reservation state.
         """
         self.model = model
@@ -327,6 +329,7 @@ class CorePipeline:
             temperature if temperature is not None else config.temperature
         )
         self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
+        self.cookies = cookies
 
         self.provider = get_provider(model)
         self.generator = StudyMaterialGenerator(
@@ -652,6 +655,7 @@ class CorePipeline:
                     video_id,
                     self.languages,
                     on_request=self._acquire_youtube_request_slot,
+                    cookies=self.cookies,
                 )
                 transcript_text = transcript_obj.to_text()
                 transcript_seconds = time.perf_counter() - transcript_start

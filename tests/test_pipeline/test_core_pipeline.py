@@ -266,6 +266,7 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
         _video_id,
         _languages,
         on_request=None,
+        **kwargs,  # Accept additional kwargs like cookies
     ):  # pragma: no cover - signature exercise
         assert on_request is not None
         await on_request()
