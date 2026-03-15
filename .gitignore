@@ -22,3 +22,9 @@ src/yt_study/output/
 coverage.xml
 htmlcov/
 dummy_path
+codex*
+.codex*
+*temp*
+*tmp*
+*.log
+*codex*
