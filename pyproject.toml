@@ -1,6 +1,6 @@
 [project]
 name = "yt-study"
-version = "0.2.4"
+version = "0.2.5"
 description = "Convert YouTube videos into AI-powered study notes with chapter support"
 readme = "README.md"
 requires-python = ">=3.10"
