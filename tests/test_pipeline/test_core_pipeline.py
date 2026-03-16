@@ -1,6 +1,7 @@
 """Tests for CorePipeline (zero-UI core pipeline)."""
 
 import asyncio
+import json
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1568,3 +1569,196 @@ async def test_pipeline_reuses_sqlite_cache_across_runs(
     mock_duration_second.assert_not_called()
     mock_chapters_second.assert_not_called()
     mock_fetch_second.assert_not_awaited()
+
+
+# ---------------------------------------------------------------------------
+# Transcript export tests
+# ---------------------------------------------------------------------------
+
+
+def _make_pipeline_with_export(
+    temp_output_dir,
+    mock_llm_provider,
+    export_format: str,
+) -> CorePipeline:
+    """Create a pipeline with export_transcript enabled."""
+    with patch(
+        "yt_study.core.pipeline.get_provider",
+        return_value=mock_llm_provider,
+    ):
+        p = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            export_transcript=export_format,
+        )
+        p.generator = MagicMock()
+        p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        return p
+
+
+@pytest.mark.asyncio
+async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
+    """export_transcript='txt' creates a .txt file with plain text."""
+    p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "txt")
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "Hello world transcript"
+        mock_transcript.video_id = "vid123"
+        mock_transcript.language = "English"
+        mock_transcript.language_code = "en"
+        mock_transcript.is_generated = False
+        mock_transcript.segments = []
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid123"])
+
+    assert result.success_count == 1
+    export_file = temp_output_dir / "Test Video_transcript.txt"
+    assert export_file.exists()
+    assert export_file.read_text(encoding="utf-8") == "Hello world transcript"
+
+
+@pytest.mark.asyncio
+async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
+    """export_transcript='json' creates a .json file with timestamped segments."""
+    p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "json")
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        # Create mock segments with timestamps
+        mock_segment1 = MagicMock()
+        mock_segment1.text = "Hello"
+        mock_segment1.start = 0.0
+        mock_segment1.duration = 1.5
+
+        mock_segment2 = MagicMock()
+        mock_segment2.text = "world"
+        mock_segment2.start = 1.5
+        mock_segment2.duration = 2.0
+
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "Hello world"
+        mock_transcript.video_id = "vid123"
+        mock_transcript.language = "English"
+        mock_transcript.language_code = "en"
+        mock_transcript.is_generated = False
+        mock_transcript.segments = [mock_segment1, mock_segment2]
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid123"])
+
+    assert result.success_count == 1
+    export_file = temp_output_dir / "Test Video_transcript.json"
+    assert export_file.exists()
+
+    data = json.loads(export_file.read_text(encoding="utf-8"))
+    assert data["video_id"] == "vid123"
+    assert data["language"] == "English"
+    assert data["language_code"] == "en"
+    assert data["is_generated"] is False
+    assert len(data["segments"]) == 2
+    assert data["segments"][0]["text"] == "Hello"
+    assert data["segments"][0]["start"] == 0.0
+    assert data["segments"][0]["duration"] == 1.5
+    assert data["segments"][1]["text"] == "world"
+
+
+@pytest.mark.asyncio
+async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
+    """No transcript file is created when export_transcript is None."""
+    with patch(
+        "yt_study.core.pipeline.get_provider",
+        return_value=mock_llm_provider,
+    ):
+        p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
+        p.generator = MagicMock()
+        p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+
+    with (
+        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript text"
+        mock_transcript.segments = []
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid123"])
+
+    assert result.success_count == 1
+    # No transcript export files should exist
+    txt_files = list(temp_output_dir.glob("*_transcript.txt"))
+    json_files = list(temp_output_dir.glob("*_transcript.json"))
+    assert len(txt_files) == 0
+    assert len(json_files) == 0
+
+
+@pytest.mark.asyncio
+async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
+    """Export file uses sanitized filename for special characters in title."""
+    p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "txt")
+
+    with (
+        patch(
+            "yt_study.core.pipeline.get_video_title",
+            return_value="Test: Video <Special>",
+        ),
+        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
+        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
+        patch(
+            "yt_study.core.pipeline.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.core.pipeline.config.get_api_key_name_for_model",
+            return_value=None,
+        ),
+    ):
+        mock_transcript = MagicMock()
+        mock_transcript.to_text.return_value = "transcript text"
+        mock_transcript.video_id = "vid123"
+        mock_transcript.language = "English"
+        mock_transcript.language_code = "en"
+        mock_transcript.is_generated = False
+        mock_transcript.segments = []
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid123"])
+
+    assert result.success_count == 1
+    # Special characters should be stripped
+    export_file = temp_output_dir / "Test Video Special_transcript.txt"
+    assert export_file.exists()

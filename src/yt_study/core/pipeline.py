@@ -7,6 +7,7 @@ No Rich, no Console, no Dashboard imports here.
 """
 
 import asyncio
+import json
 import logging
 import os
 import re
@@ -37,6 +38,7 @@ from .youtube.metadata import (
 )
 from .youtube.transcript import (
     TranscriptError,
+    VideoTranscript,
     YouTubeIPBlockError,
     fetch_transcript,
     split_transcript_by_chapters,
@@ -305,6 +307,7 @@ class CorePipeline:
         max_tokens: int | None = None,
         force: bool = False,
         quiz: bool = False,
+        export_transcript: str | None = None,
         shared_state: PipelineSharedState | None = None,
     ):
         """
@@ -318,6 +321,7 @@ class CorePipeline:
             max_tokens: Max tokens for generation.
             force: Re-process videos that already have saved output.
             quiz: Also generate a multiple-choice quiz file.
+            export_transcript: Export format for raw transcript ('txt' or 'json').
             shared_state: Optional shared semaphore/output reservation state.
         """
         self.model = model
@@ -336,6 +340,7 @@ class CorePipeline:
         )
         self.force = force
         self.quiz = quiz
+        self.export_transcript = export_transcript
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}
         self._metrics_lock = asyncio.Lock()
@@ -574,6 +579,71 @@ class CorePipeline:
         quiz_path.write_text(quiz_notes, encoding="utf-8")
         emit(EventType.QUIZ_COMPLETE, video_id, title=title)
 
+    # ------------------------------------------------------------------
+    # Transcript export helper
+    # ------------------------------------------------------------------
+
+    def _export_transcript(
+        self,
+        transcript: VideoTranscript,
+        title: str,
+        output_dir: Path,
+        video_id: str,
+    ) -> Path:
+        """Export raw transcript to file in the configured format.
+
+        Args:
+            transcript: The video transcript object.
+            title: Video title for filename.
+            output_dir: Directory to write the export file.
+            video_id: YouTube video ID for database record.
+
+        Returns:
+            Path to the created export file.
+        """
+        safe_title = sanitize_filename(title)
+        format_ext = self.export_transcript
+
+        if format_ext == "json":
+            export_path = output_dir / f"{safe_title}_transcript.json"
+            data = {
+                "video_id": transcript.video_id,
+                "language": transcript.language,
+                "language_code": transcript.language_code,
+                "is_generated": transcript.is_generated,
+                "segments": [
+                    {
+                        "text": seg.text,
+                        "start": seg.start,
+                        "duration": seg.duration,
+                    }
+                    for seg in transcript.segments
+                ],
+            }
+            export_path.write_text(
+                json.dumps(data, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        else:
+            # Default to txt format
+            export_path = output_dir / f"{safe_title}_transcript.txt"
+            export_path.write_text(transcript.to_text(), encoding="utf-8")
+
+        # Persist export record to database (fire-and-forget for performance)
+        try:
+            self.db.add_export_record(
+                video_id=video_id,
+                format=format_ext or "txt",
+                output_path=str(export_path),
+            )
+        except SQLAlchemyError as exc:
+            logger.warning(
+                f"Failed to persist export record for {video_id}: {exc}",
+                exc_info=True,
+            )
+
+        return export_path
+
     async def _process_single_video(
         self,
         video_id: str,
@@ -662,6 +732,14 @@ class CorePipeline:
                 use_chapters = bool(
                     duration > config.chapter_generation_min_duration and chapters
                 )
+
+                # --- Transcript Export (if requested) ---
+                # Export as single file per video (not per-chapter)
+                if self.export_transcript:
+                    self._export_transcript(
+                        transcript_obj, title, self.output_dir, video_id
+                    )
+
                 generation_start = time.perf_counter()
                 usage_context = nullcontext(UsageTotals())
                 usage_collector = getattr(self.provider, "collect_usage", None)

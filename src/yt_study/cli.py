@@ -217,6 +217,17 @@ def process(
             help="Also generate a multiple-choice quiz file alongside the study notes.",
         ),
     ] = False,
+    export_transcript: Annotated[
+        str | None,
+        typer.Option(
+            "--export-transcript",
+            help=(
+                "Export raw transcript to a file. "
+                "Format: [green]txt[/green] (plain text) or "
+                "[green]json[/green] (with timestamps)."
+            ),
+        ),
+    ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -617,6 +628,7 @@ def process(
                 max_tokens=selected_max_tokens,
                 force=force,
                 quiz=quiz,
+                export_transcript=export_transcript,
                 shared_state=shared_state,
             )
 
