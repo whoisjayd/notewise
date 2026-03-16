@@ -3,13 +3,23 @@
 import os
 import sqlite3
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from pathlib import Path
+
+import pytest
 
 from yt_study.db import (
     CACHE_DB_FILENAME,
     DatabaseManager,
     build_cache_db_path,
 )
+
+
+@pytest.fixture(autouse=True)
+def _close_db_instances():
+    """Close all DatabaseManager singletons after each test."""
+    yield
+    DatabaseManager.close_all_instances()
 
 
 def test_database_manager_singleton_for_same_path(tmp_path):
@@ -202,7 +212,7 @@ def test_database_manager_close_instance_evicts_singleton(tmp_path):
 def test_database_manager_repairs_older_runstats_schema_in_place(tmp_path):
     """Older cache DBs should be upgraded before new metric writes occur."""
     db_path = tmp_path / "legacy-cache.db"
-    with sqlite3.connect(db_path) as connection:
+    with closing(sqlite3.connect(db_path)) as connection:
         connection.executescript(
             """
             CREATE TABLE video (
@@ -242,7 +252,7 @@ def test_database_manager_repairs_older_runstats_schema_in_place(tmp_path):
         generation_seconds=2.75,
     )
 
-    with sqlite3.connect(db_path) as connection:
+    with closing(sqlite3.connect(db_path)) as connection:
         columns = {
             row[1]: row[4]
             for row in connection.execute("PRAGMA table_info(runstats)").fetchall()
@@ -268,7 +278,7 @@ def test_get_run_stats_orders_rows_chronologically(tmp_path):
     db_path = tmp_path / "ordered-cache.db"
     db = DatabaseManager.get_instance(db_path)
 
-    with sqlite3.connect(db_path) as connection:
+    with closing(sqlite3.connect(db_path)) as connection:
         connection.execute(
             "INSERT INTO video (id, title, duration) VALUES (?, ?, ?)",
             ("video-1", "Video One", 120),
@@ -330,3 +340,102 @@ def test_get_run_stats_orders_rows_chronologically(tmp_path):
     stats = db.get_run_stats("video-1")
 
     assert [row.model for row in stats] == ["model-older", "model-newer"]
+
+
+# ---------------------------------------------------------------------------
+# ExportRecord tests
+# ---------------------------------------------------------------------------
+
+
+def test_add_export_record_txt(tmp_path):
+    """add_export_record persists a txt export record."""
+    db = DatabaseManager.get_instance(tmp_path / "cache.db")
+
+    # First create the video
+    db.upsert_video_cache(
+        video_id="video-1",
+        title="Test Video",
+        duration=120,
+        transcript_content="test transcript",
+        language="en",
+        tokens_used=10,
+        model="test-model",
+    )
+
+    db.add_export_record(
+        video_id="video-1",
+        format="txt",
+        output_path="/output/Test Video_transcript.txt",
+    )
+
+    records = db.get_export_records("video-1")
+    assert len(records) == 1
+    assert records[0].format == "txt"
+    assert records[0].output_path == "/output/Test Video_transcript.txt"
+
+
+def test_add_export_record_json(tmp_path):
+    """add_export_record persists a json export record."""
+    db = DatabaseManager.get_instance(tmp_path / "cache.db")
+
+    db.upsert_video_cache(
+        video_id="video-2",
+        title="Test Video 2",
+        duration=120,
+        transcript_content="test transcript",
+        language="en",
+        tokens_used=10,
+        model="test-model",
+    )
+
+    db.add_export_record(
+        video_id="video-2",
+        format="json",
+        output_path="/output/Test Video 2_transcript.json",
+    )
+
+    records = db.get_export_records("video-2")
+    assert len(records) == 1
+    assert records[0].format == "json"
+
+
+def test_get_export_records_multiple(tmp_path):
+    """get_export_records returns all export records for a video."""
+    db = DatabaseManager.get_instance(tmp_path / "cache.db")
+
+    db.upsert_video_cache(
+        video_id="video-3",
+        title="Test Video 3",
+        duration=120,
+        transcript_content="test transcript",
+        language="en",
+        tokens_used=10,
+        model="test-model",
+    )
+
+    db.add_export_record(video_id="video-3", format="txt", output_path="/path/1.txt")
+    db.add_export_record(video_id="video-3", format="json", output_path="/path/2.json")
+
+    records = db.get_export_records("video-3")
+    assert len(records) == 2
+    formats = [r.format for r in records]
+    assert "txt" in formats
+    assert "json" in formats
+
+
+def test_get_export_records_empty(tmp_path):
+    """get_export_records returns empty list for video with no exports."""
+    db = DatabaseManager.get_instance(tmp_path / "cache.db")
+
+    db.upsert_video_cache(
+        video_id="video-4",
+        title="Test Video 4",
+        duration=120,
+        transcript_content="test transcript",
+        language="en",
+        tokens_used=10,
+        model="test-model",
+    )
+
+    records = db.get_export_records("video-4")
+    assert len(records) == 0

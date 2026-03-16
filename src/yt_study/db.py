@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import ClassVar
 
 from sqlalchemy import inspect
+from sqlalchemy.pool import NullPool
 from sqlmodel import Field, Session, SQLModel, col, create_engine, select
 
 
@@ -83,6 +84,19 @@ class RunStats(SQLModel, table=True):
     )
 
 
+class ExportRecord(SQLModel, table=True):
+    """Record of exported transcript files."""
+
+    id: int | None = Field(default=None, primary_key=True)
+    video_id: str = Field(foreign_key="video.id", index=True)
+    format: str  # 'txt' or 'json'
+    output_path: str
+    timestamp: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
 class DatabaseManager:
     """Thread-safe SQLite manager shared per database path."""
 
@@ -95,6 +109,7 @@ class DatabaseManager:
         self.engine = create_engine(
             f"sqlite:///{self.db_path}",
             connect_args={"check_same_thread": False},
+            poolclass=NullPool,
         )
         self._write_lock = threading.Lock()
         SQLModel.metadata.create_all(self.engine)
@@ -102,11 +117,14 @@ class DatabaseManager:
 
     def _repair_runstats_schema(self) -> None:
         """Add newer RunStats metric columns to older SQLite cache files."""
-        schema = inspect(self.engine)
-        if not schema.has_table("runstats"):
-            return
+        with self.engine.connect() as connection:
+            schema = inspect(connection)
+            if not schema.has_table("runstats"):
+                return
 
-        existing_columns = {column["name"] for column in schema.get_columns("runstats")}
+            existing_columns = {
+                column["name"] for column in schema.get_columns("runstats")
+            }
         missing_columns = [
             RUNSTATS_ADDITIVE_SCHEMA_UPDATES[name]
             for name in RUNSTATS_ADDITIVE_SCHEMA_UPDATES
@@ -180,6 +198,34 @@ class DatabaseManager:
                 .order_by(col(RunStats.timestamp), col(RunStats.id))
             ).all()
         return list(rows)
+
+    def get_export_records(self, video_id: str) -> list[ExportRecord]:
+        """Load export records for a video."""
+        with Session(self.engine) as session:
+            rows = session.exec(
+                select(ExportRecord)
+                .where(ExportRecord.video_id == video_id)
+                .order_by(col(ExportRecord.timestamp), col(ExportRecord.id))
+            ).all()
+        return list(rows)
+
+    def add_export_record(
+        self,
+        *,
+        video_id: str,
+        format: str,
+        output_path: str,
+    ) -> None:
+        """Persist an export record for a video."""
+        with self._write_lock, Session(self.engine) as session:
+            session.add(
+                ExportRecord(
+                    video_id=video_id,
+                    format=format,
+                    output_path=output_path,
+                )
+            )
+            session.commit()
 
     def upsert_video_cache(
         self,
