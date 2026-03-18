@@ -203,7 +203,7 @@ src/yt_study/
 ## Key design rules
 
 1. **`core/` is UI-free.** No Rich imports inside `src/yt_study/core/`.
-2. **Blocking I/O off the event loop.** `pytubefix` and `youtube-transcript-api` calls are wrapped in `asyncio.to_thread(...)`.
+2. **Blocking I/O off the event loop.** Native YouTube extractor calls are wrapped in `asyncio.to_thread(...)`.
 3. **Progress via events.** `CorePipeline` emits `PipelineEvent` objects through a callback; the CLI converts them into dashboard updates, headless progress lines, and final summaries.
 4. **User-facing failures stay in the CLI.** The terminal shows simplified, non-technical failures while detailed tracebacks stay in the current session log.
 5. **Config is a 3-part contract.** Adding a provider key requires updating `Config.ALLOWED_KEYS`, `Config.get_api_key_name_for_model()`, and `Config._sync_env_vars()`.

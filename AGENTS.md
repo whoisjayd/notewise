@@ -13,8 +13,7 @@ Core stack:
 - Typer CLI
 - Rich TUI
 - LiteLLM
-- youtube-transcript-api
-- pytubefix
+- native YouTube extractor (`core/youtube/extractor`)
 - hatchling
 - uv
 
@@ -64,24 +63,24 @@ yt-study/
 
 ## IMPORTANT FILES TO KNOW
 
-| Area | File | Why it matters |
-| --- | --- | --- |
-| CLI | `src/yt_study/cli.py` | Defines commands, logging, batch handling, dashboard bridge |
-| Setup | `src/yt_study/setup_wizard.py` | Writes `~/.yt-study/config.env` |
-| Storage | `src/yt_study/db.py` | SQLModel schema and SQLite cache singleton |
-| Config | `src/yt_study/core/config.py` | Actual supported runtime keys and provider mapping |
-| Config | `src/yt_study/core/config_helpers.py` | Shared config parsing helpers |
-| Pipeline | `src/yt_study/core/pipeline.py` | Main orchestration logic and event model |
-| LLM | `src/yt_study/core/llm/generator.py` | Chunking strategy and note generation |
-| Provider | `src/yt_study/core/llm/providers.py` | LiteLLM async completion wrapper |
-| YouTube | `src/yt_study/core/youtube/transcript.py` | Transcript fallback and retry logic |
-| YouTube | `src/yt_study/core/youtube/metadata.py` | Duration/title/chapters/playlist info |
-| YouTube | `src/yt_study/core/youtube/playlist.py` | Playlist ID expansion |
-| UI | `src/yt_study/ui/dashboard.py` | Rich dashboard rendering |
-| Tests | `tests/test_pipeline/test_core_pipeline.py` | Best reference for expected pipeline behavior |
-| Workflow | `Makefile` | Canonical local commands |
-| Hooks | `.pre-commit-config.yaml` | Actual enforced local checks |
-| CI | `.github/workflows/ci-main.yml` | Main validation and matrix jobs |
+| Area     | File                                        | Why it matters                                              |
+| -------- | ------------------------------------------- | ----------------------------------------------------------- |
+| CLI      | `src/yt_study/cli.py`                       | Defines commands, logging, batch handling, dashboard bridge |
+| Setup    | `src/yt_study/setup_wizard.py`              | Writes `~/.yt-study/config.env`                             |
+| Storage  | `src/yt_study/db.py`                        | SQLModel schema and SQLite cache singleton                  |
+| Config   | `src/yt_study/core/config.py`               | Actual supported runtime keys and provider mapping          |
+| Config   | `src/yt_study/core/config_helpers.py`       | Shared config parsing helpers                               |
+| Pipeline | `src/yt_study/core/pipeline.py`             | Main orchestration logic and event model                    |
+| LLM      | `src/yt_study/core/llm/generator.py`        | Chunking strategy and note generation                       |
+| Provider | `src/yt_study/core/llm/providers.py`        | LiteLLM async completion wrapper                            |
+| YouTube  | `src/yt_study/core/youtube/transcript.py`   | Transcript fallback and retry logic                         |
+| YouTube  | `src/yt_study/core/youtube/metadata.py`     | Duration/title/chapters/playlist info                       |
+| YouTube  | `src/yt_study/core/youtube/playlist.py`     | Playlist ID expansion                                       |
+| UI       | `src/yt_study/ui/dashboard.py`              | Rich dashboard rendering                                    |
+| Tests    | `tests/test_pipeline/test_core_pipeline.py` | Best reference for expected pipeline behavior               |
+| Workflow | `Makefile`                                  | Canonical local commands                                    |
+| Hooks    | `.pre-commit-config.yaml`                   | Actual enforced local checks                                |
+| CI       | `.github/workflows/ci-main.yml`             | Main validation and matrix jobs                             |
 
 ## CLI SURFACE
 
@@ -162,16 +161,16 @@ Important distinction:
 
 Provider mapping implemented in `Config.get_api_key_name_for_model()`:
 
-| Model family | Required env key |
-| --- | --- |
-| `gemini`, `vertex` | `GEMINI_API_KEY` |
-| `gpt`, `openai`, `o1`, `o3`, `o4` | `OPENAI_API_KEY` |
-| `claude`, `anthropic` | `ANTHROPIC_API_KEY` |
-| `groq` | `GROQ_API_KEY` |
-| `grok`, `xai` | `XAI_API_KEY` |
-| `mistral` | `MISTRAL_API_KEY` |
-| `cohere`, `command` | `COHERE_API_KEY` |
-| `deepseek` | `DEEPSEEK_API_KEY` |
+| Model family                      | Required env key    |
+| --------------------------------- | ------------------- |
+| `gemini`, `vertex`                | `GEMINI_API_KEY`    |
+| `gpt`, `openai`, `o1`, `o3`, `o4` | `OPENAI_API_KEY`    |
+| `claude`, `anthropic`             | `ANTHROPIC_API_KEY` |
+| `groq`                            | `GROQ_API_KEY`      |
+| `grok`, `xai`                     | `XAI_API_KEY`       |
+| `mistral`                         | `MISTRAL_API_KEY`   |
+| `cohere`, `command`               | `COHERE_API_KEY`    |
+| `deepseek`                        | `DEEPSEEK_API_KEY`  |
 
 Setup wizard model selection is intentionally strict for non-technical users:
 
@@ -189,7 +188,7 @@ Do not import Rich, `Console`, or dashboard components into `src/yt_study/core/`
 
 ### 2. Blocking YouTube calls stay off the event loop
 
-Use `asyncio.to_thread(...)` for `pytubefix` and `youtube-transcript-api` work.
+Use `asyncio.to_thread(...)` for blocking native extractor network calls.
 
 ### 3. Progress moves through `PipelineEvent`
 
@@ -405,20 +404,20 @@ Configured in `src/yt_study/cli.py`.
 
 ## TEST MAP
 
-| Test file | Focus |
-| --- | --- |
-| `tests/test_cli.py` | Typer command behavior, flags, config-path, setup |
-| `tests/test_config.py` | env/file loading and validation |
-| `tests/test_setup_wizard.py` | setup wizard prompts and save/load behavior |
-| `tests/test_ui.py` | dashboard state and render output |
-| `tests/test_llm/test_generator.py` | chunking and generation calls |
-| `tests/test_llm/test_providers.py` | LiteLLM wrapper behavior |
-| `tests/test_pipeline/test_core_pipeline.py` | event flow, output creation, chapter path |
-| `tests/test_db.py` | SQLite cache schema, singleton behavior, and upserts |
-| `tests/test_youtube/test_parser.py` | URL parsing |
-| `tests/test_youtube/test_transcript.py` | transcript fallback and retry logic |
-| `tests/test_youtube/test_metadata.py` | metadata extraction |
-| `tests/test_youtube/test_playlist.py` | playlist extraction retries |
+| Test file                                   | Focus                                                |
+| ------------------------------------------- | ---------------------------------------------------- |
+| `tests/test_cli.py`                         | Typer command behavior, flags, config-path, setup    |
+| `tests/test_config.py`                      | env/file loading and validation                      |
+| `tests/test_setup_wizard.py`                | setup wizard prompts and save/load behavior          |
+| `tests/test_ui.py`                          | dashboard state and render output                    |
+| `tests/test_llm/test_generator.py`          | chunking and generation calls                        |
+| `tests/test_llm/test_providers.py`          | LiteLLM wrapper behavior                             |
+| `tests/test_pipeline/test_core_pipeline.py` | event flow, output creation, chapter path            |
+| `tests/test_db.py`                          | SQLite cache schema, singleton behavior, and upserts |
+| `tests/test_youtube/test_parser.py`         | URL parsing                                          |
+| `tests/test_youtube/test_transcript.py`     | transcript fallback and retry logic                  |
+| `tests/test_youtube/test_metadata.py`       | metadata extraction                                  |
+| `tests/test_youtube/test_playlist.py`       | playlist extraction retries                          |
 
 ## DEVELOPMENT COMMANDS
 

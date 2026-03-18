@@ -25,7 +25,7 @@ Convert videos, playlists, and URL batches into clean Markdown notes with chapte
 | Inputs      | Single video URL, playlist URL, or text file with one URL per line |
 | Output      | Markdown notes as one file per video or one file per chapter       |
 | Runtime     | Async pipeline with concurrency-limited video workers              |
-| Core Stack  | Python, Typer, Rich, LiteLLM, youtube-transcript-api, pytubefix    |
+| Core Stack  | Python, Typer, Rich, LiteLLM, native YouTube extractor             |
 | Config Path | `~/.yt-study/config.env`                                           |
 | Quality     | Pytest, Ruff, MyPy, Bandit, Deptry, GitHub Actions                 |
 
