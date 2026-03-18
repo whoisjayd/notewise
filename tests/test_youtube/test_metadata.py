@@ -1,12 +1,13 @@
 """Tests for video metadata extraction."""
 
-from unittest.mock import MagicMock, PropertyMock
-
 import pytest
-from pytubefix.exceptions import VideoPrivate
 
+from yt_study.core.youtube.extractor.client import ExtractorError
 from yt_study.core.youtube.metadata import (
     PublicAccessRequiredError,
+    _raise_if_playlist_data_requires_public_access,
+    _raise_if_public_access_required,
+    _raise_if_video_data_requires_public_access,
     get_playlist_info,
     get_video_chapters,
     get_video_duration,
@@ -17,22 +18,15 @@ from yt_study.core.youtube.metadata import (
 class TestVideoMetadata:
     """Test video metadata extraction functions."""
 
-    def test_get_video_chapters_success(self, mock_pytube):
-        """Test successful chapter extraction."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-
-        # Mock chapters as objects
-        chap1 = MagicMock()
-        chap1.title = "Intro"
-        chap1.start_seconds = 0
-
-        chap2 = MagicMock()
-        chap2.title = "Middle"
-        chap2.start_seconds = 60
-
-        # Configure the chapters property
-        type(mock_yt_instance).chapters = PropertyMock(return_value=[chap1, chap2])
+    def test_get_video_chapters_success(self, mock_extractor_client):
+        """Chapter payload should map to VideoChapter models."""
+        client = mock_extractor_client["metadata"].return_value
+        client.chapters.return_value = {
+            "chapters": [
+                {"title": "Intro", "start_time": 0, "end_time": 60},
+                {"title": "Middle", "start_time": 60, "end_time": 120},
+            ]
+        }
 
         chapters = get_video_chapters("video123")
 
@@ -40,103 +34,103 @@ class TestVideoMetadata:
         assert chapters[0].title == "Intro"
         assert chapters[0].end_seconds == 60
 
-    def test_get_video_chapters_dict_format(self, mock_pytube):
-        """Test chapter extraction when returned as dicts."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-
-        chapters_data = [
-            {"title": "Start", "start_seconds": 0},
-            {"title": "End", "start_seconds": 100},
-        ]
-        type(mock_yt_instance).chapters = PropertyMock(return_value=chapters_data)
-
-        chapters = get_video_chapters("video123")
-
-        assert len(chapters) == 2
-        assert chapters[0].title == "Start"
-
-    def test_get_video_chapters_none(self, mock_pytube):
-        """Test when no chapters are available."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).chapters = PropertyMock(return_value=None)
+    def test_get_video_chapters_none(self, mock_extractor_client):
+        """Missing chapters should return an empty list."""
+        client = mock_extractor_client["metadata"].return_value
+        client.chapters.return_value = {"chapters": []}
 
         chapters = get_video_chapters("video123")
         assert chapters == []
 
-    def test_get_video_chapters_reads_property_once(self, mock_pytube):
-        """Chapter extraction should not re-fetch the chapters property repeatedly."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
+    def test_get_video_chapters_extractor_error_returns_empty(
+        self, mock_extractor_client
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.chapters.side_effect = ExtractorError("network issue")
 
-        chap1 = MagicMock()
-        chap1.title = "Intro"
-        chap1.start_seconds = 0
-        chap2 = MagicMock()
-        chap2.title = "Middle"
-        chap2.start_seconds = 60
+        assert get_video_chapters("video123") == []
 
-        type(mock_yt_instance).chapters = PropertyMock(
-            side_effect=[[chap1, chap2], RuntimeError("property fetched twice")]
-        )
+    def test_get_video_chapters_generic_error_returns_empty(
+        self, mock_extractor_client
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.chapters.side_effect = RuntimeError("boom")
 
-        chapters = get_video_chapters("video123")
+        assert get_video_chapters("video123") == []
 
-        assert [chapter.title for chapter in chapters] == ["Intro", "Middle"]
-
-    def test_get_video_chapters_error(self, mock_pytube):
-        """Test error handling during chapter extraction."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).chapters = PropertyMock(
-            side_effect=Exception("API Error")
-        )
-
-        chapters = get_video_chapters("video123")
-        assert chapters == []
-
-    def test_get_video_title_success(self, mock_pytube):
-        """Test successful title extraction."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).title = PropertyMock(return_value="Awesome Video")
+    def test_get_video_title_success(self, mock_extractor_client):
+        """Title should be returned when present."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "title": "Awesome Video",
+            "data": {"availability": "public", "title": "Awesome Video"},
+        }
 
         title = get_video_title("video123")
         assert title == "Awesome Video"
 
-    def test_get_video_title_failure(self, mock_pytube):
-        """Test title extraction failure falls back to ID."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).title = PropertyMock(side_effect=Exception("Net Error"))
+    def test_get_video_title_failure(self, mock_extractor_client):
+        """Title extraction failure should fall back to the ID."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = ExtractorError("network error")
 
         title = get_video_title("video123")
         assert title == "video123"
 
-    def test_get_video_duration_success(self, mock_pytube):
-        """Test successful duration extraction."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).length = PropertyMock(return_value=120)
+    def test_get_video_title_empty_title_falls_back_to_video_id(
+        self, mock_extractor_client
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {"data": {"availability": "public", "title": ""}}
+
+        assert get_video_title("video123") == "video123"
+
+    def test_get_video_title_generic_error_falls_back(self, mock_extractor_client):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = RuntimeError("boom")
+
+        assert get_video_title("video123") == "video123"
+
+    def test_get_video_duration_success(self, mock_extractor_client):
+        """Duration should be read from metadata payload."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "data": {"availability": "public", "duration": 120}
+        }
 
         duration = get_video_duration("video123")
         assert duration == 120
 
-    def test_get_video_duration_failure(self, mock_pytube):
-        """Test duration extraction failure returns 0."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        type(mock_yt_instance).length = PropertyMock(side_effect=Exception("Error"))
+    def test_get_video_duration_failure(self, mock_extractor_client):
+        """Duration failures should return 0."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = ExtractorError("request failed")
 
         duration = get_video_duration("video123")
         assert duration == 0
 
-    def test_get_video_duration_private_video_raises_clear_error(self, mock_pytube):
-        """Private videos should raise a user-facing public-access error."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        mock_yt_instance.check_availability.side_effect = VideoPrivate("video123")
+    def test_get_video_duration_none_returns_zero(self, mock_extractor_client):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "data": {"availability": "public", "duration": None}
+        }
+
+        assert get_video_duration("video123") == 0
+
+    def test_get_video_duration_generic_error_returns_zero(self, mock_extractor_client):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = RuntimeError("boom")
+
+        assert get_video_duration("video123") == 0
+
+    def test_get_video_duration_private_video_raises_clear_error(
+        self, mock_extractor_client
+    ):
+        """Private videos should raise user-facing access errors."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "data": {"availability": "private", "duration": 120}
+        }
 
         with pytest.raises(
             PublicAccessRequiredError,
@@ -144,81 +138,78 @@ class TestVideoMetadata:
         ):
             get_video_duration("video123")
 
-    def test_get_video_title_login_required_private_reason_raises_clear_error(
-        self, mock_pytube
-    ):
-        """Private playability details should beat generic login-required text."""
-        mock_yt_cls, _ = mock_pytube
-        mock_yt_instance = mock_yt_cls.return_value
-        mock_yt_instance.check_availability.side_effect = Exception(
-            "video123 requires login to view, YouTube reason: Please sign in"
-        )
-        mock_yt_instance.vid_info = {
-            "playabilityStatus": {
-                "status": "LOGIN_REQUIRED",
-                "messages": [
-                    "This is a private video. Please sign in to verify that you "
-                    "may see it."
-                ],
-                "errorScreen": {
-                    "playerErrorMessageRenderer": {
-                        "reason": {"simpleText": "Private video"},
-                    }
-                },
-            }
-        }
-
-        with pytest.raises(
-            PublicAccessRequiredError,
-            match="Make the video unlisted or public to process it",
-        ):
-            get_video_title("video123")
-
 
 class TestPlaylistMetadata:
     """Test playlist metadata extraction."""
 
-    def test_get_playlist_info_success(self, mock_pytube):
-        """Test successful playlist info extraction."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl_instance = mock_pl_cls.return_value
-
-        # Note: metadata.py accesses .title property
-        type(mock_pl_instance).title = PropertyMock(return_value="My Course")
-        # And video_urls property which returns iterator/list
-        type(mock_pl_instance).video_urls = PropertyMock(
-            return_value=["url1", "url2", "url3"]
-        )
+    def test_get_playlist_info_success(self, mock_extractor_client):
+        """Playlist title and count should be returned when present."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "title": "My Course",
+            "data": {"availability": "public", "playlist_count": 3},
+        }
 
         title, count = get_playlist_info("pl123")
 
         assert title == "My Course"
         assert count == 3
 
-    def test_get_playlist_info_failure(self, mock_pytube):
-        """Test failure handling for playlist info."""
-        _, mock_pl_cls = mock_pytube
-
-        # Simulate constructor failure or property access failure
-        # metadata.py: playlist = Playlist(url) -> could fail
-        mock_pl_cls.side_effect = Exception("Access Denied")
+    def test_get_playlist_info_failure(self, mock_extractor_client):
+        """Playlist failures should use fallback title and count."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = ExtractorError("Access Denied")
 
         title, count = get_playlist_info("pl123")
 
         assert title == "playlist_pl123"
         assert count == 0
 
-    def test_get_playlist_info_keeps_count_when_title_lookup_fails(self, mock_pytube):
-        """A broken title property should not block playlist video counting."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl_instance = mock_pl_cls.return_value
+    def test_get_playlist_info_private_playlist_raises(self, mock_extractor_client):
+        """Private playlists should be rejected with a clear message."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "title": "Private playlist",
+            "data": {"availability": "private", "playlist_count": 1},
+        }
 
-        type(mock_pl_instance).title = PropertyMock(
-            side_effect=Exception("title failed")
-        )
-        type(mock_pl_instance).video_urls = PropertyMock(return_value=["url1", "url2"])
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="Make the playlist unlisted or public to process it",
+        ):
+            get_playlist_info("pl123")
 
-        title, count = get_playlist_info("pl123")
 
-        assert title == "playlist_pl123"
-        assert count == 2
+class TestMetadataAccessHelpers:
+    @pytest.mark.parametrize(
+        "availability", ["private", "login_required", "unavailable", "age_restricted"]
+    )
+    def test_video_access_helper_raises_for_restricted_status(self, availability):
+        with pytest.raises(PublicAccessRequiredError):
+            _raise_if_video_data_requires_public_access({"availability": availability})
+
+    def test_video_access_helper_allows_public(self):
+        _raise_if_video_data_requires_public_access({"availability": "public"})
+
+    def test_playlist_access_helper_private_raises(self):
+        with pytest.raises(PublicAccessRequiredError):
+            _raise_if_playlist_data_requires_public_access({"availability": "private"})
+
+    def test_playlist_access_helper_non_private_passes(self):
+        _raise_if_playlist_data_requires_public_access({"availability": "public"})
+
+    @pytest.mark.parametrize(
+        "message",
+        [
+            "this is a private video",
+            "members only",
+            "age restricted",
+            "requires login to view",
+        ],
+    )
+    def test_raise_if_public_access_required_detects_known_messages(self, message):
+        with pytest.raises(PublicAccessRequiredError):
+            _raise_if_public_access_required(message)
+
+    def test_raise_if_public_access_required_ignores_unknown(self):
+        _raise_if_public_access_required("random network error")

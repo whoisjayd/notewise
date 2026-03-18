@@ -1036,7 +1036,6 @@ def test_process_quiz_flag_passed_to_pipeline(
 @pytest.mark.parametrize(
     "args",
     [
-        ["--cookies", "cookies.txt"],
         ["--use-oauth"],
         ["--token-file", "token.json"],
         ["--save-oauth-token"],

@@ -6,16 +6,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-from youtube_transcript_api import YouTubeTranscriptApi
-from youtube_transcript_api._errors import (
-    IpBlocked,
-    NoTranscriptFound,
-    RequestBlocked,
-    TranscriptsDisabled,
-    VideoUnavailable,
-    VideoUnplayable,
-)
-
+from .extractor.client import ExtractorClient, ExtractorConfig, ExtractorError
 from .metadata import PublicAccessRequiredError, VideoChapter
 
 
@@ -78,11 +69,6 @@ def _raise_if_public_access_required(error: Exception) -> None:
     """Convert private or sign-in-only transcript failures into user-facing errors."""
     error_text = str(error).lower()
 
-    if isinstance(error, VideoUnplayable):
-        reason = str(getattr(error, "reason", "") or "").lower()
-        sub_reasons = " ".join(getattr(error, "sub_reasons", []) or []).lower()
-        error_text = f"{reason} {sub_reasons} {error_text}"
-
     if "private" in error_text:
         raise PublicAccessRequiredError(
             "Private YouTube videos are not supported. "
@@ -114,33 +100,28 @@ def _raise_if_public_access_required(error: Exception) -> None:
         ) from error
 
 
-def _describe_video_unplayable(error: VideoUnplayable) -> str:
-    """Return a short reason string for VideoUnplayable errors."""
-    reason = str(getattr(error, "reason", "") or "").strip()
-    if reason:
-        return reason
-
-    sub_reasons = [item.strip() for item in getattr(error, "sub_reasons", []) if item]
-    if sub_reasons:
-        return "; ".join(sub_reasons)
-
-    return "video is unplayable"
+def _extract_error_reason(error: Exception) -> str:
+    """Return a concise error string for user-facing failures."""
+    message = str(error).strip()
+    if message:
+        return message
+    return "video is unavailable"
 
 
 async def fetch_transcript(
     video_id: str,
     languages: list[str] | None = None,
     on_request: Callable[[], Awaitable[None]] | None = None,
+    cookie_file: str | None = None,
 ) -> VideoTranscript:
     """
     Fetch transcript for a YouTube video with language fallback and retry logic.
 
     Priority:
-    1. Manual transcript in preferred language
-    2. Auto-generated transcript in preferred language
-    3. Manual transcript in any available language
-    4. Auto-generated transcript in any available language
-    5. Translated transcript to English
+    Strategy:
+    1. Native subtitle tracks in preferred language order
+    2. Automatic captions fallback when enabled
+    3. Innertube player transcript fallback
 
     Args:
         video_id: YouTube video ID.
@@ -162,11 +143,14 @@ async def fetch_transcript(
             if on_request is not None:
                 await on_request()
 
-            # Wrap blocking YouTubeTranscriptApi calls in a thread
+            # Wrap blocking extractor calls in a thread
             # This is critical to prevent blocking the asyncio event loop
             # during concurrency
             raw_transcript, transcript_meta, log_msg = await asyncio.to_thread(
-                _fetch_sync, video_id, languages
+                _fetch_sync,
+                video_id,
+                languages,
+                cookie_file,
             )
 
             logger.info(log_msg)
@@ -200,32 +184,9 @@ async def fetch_transcript(
                 is_generated=transcript_meta.is_generated,
             )
 
-        except (TranscriptsDisabled, VideoUnavailable) as e:
-            # Fatal errors, do not retry
-            _raise_if_public_access_required(e)
-            logger.error(f"Transcript unavailable for {video_id}: {e}")
-            raise TranscriptError(
-                f"Transcripts are disabled or video is unavailable: {video_id}"
-            ) from e
-
-        except VideoUnplayable as e:
-            # VideoUnplayable is fatal and often indicates sign-in-only content.
-            _raise_if_public_access_required(e)
-            reason = _describe_video_unplayable(e)
-            logger.error(f"Transcript unavailable for {video_id}: {reason}")
-            raise TranscriptError(f"Could not fetch transcript: {reason}") from e
-
-        except (TranscriptError, NoTranscriptFound):
+        except TranscriptError:
             # Already handled or strictly not found, do not retry
             raise
-
-        except (IpBlocked, RequestBlocked) as e:
-            # Specifically handle IP blocking
-            logger.error(f"YouTube IP Block detected for {video_id}")
-            raise YouTubeIPBlockError(
-                "YouTube is blocking requests from your IP. "
-                "Please try using a VPN, proxies, or wait a while."
-            ) from e
 
         except Exception as e:
             _raise_if_public_access_required(e)
@@ -255,87 +216,40 @@ async def fetch_transcript(
 def _fetch_sync(
     video_id: str,
     languages: list[str],
+    cookie_file: str | None = None,
 ) -> tuple[Any, Any, str]:
-    """Blocking helper to interact with YouTubeTranscriptApi."""
-    ytt_api = YouTubeTranscriptApi()
-
-    # List all available transcripts
-    # This list call can fail with TranscriptsDisabled or VideoUnavailable
-    transcript_list = ytt_api.list(video_id)
-
-    transcript = None
-    found_msg = ""
-
-    # Strategy 1: Find manual transcript in preferred language
+    """Blocking helper to interact with the native extractor client."""
     try:
-        transcript = transcript_list.find_manually_created_transcript(languages)
-        found_msg = f"Found manual transcript: {transcript.language}"
-    except NoTranscriptFound:
-        pass
-
-    # Strategy 2: Try auto-generated in preferred language
-    if not transcript:
-        try:
-            transcript = transcript_list.find_generated_transcript(languages)
-            found_msg = f"Using auto-generated transcript: {transcript.language}"
-        except NoTranscriptFound:
-            pass
-
-    # Strategy 3: Try any manual transcript
-    if not transcript:
-        try:
-            # Get all language codes available
-            all_codes = [t.language_code for t in transcript_list]
-            transcript = transcript_list.find_manually_created_transcript(all_codes)
-            found_msg = f"Using manual transcript in {transcript.language}"
-        except NoTranscriptFound:
-            pass
-
-    # Strategy 4: Last resort - try any available transcript and translate if needed
-    if not transcript:
-        try:
-            # list(transcript_list) returns iterable of Transcript objects
-            available = list(transcript_list)
-            if not available:
-                raise NoTranscriptFound(video_id, languages, [])
-
-            first_preferred = next(
-                (item for item in available if item.language_code in languages),
-                None,
+        payload = ExtractorClient(
+            ExtractorConfig(
+                cookie_file=cookie_file,
             )
-            if first_preferred is not None:
-                transcript = first_preferred
-                found_msg = f"Using {transcript.language}"
-            elif "en" in languages:
-                translatable = next(
-                    (
-                        item
-                        for item in available
-                        if item.language_code != "en" and item.is_translatable
-                    ),
-                    None,
-                )
-                if translatable is not None:
-                    transcript = translatable.translate("en")
-                    found_msg = f"Translated {translatable.language} -> English"
-                else:
-                    transcript = available[0]
-                    found_msg = (
-                        f"Using {transcript.language} (translation not available)"
-                    )
-            else:
-                transcript = available[0]
-                found_msg = f"Using {transcript.language}"
+        ).transcript(
+            video_id,
+            languages=languages,
+            include_automatic=True,
+        )
+    except ExtractorError as error:
+        message = str(error)
+        if "no transcript/subtitle track found" in message.lower():
+            raise TranscriptError("No usable transcript found") from error
+        raise
 
-        except Exception as e:
-            # If we really can't find anything
-            if isinstance(e, NoTranscriptFound):
-                raise
-            raise TranscriptError(f"No usable transcript found: {e}") from e
-
-    # Fetch the actual transcript data
-    raw_transcript = transcript.fetch()
-    return raw_transcript, transcript, found_msg
+    raw_transcript = payload.get("segments") or []
+    language_code = str(payload.get("language_code") or "")
+    track = payload.get("track") or {}
+    language_name = str(track.get("name") or language_code or "Unknown")
+    transcript_meta = type(
+        "NativeTranscriptMeta",
+        (),
+        {
+            "language": language_name,
+            "language_code": language_code,
+            "is_generated": bool(payload.get("is_generated")),
+        },
+    )()
+    found_msg = f"Using native transcript: {language_name}"
+    return raw_transcript, transcript_meta, found_msg
 
 
 def split_transcript_by_chapters(

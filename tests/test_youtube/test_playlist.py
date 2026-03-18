@@ -1,9 +1,8 @@
 """Tests for playlist processing."""
 
-from unittest.mock import MagicMock, PropertyMock
-
 import pytest
 
+from yt_study.core.youtube.extractor.client import ExtractorError
 from yt_study.core.youtube.metadata import PublicAccessRequiredError
 from yt_study.core.youtube.playlist import PlaylistError, extract_playlist_videos
 
@@ -12,19 +11,16 @@ class TestPlaylistExtraction:
     """Test playlist video extraction."""
 
     @pytest.mark.asyncio
-    async def test_extract_playlist_success(self, mock_pytube):
-        """Test successful extraction of video IDs."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl = mock_pl_cls.return_value
-
-        # Use PropertyMock for video_urls since it's a property
-        type(mock_pl).video_urls = PropertyMock(
-            return_value=[
-                "https://youtube.com/watch?v=dQw4w9WgXcQ",
-                "https://youtube.com/watch?v=J---aiyznGQ&list=pl1",
-                "https://youtube.com/watch?v=9bZkp7q19f0",
+    async def test_extract_playlist_success(self, mock_extractor_client):
+        """Extract video IDs from native playlist entries."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.return_value = {
+            "entries": [
+                {"id": "dQw4w9WgXcQ", "url": "https://youtube.com/watch?v=dQw4w9WgXcQ"},
+                {"id": "J---aiyznGQ", "url": "https://youtube.com/watch?v=J---aiyznGQ"},
+                {"id": "9bZkp7q19f0", "url": "https://youtube.com/watch?v=9bZkp7q19f0"},
             ]
-        )
+        }
 
         video_ids = await extract_playlist_videos("pl123")
 
@@ -32,53 +28,44 @@ class TestPlaylistExtraction:
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ", "9bZkp7q19f0"]
 
     @pytest.mark.asyncio
-    async def test_extract_playlist_retry_success(self, mock_pytube):
-        """Test retry logic eventually succeeds."""
-        _, mock_pl_cls = mock_pytube
-
-        # We want:
-        # Attempt 1 -> Mock that raises Exception on property access
-        # Attempt 2 -> Mock that succeeds
-
-        mock_fail = MagicMock()
-        type(mock_fail).video_urls = PropertyMock(
-            side_effect=Exception("Network Error")
-        )
-
-        mock_success = MagicMock()
-        type(mock_success).video_urls = PropertyMock(
-            return_value=["https://youtube.com/watch?v=dQw4w9WgXcQ"]
-        )
-
-        # side_effect on the constructor (mock_pl_cls)
-        mock_pl_cls.side_effect = [mock_fail, mock_success]
+    async def test_extract_playlist_retry_success(self, mock_extractor_client):
+        """Transient failures should retry and then succeed."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.side_effect = [
+            ExtractorError("Network Error"),
+            {
+                "entries": [
+                    {
+                        "id": "dQw4w9WgXcQ",
+                        "url": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+                    }
+                ]
+            },
+        ]
 
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["dQw4w9WgXcQ"]
-        assert mock_pl_cls.call_count == 2
+        assert client.playlist.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_extract_playlist_empty(self, mock_pytube):
-        """Test empty playlist raises error."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl = mock_pl_cls.return_value
+    async def test_extract_playlist_empty(self, mock_extractor_client):
+        """Empty playlist payload should raise PlaylistError after retries."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.return_value = {"entries": []}
 
-        type(mock_pl).video_urls = PropertyMock(return_value=[])
-
-        # Should retry 3 times then fail
         with pytest.raises(PlaylistError, match="Could not access playlist"):
             await extract_playlist_videos("pl123")
 
-        assert mock_pl_cls.call_count == 3
+        assert client.playlist.call_count == 3
 
     @pytest.mark.asyncio
-    async def test_extract_private_playlist_fails_without_retry(self, mock_pytube):
-        """Private playlists should surface a clean fatal error on the first attempt."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl = mock_pl_cls.return_value
-
-        type(mock_pl).video_urls = PropertyMock(
-            side_effect=Exception("This playlist is private. Please sign in")
+    async def test_extract_private_playlist_fails_without_retry(
+        self, mock_extractor_client
+    ):
+        """Private playlists should fail immediately with user-facing error."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.side_effect = ExtractorError(
+            "This playlist is private. Please sign in"
         )
 
         with pytest.raises(
@@ -87,39 +74,56 @@ class TestPlaylistExtraction:
         ):
             await extract_playlist_videos("pl123")
 
-        assert mock_pl_cls.call_count == 1
+        assert client.playlist.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_extract_playlist_malformed_urls(self, mock_pytube):
-        """Test skipping malformed URLs."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl = mock_pl_cls.return_value
-
-        type(mock_pl).video_urls = PropertyMock(
-            return_value=[
-                "https://youtube.com/watch?v=dQw4w9WgXcQ",
-                "https://broken.com/video",  # Should be skipped
-                "https://youtube.com/watch?v=J---aiyznGQ",
-            ]
+    async def test_extract_signin_playlist_fails_without_retry(
+        self, mock_extractor_client
+    ):
+        """Sign-in-only playlists should fail immediately with user-facing error."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.side_effect = ExtractorError(
+            "Please sign in to view this playlist"
         )
+
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="Sign-in-only YouTube playlists are not supported",
+        ):
+            await extract_playlist_videos("pl123")
+
+        assert client.playlist.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_extract_playlist_malformed_urls(self, mock_extractor_client):
+        """Malformed entries should be skipped while valid IDs are kept."""
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.return_value = {
+            "entries": [
+                {"id": "dQw4w9WgXcQ", "url": "https://youtube.com/watch?v=dQw4w9WgXcQ"},
+                {"url": "https://broken.com/video"},
+                {"id": "J---aiyznGQ", "url": "https://youtube.com/watch?v=J---aiyznGQ"},
+            ]
+        }
 
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ"]
 
-    @pytest.mark.asyncio
-    async def test_extract_playlist_supports_short_and_shorts_urls(self, mock_pytube):
-        """Playlist extraction should keep valid youtu.be and shorts entries."""
-        _, mock_pl_cls = mock_pytube
-        mock_pl = mock_pl_cls.return_value
+    def test_extract_sync_logs_playlist_title_on_first_attempt(self, mocker):
+        """_extract_sync should log title when attempt is first and title exists."""
+        from yt_study.core.youtube.playlist import _extract_sync
 
-        type(mock_pl).video_urls = PropertyMock(
-            return_value=[
-                "https://youtu.be/dQw4w9WgXcQ?si=abc",
-                "https://www.youtube.com/shorts/9bZkp7q19f0",
-                "https://youtube.com/watch?v=J---aiyznGQ&list=pl1",
-            ]
-        )
+        mock_client_cls = mocker.patch("yt_study.core.youtube.playlist.ExtractorClient")
+        mock_logger = mocker.patch("yt_study.core.youtube.playlist.logger")
+        mock_client = mock_client_cls.return_value
+        mock_client.playlist.return_value = {
+            "playlist": {"title": "My Playlist"},
+            "entries": [
+                {"id": "dQw4w9WgXcQ", "url": "https://youtube.com/watch?v=dQw4w9WgXcQ"}
+            ],
+        }
 
-        video_ids = await extract_playlist_videos("pl123")
+        result = _extract_sync("pl123", 0, None)
 
-        assert video_ids == ["dQw4w9WgXcQ", "9bZkp7q19f0", "J---aiyznGQ"]
+        assert result == ["dQw4w9WgXcQ"]
+        mock_logger.info.assert_called_once()

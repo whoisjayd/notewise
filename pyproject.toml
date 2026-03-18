@@ -21,8 +21,6 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "youtube-transcript-api>=1.2.3",
-    "pytubefix>=10.3.6",
     "litellm>=1.81.1",
     "typer>=0.21.1",
     "rich>=13.9.4",

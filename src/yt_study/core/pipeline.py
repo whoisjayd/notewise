@@ -308,6 +308,7 @@ class CorePipeline:
         force: bool = False,
         quiz: bool = False,
         export_transcript: str | None = None,
+        youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
     ):
         """
@@ -322,6 +323,7 @@ class CorePipeline:
             force: Re-process videos that already have saved output.
             quiz: Also generate a multiple-choice quiz file.
             export_transcript: Export format for raw transcript ('txt' or 'json').
+            youtube_cookie_file: Optional path to a Netscape cookies file.
             shared_state: Optional shared semaphore/output reservation state.
         """
         self.model = model
@@ -341,6 +343,7 @@ class CorePipeline:
         self.force = force
         self.quiz = quiz
         self.export_transcript = export_transcript
+        self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}
         self._metrics_lock = asyncio.Lock()
@@ -682,10 +685,37 @@ class CorePipeline:
                     current_cached_video = await self._get_cached_video(video_id)
 
                 # Fetch all metadata concurrently; title failure is non-fatal
+                title_task = (
+                    self._rate_limited_to_thread(
+                        get_video_title,
+                        video_id,
+                        self.youtube_cookie_file,
+                    )
+                    if self.youtube_cookie_file
+                    else self._rate_limited_to_thread(get_video_title, video_id)
+                )
+                duration_task = (
+                    self._rate_limited_to_thread(
+                        get_video_duration,
+                        video_id,
+                        self.youtube_cookie_file,
+                    )
+                    if self.youtube_cookie_file
+                    else self._rate_limited_to_thread(get_video_duration, video_id)
+                )
+                chapters_task = (
+                    self._rate_limited_to_thread(
+                        get_video_chapters,
+                        video_id,
+                        self.youtube_cookie_file,
+                    )
+                    if self.youtube_cookie_file
+                    else self._rate_limited_to_thread(get_video_chapters, video_id)
+                )
                 meta_results = await asyncio.gather(
-                    self._rate_limited_to_thread(get_video_title, video_id),
-                    self._rate_limited_to_thread(get_video_duration, video_id),
-                    self._rate_limited_to_thread(get_video_chapters, video_id),
+                    title_task,
+                    duration_task,
+                    chapters_task,
                     return_exceptions=True,
                 )
                 raw_title, duration, chapters = meta_results
@@ -718,10 +748,15 @@ class CorePipeline:
                 emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
 
                 transcript_start = time.perf_counter()
+                transcript_kwargs: dict[str, Any] = {
+                    "on_request": self._acquire_youtube_request_slot,
+                }
+                if self.youtube_cookie_file:
+                    transcript_kwargs["cookie_file"] = self.youtube_cookie_file
                 transcript_obj = await fetch_transcript(
                     video_id,
                     self.languages,
-                    on_request=self._acquire_youtube_request_slot,
+                    **transcript_kwargs,
                 )
                 transcript_text = transcript_obj.to_text()
                 transcript_seconds = time.perf_counter() - transcript_start

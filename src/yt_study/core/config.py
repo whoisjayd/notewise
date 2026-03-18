@@ -69,6 +69,7 @@ class Config:
 
     # Transcript Configuration
     default_languages: list[str] = field(default_factory=lambda: ["en"])
+    youtube_cookie_file: str | None = None
 
     # Security: Allowed keys for environment injection
     ALLOWED_KEYS: set[str] = field(
@@ -87,6 +88,7 @@ class Config:
             "YOUTUBE_REQUESTS_PER_MINUTE",
             "TEMPERATURE",
             "MAX_TOKENS",
+            "YOUTUBE_COOKIE_FILE",
         }
     )
 
@@ -106,6 +108,9 @@ class Config:
         self.mistral_api_key = os.getenv("MISTRAL_API_KEY") or self.mistral_api_key
         self.cohere_api_key = os.getenv("COHERE_API_KEY") or self.cohere_api_key
         self.deepseek_api_key = os.getenv("DEEPSEEK_API_KEY") or self.deepseek_api_key
+        self.youtube_cookie_file = (
+            os.getenv("YOUTUBE_COOKIE_FILE") or self.youtube_cookie_file
+        )
 
         # Load default model and output dir from config
         env_model = os.getenv("DEFAULT_MODEL")
@@ -244,6 +249,8 @@ class Config:
             os.environ["COHERE_API_KEY"] = self.cohere_api_key
         if self.deepseek_api_key:
             os.environ["DEEPSEEK_API_KEY"] = self.deepseek_api_key
+        if self.youtube_cookie_file:
+            os.environ["YOUTUBE_COOKIE_FILE"] = self.youtube_cookie_file
 
     def get_api_key_name_for_model(self, model: str) -> str | None:
         """Get the environment variable name for the API key required by a model."""

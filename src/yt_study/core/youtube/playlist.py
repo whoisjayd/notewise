@@ -1,10 +1,9 @@
-"""Playlist video extraction using pytubefix."""
+"""Playlist video extraction using the native extractor."""
 
 import asyncio
 import logging
 
-from pytubefix import Playlist
-
+from .extractor.client import ExtractorClient, ExtractorConfig, ExtractorError
 from .metadata import PublicAccessRequiredError
 from .parser import extract_video_id
 
@@ -42,11 +41,12 @@ def _raise_if_public_access_required(error: Exception) -> None:
 
 async def extract_playlist_videos(
     playlist_id: str,
+    cookie_file: str | None = None,
 ) -> list[str]:
     """
     Extract all video IDs from a YouTube playlist with retry logic.
 
-    This function handles the blocking network calls of pytubefix by offloading
+    This function handles blocking network calls by offloading
     them to a separate thread, ensuring the asyncio event loop remains responsive.
 
     Args:
@@ -63,8 +63,13 @@ async def extract_playlist_videos(
 
     for attempt in range(max_retries):
         try:
-            # Wrap blocking pytubefix logic in a thread
-            video_ids = await asyncio.to_thread(_extract_sync, playlist_id, attempt)
+            # Wrap blocking native extraction logic in a thread
+            video_ids = await asyncio.to_thread(
+                _extract_sync,
+                playlist_id,
+                attempt,
+                cookie_file,
+            )
 
             if not video_ids:
                 # Should have been raised in _extract_sync if empty, but double check
@@ -96,27 +101,33 @@ async def extract_playlist_videos(
 def _extract_sync(
     playlist_id: str,
     attempt: int,
+    cookie_file: str | None,
 ) -> list[str]:
-    """Blocking helper to extract videos using pytubefix."""
+    """Blocking helper to extract playlist videos with the native extractor."""
     playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
-    playlist = Playlist(playlist_url)
+    client = ExtractorClient(
+        ExtractorConfig(
+            cookie_file=cookie_file,
+        )
+    )
 
-    # Access playlist title to trigger loading
     try:
-        title = playlist.title
-        if attempt == 0:
-            logger.info(f"Found playlist: {title}")
-    except Exception as e:
-        _raise_if_public_access_required(e)
-        # Title fetch might fail but video extraction might still work
-        logger.warning(f"Could not fetch playlist title on attempt {attempt + 1}")
+        payload = client.playlist(playlist_url)
+    except ExtractorError as error:
+        _raise_if_public_access_required(error)
+        raise
+
+    playlist_meta = payload.get("playlist") or {}
+    title = playlist_meta.get("title")
+    if attempt == 0 and title:
+        logger.info(f"Found playlist: {title}")
 
     video_ids = []
 
-    # Extract video IDs from URLs (waits for internal generator)
-    # This loop triggers network requests
-    for url in playlist.video_urls:
-        video_id = extract_video_id(url)
+    entries = payload.get("entries") or []
+    for entry in entries:
+        url = entry.get("url") or ""
+        video_id = entry.get("id") or extract_video_id(url)
         if video_id:
             video_ids.append(video_id)
 

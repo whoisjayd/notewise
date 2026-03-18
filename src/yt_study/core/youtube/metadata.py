@@ -1,12 +1,9 @@
-"""Video metadata extraction using pytubefix."""
+"""Video metadata extraction using the native extractor."""
 
-import json
 import logging
 from dataclasses import dataclass
-from typing import Any
 
-from pytubefix import Playlist, YouTube
-from pytubefix import exceptions as pytubefix_exceptions
+from .extractor.client import ExtractorClient, ExtractorConfig, ExtractorError
 
 
 logger = logging.getLogger(__name__)
@@ -34,8 +31,28 @@ class VideoChapter:
     end_seconds: int | None = None
 
 
+def _client(
+    cookie_file: str | None = None,
+) -> ExtractorClient:
+    """Build a short-lived extractor client instance."""
+    return ExtractorClient(
+        ExtractorConfig(
+            cookie_file=cookie_file,
+        )
+    )
+
+
+def _video_url(video_id: str) -> str:
+    return f"https://www.youtube.com/watch?v={video_id}"
+
+
+def _playlist_url(playlist_id: str) -> str:
+    return f"https://www.youtube.com/playlist?list={playlist_id}"
+
+
 def get_video_chapters(
     video_id: str,
+    cookie_file: str | None = None,
 ) -> list[VideoChapter]:
     """
     Get chapters from a YouTube video.
@@ -49,41 +66,28 @@ def get_video_chapters(
         List of VideoChapter objects, empty if no chapters found.
     """
     try:
-        yt = _get_available_video(video_id)
-
-        # Read the chapter property once because pytubefix properties can
-        # trigger network calls on access.
-        try:
-            chapter_data = yt.chapters
-        except AttributeError:
-            chapter_data = None
-
-        if chapter_data:
-            chapters: list[VideoChapter] = []
-
-            for i, chapter in enumerate(chapter_data):
-                # Handle pytubefix chapter object structure (dict or object)
-                start_time = _get_attr_or_item(chapter, "start_seconds", 0)
-                title = _get_attr_or_item(chapter, "title", f"Chapter {i + 1}")
-
-                # Calculate end time (start of next chapter or None for last)
-                end_time = None
-                if i < len(chapter_data) - 1:
-                    next_chapter = chapter_data[i + 1]
-                    end_time = _get_attr_or_item(next_chapter, "start_seconds", None)
-
-                chapters.append(
-                    VideoChapter(
-                        title=str(title),
-                        start_seconds=int(start_time),
-                        end_seconds=int(end_time) if end_time is not None else None,
-                    )
+        result = _client(cookie_file).chapters(_video_url(video_id))
+        chapter_data = result.get("chapters") or []
+        chapters: list[VideoChapter] = []
+        for i, chapter in enumerate(chapter_data, start=1):
+            start_time = chapter.get("start_time") or 0
+            end_time = chapter.get("end_time")
+            title = chapter.get("title") or f"Chapter {i}"
+            chapters.append(
+                VideoChapter(
+                    title=str(title),
+                    start_seconds=int(start_time),
+                    end_seconds=int(end_time) if end_time is not None else None,
                 )
-            return chapters
+            )
+        return chapters
     except PublicAccessRequiredError:
         raise
+    except ExtractorError as e:
+        _raise_if_public_access_required(str(e))
+        logger.debug(f"Could not fetch chapters for {video_id}: {e}")
     except Exception as e:
-        _raise_if_public_access_required(e)
+        _raise_if_public_access_required(str(e))
         logger.debug(f"Could not fetch chapters for {video_id}: {e}")
 
     return []
@@ -91,6 +95,7 @@ def get_video_chapters(
 
 def get_video_title(
     video_id: str,
+    cookie_file: str | None = None,
 ) -> str:
     """
     Get the title of a YouTube video.
@@ -104,15 +109,19 @@ def get_video_title(
         Video title, or video ID if title cannot be fetched.
     """
     try:
-        yt = _get_available_video(video_id)
-        title = yt.title
-
+        result = _client(cookie_file).metadata(_video_url(video_id))
+        data = result.get("data") or {}
+        _raise_if_video_data_requires_public_access(data)
+        title = result.get("title") or data.get("title")
         if title:
             return str(title)
     except PublicAccessRequiredError:
         raise
+    except ExtractorError as e:
+        _raise_if_public_access_required(str(e))
+        logger.warning(f"Could not fetch title for {video_id}: {e}")
     except Exception as e:
-        _raise_if_public_access_required(e)
+        _raise_if_public_access_required(str(e))
         logger.warning(f"Could not fetch title for {video_id}: {e}")
 
     # Fallback to video ID
@@ -121,6 +130,7 @@ def get_video_title(
 
 def get_video_duration(
     video_id: str,
+    cookie_file: str | None = None,
 ) -> int:
     """
     Get video duration in seconds.
@@ -134,18 +144,25 @@ def get_video_duration(
         Duration in seconds, 0 if cannot be fetched.
     """
     try:
-        yt = _get_available_video(video_id)
-        return int(yt.length)
+        result = _client(cookie_file).metadata(_video_url(video_id))
+        data = result.get("data") or {}
+        _raise_if_video_data_requires_public_access(data)
+        duration = data.get("duration")
+        return int(duration) if duration is not None else 0
     except PublicAccessRequiredError:
         raise
+    except ExtractorError as e:
+        _raise_if_public_access_required(str(e))
+        logger.warning(f"Could not fetch duration for {video_id}: {e}")
     except Exception as e:
-        _raise_if_public_access_required(e)
+        _raise_if_public_access_required(str(e))
         logger.warning(f"Could not fetch duration for {video_id}: {e}")
     return 0
 
 
 def get_playlist_info(
     playlist_id: str,
+    cookie_file: str | None = None,
 ) -> tuple[str, int]:
     """
     Get playlist title and video count.
@@ -159,90 +176,49 @@ def get_playlist_info(
         Tuple of (title, video_count).
     """
     try:
-        url = f"https://www.youtube.com/playlist?list={playlist_id}"
-        playlist = Playlist(url)
-
-        # Pytube's title might fail if playlist is private/invalid
-        try:
-            title = playlist.title
-        except Exception:
-            title = f"playlist_{playlist_id}"
-
-        # Getting length requires fetching the page
-        # list(playlist.video_urls) is robust but slow for huge playlists
-        # For metadata, it's acceptable.
-        count = len(list(playlist.video_urls))
-
-        return str(title), count
+        result = _client(cookie_file).metadata(_playlist_url(playlist_id))
+        data = result.get("data") or {}
+        _raise_if_playlist_data_requires_public_access(data)
+        title = result.get("title") or data.get("title") or f"playlist_{playlist_id}"
+        count = data.get("playlist_count")
+        return str(title), int(count) if count is not None else 0
+    except PublicAccessRequiredError:
+        raise
     except Exception as e:
+        _raise_if_public_access_required(str(e))
         logger.warning(f"Could not fetch playlist info: {e}")
     return f"playlist_{playlist_id}", 0
 
 
-def _get_attr_or_item(obj: Any, key: str, default: Any = None) -> Any:
-    """Helper to get value from object attribute or dict key."""
-    if isinstance(obj, dict):
-        return obj.get(key, default)
-    return getattr(obj, key, default)
-
-
-def _get_available_video(video_id: str) -> YouTube:
-    """Build a pytubefix YouTube object and fail fast on restricted access."""
-    url = f"https://www.youtube.com/watch?v={video_id}"
-    yt = YouTube(url)
-    try:
-        yt.check_availability()
-    except Exception as error:
-        _raise_if_playability_status_requires_public_access(yt, error)
-        _raise_if_public_access_required(error)
-        raise
-    return yt
-
-
-def _raise_if_public_access_required(error: Exception) -> None:
-    """Convert private or sign-in-only pytubefix errors into user-facing failures."""
-    if isinstance(error, pytubefix_exceptions.VideoPrivate):
+def _raise_if_video_data_requires_public_access(data: dict[str, object]) -> None:
+    availability = str(data.get("availability") or "").lower()
+    if availability == "private":
         raise PublicAccessRequiredError(
             "Private YouTube videos are not supported. "
             "Make the video unlisted or public to process it."
-        ) from error
-
-    if isinstance(error, pytubefix_exceptions.MembersOnly):
+        )
+    if availability in {"login_required", "unavailable"}:
         raise PublicAccessRequiredError(
-            "Members-only YouTube videos are not supported. "
+            "Sign-in-only YouTube videos are not supported. "
             "Use a public or unlisted video to process it."
-        ) from error
-
-    if isinstance(
-        error,
-        (
-            pytubefix_exceptions.AgeRestrictedError,
-            pytubefix_exceptions.AgeCheckRequiredError,
-            pytubefix_exceptions.AgeCheckRequiredAccountError,
-        ),
-    ):
+        )
+    if availability == "age_restricted":
         raise PublicAccessRequiredError(
             "Age-restricted YouTube videos are not supported. "
             "Use a public or unlisted video without sign-in requirements to process it."
-        ) from error
-
-    _raise_from_public_access_text(str(error), error)
+        )
 
 
-def _raise_if_playability_status_requires_public_access(
-    yt: YouTube, error: Exception
-) -> None:
-    """Inspect pytubefix playability metadata for private/sign-in-only videos."""
-    try:
-        playability_status = (yt.vid_info or {}).get("playabilityStatus", {})
-        status_text = json.dumps(playability_status)
-    except Exception:
-        return
-
-    _raise_from_public_access_text(status_text, error)
+def _raise_if_playlist_data_requires_public_access(data: dict[str, object]) -> None:
+    availability = str(data.get("availability") or "").lower()
+    if availability == "private":
+        raise PublicAccessRequiredError(
+            "Private YouTube playlists are not supported. "
+            "Make the playlist unlisted or public to process it."
+        )
 
 
-def _raise_from_public_access_text(error_text: str, cause: Exception) -> None:
+def _raise_if_public_access_required(error_text: str) -> None:
     """Raise a user-facing access error when the text indicates restricted access."""
     normalized_text = error_text.lower()
 
@@ -253,17 +229,17 @@ def _raise_from_public_access_text(error_text: str, cause: Exception) -> None:
         raise PublicAccessRequiredError(
             "Private YouTube videos are not supported. "
             "Make the video unlisted or public to process it."
-        ) from cause
+        )
     if "members-only video" in normalized_text or "members only" in normalized_text:
         raise PublicAccessRequiredError(
             "Members-only YouTube videos are not supported. "
             "Use a public or unlisted video to process it."
-        ) from cause
+        )
     if "age restricted" in normalized_text or "without logging in" in normalized_text:
         raise PublicAccessRequiredError(
             "Age-restricted YouTube videos are not supported. "
             "Use a public or unlisted video without sign-in requirements to process it."
-        ) from cause
+        )
     if (
         "requires login to view" in normalized_text
         or "please sign in" in normalized_text
@@ -272,4 +248,4 @@ def _raise_from_public_access_text(error_text: str, cause: Exception) -> None:
         raise PublicAccessRequiredError(
             "Sign-in-only YouTube videos are not supported. "
             "Use a public or unlisted video to process it."
-        ) from cause
+        )

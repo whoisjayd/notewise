@@ -42,6 +42,10 @@ class TestVideoIDExtraction:
         url = "https://example.com/watch?v=dQw4w9WgXcQ"
         assert extract_video_id(url) is None
 
+    def test_extract_video_id_youtube_root_without_path_returns_none(self):
+        """Test that the YouTube root URL without a path returns None."""
+        assert extract_video_id("https://www.youtube.com") is None
+
 
 class TestPlaylistIDExtraction:
     """Test playlist ID extraction."""
@@ -60,6 +64,16 @@ class TestPlaylistIDExtraction:
         """Test URL without playlist."""
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         assert extract_playlist_id(url) is None
+
+    def test_extract_playlist_id_handles_parse_errors_gracefully(self, mocker):
+        """Test that extract_playlist_id handles parse errors gracefully."""
+        mocker.patch(
+            "yt_study.core.youtube.parser._parse_supported_youtube_url",
+            side_effect=RuntimeError("bad"),
+        )
+        assert (
+            extract_playlist_id("https://www.youtube.com/playlist?list=PL123") is None
+        )
 
 
 class TestURLParsing:
@@ -99,3 +113,9 @@ class TestURLParsing:
         """Test empty URL raises error."""
         with pytest.raises(ValueError, match="URL must be a non-empty string"):
             parse_youtube_url("")
+
+    def test_first_query_value_returns_none_for_missing_key(self):
+        """Test that first_query_value returns None for a missing key."""
+        from yt_study.core.youtube.parser import _first_query_value
+
+        assert _first_query_value({}, "v") is None

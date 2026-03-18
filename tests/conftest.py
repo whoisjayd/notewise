@@ -60,19 +60,13 @@ def mock_llm_provider():
 
 
 @pytest.fixture
-def mock_transcript_api(mocker):
-    """Mock YouTubeTranscriptApi class."""
-    return mocker.patch("yt_study.core.youtube.transcript.YouTubeTranscriptApi")
-
-
-@pytest.fixture
-def mock_pytube(mocker):
-    """Mock pytubefix YouTube and Playlist classes."""
-    # We patch the classes where they are imported in metadata.py
-    mock_yt = mocker.patch("yt_study.core.youtube.metadata.YouTube")
-    mock_pl = mocker.patch("yt_study.core.youtube.metadata.Playlist")
-
-    # Also patch in playlist.py if used there
-    mocker.patch("yt_study.core.youtube.playlist.Playlist", new=mock_pl)
-
-    return mock_yt, mock_pl
+def mock_extractor_client(mocker):
+    """Mock native ExtractorClient in all wrapper modules."""
+    meta_client = mocker.patch("yt_study.core.youtube.metadata.ExtractorClient")
+    transcript_client = mocker.patch("yt_study.core.youtube.transcript.ExtractorClient")
+    playlist_client = mocker.patch("yt_study.core.youtube.playlist.ExtractorClient")
+    return {
+        "metadata": meta_client,
+        "transcript": transcript_client,
+        "playlist": playlist_client,
+    }

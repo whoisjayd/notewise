@@ -228,6 +228,20 @@ def process(
             ),
         ),
     ] = None,
+    cookie_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--cookie-file",
+            "--cookies",
+            help=(
+                "Path to Netscape-format cookies .txt file used for YouTube requests."
+            ),
+            exists=False,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+        ),
+    ] = None,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -278,6 +292,9 @@ def process(
         )
         selected_max_tokens = (
             max_tokens if max_tokens is not None else config.max_tokens
+        )
+        selected_cookie_file = (
+            str(cookie_file) if cookie_file is not None else config.youtube_cookie_file
         )
 
         api_key_checked: bool | None = None
@@ -629,6 +646,7 @@ def process(
                 force=force,
                 quiz=quiz,
                 export_transcript=export_transcript,
+                youtube_cookie_file=selected_cookie_file,
                 shared_state=shared_state,
             )
 
@@ -660,7 +678,10 @@ def process(
                 )
 
             try:
-                video_ids = await extract_playlist_videos(parsed.playlist_id)
+                video_ids = await extract_playlist_videos(
+                    parsed.playlist_id,
+                    cookie_file=selected_cookie_file,
+                )
             except (PlaylistError, PublicAccessRequiredError) as e:
                 raise UserVisibleCliError(
                     "Playlist Error",
@@ -670,6 +691,7 @@ def process(
             playlist_name, _ = await asyncio.to_thread(
                 get_playlist_info,
                 parsed.playlist_id,
+                selected_cookie_file,
             )
             video_ids = dedupe_video_ids(video_ids)
             output_dir = selected_output / sanitize_filename(playlist_name)
