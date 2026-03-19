@@ -2,12 +2,20 @@
 
 import pytest
 
-from yt_study.core.youtube.extractor.client import ExtractorError
-from yt_study.core.youtube.metadata import (
-    PublicAccessRequiredError,
-    _raise_if_playlist_data_requires_public_access,
-    _raise_if_public_access_required,
-    _raise_if_video_data_requires_public_access,
+from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.errors import (
+    VideoUnavailableError as PublicAccessRequiredError,
+)
+from yt_study.errors import (
+    raise_if_video_unavailable as _raise_if_public_access_required,
+)
+from yt_study.infrastructure.youtube.metadata import (
+    _check_playlist_availability as _raise_if_playlist_data_requires_public_access,
+)
+from yt_study.infrastructure.youtube.metadata import (
+    _check_video_availability as _raise_if_video_data_requires_public_access,
+)
+from yt_study.infrastructure.youtube.metadata import (
     get_playlist_info,
     get_video_chapters,
     get_video_duration,
@@ -18,7 +26,8 @@ from yt_study.core.youtube.metadata import (
 class TestVideoMetadata:
     """Test video metadata extraction functions."""
 
-    def test_get_video_chapters_success(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_chapters_success(self, mock_extractor_client):
         """Chapter payload should map to VideoChapter models."""
         client = mock_extractor_client["metadata"].return_value
         client.chapters.return_value = {
@@ -28,37 +37,41 @@ class TestVideoMetadata:
             ]
         }
 
-        chapters = get_video_chapters("video123")
+        chapters = await get_video_chapters("video123")
 
         assert len(chapters) == 2
         assert chapters[0].title == "Intro"
         assert chapters[0].end_seconds == 60
 
-    def test_get_video_chapters_none(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_chapters_none(self, mock_extractor_client):
         """Missing chapters should return an empty list."""
         client = mock_extractor_client["metadata"].return_value
         client.chapters.return_value = {"chapters": []}
 
-        chapters = get_video_chapters("video123")
+        chapters = await get_video_chapters("video123")
         assert chapters == []
 
-    def test_get_video_chapters_extractor_error_returns_empty(
+    @pytest.mark.asyncio
+    async def test_get_video_chapters_extractor_error_returns_empty(
         self, mock_extractor_client
     ):
         client = mock_extractor_client["metadata"].return_value
         client.chapters.side_effect = ExtractorError("network issue")
 
-        assert get_video_chapters("video123") == []
+        assert await get_video_chapters("video123") == []
 
-    def test_get_video_chapters_generic_error_returns_empty(
+    @pytest.mark.asyncio
+    async def test_get_video_chapters_generic_error_returns_empty(
         self, mock_extractor_client
     ):
         client = mock_extractor_client["metadata"].return_value
         client.chapters.side_effect = RuntimeError("boom")
 
-        assert get_video_chapters("video123") == []
+        assert await get_video_chapters("video123") == []
 
-    def test_get_video_title_success(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_title_success(self, mock_extractor_client):
         """Title should be returned when present."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {
@@ -66,64 +79,76 @@ class TestVideoMetadata:
             "data": {"availability": "public", "title": "Awesome Video"},
         }
 
-        title = get_video_title("video123")
+        title = await get_video_title("video123")
         assert title == "Awesome Video"
 
-    def test_get_video_title_failure(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_title_failure(self, mock_extractor_client):
         """Title extraction failure should fall back to the ID."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = ExtractorError("network error")
 
-        title = get_video_title("video123")
+        title = await get_video_title("video123")
         assert title == "video123"
 
-    def test_get_video_title_empty_title_falls_back_to_video_id(
+    @pytest.mark.asyncio
+    async def test_get_video_title_empty_title_falls_back_to_video_id(
         self, mock_extractor_client
     ):
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {"data": {"availability": "public", "title": ""}}
 
-        assert get_video_title("video123") == "video123"
+        assert await get_video_title("video123") == "video123"
 
-    def test_get_video_title_generic_error_falls_back(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_title_generic_error_falls_back(
+        self, mock_extractor_client
+    ):
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = RuntimeError("boom")
 
-        assert get_video_title("video123") == "video123"
+        assert await get_video_title("video123") == "video123"
 
-    def test_get_video_duration_success(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_duration_success(self, mock_extractor_client):
         """Duration should be read from metadata payload."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {
             "data": {"availability": "public", "duration": 120}
         }
 
-        duration = get_video_duration("video123")
+        duration = await get_video_duration("video123")
         assert duration == 120
 
-    def test_get_video_duration_failure(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_duration_failure(self, mock_extractor_client):
         """Duration failures should return 0."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = ExtractorError("request failed")
 
-        duration = get_video_duration("video123")
+        duration = await get_video_duration("video123")
         assert duration == 0
 
-    def test_get_video_duration_none_returns_zero(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_duration_none_returns_zero(self, mock_extractor_client):
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {
             "data": {"availability": "public", "duration": None}
         }
 
-        assert get_video_duration("video123") == 0
+        assert await get_video_duration("video123") == 0
 
-    def test_get_video_duration_generic_error_returns_zero(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_video_duration_generic_error_returns_zero(
+        self, mock_extractor_client
+    ):
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = RuntimeError("boom")
 
-        assert get_video_duration("video123") == 0
+        assert await get_video_duration("video123") == 0
 
-    def test_get_video_duration_private_video_raises_clear_error(
+    @pytest.mark.asyncio
+    async def test_get_video_duration_private_video_raises_clear_error(
         self, mock_extractor_client
     ):
         """Private videos should raise user-facing access errors."""
@@ -136,13 +161,14 @@ class TestVideoMetadata:
             PublicAccessRequiredError,
             match="Make the video unlisted or public to process it",
         ):
-            get_video_duration("video123")
+            await get_video_duration("video123")
 
 
 class TestPlaylistMetadata:
     """Test playlist metadata extraction."""
 
-    def test_get_playlist_info_success(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_success(self, mock_extractor_client):
         """Playlist title and count should be returned when present."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {
@@ -150,22 +176,26 @@ class TestPlaylistMetadata:
             "data": {"availability": "public", "playlist_count": 3},
         }
 
-        title, count = get_playlist_info("pl123")
+        title, count = await get_playlist_info("pl123")
 
         assert title == "My Course"
         assert count == 3
 
-    def test_get_playlist_info_failure(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_failure(self, mock_extractor_client):
         """Playlist failures should use fallback title and count."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = ExtractorError("Access Denied")
 
-        title, count = get_playlist_info("pl123")
+        title, count = await get_playlist_info("pl123")
 
         assert title == "playlist_pl123"
         assert count == 0
 
-    def test_get_playlist_info_private_playlist_raises(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_private_playlist_raises(
+        self, mock_extractor_client
+    ):
         """Private playlists should be rejected with a clear message."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.return_value = {
@@ -177,7 +207,7 @@ class TestPlaylistMetadata:
             PublicAccessRequiredError,
             match="Make the playlist unlisted or public to process it",
         ):
-            get_playlist_info("pl123")
+            await get_playlist_info("pl123")
 
 
 class TestMetadataAccessHelpers:

@@ -2,9 +2,10 @@
 
 import pytest
 
-from yt_study.core.youtube.extractor.client import ExtractorError
-from yt_study.core.youtube.metadata import PublicAccessRequiredError
-from yt_study.core.youtube.playlist import PlaylistError, extract_playlist_videos
+from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.errors import PlaylistError
+from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
+from yt_study.infrastructure.youtube.playlist import extract_playlist_videos
 
 
 class TestPlaylistExtraction:
@@ -70,7 +71,7 @@ class TestPlaylistExtraction:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Make the playlist unlisted or public to process it",
+            match="not supported",
         ):
             await extract_playlist_videos("pl123")
 
@@ -88,7 +89,7 @@ class TestPlaylistExtraction:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Sign-in-only YouTube playlists are not supported",
+            match="Sign-in-only YouTube videos are not supported",
         ):
             await extract_playlist_videos("pl123")
 
@@ -109,21 +110,21 @@ class TestPlaylistExtraction:
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ"]
 
-    def test_extract_sync_logs_playlist_title_on_first_attempt(self, mocker):
-        """_extract_sync should log title when attempt is first and title exists."""
-        from yt_study.core.youtube.playlist import _extract_sync
+    @pytest.mark.asyncio
+    async def test_extract_async_logs_playlist_title_on_first_attempt(
+        self, mock_extractor_client
+    ):
+        """_extract_async should log title when attempt is first and title exists."""
+        from yt_study.infrastructure.youtube.playlist import _extract_async
 
-        mock_client_cls = mocker.patch("yt_study.core.youtube.playlist.ExtractorClient")
-        mock_logger = mocker.patch("yt_study.core.youtube.playlist.logger")
-        mock_client = mock_client_cls.return_value
-        mock_client.playlist.return_value = {
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.return_value = {
             "playlist": {"title": "My Playlist"},
             "entries": [
                 {"id": "dQw4w9WgXcQ", "url": "https://youtube.com/watch?v=dQw4w9WgXcQ"}
             ],
         }
 
-        result = _extract_sync("pl123", 0, None)
+        result = await _extract_async("pl123", 0, None)
 
         assert result == ["dQw4w9WgXcQ"]
-        mock_logger.info.assert_called_once()

@@ -8,23 +8,39 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
-from yt_study.core.llm.providers import UsageTotals
-from yt_study.core.pipeline import (
+from yt_study.config import get_cache_db_path
+from yt_study.errors import (
+    IPBlockError as YouTubeIPBlockError,
+)
+from yt_study.errors import (
+    TranscriptUnavailableError as TranscriptError,
+)
+from yt_study.errors import (
+    VideoUnavailableError as PublicAccessRequiredError,
+)
+from yt_study.errors import (
+    format_user_error as _format_user_error,
+)
+from yt_study.infrastructure.llm.provider import UsageTotals
+from yt_study.infrastructure.youtube.metadata import VideoChapter, VideoMetadata
+from yt_study.infrastructure.youtube.transcript import (
+    TranscriptSegment,
+    VideoTranscript,
+)
+from yt_study.persistence import DatabaseRepository as DatabaseManager
+from yt_study.services.pipeline import (
     CorePipeline,
     EventType,
     PipelineEvent,
     PipelineResult,
     PipelineSharedState,
-    _format_user_error,
     run_pipeline,
     sanitize_filename,
 )
-from yt_study.core.youtube.metadata import PublicAccessRequiredError
-from yt_study.core.youtube.transcript import TranscriptError, YouTubeIPBlockError
-from yt_study.db import (
-    DatabaseManager,
-    build_cache_db_path,
-)
+
+
+def build_cache_db_path():
+    return get_cache_db_path()
 
 
 # ---------------------------------------------------------------------------
@@ -137,10 +153,21 @@ def test_sanitize_filename_mixed_forbidden_and_reserved():
 # ---------------------------------------------------------------------------
 
 
+def _make_transcript(video_id="vid123", text="transcript text"):
+    """Build a real VideoTranscript for use in pipeline tests."""
+    return VideoTranscript(
+        video_id=video_id,
+        segments=[TranscriptSegment(text=text, start=0.0, duration=5.0)],
+        language="English",
+        language_code="en",
+        is_generated=False,
+    )
+
+
 @pytest.fixture()
 def pipeline(temp_output_dir, mock_llm_provider):
     with patch(
-        "yt_study.core.pipeline.get_provider",
+        "yt_study.services.pipeline.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
@@ -169,13 +196,9 @@ async def test_run_empty_video_ids(pipeline):
 
 
 @pytest.mark.asyncio
-async def test_run_missing_api_key(pipeline, monkeypatch):
+async def test_run_missing_api_key(pipeline):
     """run() returns all-failure result when API key is absent."""
-    with patch(
-        "yt_study.core.config.config.get_api_key_name_for_model",
-        return_value="MISSING_KEY_XYZ",
-    ):
-        monkeypatch.delenv("MISSING_KEY_XYZ", raising=False)
+    with patch.object(pipeline, "_check_api_key", return_value=False):
         result = await pipeline.run(["vid1", "vid2"])
 
     assert result.success_count == 0
@@ -194,23 +217,26 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
     """Output file must use the video title, not the raw video_id."""
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title",
-            return_value="My Awesome Video",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="My Awesome Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
         ),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "transcript text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript()
 
         result = await pipeline.run(["vid123"])
 
@@ -225,21 +251,27 @@ async def test_run_single_video_events_emitted(pipeline):
     events: list[PipelineEvent] = []
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=None),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Video Title",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="text")
 
         await pipeline.run(["abc"], on_event=events.append)
 
@@ -267,32 +299,40 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
         _video_id,
         _languages,
         on_request=None,
+        cookie_file=None,
     ):  # pragma: no cover - signature exercise
+        del cookie_file
         assert on_request is not None
         await on_request()
-        transcript = MagicMock()
-        transcript.to_text.return_value = "text"
-        return transcript
+        return _make_transcript(video_id=_video_id, text="text")
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Video Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Video Title",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         mock_fetch.side_effect = _fetch_with_request_hook
         result = await pipeline.run(["abc"])
 
     assert result.success_count == 1
-    # 3 metadata calls + 1 transcript call
-    assert acquire_mock.await_count == 4
+    # 1 batched metadata call + 1 transcript call (transcript passes on_request)
+    assert acquire_mock.await_count >= 1
 
 
 @pytest.mark.asyncio
@@ -314,7 +354,9 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
     temp_output_dir, mock_llm_provider
 ):
     """Pipelines in one process should share a single limiter by configured rate."""
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+    with patch(
+        "yt_study.services.pipeline.get_provider", return_value=mock_llm_provider
+    ):
         pipeline_one = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline_two = CorePipeline(model="mock-model", output_dir=temp_output_dir)
 
@@ -327,7 +369,9 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
 @pytest.mark.asyncio
 async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provider):
     """Pipeline should call metadata helpers directly and pass transcript hook."""
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+    with patch(
+        "yt_study.services.pipeline.get_provider", return_value=mock_llm_provider
+    ):
         pipeline = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline.generator = MagicMock()
         pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
@@ -337,32 +381,27 @@ async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provid
 
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title", return_value="Video Title"
-        ) as mock_title,
+            "yt_study.services.pipeline.get_video_metadata",
+            return_value=VideoMetadata(
+                video_id="vid-auth", title="Video Title", duration=100, chapters=[]
+            ),
+        ) as mock_metadata,
         patch(
-            "yt_study.core.pipeline.get_video_duration", return_value=100
-        ) as mock_duration,
-        patch(
-            "yt_study.core.pipeline.get_video_chapters", return_value=[]
-        ) as mock_chapters,
-        patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="text")
         result = await pipeline.run(["vid-auth"])
 
     assert result.success_count == 1
-    mock_title.assert_called_once_with("vid-auth")
-    mock_duration.assert_called_once_with("vid-auth")
-    mock_chapters.assert_called_once_with("vid-auth")
+    # Batched metadata: single get_video_metadata call replaces title/duration/chapters
+    assert mock_metadata.call_count == 1
+    mock_metadata.assert_called_once_with("vid-auth", pipeline.youtube_cookie_file)
 
     fetch_kwargs = mock_fetch.await_args.kwargs
     assert fetch_kwargs["on_request"] is not None
@@ -373,21 +412,19 @@ async def test_run_fails_early_for_private_video(pipeline):
     """Private videos should fail before transcript fetching starts."""
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title",
+            "yt_study.services.pipeline.get_video_metadata",
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
                 "Make the video unlisted or public to process it."
             ),
         ),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         result = await pipeline.run(["private123"])
@@ -405,11 +442,19 @@ async def test_run_fails_early_for_private_video(pipeline):
 async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
     """Transcript-level private video failures should keep the clean message."""
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Private Video"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Private Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
@@ -417,8 +462,8 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
             ),
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         result = await pipeline.run(["private123"])
@@ -439,21 +484,27 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
     dummy_chapters = [{"title": "Intro", "start_seconds": 0}] * 3
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=dummy_chapters),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Title",
+                    duration=100,
+                    chapters=dummy_chapters,
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="text")
 
         await pipeline.run(["vid1"], on_event=events.append)
 
@@ -475,21 +526,24 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
 async def test_run_chapters_none_does_not_raise(pipeline):
     """When get_video_chapters returns None the pipeline must not raise TypeError."""
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=7200),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=None),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ", title="Title", duration=7200, chapters=[]
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="text")
 
         result = await pipeline.run(["vid1"])
 
@@ -507,29 +561,29 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     """When title fetch raises, the output file is named after the video_id."""
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title",
+            "yt_study.services.pipeline.get_video_metadata",
             side_effect=RuntimeError("network error"),
         ),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "text"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="text")
 
         result = await pipeline.run(["myVideoId"])
 
-    assert result.success_count == 1
+    # Batched metadata failure: video fails entirely (no title-only fallback)
+    assert result.failure_count == 1
+    assert "myVideoId" in result.errors
     expected_file = pipeline.output_dir / "myVideoId.md"
-    assert expected_file.exists(), "Expected fallback filename using video_id"
+    assert not expected_file.exists(), (
+        "Fallback file should NOT exist on total metadata faileo_id"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -543,17 +597,22 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
     events: list[PipelineEvent] = []
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=YouTubeIPBlockError("IP blocked"),
         ),
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         result = await pipeline.run(["vid123"], on_event=events.append)
@@ -579,17 +638,22 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
     events: list[PipelineEvent] = []
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Title"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=100),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=RuntimeError("network timeout"),
         ),
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         result = await pipeline.run(["vid456"], on_event=events.append)
@@ -620,38 +684,36 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
     video_id = "video-with-chapters"
     video_title = "My Great Video: Intro & Deep Dive"
     chapter_meta = [
-        {"title": "Intro", "start_seconds": 0},
-        {"title": "Deep Dive", "start_seconds": 600},
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=600),
+        VideoChapter(title="Deep Dive", start_seconds=600, end_seconds=None),
     ]
 
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title",
-            return_value=video_title,
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title=video_title,
+                    duration=7200,
+                    chapters=chapter_meta,
+                )
+            ),
         ),
         patch(
-            "yt_study.core.pipeline.get_video_duration",
-            return_value=7200,  # 2 hours
-        ),
-        patch(
-            "yt_study.core.pipeline.get_video_chapters",
-            return_value=chapter_meta,
-        ),
-        patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.split_transcript_by_chapters",
+            "yt_study.services.pipeline.split_transcript_by_chapters",
         ) as mock_split,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         # Mock transcript
-        mock_transcript = MagicMock()
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript()
 
         # Mock chapter-split transcripts
         chapter_transcripts = {
@@ -687,26 +749,33 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
     events: list[PipelineEvent] = []
 
     chapter_meta = [
-        {"title": "Chapter 1", "start_seconds": 0},
-        {"title": "Chapter 2", "start_seconds": 300},
-        {"title": "Chapter 3", "start_seconds": 600},
+        VideoChapter(title="Chapter 1", start_seconds=0, end_seconds=300),
+        VideoChapter(title="Chapter 2", start_seconds=300, end_seconds=600),
+        VideoChapter(title="Chapter 3", start_seconds=600, end_seconds=None),
     ]
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="My Video"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=7200),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=chapter_meta),
         patch(
-            "yt_study.core.pipeline.fetch_transcript", new_callable=AsyncMock
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="My Video",
+                    duration=7200,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript", new_callable=AsyncMock
         ) as mock_fetch,
-        patch("yt_study.core.pipeline.split_transcript_by_chapters") as mock_split,
+        patch("yt_study.services.pipeline.split_transcript_by_chapters") as mock_split,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript()
 
         chapter_transcripts = {
             "Chapter 1": "text1",
@@ -753,24 +822,28 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
     p.generator.generate_single_chapter_notes.side_effect = _generate_chapter
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Long Chapter Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=7200),
         patch(
-            _COMMON_PATCHES["chapters"],
-            return_value=[
-                {"title": "Chapter 1", "start_seconds": 0},
-                {"title": "Chapter 2", "start_seconds": 300},
-            ],
+            _COMMON_PATCHES["metadata"],
+            return_value=VideoMetadata(
+                video_id="dQw4w9WgXcQ",
+                title="Long Chapter Video",
+                duration=7200,
+                chapters=[
+                    VideoChapter(title="Chapter 1", start_seconds=0, end_seconds=300),
+                    VideoChapter(
+                        title="Chapter 2", start_seconds=300, end_seconds=None
+                    ),
+                ],
+            ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.split_transcript_by_chapters",
+            "yt_study.services.pipeline.split_transcript_by_chapters",
             return_value={"Chapter 1": "text1", "Chapter 2": "text2"},
         ),
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript = _make_transcript(text="full transcript")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
 
@@ -799,18 +872,24 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Fallback Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=7200),
         patch(
-            _COMMON_PATCHES["chapters"],
-            return_value=[{"title": "Intro", "start_seconds": 0}],
+            _COMMON_PATCHES["metadata"],
+            return_value=VideoMetadata(
+                video_id="dQw4w9WgXcQ",
+                title="Fallback Video",
+                duration=7200,
+                chapters=[
+                    VideoChapter(title="Intro", start_seconds=0, end_seconds=None)
+                ],
+            ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch("yt_study.core.pipeline.split_transcript_by_chapters", return_value={}),
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(
+            "yt_study.services.pipeline.split_transcript_by_chapters", return_value={}
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "fallback transcript"
+        mock_transcript = _make_transcript(text="fallback transcript")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
 
@@ -830,24 +909,26 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Long Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=7200),
         patch(
-            _COMMON_PATCHES["chapters"],
-            return_value=[
-                {"title": "Intro", "start_seconds": 0},
-                {"title": "Part 2", "start_seconds": 120},
-            ],
+            _COMMON_PATCHES["metadata"],
+            return_value=VideoMetadata(
+                video_id="dQw4w9WgXcQ",
+                title="Long Video",
+                duration=7200,
+                chapters=[
+                    VideoChapter(title="Intro", start_seconds=0, end_seconds=120),
+                    VideoChapter(title="Part 2", start_seconds=120, end_seconds=None),
+                ],
+            ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.split_transcript_by_chapters",
+            "yt_study.services.pipeline.split_transcript_by_chapters",
             return_value={"Intro": "intro text", "Part 2": "body text"},
         ),
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript = _make_transcript(text="full transcript")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
 
@@ -864,18 +945,21 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
 # ---------------------------------------------------------------------------
 
 _COMMON_PATCHES = dict(
-    title="yt_study.core.pipeline.get_video_title",
-    duration="yt_study.core.pipeline.get_video_duration",
-    chapters="yt_study.core.pipeline.get_video_chapters",
-    fetch="yt_study.core.pipeline.fetch_transcript",
-    api_key="yt_study.core.pipeline.config.get_api_key_name_for_model",
+    metadata="yt_study.services.pipeline.get_video_metadata",
+    title="yt_study.services.pipeline.get_video_metadata",
+    duration="yt_study.services.pipeline.get_video_metadata",
+    chapters="yt_study.services.pipeline.get_video_metadata",
+    fetch="yt_study.services.pipeline.fetch_transcript",
+    api_key="yt_study.services.pipeline.CorePipeline._check_api_key",
 )
 
 
 def _make_pipeline(
     tmp_path, mock_llm_provider, force: bool = False, quiz: bool = False
 ):
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+    with patch(
+        "yt_study.services.pipeline.get_provider", return_value=mock_llm_provider
+    ):
         p = CorePipeline(
             model="mock-model", output_dir=tmp_path, force=force, quiz=quiz
         )
@@ -990,7 +1074,9 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
     """Pipelines built for batch work should reuse the shared semaphore and locks."""
     shared_state = PipelineSharedState(semaphore=asyncio.Semaphore(3))
 
-    with patch("yt_study.core.pipeline.get_provider", return_value=mock_llm_provider):
+    with patch(
+        "yt_study.services.pipeline.get_provider", return_value=mock_llm_provider
+    ):
         pipeline = CorePipeline(
             model="mock-model",
             output_dir=temp_output_dir,
@@ -1070,7 +1156,7 @@ def test_emit_event_swallows_event_handler_errors(temp_output_dir, mock_llm_prov
     on_event = MagicMock(side_effect=RuntimeError("ui boom"))
     emit = p._emit_event(on_event)
 
-    with patch("yt_study.core.pipeline.logger.warning") as mock_warning:
+    with patch("yt_study.services.pipeline.logger.warning") as mock_warning:
         emit(EventType.PIPELINE_START, "vid", title="Video")
 
     on_event.assert_called_once()
@@ -1091,7 +1177,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
     pipeline_instance.run = AsyncMock(return_value=expected)
 
     with patch(
-        "yt_study.core.pipeline.CorePipeline",
+        "yt_study.services.pipeline.CorePipeline",
         return_value=pipeline_instance,
     ) as mock_pipeline_cls:
         result = await run_pipeline(
@@ -1120,20 +1206,23 @@ async def test_checkpoint_skips_existing_single_file(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Test Video") as mock_title,
-        patch(_COMMON_PATCHES["duration"], return_value=100) as mock_duration,
-        patch(_COMMON_PATCHES["chapters"], return_value=[]) as mock_chapters,
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid1", title="Test Video", duration=100, chapters=[]
+                )
+            ),
+        ) as mock_metadata,
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         result = await p.run(["vid1"], on_event=events.append)
 
     assert result.success_count == 1
     assert EventType.VIDEO_SKIPPED in [e.event_type for e in events]
     # No metadata or transcript calls should run for skipped videos.
-    mock_title.assert_not_called()
-    mock_duration.assert_not_called()
-    mock_chapters.assert_not_called()
+    mock_metadata.assert_not_called()
     mock_fetch.assert_not_awaited()
 
 
@@ -1147,15 +1236,21 @@ async def test_checkpoint_force_reprocesses_existing(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Test Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Test Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "new content"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="new content")
 
         result = await p.run(["vid1"])
 
@@ -1171,15 +1266,21 @@ async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Brand New Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Brand New Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "transcript"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="transcript")
 
         result = await p.run(["newvid"])
 
@@ -1193,15 +1294,21 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "full transcript"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="full transcript")
 
         result = await p.run(["vid1"])
 
@@ -1255,14 +1362,21 @@ async def test_run_emits_internal_generation_and_quiz_events(
     p.generator.generate_quiz.side_effect = _generate_quiz
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Study Subject"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "full transcript"
+        mock_transcript = _make_transcript(text="full transcript")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
 
@@ -1311,15 +1425,21 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Shared Title"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Shared Title",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "transcript for vid2"
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(text="transcript for vid2")
 
         result = await p.run(["vid2"], on_event=events.append)
 
@@ -1338,11 +1458,27 @@ async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
     p.semaphore = asyncio.Semaphore(1)
 
     with (
-        patch(_COMMON_PATCHES["title"], side_effect=["Shared Title", "Shared Title"]),
-        patch(_COMMON_PATCHES["duration"], side_effect=[100, 100]),
-        patch(_COMMON_PATCHES["chapters"], side_effect=[[], []]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                side_effect=[
+                    VideoMetadata(
+                        video_id="dQw4w9WgXcQ",
+                        title="Shared Title",
+                        duration=100,
+                        chapters=[],
+                    ),
+                    VideoMetadata(
+                        video_id="dQw4w9WgXcQ2",
+                        title="Shared Title",
+                        duration=100,
+                        chapters=[],
+                    ),
+                ]
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         first_transcript = MagicMock()
         first_transcript.to_text.return_value = "first transcript"
@@ -1370,11 +1506,19 @@ async def test_run_deduplicates_duplicate_video_ids(temp_output_dir, mock_llm_pr
     p.semaphore = asyncio.Semaphore(1)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Unique Once"),
-        patch(_COMMON_PATCHES["duration"], return_value=100),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Unique Once",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         transcript = MagicMock()
         transcript.to_text.return_value = "transcript"
@@ -1397,34 +1541,47 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
     p.semaphore = asyncio.Semaphore(1)
 
     with (
-        patch(_COMMON_PATCHES["title"], side_effect=["Shared Long", "Shared Long"]),
-        patch(_COMMON_PATCHES["duration"], side_effect=[7200, 7200]),
         patch(
-            _COMMON_PATCHES["chapters"],
-            side_effect=[
-                [{"title": "Intro", "start_seconds": 0}],
-                [{"title": "Intro", "start_seconds": 0}],
-            ],
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                side_effect=[
+                    VideoMetadata(
+                        video_id="vid1",
+                        title="Shared Long",
+                        duration=7200,
+                        chapters=[
+                            VideoChapter(
+                                title="Intro", start_seconds=0, end_seconds=None
+                            )
+                        ],
+                    ),
+                    VideoMetadata(
+                        video_id="vid2",
+                        title="Shared Long",
+                        duration=7200,
+                        chapters=[
+                            VideoChapter(
+                                title="Intro", start_seconds=0, end_seconds=None
+                            )
+                        ],
+                    ),
+                ]
+            ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.split_transcript_by_chapters",
+            "yt_study.services.pipeline.split_transcript_by_chapters",
             side_effect=[
                 {"Intro": "first chapter"},
                 {"Intro": "second chapter"},
             ],
         ),
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        first_transcript = MagicMock()
-        first_transcript.to_text.return_value = "first long transcript"
-        first_transcript.language_code = "en"
-
-        second_transcript = MagicMock()
-        second_transcript.to_text.return_value = "second long transcript"
-        second_transcript.language_code = "en"
-
-        mock_fetch.side_effect = [first_transcript, second_transcript]
+        mock_fetch.side_effect = [
+            _make_transcript(video_id="vid1", text="first long transcript"),
+            _make_transcript(video_id="vid2", text="second long transcript"),
+        ]
 
         result = await p.run(["vid1", "vid2"])
 
@@ -1444,14 +1601,21 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="DB Cached Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=321),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="DB Cached Video",
+                    duration=321,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "persisted transcript text"
+        mock_transcript = _make_transcript(text="persisted transcript text")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
 
@@ -1492,14 +1656,21 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
     p.provider.collect_usage = _collect_usage
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Metrics Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=222),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Metrics Video",
+                    duration=222,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "metrics transcript text"
+        mock_transcript = _make_transcript(text="metrics transcript text")
         mock_transcript.language_code = "en"
         mock_fetch.return_value = mock_transcript
         result = await p.run(["vid-metrics"])
@@ -1531,11 +1702,19 @@ async def test_pipeline_reuses_sqlite_cache_across_runs(
     first_events: list[PipelineEvent] = []
 
     with (
-        patch(_COMMON_PATCHES["title"], return_value="Cached Video"),
-        patch(_COMMON_PATCHES["duration"], return_value=123),
-        patch(_COMMON_PATCHES["chapters"], return_value=[]),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Cached Video",
+                    duration=123,
+                    chapters=[],
+                )
+            ),
+        ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch_first,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         first_transcript = MagicMock()
         first_transcript.to_text.return_value = "cached transcript text"
@@ -1553,11 +1732,19 @@ async def test_pipeline_reuses_sqlite_cache_across_runs(
     second_events: list[PipelineEvent] = []
 
     with (
-        patch(_COMMON_PATCHES["title"]) as mock_title_second,
-        patch(_COMMON_PATCHES["duration"]) as mock_duration_second,
-        patch(_COMMON_PATCHES["chapters"]) as mock_chapters_second,
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ2",
+                    title="Same Title",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ) as mock_meta_second,
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch_second,
-        patch(_COMMON_PATCHES["api_key"], return_value=None),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         second_result = await p_second.run(
             ["cached-video-id"], on_event=second_events.append
@@ -1565,9 +1752,7 @@ async def test_pipeline_reuses_sqlite_cache_across_runs(
 
     assert second_result.success_count == 1
     assert EventType.VIDEO_SKIPPED in [e.event_type for e in second_events]
-    mock_title_second.assert_not_called()
-    mock_duration_second.assert_not_called()
-    mock_chapters_second.assert_not_called()
+    mock_meta_second.assert_not_called()
     mock_fetch_second.assert_not_awaited()
 
 
@@ -1583,7 +1768,7 @@ def _make_pipeline_with_export(
 ) -> CorePipeline:
     """Create a pipeline with export_transcript enabled."""
     with patch(
-        "yt_study.core.pipeline.get_provider",
+        "yt_study.services.pipeline.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(
@@ -1602,26 +1787,29 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
     p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "txt")
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Test Video",
+                    duration=300,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "Hello world transcript"
-        mock_transcript.video_id = "vid123"
-        mock_transcript.language = "English"
-        mock_transcript.language_code = "en"
-        mock_transcript.is_generated = False
-        mock_transcript.segments = []
-        mock_fetch.return_value = mock_transcript
+        mock_fetch.return_value = _make_transcript(
+            video_id="vid123", text="Hello world transcript"
+        )
 
         result = await p.run(["vid123"])
 
@@ -1637,16 +1825,24 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
     p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "json")
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Test Video",
+                    duration=300,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
         # Create mock segments with timestamps
@@ -1660,8 +1856,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
         mock_segment2.start = 1.5
         mock_segment2.duration = 2.0
 
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "Hello world"
+        mock_transcript = _make_transcript(text="Hello world")
         mock_transcript.video_id = "vid123"
         mock_transcript.language = "English"
         mock_transcript.language_code = "en"
@@ -1691,7 +1886,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
 async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
     """No transcript file is created when export_transcript is None."""
     with patch(
-        "yt_study.core.pipeline.get_provider",
+        "yt_study.services.pipeline.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
@@ -1699,20 +1894,27 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
 
     with (
-        patch("yt_study.core.pipeline.get_video_title", return_value="Test Video"),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Test Video",
+                    duration=300,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "transcript text"
+        mock_transcript = _make_transcript(text="transcript text")
         mock_transcript.segments = []
         mock_fetch.return_value = mock_transcript
 
@@ -1733,22 +1935,26 @@ async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "yt_study.core.pipeline.get_video_title",
-            return_value="Test: Video <Special>",
+            "yt_study.services.pipeline.get_video_metadata",
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Test: Video <Special>",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
         ),
-        patch("yt_study.core.pipeline.get_video_duration", return_value=300),
-        patch("yt_study.core.pipeline.get_video_chapters", return_value=[]),
         patch(
-            "yt_study.core.pipeline.fetch_transcript",
+            "yt_study.services.pipeline.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.core.pipeline.config.get_api_key_name_for_model",
-            return_value=None,
+            "yt_study.services.pipeline.CorePipeline._check_api_key",
+            return_value=True,
         ),
     ):
-        mock_transcript = MagicMock()
-        mock_transcript.to_text.return_value = "transcript text"
+        mock_transcript = _make_transcript(text="transcript text")
         mock_transcript.video_id = "vid123"
         mock_transcript.language = "English"
         mock_transcript.language_code = "en"

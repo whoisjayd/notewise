@@ -4,16 +4,23 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from yt_study.core.youtube.extractor.client import ExtractorError
-from yt_study.core.youtube.metadata import PublicAccessRequiredError, VideoChapter
-from yt_study.core.youtube.transcript import (
-    TranscriptError,
+from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.errors import (
+    IPBlockError as YouTubeIPBlockError,
+)
+from yt_study.errors import (
+    TranscriptUnavailableError as TranscriptError,
+)
+from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
+from yt_study.errors import (
+    raise_if_video_unavailable as _raise_if_public_access_required,
+)
+from yt_study.infrastructure.youtube.metadata import VideoChapter
+from yt_study.infrastructure.youtube.transcript import (
     TranscriptSegment,
     VideoTranscript,
-    YouTubeIPBlockError,
     _extract_error_reason,
-    _fetch_sync,
-    _raise_if_public_access_required,
+    _fetch_async,
     fetch_transcript,
     split_transcript_by_chapters,
 )
@@ -61,11 +68,11 @@ class TestTranscriptHelpers:
     ):
         """Known sign-in-only restrictions should map to one clean user error."""
         with pytest.raises(PublicAccessRequiredError, match=expected_message):
-            _raise_if_public_access_required(error)
+            _raise_if_public_access_required(str(error))
 
     def test_raise_if_public_access_required_ignores_public_errors(self):
         """Non-access errors should be left untouched for normal handling."""
-        _raise_if_public_access_required(Exception("captions missing"))
+        _raise_if_public_access_required(str(Exception("captions missing")))
 
     def test_extract_error_reason_prefers_message_and_fallback(self):
         assert _extract_error_reason(Exception("boom")) == "boom"
@@ -195,7 +202,7 @@ class TestFetchTranscript:
         client = mock_extractor_client["transcript"].return_value
         client.transcript.side_effect = ExtractorError("network down")
         monkeypatch.setattr(
-            "yt_study.core.youtube.transcript.asyncio.sleep", AsyncMock()
+            "yt_study.infrastructure.youtube.transcript.asyncio.sleep", AsyncMock()
         )
 
         with pytest.raises(TranscriptError, match="Could not fetch transcript"):
@@ -203,7 +210,8 @@ class TestFetchTranscript:
 
         assert client.transcript.call_count == 3
 
-    def test_fetch_sync_wraps_not_found(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_fetch_async_wraps_not_found(self, mock_extractor_client):
         """No-track native errors should map to TranscriptError."""
         client = mock_extractor_client["transcript"].return_value
         client.transcript.side_effect = ExtractorError(
@@ -211,9 +219,12 @@ class TestFetchTranscript:
         )
 
         with pytest.raises(TranscriptError, match="No usable transcript found"):
-            _fetch_sync("video123", ["en"])
+            await _fetch_async("video123", ["en"])
 
-    def test_fetch_sync_success_with_unknown_track_name(self, mock_extractor_client):
+    @pytest.mark.asyncio
+    async def test_fetch_async_success_with_unknown_track_name(
+        self, mock_extractor_client
+    ):
         client = mock_extractor_client["transcript"].return_value
         client.transcript.return_value = {
             "segments": [{"text": "ok", "start": 0.0, "duration": 1.0}],
@@ -222,7 +233,7 @@ class TestFetchTranscript:
             "is_generated": True,
         }
 
-        raw, meta, message = _fetch_sync("video123", ["en"])
+        raw, meta, message = await _fetch_async("video123", ["en"])
 
         assert raw[0]["text"] == "ok"
         assert meta.language == "en"

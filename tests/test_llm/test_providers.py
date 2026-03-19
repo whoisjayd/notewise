@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_study.core.llm.providers import (
-    LLMGenerationError,
+from yt_study.errors import LLMGenerationError
+from yt_study.infrastructure.llm.provider import (
     LLMProvider,
     UsageTotals,
     get_provider,
@@ -26,8 +26,12 @@ class TestLLMProvider:
     async def test_generate_success(self):
         """Test successful generation."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost", return_value=0.0
+            ),
         ):
             # Setup mock response
             mock_response = MagicMock()
@@ -52,8 +56,12 @@ class TestLLMProvider:
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost", return_value=0.0
+            ),
         ):
             mock_response = MagicMock()
             # LLM returns content wrapped in ```markdown ... ```
@@ -71,8 +79,13 @@ class TestLLMProvider:
     async def test_generate_collects_usage_from_litellm_response(self):
         """Provider should accumulate prompt/completion metrics from response usage."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0042),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost",
+                return_value=0.0042,
+            ),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -96,8 +109,12 @@ class TestLLMProvider:
     async def test_generate_usage_defaults_to_zero_when_missing(self):
         """Missing usage metadata should not break generation metrics collection."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost", return_value=0.0
+            ),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -114,8 +131,13 @@ class TestLLMProvider:
     async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
         """Nested usage scopes should preserve inner totals in the outer collector."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0025),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost",
+                return_value=0.0025,
+            ),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -144,8 +166,12 @@ class TestLLMProvider:
     async def test_generate_failure(self):
         """Test generation failure raises custom exception."""
         with (
-            patch("yt_study.core.llm.providers.acompletion") as mock_acompletion,
-            patch("yt_study.core.llm.providers.completion_cost", return_value=0.0),
+            patch(
+                "yt_study.infrastructure.llm.provider.acompletion"
+            ) as mock_acompletion,
+            patch(
+                "yt_study.infrastructure.llm.provider.completion_cost", return_value=0.0
+            ),
         ):
             mock_acompletion.side_effect = Exception("API Error")
 
@@ -181,7 +207,7 @@ class TestLLMProvider:
         provider = LLMProvider("gpt-4o")
         response = MagicMock()
         with patch(
-            "yt_study.core.llm.providers.completion_cost",
+            "yt_study.infrastructure.llm.provider.completion_cost",
             side_effect=RuntimeError("missing price map"),
         ):
             assert provider._extract_cost(response) == 0.0

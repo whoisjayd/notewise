@@ -4,8 +4,8 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_study.core.config import config
-from yt_study.core.llm.generator import StudyMaterialGenerator
+from yt_study.config import settings as config
+from yt_study.services.generation import StudyMaterialGenerator
 
 
 class TestStudyMaterialGenerator:
@@ -18,19 +18,19 @@ class TestStudyMaterialGenerator:
     def test_count_tokens_fallback(self, generator):
         """Test token counting fallback when library fails."""
         with patch(
-            "yt_study.core.llm.generator.token_counter", side_effect=Exception("Error")
+            "yt_study.services.generation.token_counter", side_effect=Exception("Error")
         ):
             count = generator._count_tokens("1234")
             assert count == 1  # 4 chars // 4 = 1
 
     def test_count_tokens_public_api(self, generator):
         """Public count_tokens API should use model token counter."""
-        with patch("yt_study.core.llm.generator.token_counter", return_value=123):
+        with patch("yt_study.services.generation.token_counter", return_value=123):
             assert generator.count_tokens("sample text") == 123
 
     def test_chunk_transcript_small(self, generator):
         """Test that small transcripts are not chunked."""
-        with patch("yt_study.core.llm.generator.token_counter", return_value=100):
+        with patch("yt_study.services.generation.token_counter", return_value=100):
             chunks = generator._chunk_transcript("Small text")
             assert len(chunks) == 1
             assert chunks[0] == "Small text"
@@ -41,7 +41,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 5  # Allow room for a sentence + delimiter
 
         try:
-            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.services.generation.token_counter") as mock_tc:
                 # 1 token per word, with the delimiter ". " adding extra tokens
                 def count_tokens(_model, text):  # noqa: ARG001
                     return len(text.split())
@@ -65,7 +65,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 3
 
         try:
-            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.services.generation.token_counter") as mock_tc:
                 mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
 
                 text = "Sentence one. Sentence two. Sentence three."
@@ -82,7 +82,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 2
 
         try:
-            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.services.generation.token_counter") as mock_tc:
                 mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
 
                 # No periods, just newlines
@@ -100,7 +100,7 @@ class TestStudyMaterialGenerator:
         config.chunk_size = 1  # Tiny
 
         try:
-            with patch("yt_study.core.llm.generator.token_counter") as mock_tc:
+            with patch("yt_study.services.generation.token_counter") as mock_tc:
                 # Mock token counter to say everything is too big
                 mock_tc.side_effect = lambda _model, text: len(text)  # noqa: ARG005
 
@@ -185,7 +185,7 @@ class TestStudyMaterialGenerator:
         two_chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             await generator.generate_chapter_based_notes(chapters)
 
@@ -195,7 +195,7 @@ class TestStudyMaterialGenerator:
     @pytest.mark.asyncio
     async def test_generate_single_chapter_small(self, generator):
         """Single-pass path used when chapter fits within chunk_size."""
-        with patch("yt_study.core.llm.generator.token_counter", return_value=50):
+        with patch("yt_study.services.generation.token_counter", return_value=50):
             await generator.generate_single_chapter_notes("Intro", "short text")
         # One call only (no chunking needed)
         assert generator.provider.generate.call_count == 1
@@ -206,7 +206,7 @@ class TestStudyMaterialGenerator:
         two_chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             await generator.generate_single_chapter_notes("Ch1", "very long text")
         # 2 chunk calls + 1 combine call = 3
@@ -219,7 +219,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -238,7 +238,7 @@ class TestStudyMaterialGenerator:
         """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             await generator.generate_single_chapter_notes("Ch1", "big text")
         # 1 chunk call only — combine is skipped when there is a single chunk
@@ -257,7 +257,7 @@ class TestStudyMaterialGenerator:
         chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             result = await generator.generate_quiz("very long transcript")
 
@@ -272,7 +272,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -290,7 +290,7 @@ class TestStudyMaterialGenerator:
         """When the chunker returns exactly one chunk no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("yt_study.core.llm.generator.token_counter", return_value=9999),
+            patch("yt_study.services.generation.token_counter", return_value=9999),
         ):
             result = await generator.generate_quiz("big transcript")
 

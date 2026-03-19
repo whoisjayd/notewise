@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from yt_study.core.youtube.extractor import transcripts as tx
+from yt_study.infrastructure.youtube.extractor import parsers as tx
 
 
 class TestSelectTrack:

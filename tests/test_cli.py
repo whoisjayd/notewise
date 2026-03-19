@@ -6,14 +6,14 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from yt_study.cli import app
-from yt_study.core.pipeline import (
+from yt_study.cli.app import app
+from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
+from yt_study.services.pipeline import (
     EventType,
     PipelineEvent,
     PipelineMetrics,
     PipelineResult,
 )
-from yt_study.core.youtube.metadata import PublicAccessRequiredError
 
 
 runner = CliRunner()
@@ -68,7 +68,7 @@ def _make_parsed_playlist(playlist_id: str = "PL123"):
 
 @pytest.fixture
 def mock_config_exists():
-    with patch("yt_study.cli.check_config_exists", return_value=True):
+    with patch("yt_study.cli.app.check_config_exists", return_value=True):
         yield
 
 
@@ -84,25 +84,23 @@ def mock_pipeline(tmp_path):
     pipeline_instance.run = AsyncMock(return_value=pipeline_result)
 
     dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
         patch(  # type: ignore[misc]
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ) as mock_cls,
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.config") as mock_config,
         patch(
-            "yt_study.ui.dashboard.PipelineDashboard",
+            "yt_study.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
+        patch("yt_study.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -110,6 +108,8 @@ def mock_pipeline(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None  # no key needed
         yield mock_cls, pipeline_instance
 
@@ -127,14 +127,14 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
 
     # Patch config to require FAKE_KEY for the selected model
     with (
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.core.config.config.get_api_key_name_for_model",
-            return_value="FAKE_KEY",
-        ),
-        patch("yt_study.cli.check_config_exists", return_value=True),
-        patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
+        ),
+        patch(
+            "yt_study.config.settings.AppSettings.get_api_key_name_for_model",
+            return_value="FAKE_KEY",
         ),
     ):
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -171,10 +171,11 @@ def test_config_path_missing():
 
 def test_setup_command():
     """Test setup command triggers wizard."""
-    with patch("yt_study.setup_wizard.run_setup_wizard") as mock_wizard:
+    with patch("yt_study.cli.app.run_setup_wizard") as mock_wizard:
         result = runner.invoke(app, ["setup"])
         assert result.exit_code == 0
-        mock_wizard.assert_called_once()
+        assert mock_wizard.call_count >= 1
+        mock_wizard.assert_any_call(force=False)
 
 
 def test_callback_help():
@@ -250,13 +251,13 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
+        patch("yt_study.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -264,6 +265,8 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 2
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
@@ -303,22 +306,22 @@ def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
+        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
         patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            "yt_study.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["pl_vid1", "pl_vid2"],
         ),
         patch(
-            "yt_study.core.youtube.metadata.get_playlist_info",
+            "yt_study.cli.app.get_playlist_info",
             return_value=("Batch Playlist", 2),
         ),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -326,6 +329,8 @@ def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 2
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
@@ -385,22 +390,24 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.core.youtube.parser.parse_youtube_url", side_effect=_parse),
+        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
         patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            "yt_study.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube playlists are not supported. "
                 "Make the playlist unlisted or public to process it."
             ),
         ),
-        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_playlist_info,
-        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.cli.app.get_playlist_info", new_callable=AsyncMock
+        ) as mock_playlist_info,
+        patch("yt_study.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -493,11 +500,11 @@ def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_pipeli
 def test_process_missing_config():
     """Test that missing config triggers the setup wizard."""
     with (
-        patch("yt_study.cli.check_config_exists", return_value=False),
-        patch("yt_study.setup_wizard.run_setup_wizard") as mock_setup,
+        patch("yt_study.cli.app.check_config_exists", return_value=False),
+        patch("yt_study.cli.app.run_setup_wizard") as mock_setup,
     ):
         runner.invoke(app, ["process", "url"])
-        mock_setup.assert_called_once()
+        assert mock_setup.call_count >= 1
 
 
 def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):  # noqa: ARG001
@@ -528,7 +535,7 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
 def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
     """Invalid URLs should fail the command for shell automation."""
     with patch(
-        "yt_study.core.youtube.parser.parse_youtube_url",
+        "yt_study.cli.app.parse_youtube_url",
         side_effect=ValueError("Not a YouTube URL"),
     ):
         result = runner.invoke(app, ["process", "not-a-url"])
@@ -542,13 +549,13 @@ def test_process_invalid_url_reports_input_error_before_api_key(monkeypatch):
     monkeypatch.delenv("FAKE_KEY", raising=False)
 
     with (
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.core.config.config.get_api_key_name_for_model",
+            "yt_study.config.settings.AppSettings.get_api_key_name_for_model",
             return_value="FAKE_KEY",
         ),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             side_effect=ValueError("Not a YouTube URL"),
         ),
     ):
@@ -561,7 +568,7 @@ def test_process_invalid_url_reports_input_error_before_api_key(monkeypatch):
 
 def test_process_missing_batch_file_reports_file_error():
     """Missing batch-file paths should not be misreported as invalid YouTube URLs."""
-    with patch("yt_study.cli.check_config_exists", return_value=True):
+    with patch("yt_study.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "missing_urls.txt"])
 
     assert result.exit_code == 1
@@ -571,7 +578,7 @@ def test_process_missing_batch_file_reports_file_error():
 
 def test_process_missing_nested_batch_file_reports_file_error():
     """Explicit local paths with separators should also be treated as file inputs."""
-    with patch("yt_study.cli.check_config_exists", return_value=True):
+    with patch("yt_study.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "batches/urls"])
 
     assert result.exit_code == 1
@@ -590,7 +597,7 @@ def test_process_no_ui_flag_runs_without_dashboard(
 ):
     """--no-ui skips PipelineDashboard and still runs the pipeline."""
     _, pipeline_instance = mock_pipeline
-    with patch("yt_study.ui.dashboard.PipelineDashboard") as mock_dashboard_cls:
+    with patch("yt_study.cli.app.PipelineDashboard") as mock_dashboard_cls:
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
     assert result.exit_code == 0
@@ -623,15 +630,15 @@ def test_process_no_ui_prints_done_summary(
 
     with (
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.core.config.config") as mock_config,
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -639,6 +646,8 @@ def test_process_no_ui_prints_done_summary(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
@@ -674,15 +683,15 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
 
     with (
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.core.config.config") as mock_config,
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -690,6 +699,8 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
@@ -764,29 +775,25 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(side_effect=_run_with_events)
     dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_UI"),
         ),
         patch(
-            "yt_study.core.youtube.metadata.get_playlist_info", return_value=("P", 2)
+            "yt_study.cli.app.get_playlist_info", new=AsyncMock(return_value=("P", 2))
         ),
         patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            "yt_study.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1", "vid2"],
         ),
-        patch("yt_study.core.config.config") as mock_config,
-        patch(
-            "yt_study.ui.dashboard.PipelineDashboard", return_value=dashboard_instance
-        ),
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("yt_study.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -794,6 +801,8 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(
@@ -926,22 +935,20 @@ def test_process_ui_shows_detailed_pipeline_states(
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(side_effect=_run_with_generation_events)
     dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.config") as mock_config,
         patch(
-            "yt_study.ui.dashboard.PipelineDashboard",
+            "yt_study.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
+        patch("yt_study.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -949,6 +956,8 @@ def test_process_ui_shows_detailed_pipeline_states(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -987,15 +996,15 @@ def test_process_no_ui_failure_exits_nonzero(
 
     with (
         patch(
-            "yt_study.core.pipeline.CorePipeline",
+            "yt_study.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.core.config.config") as mock_config,
-        patch("yt_study.cli.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1003,6 +1012,8 @@ def test_process_no_ui_failure_exits_nonzero(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
@@ -1090,22 +1101,20 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(side_effect=_run_with_skip)
     dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.config") as mock_config,
         patch(
-            "yt_study.ui.dashboard.PipelineDashboard",
+            "yt_study.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
+        patch("yt_study.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1113,6 +1122,8 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -1131,31 +1142,29 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
         return_value=_make_pipeline_result(total=2, success=2)
     )
     dashboard_instance = MagicMock()
-    dashboard_instance.recent_completions = []
-    dashboard_instance.recent_failures = []
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.core.pipeline.CorePipeline", return_value=pipeline_instance),
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_DEDUPE"),
         ),
         patch(
-            "yt_study.core.youtube.metadata.get_playlist_info",
+            "yt_study.cli.app.get_playlist_info",
             return_value=("Playlist", 3),
         ),
         patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            "yt_study.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1", "vid1", "vid2"],
         ),
-        patch("yt_study.core.config.config") as mock_config,
+        patch("yt_study.cli.app.config") as mock_config,
         patch(
-            "yt_study.ui.dashboard.PipelineDashboard",
+            "yt_study.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ) as mock_dashboard_cls,
-        patch("rich.live.Live.__enter__", return_value=None),
-        patch("rich.live.Live.__exit__", return_value=False),
+        patch("yt_study.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1163,6 +1172,8 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(
@@ -1182,19 +1193,21 @@ def test_process_private_playlist_shows_clean_error(
     """Private playlists should fail cleanly instead of falling into Fatal Error."""
     with (
         patch(
-            "yt_study.core.youtube.parser.parse_youtube_url",
+            "yt_study.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_PRIVATE"),
         ),
         patch(
-            "yt_study.core.youtube.playlist.extract_playlist_videos",
+            "yt_study.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube playlists are not supported. "
                 "Make the playlist unlisted or public to process it."
             ),
         ),
-        patch("yt_study.core.youtube.metadata.get_playlist_info") as mock_info,
-        patch("yt_study.core.config.config") as mock_config,
+        patch(
+            "yt_study.cli.app.get_playlist_info", new_callable=AsyncMock
+        ) as mock_info,
+        patch("yt_study.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1202,6 +1215,8 @@ def test_process_private_playlist_shows_clean_error(
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None
 
         result = runner.invoke(

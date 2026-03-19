@@ -6,7 +6,10 @@ import http.cookiejar
 
 import pytest
 
-from yt_study.core.youtube.extractor.client import ExtractorClient, ExtractorError
+from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.infrastructure.youtube.extractor.client import (
+    YouTubeExtractorClient as ExtractorClient,
+)
 
 
 def _make_cookie(
@@ -76,7 +79,7 @@ class TestAuthHeaders:
         jar.set_cookie(_make_cookie("__Secure-3PAPISID", "threep"))
         client._cookie_jar = jar
         monkeypatch.setattr(
-            "yt_study.core.youtube.extractor.client.time.time", lambda: 123.0
+            "yt_study.infrastructure.youtube.extractor.client.time.time", lambda: 123.0
         )
 
         header = client._get_sid_authorization_header(
@@ -478,7 +481,7 @@ class TestLowLevelHelpers:
 
     def test_make_sid_authorization_includes_user_tag(self, monkeypatch):
         monkeypatch.setattr(
-            "yt_study.core.youtube.extractor.client.time.time", lambda: 9.0
+            "yt_study.infrastructure.youtube.extractor.client.time.time", lambda: 9.0
         )
         header = ExtractorClient._make_sid_authorization(
             "SAPISIDHASH",

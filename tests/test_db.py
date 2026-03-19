@@ -8,11 +8,13 @@ from pathlib import Path
 
 import pytest
 
-from yt_study.db import (
-    CACHE_DB_FILENAME,
-    DatabaseManager,
-    build_cache_db_path,
-)
+from yt_study.config import get_cache_db_path
+from yt_study.persistence import CACHE_DB_FILENAME
+from yt_study.persistence.repository import DatabaseRepository as DatabaseManager
+
+
+def build_cache_db_path():
+    return get_cache_db_path()
 
 
 @pytest.fixture(autouse=True)

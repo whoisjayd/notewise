@@ -2,7 +2,8 @@
 
 import pytest
 
-from yt_study.core.youtube.parser import (
+from yt_study.errors import ValidationError
+from yt_study.infrastructure.youtube.parser import (
     extract_playlist_id,
     extract_video_id,
     parse_youtube_url,
@@ -65,11 +66,15 @@ class TestPlaylistIDExtraction:
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         assert extract_playlist_id(url) is None
 
-    def test_extract_playlist_id_handles_parse_errors_gracefully(self, mocker):
+    def test_extract_playlist_id_handles_parse_errors_gracefully(self, monkeypatch):
         """Test that extract_playlist_id handles parse errors gracefully."""
-        mocker.patch(
-            "yt_study.core.youtube.parser._parse_supported_youtube_url",
-            side_effect=RuntimeError("bad"),
+
+        def _boom(_: str):
+            raise RuntimeError("bad")
+
+        monkeypatch.setattr(
+            "yt_study.infrastructure.youtube.parser._parse_supported_youtube_url",
+            _boom,
         )
         assert (
             extract_playlist_id("https://www.youtube.com/playlist?list=PL123") is None
@@ -96,26 +101,26 @@ class TestURLParsing:
 
     def test_invalid_url(self):
         """Test invalid URL raises error."""
-        with pytest.raises(ValueError, match="Invalid YouTube URL"):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
             parse_youtube_url("https://example.com/video")
 
     def test_invalid_host_with_playlist_param(self):
         """Playlist IDs on non-YouTube hosts must not parse as YouTube playlists."""
-        with pytest.raises(ValueError, match="Invalid YouTube URL"):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
             parse_youtube_url("https://example.com/?list=PLtest123")
 
     def test_free_form_text_with_video_param_rejected(self):
         """Free-form text containing v= should not be treated as a valid URL."""
-        with pytest.raises(ValueError, match="Invalid YouTube URL"):
+        with pytest.raises(ValidationError, match="Invalid YouTube URL"):
             parse_youtube_url("not youtube but v=dQw4w9WgXcQ")
 
     def test_empty_url(self):
         """Test empty URL raises error."""
-        with pytest.raises(ValueError, match="URL must be a non-empty string"):
+        with pytest.raises(ValidationError, match="URL must be a non-empty string"):
             parse_youtube_url("")
 
     def test_first_query_value_returns_none_for_missing_key(self):
         """Test that first_query_value returns None for a missing key."""
-        from yt_study.core.youtube.parser import _first_query_value
+        from yt_study.infrastructure.youtube.parser import _first_query_value
 
         assert _first_query_value({}, "v") is None
