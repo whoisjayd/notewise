@@ -57,13 +57,12 @@ class AsyncYouTubeExtractorClient:
             include_automatic,
         )
 
-    async def video_metadata_full(self, video_id: str) -> dict[str, Any]:
-        """Fetch raw video dict via a single page scrape (async).
+    async def video_metadata_full(self, target: str) -> dict[str, Any]:
+        """Fetch the full raw video payload for a video id or URL (async).
 
-        Lower-level than :meth:`metadata` — returns the full internal video
-        dict including subtitles, automatic_captions, _ytcfg, etc.
+        Lower-level than :meth:`metadata` — returns the internal extractor
+        mapping including subtitles, automatic captions, and Innertube context.
+        The target is forwarded unchanged so callers can pass either a bare
+        video id or a fully-qualified watch URL.
         """
-        return await asyncio.to_thread(
-            self._sync._extract_video,
-            f"https://www.youtube.com/watch?v={video_id}",
-        )
+        return await asyncio.to_thread(self._sync._extract_video, target)

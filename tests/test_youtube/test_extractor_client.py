@@ -7,6 +7,9 @@ import http.cookiejar
 import pytest
 
 from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.infrastructure.youtube.extractor.async_client import (
+    AsyncYouTubeExtractorClient,
+)
 from yt_study.infrastructure.youtube.extractor.client import (
     YouTubeExtractorClient as ExtractorClient,
 )
@@ -406,6 +409,26 @@ class TestHighLevelClientCommands:
         assert payload["segment_count"] == 1
         assert payload["source"] == "innertube:player"
         assert payload["is_generated"] is True
+
+
+class TestAsyncExtractorClient:
+    @pytest.mark.asyncio
+    async def test_video_metadata_full_forwards_target_unchanged(self, monkeypatch):
+        captured: dict[str, str] = {}
+
+        def _fake_extract_video(_self, target: str):
+            captured["target"] = target
+            return {"id": "vid1"}
+
+        monkeypatch.setattr(ExtractorClient, "_extract_video", _fake_extract_video)
+        client = AsyncYouTubeExtractorClient()
+
+        payload = await client.video_metadata_full(
+            "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+        )
+
+        assert payload == {"id": "vid1"}
+        assert captured["target"] == "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
 
 
 class TestLowLevelHelpers:

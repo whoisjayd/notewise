@@ -19,12 +19,40 @@ from yt_study.infrastructure.youtube.metadata import (
     get_playlist_info,
     get_video_chapters,
     get_video_duration,
+    get_video_metadata,
     get_video_title,
 )
 
 
 class TestVideoMetadata:
     """Test video metadata extraction functions."""
+
+    @pytest.mark.asyncio
+    async def test_get_video_metadata_success(self, mock_extractor_client):
+        """Single-call metadata path should map chapters and core fields."""
+        client = mock_extractor_client["metadata"].return_value
+        client.video_metadata_full.return_value = {
+            "title": "Awesome Video",
+            "duration": 125,
+            "availability": "public",
+            "chapters": [
+                {"title": "Intro", "start_time": 0, "end_time": 60},
+                {"title": "Deep Dive", "start_time": 60, "end_time": 125},
+            ],
+        }
+
+        metadata = await get_video_metadata("video123")
+
+        client.video_metadata_full.assert_awaited_once_with(
+            "https://www.youtube.com/watch?v=video123"
+        )
+        assert metadata.video_id == "video123"
+        assert metadata.title == "Awesome Video"
+        assert metadata.duration == 125
+        assert [chapter.title for chapter in metadata.chapters] == [
+            "Intro",
+            "Deep Dive",
+        ]
 
     @pytest.mark.asyncio
     async def test_get_video_chapters_success(self, mock_extractor_client):
