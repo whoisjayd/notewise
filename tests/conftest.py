@@ -9,7 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yt_study.persistence import DatabaseRepository
+from yt_study.storage import DatabaseRepository
 
 
 # ── Simple value fixtures ─────────────────────────────────────────────────────
@@ -100,21 +100,23 @@ def mock_extractor_client(monkeypatch):
         return cls_mock
 
     return {
-        "metadata": _patch(
-            "yt_study.infrastructure.youtube.metadata.AsyncYouTubeExtractorClient"
-        ),
-        "transcript": _patch(
-            "yt_study.infrastructure.youtube.transcript.AsyncYouTubeExtractorClient"
-        ),
-        "playlist": _patch(
-            "yt_study.infrastructure.youtube.playlist.AsyncYouTubeExtractorClient"
-        ),
+        "metadata": _patch("yt_study.youtube.metadata.AsyncYouTubeExtractorClient"),
+        "transcript": _patch("yt_study.youtube.transcript.AsyncYouTubeExtractorClient"),
+        "playlist": _patch("yt_study.youtube.playlist.AsyncYouTubeExtractorClient"),
     }
 
 
 def pytest_configure(config: pytest.Config) -> None:
     """Register the local asyncio mark used by the test suite."""
     config.addinivalue_line("markers", "asyncio: run the test in an event loop")
+    config.addinivalue_line(
+        "markers",
+        "integration: run the test across multiple project layers",
+    )
+    config.addinivalue_line(
+        "markers",
+        "e2e: opt-in end-to-end smoke test that may hit live services",
+    )
 
 
 def pytest_addoption(parser: pytest.Parser) -> None:

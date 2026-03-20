@@ -1,4 +1,4 @@
-"""Pure domain objects for yt-study — no infrastructure dependencies."""
+"""Pure domain objects for yt-study — no external dependencies."""
 
 from .events import EventType, PipelineEvent
 from .results import PipelineMetrics, PipelineResult

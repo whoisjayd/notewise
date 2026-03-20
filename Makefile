@@ -15,6 +15,7 @@ ifeq ($(OS),Windows_NT)
 	FIND_PYCACHE := for /d /r . %%d in (__pycache__) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
 	FIND_CACHE := for /d /r . %%d in (.ruff_cache .mypy_cache .pytest_cache) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
 	FIND_EGG := for /d /r . %%d in (*.egg-info) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
+	FIND_EMPTY_DIRS := powershell -NoProfile -Command "Get-ChildItem -Directory -Recurse | Where-Object { (Get-ChildItem -Force -LiteralPath $${PSItem}.FullName | Measure-Object).Count -eq 0 -and $${PSItem}.FullName -notmatch '\\.venv\\' } | Sort-Object FullName -Descending | ForEach-Object { Remove-Item -LiteralPath $${PSItem}.FullName -Force -Recurse }"
 	FIND_PYC := del /S /Q *.pyc *.pyo 2>$(DEVNULL) || echo >$(DEVNULL)
 	CHECK_DIR = @if exist $(1) $(RM_DIR) $(1) 2>$(DEVNULL)
 	CHECK_FILE = @if exist $(1) $(RM_FILE) $(1) 2>$(DEVNULL)
@@ -29,6 +30,7 @@ else
 	FIND_PYCACHE := find . -type d -name "__pycache__" -exec rm -rf {} + 2>$(DEVNULL) || true
 	FIND_CACHE := find . -type d \( -name ".ruff_cache" -o -name ".mypy_cache" -o -name ".pytest_cache" \) -exec rm -rf {} + 2>$(DEVNULL) || true
 	FIND_EGG := find . -type d -name "*.egg-info" -exec rm -rf {} + 2>$(DEVNULL) || true
+	FIND_EMPTY_DIRS := find . -type d -empty -not -path "./.venv/*" -not -path "./.venv" -exec rmdir {} + 2>$(DEVNULL) || true
 	FIND_PYC := find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>$(DEVNULL) || true
 	CHECK_DIR = @$(RM_DIR) $(1) 2>$(DEVNULL) || true
 	CHECK_FILE = @$(RM_FILE) $(1) 2>$(DEVNULL) || true
@@ -295,7 +297,10 @@ clean-test: ## Remove test artifacts
 	$(call CHECK_FILE,.coverage)
 	$(call CHECK_FILE,coverage.xml)
 
-clean: $(CLEAN_TARGETS) ## Remove all generated files
+clean-empty-dirs: ## Remove empty directories created by build and refactor churn
+	@$(FIND_EMPTY_DIRS)
+
+clean: $(CLEAN_TARGETS) clean-empty-dirs ## Remove all generated files
 
 clean-all: clean ## Remove generated files and virtualenvs
 	$(call CHECK_DIR,.venv)

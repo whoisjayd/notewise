@@ -1,199 +1,165 @@
 # PROJECT KNOWLEDGE BASE
 
-**Updated:** 2026-03-19  **Stack:** Python 3.10+ · Typer · Rich · LiteLLM · Pydantic v2 · SQLAlchemy 2 · structlog
+**Updated:** 2026-03-20
+**Stack:** Python 3.10+ · Typer · Rich · LiteLLM · Pydantic v2 · SQLAlchemy 2 · structlog
 
 ---
 
-## WHAT THIS PROJECT DOES
+## What This Project Does
 
-`yt-study` converts YouTube videos and playlists into Markdown study notes using LLMs.
-It is a CLI tool that: fetches transcripts via a native YouTube extractor (no yt-dlp),
-generates notes/quizzes via LiteLLM, and caches results in SQLite.
+`yt-study` turns public YouTube videos and playlists into Markdown study notes.
+It fetches transcripts through a native YouTube extractor, generates notes and
+quizzes via LiteLLM, and caches results in SQLite.
 
 ---
 
-## REPOSITORY STRUCTURE
+## Repository Structure
 
-```
+```text
 yt-study/
 ├── src/yt_study/
-│   ├── _constants.py              ← App-wide constants (defaults, filenames, limits)
+│   ├── __main__.py                ← CLI entrypoint for `yt-study`
+│   ├── _constants.py              ← App-wide defaults, filenames, and limits
 │   ├── cli/
-│   │   ├── app.py                 ← Full CLI (process / setup / config-path / version)
-│   │   ├── types.py               ← ResolvedSource, _BatchVideoJob, _WorkerSlotManager, …
-│   │   └── formatters.py          ← Rich rendering helpers (panels, cost table)
-│   ├── config/
-│   │   └── settings.py            ← AppSettings (Pydantic BaseSettings), provider key map
+│   │   ├── app.py                 ← Typer commands and top-level wiring
+│   │   ├── _runtime.py            ← CLI process coordinator
+│   │   ├── _context.py            ← Shared CLI runtime state
+│   │   ├── _display.py            ← Rich and headless event rendering
+│   │   ├── _formatters.py         ← Panels, summaries, and cost tables
+│   │   ├── _single_runner.py      ← Single URL flow
+│   │   ├── _batch_runner.py       ← Batch file flow
+│   │   ├── _source_resolution.py  ← URL and playlist resolution
+│   │   └── _types.py              ← CLI-only dataclasses and helpers
+│   ├── config.py                  ← AppSettings and state-dir helpers
 │   ├── domain/
-│   │   ├── events.py              ← EventType, PipelineEvent
-│   │   ├── results.py             ← PipelineResult, PipelineMetrics
-│   │   └── youtube.py             ← VideoChapter, VideoTranscript, VideoMetadata, ParsedURL
-│   ├── errors/
-│   │   ├── exceptions.py          ← YtStudyError hierarchy + raise_if_video_unavailable
-│   │   └── formatting.py          ← format_user_error
-│   ├── infrastructure/
-│   │   ├── llm/
-│   │   │   ├── provider.py        ← LLMProvider (LiteLLM async), UsageTotals, get_provider
-│   │   │   └── prompts/           ← study_notes.py, chapter_notes.py, quiz.py
-│   │   └── youtube/
-│   │       ├── _constants.py      ← YouTube URLs, Innertube config, user-agent, limits
-│   │       ├── extractor/
-│   │       │   ├── client.py      ← YouTubeExtractorClient (sync HTTP), YouTubeExtractorConfig
-│   │       │   ├── async_client.py← AsyncYouTubeExtractorClient (async facade)
-│   │       │   └── parsers.py     ← parse_transcript_payload, select_track
-│   │       ├── metadata.py        ← async get_video_metadata (single-page batch)
-│   │       ├── transcript.py      ← async fetch_transcript, _fetch_async
-│   │       ├── playlist.py        ← async extract_playlist_videos, _extract_async
-│   │       └── parser.py          ← parse_youtube_url → ParsedURL
-│   ├── logging_config/
-│   │   └── setup.py               ← configure_logging(), get_session_log_path()
-│   ├── persistence/
-│   │   ├── models.py              ← SQLAlchemy ORM (VideoRecord, TranscriptRecord, …)
-│   │   ├── schemas.py             ← Pydantic v2 read schemas
-│   │   ├── repository.py          ← DatabaseRepository (thread-safe singleton)
-│   │   └── migrations.py          ← Additive schema repair
-│   ├── services/
-│   │   ├── pipeline.py            ← CorePipeline (async orchestrator)
-│   │   ├── generation.py          ← StudyMaterialGenerator (chunking + LLM calls)
-│   │   └── _limiter.py            ← get_youtube_limiter, clear_youtube_limiters
+│   │   ├── events.py              ← EventType and PipelineEvent
+│   │   ├── results.py             ← PipelineResult and metrics
+│   │   └── youtube.py             ← VideoTranscript, VideoMetadata, ParsedURL
+│   ├── errors.py                  ← Exception hierarchy and formatting
+│   ├── llm/
+│   │   ├── provider.py            ← LiteLLM async provider wrapper
+│   │   └── prompts/               ← study_notes.py, chapter_notes.py, quiz.py
+│   ├── logging.py                 ← structlog setup and session log path
+│   ├── pipeline/
+│   │   ├── core.py                ← CorePipeline facade
+│   │   ├── generation.py          ← Chunking and note generation
+│   │   ├── _execution.py          ← Single-video and batch execution logic
+│   │   ├── _artifacts.py          ← Transcript export and quiz writing
+│   │   ├── _helpers.py            ← Usage, token, and output helpers
+│   │   ├── _limiter.py            ← Shared YouTube rate limiter
+│   │   └── _state.py              ← Shared pipeline state
+│   ├── storage/
+│   │   ├── repository.py          ← SQLite repository
+│   │   ├── models.py              ← ORM models
+│   │   ├── schemas.py             ← Pydantic read schemas
+│   │   └── migrations.py          ← Schema repair helpers
 │   ├── ui/
-│   │   ├── dashboard.py           ← PipelineDashboard (Rich live)
-│   │   └── setup_wizard.py        ← run_setup_wizard
-│   └── utils/
-│       ├── filenames.py           ← sanitize_filename, safe_output_path
-│       ├── iterables.py           ← dedupe_ordered
-│       └── config_helpers.py      ← parse_bool_setting, is_valid_bool_setting
-├── tests/                         ← 461 pytest tests
-├── wiki/Architecture.md           ← CANONICAL architecture doc (read this first)
-├── plans/                         ← Refactor execution plans (01–12)
-├── pyproject.toml
-└── Makefile
+│   │   ├── dashboard.py           ← Rich live dashboard
+│   │   └── setup_wizard.py        ← Interactive setup flow
+│   ├── utils.py                   ← Filename, iterable, and bool helpers
+│   └── youtube/
+│       ├── parser.py              ← YouTube URL parsing
+│       ├── metadata.py            ← Video and playlist metadata fetchers
+│       ├── playlist.py            ← Playlist video extraction
+│       ├── transcript.py          ← Transcript fetching and chapter splitting
+│       ├── _availability.py       ← Availability checks
+│       ├── _constants.py          ← YouTube-specific constants
+│       └── extractor/             ← Native extractor implementation
+├── tests/
+│   ├── unit/
+│   ├── integration/
+│   └── e2e/
+├── README.md
+├── CONTRIBUTING.md
+├── AGENTS.md
+└── pyproject.toml
 ```
 
 ---
 
-## IMPORTANT FILES
+## Important Files
 
 | File | Why it matters |
-|------|---------------|
-| `src/yt_study/cli/app.py` | All CLI commands; logging init; single/batch/playlist dispatch |
-| `src/yt_study/cli/types.py` | `_WorkerSlotManager`, `_BatchVideoJob`, `ResolvedSource` — CLI-internal types with `_` prefix for private convention |
-| `src/yt_study/_constants.py` | Single source of truth for defaults — never hardcode values elsewhere |
-| `src/yt_study/infrastructure/youtube/_constants.py` | YouTube-specific constants (URLs, Innertube API details) |
-| `src/yt_study/infrastructure/youtube/extractor/async_client.py` | `AsyncYouTubeExtractorClient` — the ONLY async boundary for YouTube I/O; wraps sync client via `asyncio.to_thread` |
-| `src/yt_study/infrastructure/youtube/metadata.py` | `async get_video_metadata` — single-page fetch for title+duration+chapters |
-| `src/yt_study/services/pipeline.py` | `CorePipeline.run()` — async orchestrator; uses `return_exceptions=True` |
-| `src/yt_study/services/_limiter.py` | Shared `AsyncLimiter` keyed by `(loop_id, rate)` |
-| `src/yt_study/persistence/repository.py` | `DatabaseRepository` — thread-safe singleton; all write via `upsert_video_cache()` |
-| `src/yt_study/errors/exceptions.py` | `raise_if_video_unavailable()` — central access-restriction detection |
-| `tests/conftest.py` | `mock_extractor_client` fixture — patches `AsyncYouTubeExtractorClient` with `AsyncMock` methods |
-| `tests/test_pipeline/test_core_pipeline.py` | Reference for expected pipeline behaviour |
+| --- | --- |
+| `src/yt_study/__main__.py` | Console-script entrypoint used by `yt-study` |
+| `src/yt_study/cli/app.py` | Public Typer command surface and module patch points |
+| `src/yt_study/pipeline/core.py` | Pipeline orchestration facade |
+| `src/yt_study/pipeline/_execution.py` | Video processing and batch processing logic |
+| `src/yt_study/youtube/extractor/async_client.py` | Only async boundary for YouTube I/O |
+| `src/yt_study/youtube/metadata.py` | Video metadata, chapter, and playlist helpers |
+| `src/yt_study/storage/repository.py` | SQLite repository and cache persistence |
+| `tests/conftest.py` | Shared fixtures and extractor client mock |
 
 ---
 
-## ASYNC PATTERN
+## Runtime Flow
 
-```python
-# ALL YouTube I/O is async-first — no asyncio.to_thread in callers
-
-# metadata
-meta = await get_video_metadata(video_id, cookie_file)
-
-# transcript
-transcript = await fetch_transcript(video_id, languages, on_request=limiter_acquire)
-
-# playlist
-video_ids = await extract_playlist_videos(playlist_id, cookie_file=cookie_file)
-```
-
-`asyncio.to_thread` lives ONLY inside `AsyncYouTubeExtractorClient` methods.
-Pipeline and CLI code never use it directly.
+1. `yt_study.__main__:main` launches the Typer app.
+2. `yt_study.cli.app` validates the input and selects single, playlist, or batch
+   mode.
+3. `yt_study.pipeline.core.CorePipeline` orchestrates the run.
+4. `yt_study.youtube.metadata`, `playlist`, and `transcript` resolve YouTube
+   content.
+5. `yt_study.llm.provider` generates study notes and quizzes.
+6. `yt_study.storage.repository` persists cache data in SQLite.
+7. `yt_study.cli._display` renders Rich UI or headless output.
 
 ---
 
-## CONFIGURATION MODEL
+## Configuration Model
 
-Runtime config: `~/.yt-study/config.env`
-Load order: code defaults → `config.env` → environment variables
+- Runtime config lives in `~/.yt-study/config.env`.
+- Load order is code defaults, `config.env`, then environment variables.
+- `AppSettings` is defined in `src/yt_study/config.py`.
+- `YT_STUDY_HOME` overrides the state directory for tests and local isolation.
 
-Key settings (with defaults from `_constants.py`):
+Key settings:
 
-| Key | Default | Notes |
-|-----|---------|-------|
-| `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model string |
-| `MAX_CONCURRENT_VIDEOS` | `5` | Pipeline parallelism |
-| `YOUTUBE_REQUESTS_PER_MINUTE` | `10` | Shared rate limiter |
-| `TEMPERATURE` | `0.7` | 0.0–1.0 validated |
-| `MAX_TOKENS` | `None` | Model max if unset |
+| Key | Default |
+| --- | --- |
+| `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` |
+| `MAX_CONCURRENT_VIDEOS` | `5` |
+| `YOUTUBE_REQUESTS_PER_MINUTE` | `10` |
+| `TEMPERATURE` | `0.7` |
+| `MAX_TOKENS` | `None` |
 
-`AppSettings` is **immutable at runtime**. Tests use `monkeypatch.setenv` + fresh
-`AppSettings()`, never direct attribute mutation.
-
----
-
-## TESTING PATTERNS
-
-### Mock extractor client
-```python
-# conftest.py provides mock_extractor_client fixture
-# Each module's AsyncYouTubeExtractorClient is patched with AsyncMock methods
-
-def test_something(mock_extractor_client):
-    client = mock_extractor_client["metadata"].return_value
-    client.metadata.return_value = {"title": "Test", ...}
-    # client.transcript, client.chapters, client.playlist are also AsyncMocks
-```
-
-### Async metadata/playlist functions
-```python
-# get_video_metadata, get_playlist_info, extract_playlist_videos are ALL async
-# Patch with AsyncMock:
-patch("yt_study.services.pipeline.get_video_metadata",
-      new=AsyncMock(return_value=VideoMetadata(...)))
-```
-
-### CLI tests
-```python
-# Patch at yt_study.cli.app.* (module-level imports)
-patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance)
-patch("yt_study.cli.app.parse_youtube_url", return_value=ParsedURL(...))
-patch("yt_study.cli.app.get_playlist_info", new=AsyncMock(return_value=("Name", 2)))
-patch("yt_study.cli.app.Live")           # mock the entire Live class
-patch("yt_study.cli.app.config")         # mock the config singleton
-# Always set: mock_config.youtube_requests_per_minute = 10
-#              mock_config.youtube_cookie_file = None
-```
+Treat `AppSettings` as immutable. Tests should prefer `monkeypatch.setenv(...)`
+over direct mutation.
 
 ---
 
-## ARCHITECTURE RULES
+## Testing Patterns
 
-1. **`services/` and `infrastructure/` never import from `cli/` or `ui/`**
-2. **Blocking I/O only inside `AsyncYouTubeExtractorClient`** — nowhere else
-3. **All progress via `PipelineEvent`** — pipeline emits; CLI converts to UI
-4. **Centralised exceptions** — always raise from `yt_study.errors`, never define local exception classes
-5. **Centralised logging** — `structlog.get_logger(__name__)` in every module
-6. **Constants in `_constants.py`** — never hardcode defaults inline
-7. **`AppSettings` is immutable** — test via env vars, not attribute mutation
-8. **`DatabaseRepository` returns Pydantic schemas** — never raw ORM objects
-
----
-
-## KNOWN GOTCHAS
-
-- `yt_study.cli.app` is a **module**, not the Typer app. Import the Typer app as:
-  `from yt_study.cli.app import app` (not `from yt_study.cli import app`)
-- `_WorkerSlotManager` methods: `.acquire(vid)`, `.release(vid)`, `.get(vid)` — not `get_slot`
-- `get_video_metadata` is `async def` — patch with `new=AsyncMock(return_value=...)`,
-  not `return_value=...`
-- `get_playlist_info` and `extract_playlist_videos` are also `async def`
-- The `DASHBOARD_STATUS_MAP` and `DASHBOARD_STATUS_MAP` are defined inside `process()`
-  — patch `yt_study.cli.app.Live` to prevent Rich event-loop conflicts in tests
-- `_fetch_async` (was `_fetch_sync`) in `transcript.py` — update any references
-- `_extract_async` (was `_extract_sync`) in `playlist.py` — update any references
+- Patch async YouTube functions with `AsyncMock`.
+- Patch `yt_study.cli.app.Live` to avoid Rich event-loop conflicts in tests.
+- Patch module-level CLI symbols at `yt_study.cli.app.*`.
+- Keep helper-level coverage in `tests/unit/`, orchestration coverage in
+  `tests/integration/`, and live public smoke coverage in `tests/e2e/`.
+- Run live smoke tests only with `RUN_E2E=1` and a real provider key.
+- Use the public smoke URLs when a change touches parsing, metadata, or the CLI:
+  - `https://www.youtube.com/watch?v=8uiZC0l4Ajw`
+  - `https://www.youtube.com/playlist?list=PL7s8EzBd1s8op6WSiYxr3U9E_T1DoIkJG`
 
 ---
 
-## ARCHITECTURE REFERENCE
+## Architecture Rules
 
-Full details: [`wiki/Architecture.md`](wiki/Architecture.md)
+1. Keep CLI, UI, pipeline, storage, YouTube, LLM, domain, and config boundaries explicit.
+2. Blocking YouTube I/O lives only inside `AsyncYouTubeExtractorClient`.
+3. All progress flows through `PipelineEvent`.
+4. Exceptions come from `yt_study.errors`, not local ad hoc classes.
+5. Shared defaults live in `_constants.py`.
+6. `DatabaseRepository` returns schemas, not raw ORM objects.
+7. Use `structlog.get_logger(__name__)` in every module.
+
+---
+
+## Gotchas
+
+- `yt_study.cli.app` is a module, not the Typer app object.
+- `get_video_metadata`, `get_playlist_info`, `extract_playlist_videos`, and
+  `fetch_transcript` are async functions.
+- The extractor helper module is private and named `yt_study.youtube.extractor._parsers`.
+- `AsyncYouTubeExtractorClient` is the only place where blocking network work is wrapped in `asyncio.to_thread`.
+
+---

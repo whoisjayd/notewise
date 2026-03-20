@@ -11,7 +11,7 @@ import structlog
 import typer
 
 from yt_study._constants import CONFIG_FILENAME
-from yt_study.cli.runtime import CliProcessRunner
+from yt_study.cli._runtime import CliProcessRunner
 
 
 # Lazy-loaded patch points kept at module scope for test compatibility.
@@ -27,10 +27,7 @@ run_setup_wizard: Any = None
 
 app = typer.Typer(
     name="yt-study",
-    help=(
-        "🎓 Convert YouTube videos and playlists into comprehensive "
-        "study materials using AI."
-    ),
+    help=("Convert YouTube videos and playlists into structured study materials."),
     add_completion=True,
     rich_markup_mode="rich",
 )
@@ -78,23 +75,23 @@ def _load_cli_dependencies() -> None:
 
         config = _config
     if CorePipeline is None:
-        from yt_study.services.pipeline import CorePipeline as _CorePipeline
+        from yt_study.pipeline.core import CorePipeline as _CorePipeline
 
         CorePipeline = _CorePipeline
     if parse_youtube_url is None:
-        from yt_study.infrastructure.youtube.parser import (
+        from yt_study.youtube.parser import (
             parse_youtube_url as _parse_youtube_url,
         )
 
         parse_youtube_url = _parse_youtube_url
     if extract_playlist_videos is None:
-        from yt_study.infrastructure.youtube.playlist import (
+        from yt_study.youtube.playlist import (
             extract_playlist_videos as _extract_playlist_videos,
         )
 
         extract_playlist_videos = _extract_playlist_videos
     if get_playlist_info is None:
-        from yt_study.infrastructure.youtube.metadata import (
+        from yt_study.youtube.metadata import (
             get_playlist_info as _get_playlist_info,
         )
 
@@ -120,7 +117,8 @@ def ensure_setup() -> None:
         console = _get_console()
         _load_cli_dependencies()
         console.print(
-            "\n[yellow]⚠ No configuration found. Running setup wizard...[/yellow]\n"
+            "\n[yellow]Warning: no configuration found. "
+            "Running setup wizard...[/yellow]\n"
         )
         run_setup_wizard(force=False)
 
@@ -233,7 +231,7 @@ def process(
             "--no-ui",
             help=(
                 "Disable the Rich live dashboard. "
-                "Outputs plain progress lines to stdout — "
+                "Outputs plain progress lines to stdout - "
                 "useful for CI, cron jobs, and log piping."
             ),
         ),
@@ -291,7 +289,7 @@ def process(
 
     try:
         _load_cli_dependencies()
-        from yt_study.logging_config import configure_logging, get_session_log_path
+        from yt_study.logging import configure_logging, get_session_log_path
 
         configure_logging()
         ensure_setup()
@@ -353,7 +351,7 @@ def process(
                 intro="Please check the current log file and try again.",
             )
         else:
-            from yt_study.logging_config import get_session_log_path
+            from yt_study.logging import get_session_log_path
 
             console.print(
                 "\n[red]yt-study hit an unexpected internal error.[/red]\n"

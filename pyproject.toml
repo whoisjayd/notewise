@@ -35,10 +35,10 @@ dependencies = [
 Homepage = "https://github.com/whoisjayd/yt-study"
 Repository = "https://github.com/whoisjayd/yt-study"
 Issues = "https://github.com/whoisjayd/yt-study/issues"
-Documentation = "https://github.com/whoisjayd/yt-study/tree/main/wiki"
+Documentation = "https://github.com/whoisjayd/yt-study"
 
 [project.scripts]
-yt-study = "yt_study.cli.app:app"
+yt-study = "yt_study.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
@@ -157,5 +157,4 @@ exclude = [
     "dist",
     "scripts",
     "tests",
-    "wiki",
 ]
