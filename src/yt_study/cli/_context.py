@@ -9,7 +9,9 @@ from typing import Any
 
 from rich.console import Console
 
+from yt_study._constants import CONFIG_FILENAME
 from yt_study.cli._formatters import print_failure_panel, print_single_failure
+from yt_study.config import get_state_dir
 from yt_study.pipeline.core import PipelineSharedState
 
 
@@ -68,7 +70,24 @@ class CliProcessContext:
             return self.api_key_checked
 
         key_name = self.config.get_api_key_name_for_model(self.selected_model)
-        if key_name and not os.environ.get(key_name):
+        configured_key = os.environ.get(key_name) if key_name else None
+        get_api_key_for_model = getattr(self.config, "get_api_key_for_model", None)
+        if not configured_key and key_name and callable(get_api_key_for_model):
+            configured_key = get_api_key_for_model(self.selected_model)
+
+        if key_name and not configured_key:
+            config_file_exists = (get_state_dir() / CONFIG_FILENAME).exists()
+            if not config_file_exists:
+                self.print_failure_panel(
+                    "Setup Required",
+                    [
+                        ("Issue", "yt-study: no configuration found."),
+                        ("API Key", key_name),
+                        ("Next Step", "Run `yt-study setup` to get started."),
+                    ],
+                )
+                self.api_key_checked = False
+                return False
             self.print_failure_panel(
                 "Setup Required",
                 [

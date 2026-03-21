@@ -26,6 +26,14 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
         context.print_failure_panel(error.title, error.rows, intro=error.intro)
         return False
 
+    if not prepared.video_ids:
+        context.print_single_failure(
+            "Input Error",
+            "No videos found to process.",
+            item_label="Source",
+        )
+        return False
+
     if not context.ensure_api_key_available():
         return False
 

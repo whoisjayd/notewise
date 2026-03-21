@@ -37,7 +37,6 @@ HEADLESS_LABELS: dict[EventType, str] = {
     EventType.GENERATION_COMPLETE: "Generation complete",
     EventType.VIDEO_SUCCESS: "Done",
     EventType.VIDEO_SKIPPED: "Skipped (already processed)",
-    EventType.VIDEO_FAILED: "Failed",
 }
 
 UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {

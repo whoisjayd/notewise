@@ -4,14 +4,17 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any
 from urllib.parse import urlparse
 
 import structlog
 import typer
 
 from yt_study._constants import CONFIG_FILENAME
-from yt_study.cli._runtime import CliProcessRunner
+
+
+if TYPE_CHECKING:
+    from yt_study.cli._runtime import CliProcessRunner
 
 
 # Lazy-loaded patch points kept at module scope for test compatibility.
@@ -111,18 +114,6 @@ def check_config_exists() -> bool:
     return _get_config_file_path().exists()
 
 
-def ensure_setup() -> None:
-    """Ensure setup wizard has been run before processing."""
-    if not check_config_exists():
-        console = _get_console()
-        _load_cli_dependencies()
-        console.print(
-            "\n[yellow]Warning: no configuration found. "
-            "Running setup wizard...[/yellow]\n"
-        )
-        run_setup_wizard(force=False)
-
-
 def looks_like_batch_file_path(value: str) -> bool:
     """Heuristic for path-like batch-file inputs that should not be parsed as URLs."""
     parsed = urlparse(value)
@@ -139,8 +130,6 @@ def looks_like_batch_file_path(value: str) -> bool:
         or input_path.is_absolute()
         or bool(input_path.drive)
         or value.startswith((".", "~"))
-        or ("/" in value)
-        or ("\\" in value)
     )
 
 
@@ -289,10 +278,10 @@ def process(
 
     try:
         _load_cli_dependencies()
+        from yt_study.cli._runtime import CliProcessRunner
         from yt_study.logging import configure_logging, get_session_log_path
 
         configure_logging()
-        ensure_setup()
 
         runner = CliProcessRunner(
             console=console,

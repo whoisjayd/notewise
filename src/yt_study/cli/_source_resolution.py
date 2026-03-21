@@ -61,7 +61,6 @@ async def prepare_source(
     )
     deduped_video_ids = dedupe_video_ids(video_ids)
     output_dir = context.selected_output / sanitize_filename(playlist_name)
-    output_dir.mkdir(parents=True, exist_ok=True)
 
     return ResolvedSource(
         source_url=source_url,

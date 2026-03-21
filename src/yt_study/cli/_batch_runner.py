@@ -9,7 +9,11 @@ from typing import cast
 import structlog
 
 from yt_study.cli._context import CliProcessContext
-from yt_study.cli._display import UI_STATUS_MAP, print_batch_summary
+from yt_study.cli._display import (
+    UI_STATUS_MAP,
+    emit_headless_event,
+    print_batch_summary,
+)
 from yt_study.cli._source_resolution import (
     batch_failure_label,
     ordered_batch_failures_from_error,
@@ -72,7 +76,10 @@ async def run_batch_file(
                     nonlocal latest_title
                     if event.title:
                         latest_title = event.title
-                    if dashboard is None or event.event_type not in UI_STATUS_MAP:
+                    if dashboard is None:
+                        emit_headless_event(context, event)
+                        return
+                    if event.event_type not in UI_STATUS_MAP:
                         return
                     status_fn = UI_STATUS_MAP[event.event_type]
                     dashboard.update_worker(
@@ -84,7 +91,7 @@ async def run_batch_file(
                     PipelineResult,
                     await pipeline.run(
                         [fallback_video_id],
-                        on_event=on_batch_event if dashboard is not None else None,
+                        on_event=on_batch_event,
                     ),
                 )
                 display_title = latest_title or fallback_video_id
@@ -155,6 +162,16 @@ async def run_batch_file(
             except UserVisibleCliError as error:
                 early_failures.extend(
                     ordered_batch_failures_from_error(item_index, batch_url, error)
+                )
+                continue
+
+            if not prepared.video_ids:
+                early_failures.append(
+                    _OrderedBatchFailure(
+                        sort_key=(item_index, 1),
+                        item=prepared.label,
+                        message="No videos found to process.",
+                    )
                 )
                 continue
 

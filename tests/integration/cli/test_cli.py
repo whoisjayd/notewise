@@ -61,6 +61,28 @@ def _make_parsed_playlist(playlist_id: str = "PL123"):
     return parsed
 
 
+@pytest.fixture(autouse=True)
+def reset_cli_app_globals():
+    """Keep app-level lazy globals from leaking between CLI tests."""
+    import yt_study.cli.app as cli_app_module
+
+    patch_points = (
+        "config",
+        "CorePipeline",
+        "parse_youtube_url",
+        "extract_playlist_videos",
+        "get_playlist_info",
+        "PipelineDashboard",
+        "Live",
+        "run_setup_wizard",
+    )
+    for name in patch_points:
+        setattr(cli_app_module, name, None)
+    yield
+    for name in patch_points:
+        setattr(cli_app_module, name, None)
+
+
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
@@ -140,10 +162,9 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
         result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 1
-    # The error message should mention the missing env var name
     assert "FAKE_KEY" in result.output
-    # And it should clearly indicate it's about an API key
-    assert "Missing API Key" in result.output or "API key" in result.output
+    assert "yt-study: no configuration found." in result.output
+    assert "Run `yt-study setup` to get started." in result.output
 
 
 def test_version():
@@ -319,6 +340,7 @@ def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
         ),
         patch(
             "yt_study.cli.app.get_playlist_info",
+            new_callable=AsyncMock,
             return_value=("Batch Playlist", 2),
         ),
         patch("yt_study.cli.app.config") as mock_config,
@@ -497,14 +519,44 @@ def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_pipeli
 # ---------------------------------------------------------------------------
 
 
-def test_process_missing_config():
-    """Test that missing config triggers the setup wizard."""
+def test_process_missing_config_reports_setup_instructions(monkeypatch, tmp_path):
+    """Missing configuration should fail with a clear next step, not launch setup."""
+    for env_var in (
+        "GEMINI_API_KEY",
+        "OPENAI_API_KEY",
+        "ANTHROPIC_API_KEY",
+        "GROQ_API_KEY",
+        "XAI_API_KEY",
+        "MISTRAL_API_KEY",
+        "COHERE_API_KEY",
+        "DEEPSEEK_API_KEY",
+    ):
+        monkeypatch.delenv(env_var, raising=False)
+
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=False),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
         patch("yt_study.cli.app.run_setup_wizard") as mock_setup,
     ):
-        runner.invoke(app, ["process", "url"])
-        assert mock_setup.call_count >= 1
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = "GEMINI_API_KEY"
+        mock_config.get_api_key_for_model.return_value = None
+        result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 1
+    assert "yt-study: no configuration found." in result.output
+    assert "Run `yt-study setup` to get started." in result.output
+    mock_setup.assert_not_called()
 
 
 def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):  # noqa: ARG001
@@ -577,9 +629,19 @@ def test_process_missing_batch_file_reports_file_error():
 
 
 def test_process_missing_nested_batch_file_reports_file_error():
-    """Explicit local paths with separators should also be treated as file inputs."""
+    """Separator-only strings should stay on the URL-validation path."""
     with patch("yt_study.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "batches/urls"])
+
+    assert result.exit_code == 1
+    assert "Input Error" in result.stdout
+    assert "Invalid YouTube URL" in result.stdout
+
+
+def test_process_missing_explicit_relative_batch_file_reports_file_error():
+    """Relative paths with an explicit local prefix should still be treated as files."""
+    with patch("yt_study.cli.app.check_config_exists", return_value=True):
+        result = runner.invoke(app, ["process", "./batches/urls"])
 
     assert result.exit_code == 1
     assert "Batch file does not exist" in result.stdout
@@ -1027,6 +1089,204 @@ def test_process_no_ui_failure_exits_nonzero(
     assert "Cost Summary" not in result.output
 
 
+def test_process_batch_file_no_ui_emits_headless_progress(tmp_path):
+    """Batch runs in headless mode should stream event lines before the summary."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(_VIDEO_URL)
+
+    async def _run_with_events(video_ids, on_event=None):  # noqa: ANN001
+        if on_event is not None:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.GENERATION_COMPLETE,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_events)
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
+
+    assert result.exit_code == 0
+    assert "Fetching metadata: Video One" in result.output
+    assert "Generation complete: Video One" in result.output
+    assert "Done: Video One" in result.output
+
+
+def test_process_env_only_config_does_not_launch_setup(monkeypatch, tmp_path):
+    """Environment-provided credentials should satisfy setup without a config file."""
+    monkeypatch.setenv("OPENAI_API_KEY", "env-key")
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(return_value=_make_pipeline_result())
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.run_setup_wizard") as mock_setup,
+    ):
+        mock_config.default_model = "openai/gpt-4o-mini"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = "OPENAI_API_KEY"
+        mock_config.get_api_key_for_model.side_effect = lambda model: (
+            "env-key" if model == "openai/gpt-4o-mini" else None
+        )
+
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+    mock_setup.assert_not_called()
+
+
+def test_process_empty_playlist_shows_no_videos_message(tmp_path):
+    """Empty playlists should fail cleanly without rendering a 0/0 dashboard."""
+    with (
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_EMPTY"),
+        ),
+        patch(
+            "yt_study.cli.app.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=[],
+        ),
+        patch(
+            "yt_study.cli.app.get_playlist_info",
+            new_callable=AsyncMock,
+            return_value=("Empty Playlist", 0),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.PipelineDashboard") as mock_dashboard_cls,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app,
+            ["process", "https://youtube.com/playlist?list=PL_EMPTY"],
+        )
+
+    assert result.exit_code == 1
+    assert "No videos found to process." in result.output
+    mock_dashboard_cls.assert_not_called()
+
+
+def test_process_playlist_failure_does_not_create_output_dir(tmp_path):
+    """Playlist processing should defer directory creation until files are written."""
+    output_dir = tmp_path / "notes"
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(
+        return_value=PipelineResult(
+            success_count=0,
+            failure_count=1,
+            total_count=1,
+            video_ids=["vid1"],
+            errors={"vid1": "boom"},
+            metrics=PipelineMetrics(),
+        )
+    )
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_DEFER"),
+        ),
+        patch(
+            "yt_study.cli.app.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["vid1"],
+        ),
+        patch(
+            "yt_study.cli.app.get_playlist_info",
+            new_callable=AsyncMock,
+            return_value=("Deferred Playlist", 1),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = output_dir
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                "https://youtube.com/playlist?list=PL_DEFER",
+                "--no-ui",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert not (output_dir / "Deferred Playlist").exists()
+
+
 # ---------------------------------------------------------------------------
 # process command — quiz flag (#30)
 # ---------------------------------------------------------------------------
@@ -1153,6 +1413,7 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
         ),
         patch(
             "yt_study.cli.app.get_playlist_info",
+            new_callable=AsyncMock,
             return_value=("Playlist", 3),
         ),
         patch(
