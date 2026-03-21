@@ -15,6 +15,7 @@ from litellm import acompletion, completion_cost
 from yt_study._constants import DEFAULT_MODEL, DEFAULT_TEMPERATURE, LLM_NUM_RETRIES
 from yt_study.config import settings as config
 from yt_study.errors import LLMGenerationError as _LLMGenerationError
+from yt_study.logging import redact_sensitive_text
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -22,6 +23,7 @@ _USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
     "yt_study_usage_collector",
     default=None,
 )
+_ERROR_SUMMARY_LIMIT = 500
 
 
 def _configure_litellm_runtime() -> None:
@@ -36,6 +38,14 @@ def _configure_litellm_runtime() -> None:
 
 
 _configure_litellm_runtime()
+
+
+def _summarize_error(error: Exception) -> str:
+    """Collapse exception text into one redacted, log-friendly summary line."""
+    summary = redact_sensitive_text(" ".join(str(error).split()))
+    if len(summary) > _ERROR_SUMMARY_LIMIT:
+        return f"{summary[: _ERROR_SUMMARY_LIMIT - 1]}..."
+    return summary
 
 
 @dataclass
@@ -166,9 +176,16 @@ class LLMProvider:
         except LLMGenerationError:
             raise
         except Exception as e:
-            logger.error(f"LLM generation failed with {self.model}: {e}", exc_info=True)
+            error_summary = _summarize_error(e)
+            logger.error(
+                "llm.generation_failed",
+                model=self.model,
+                error_type=type(e).__name__,
+                error=error_summary,
+                exc_info=True,
+            )
             raise LLMGenerationError(
-                f"Failed to generate with {self.model}: {str(e)}"
+                f"Failed to generate with {self.model}: {error_summary}"
             ) from e
 
     @contextmanager

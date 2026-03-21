@@ -161,6 +161,28 @@ class TestLLMProvider:
                 await provider.generate("sys", "user")
 
     @pytest.mark.asyncio
+    async def test_generate_failure_sanitizes_logged_and_raised_error(self):
+        """Provider failures should keep details without leaking raw credentials."""
+        secret = "AIza" + "C" * 32
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("yt_study.llm.provider.logger.error") as mock_log_error,
+        ):
+            mock_acompletion.side_effect = Exception(f"gemini_api_key={secret}")
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError) as exc:
+                await provider.generate("sys", "user")
+
+        assert secret not in str(exc.value)
+        assert "[REDACTED]" in str(exc.value)
+        assert mock_log_error.call_args.kwargs["error_type"] == "Exception"
+        assert secret not in mock_log_error.call_args.kwargs["error"]
+        assert "[REDACTED]" in mock_log_error.call_args.kwargs["error"]
+
+    @pytest.mark.asyncio
     async def test_generate_reraises_existing_llm_generation_error(self):
         """Domain errors should not be double-wrapped by the provider."""
         with (

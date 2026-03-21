@@ -9,8 +9,11 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from collections.abc import Mapping, MutableMapping
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import structlog
 
@@ -19,6 +22,97 @@ from yt_study._constants import LOGS_DIR_NAME, SESSION_LOG_PREFIX, STATE_DIR_NAM
 
 _NOISY_LOGGERS = ("LiteLLM", "litellm", "httpx", "httpcore")
 _SESSION_LOG_PATH: Path | None = None
+_REDACTED = "[REDACTED]"
+_SENSITIVE_KEY_NAMES = frozenset(
+    {
+        "geminiapikey",
+        "openaiapikey",
+        "anthropicapikey",
+        "groqapikey",
+        "xaiapikey",
+        "mistralapikey",
+        "cohereapikey",
+        "deepseekapikey",
+        "apikey",
+        "accesstoken",
+        "refreshtoken",
+        "token",
+        "authorization",
+        "secret",
+        "password",
+        "cookie",
+        "cookies",
+        "youtubecookiefile",
+    }
+)
+_ASSIGNMENT_REDACTION_PATTERN = re.compile(
+    r"(?i)(?P<key>\b(?:gemini|openai|anthropic|groq|xai|mistral|cohere|deepseek)?"
+    r"_?api[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|token|"
+    r"secret|password|cookie(?:s)?|youtube_cookie_file\b)"
+    r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,\]}]+)"
+)
+_BEARER_TOKEN_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._+/=-]{10,}")
+_GOOGLE_API_KEY_PATTERN = re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b")
+_OPENAI_STYLE_KEY_PATTERN = re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9._-]{16,}\b")
+_SENSITIVE_TEXT_PATTERNS = (
+    _BEARER_TOKEN_PATTERN,
+    _GOOGLE_API_KEY_PATTERN,
+    _OPENAI_STYLE_KEY_PATTERN,
+)
+
+
+def _normalize_sensitive_key(key: str) -> str:
+    """Normalize a key name for secret matching."""
+    return re.sub(r"[^a-z0-9]", "", key.lower())
+
+
+def _is_sensitive_key(key: str) -> bool:
+    """Return whether a mapping key should be redacted."""
+    return _normalize_sensitive_key(key) in _SENSITIVE_KEY_NAMES
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Redact API keys, tokens, and similar credentials from log text."""
+    sanitized = _ASSIGNMENT_REDACTION_PATTERN.sub(
+        lambda match: f"{match.group('key')}{match.group('sep')}{_REDACTED}",
+        text,
+    )
+    for pattern in _SENSITIVE_TEXT_PATTERNS:
+        sanitized = pattern.sub(_REDACTED, sanitized)
+    return sanitized
+
+
+def redact_sensitive_data(value: Any) -> Any:
+    """Recursively redact sensitive values in structured log payloads."""
+    if isinstance(value, Mapping):
+        return {
+            key: (
+                _REDACTED if _is_sensitive_key(str(key)) else redact_sensitive_data(val)
+            )
+            for key, val in value.items()
+        }
+    if isinstance(value, list):
+        return [redact_sensitive_data(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(redact_sensitive_data(item) for item in value)
+    if isinstance(value, set):
+        return {redact_sensitive_data(item) for item in value}
+    if isinstance(value, str):
+        return redact_sensitive_text(value)
+    return value
+
+
+def _redact_event_dict(
+    _logger: Any,
+    _method_name: str,
+    event_dict: MutableMapping[str, Any],
+) -> Mapping[str, Any]:
+    """Apply recursive secret redaction to a structlog event payload."""
+    return {
+        key: (_REDACTED if _is_sensitive_key(key) else redact_sensitive_data(value))
+        for key, value in event_dict.items()
+    }
 
 
 def get_session_log_path() -> Path | None:
@@ -60,6 +154,7 @@ def configure_logging(
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
         structlog.processors.format_exc_info,
+        _redact_event_dict,
     ]
 
     # File logs should stay plain-text and editor-friendly.
