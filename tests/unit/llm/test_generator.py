@@ -1,6 +1,7 @@
 """Tests for study material generator."""
 
-from unittest.mock import MagicMock, patch
+import asyncio
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -169,30 +170,6 @@ class TestStudyMaterialGenerator:
         on_combine.assert_called_once_with(2)
 
     @pytest.mark.asyncio
-    async def test_generate_chapter_notes(self, generator):
-        """Test generating chapter-based notes."""
-        chapters = {"Intro": "Intro text", "Body": "Body text"}
-
-        await generator.generate_chapter_based_notes(chapters)
-
-        # Calls: 1 per chapter (2) + 1 combine = 3
-        assert generator.provider.generate.call_count == 3
-
-    @pytest.mark.asyncio
-    async def test_generate_chapter_notes_large_chapter_uses_chunking(self, generator):
-        """Large chapters are chunked via generate_single_chapter_notes."""
-        chapters = {"Big Chapter": "very long text"}
-        two_chunks = ["chunk A", "chunk B"]
-        with (
-            patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("yt_study.pipeline.generation.token_counter", return_value=9999),
-        ):
-            await generator.generate_chapter_based_notes(chapters)
-
-        # 2 chunk calls + 1 combine (single chapter) + 1 final combine = 4
-        assert generator.provider.generate.call_count == 4
-
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_small(self, generator):
         """Single-pass path used when chapter fits within chunk_size."""
         with patch("yt_study.pipeline.generation.token_counter", return_value=50):
@@ -243,6 +220,96 @@ class TestStudyMaterialGenerator:
             await generator.generate_single_chapter_notes("Ch1", "big text")
         # 1 chunk call only — combine is skipped when there is a single chunk
         assert generator.provider.generate.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_concurrent_preserves_input_order(
+        self, generator
+    ):
+        """Concurrent chapter generation should return results in the original order."""
+
+        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+            del chapter_text, kwargs
+            return f"notes for {chapter_title}"
+
+        generator.generate_single_chapter_notes = AsyncMock(
+            side_effect=_generate_single
+        )
+
+        result = await generator.generate_chapter_notes_concurrent(
+            {"Intro": "intro text", "Body": "body text", "Wrap": "wrap text"},
+            max_concurrent=2,
+        )
+
+        assert list(result.keys()) == ["Intro", "Body", "Wrap"]
+        assert result["Intro"] == "notes for Intro"
+        assert result["Wrap"] == "notes for Wrap"
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_concurrent_respects_max_concurrency(
+        self, generator
+    ):
+        """The semaphore should cap simultaneous chapter generations."""
+        state = {"active": 0, "peak": 0}
+
+        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+            del chapter_title, chapter_text, kwargs
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            state["active"] -= 1
+            return "# Chapter"
+
+        generator.generate_single_chapter_notes = AsyncMock(
+            side_effect=_generate_single
+        )
+
+        await generator.generate_chapter_notes_concurrent(
+            {
+                "Chapter 1": "text1",
+                "Chapter 2": "text2",
+                "Chapter 3": "text3",
+            },
+            max_concurrent=2,
+        )
+
+        assert state["peak"] <= 2
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_concurrent_can_share_external_semaphore(
+        self, generator
+    ):
+        """A shared semaphore should cap chapter work across concurrent runs."""
+        state = {"active": 0, "peak": 0}
+
+        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+            del chapter_title, chapter_text, kwargs
+            state["active"] += 1
+            state["peak"] = max(state["peak"], state["active"])
+            await asyncio.sleep(0)
+            await asyncio.sleep(0)
+            state["active"] -= 1
+            return "# Chapter"
+
+        generator.generate_single_chapter_notes = AsyncMock(
+            side_effect=_generate_single
+        )
+        shared_semaphore = asyncio.Semaphore(2)
+
+        await asyncio.gather(
+            generator.generate_chapter_notes_concurrent(
+                {"Chapter 1": "text1", "Chapter 2": "text2", "Chapter 3": "text3"},
+                max_concurrent=3,
+                semaphore=shared_semaphore,
+            ),
+            generator.generate_chapter_notes_concurrent(
+                {"Chapter 4": "text4", "Chapter 5": "text5"},
+                max_concurrent=3,
+                semaphore=shared_semaphore,
+            ),
+        )
+
+        assert state["peak"] <= 2
 
     @pytest.mark.asyncio
     async def test_generate_quiz_calls_provider_once(self, generator):

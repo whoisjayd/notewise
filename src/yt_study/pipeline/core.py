@@ -95,7 +95,7 @@ class CorePipeline:
         )
         self.force = force
         self.quiz = quiz
-        self.export_transcript = export_transcript
+        self.export_transcript_format = export_transcript
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}
@@ -103,10 +103,18 @@ class CorePipeline:
         self._run_metrics = PipelineMetrics()
         if shared_state is None:
             self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
+            self._chapter_semaphore = asyncio.Semaphore(
+                max(1, int(config.max_concurrent_chapters))
+            )
             self._output_lock = asyncio.Lock()
             self._reserved_output_targets: set[Path] = set()
         else:
             self.semaphore = shared_state.semaphore
+            if shared_state.chapter_semaphore is None:
+                shared_state.chapter_semaphore = asyncio.Semaphore(
+                    max(1, int(config.max_concurrent_chapters))
+                )
+            self._chapter_semaphore = shared_state.chapter_semaphore
             self._output_lock = shared_state.output_lock
             self._reserved_output_targets = shared_state.reserved_output_targets
         self.db = DatabaseRepository.get_instance(self._cache_db_path())
@@ -273,7 +281,7 @@ class CorePipeline:
             title,
             output_dir,
             video_id,
-            self.export_transcript,
+            self.export_transcript_format,
         )
 
     async def _process_single_video(

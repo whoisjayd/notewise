@@ -19,5 +19,6 @@ class PipelineSharedState:
     """Shared coordination primitives for multi-pipeline batch processing."""
 
     semaphore: asyncio.Semaphore
+    chapter_semaphore: asyncio.Semaphore | None = None
     output_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     reserved_output_targets: set[Path] = field(default_factory=set)

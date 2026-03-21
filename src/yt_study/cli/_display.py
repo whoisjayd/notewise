@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Callable
 from typing import Any
 
@@ -89,12 +90,29 @@ UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
 }
 
 
+def use_transient_live_display() -> bool:
+    """Use transient live cleanup only where terminals handle it reliably."""
+    return os.name != "nt"
+
+
+def restore_console_after_live(console: Any) -> None:
+    """Best-effort console cleanup after a Rich Live session."""
+    show_cursor = getattr(console, "show_cursor", None)
+    if callable(show_cursor):
+        show_cursor(True)
+
+    flush = getattr(getattr(console, "file", None), "flush", None)
+    if callable(flush):
+        flush()
+
+
 def emit_headless_event(context: CliProcessContext, event: PipelineEvent) -> None:
     """Render a plain-text event line in `--no-ui` mode."""
     if event.event_type in (
         EventType.PIPELINE_START,
         EventType.PIPELINE_COMPLETE,
         EventType.VIDEO_FAILED,
+        EventType.CHAPTER_COMPLETE,
     ):
         return
     label = HEADLESS_LABELS.get(event.event_type, event.event_type.value)
@@ -141,6 +159,8 @@ def build_ui_event_handler(
             assigned = slot_manager.acquire(video_id)
             if assigned is not None:
                 slot = assigned
+                if hasattr(dashboard, "clear_chapter_workers"):
+                    dashboard.clear_chapter_workers(video_id)
                 status_fn = UI_STATUS_MAP.get(event.event_type)
                 if status_fn:
                     dashboard.update_worker(assigned, status_fn(title, event))
@@ -148,6 +168,15 @@ def build_ui_event_handler(
         elif event.event_type in UI_STATUS_MAP and slot is not None:
             status_fn = UI_STATUS_MAP[event.event_type]
             dashboard.update_worker(slot, status_fn(title, event))
+            if event.event_type in (
+                EventType.CHAPTER_GENERATING,
+                EventType.CHAPTER_CHUNK_GENERATING,
+                EventType.CHAPTER_COMBINING,
+            ):
+                update_dashboard_chapter_slot(dashboard, title, event)
+
+        elif event.event_type == EventType.CHAPTER_COMPLETE:
+            update_dashboard_chapter_slot(dashboard, title, event)
 
         elif event.event_type in (
             EventType.VIDEO_SUCCESS,
@@ -156,6 +185,8 @@ def build_ui_event_handler(
         ):
             released = slot_manager.release(video_id)
             if released is not None:
+                if hasattr(dashboard, "clear_chapter_workers"):
+                    dashboard.clear_chapter_workers(video_id)
                 dashboard.update_worker(released, "[dim]Idle[/dim]")
 
             if event.event_type == EventType.VIDEO_SUCCESS:
@@ -166,6 +197,38 @@ def build_ui_event_handler(
                 dashboard.add_failure(event.title or video_id)
 
     return on_event
+
+
+def update_dashboard_chapter_slot(
+    dashboard: Any,
+    title: str,
+    event: PipelineEvent,
+) -> None:
+    """Reflect a chapter event into the dashboard's shared chapter worker lanes."""
+    chapter_concurrency = int(getattr(dashboard, "chapter_concurrency", 0) or 0)
+    if (
+        chapter_concurrency <= 0
+        or event.chapter_number is None
+        or not hasattr(dashboard, "start_chapter_worker")
+        or not hasattr(dashboard, "update_chapter_worker")
+        or not hasattr(dashboard, "complete_chapter_worker")
+    ):
+        return
+    chapter_key = f"{event.video_id}:{event.chapter_number}"
+    status_fn = UI_STATUS_MAP.get(event.event_type)
+    if event.event_type == EventType.CHAPTER_COMPLETE:
+        dashboard.complete_chapter_worker(chapter_key)
+        return
+    if status_fn is None:
+        return
+    if event.event_type == EventType.CHAPTER_GENERATING:
+        dashboard.start_chapter_worker(
+            chapter_key,
+            event.video_id,
+            status_fn(title, event),
+        )
+        return
+    dashboard.update_chapter_worker(chapter_key, status_fn(title, event))
 
 
 def print_single_run_summary(

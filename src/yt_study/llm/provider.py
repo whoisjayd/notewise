@@ -1,12 +1,14 @@
 """LLM provider configuration using LiteLLM."""
 
+import logging
 import os
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, cast
 
+import litellm
 import structlog
 from litellm import acompletion, completion_cost
 
@@ -20,6 +22,20 @@ _USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
     "yt_study_usage_collector",
     default=None,
 )
+
+
+def _configure_litellm_runtime() -> None:
+    """Keep LiteLLM retry/info chatter out of the user-facing terminal."""
+    runtime = cast(Any, litellm)
+    runtime.set_verbose = False
+    runtime.suppress_debug_info = True
+    verbose_logger = getattr(runtime, "verbose_logger", None)
+    if verbose_logger is not None:
+        verbose_logger.setLevel(logging.ERROR)
+        verbose_logger.propagate = False
+
+
+_configure_litellm_runtime()
 
 
 @dataclass
@@ -122,7 +138,7 @@ class LLMProvider:
                 "num_retries": LLM_NUM_RETRIES,
             }
 
-            if max_tokens:
+            if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
 
             # LiteLLM's acompletion handles async requests to various providers
@@ -147,6 +163,8 @@ class LLMProvider:
             content = response.choices[0].message.content.strip()
             return self._clean_content(content)
 
+        except LLMGenerationError:
+            raise
         except Exception as e:
             logger.error(f"LLM generation failed with {self.model}: {e}", exc_info=True)
             raise LLMGenerationError(

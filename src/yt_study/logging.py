@@ -44,15 +44,13 @@ def configure_logging(
         Path to the session log file, or None if file logging is unavailable.
     """
     global _SESSION_LOG_PATH
+    del env
 
     # Suppress noisy third-party loggers early
     os.environ.setdefault("LITELLM_LOG", "ERROR")
     for name in _NOISY_LOGGERS:
         logging.getLogger(name).setLevel(logging.ERROR)
     logging.getLogger("httpx").setLevel(logging.WARNING)
-
-    resolved_env = env or os.getenv("YT_STUDY_ENV", "development")
-    is_production = resolved_env == "production"
 
     # Shared processors applied to every log record
     shared_processors: list[structlog.types.Processor] = [
@@ -61,14 +59,14 @@ def configure_logging(
         structlog.stdlib.add_logger_name,
         structlog.processors.TimeStamper(fmt="iso"),
         structlog.processors.StackInfoRenderer(),
+        structlog.processors.format_exc_info,
     ]
 
-    # stdlib ProcessorFormatter for FileHandler integration
+    # File logs should stay plain-text and editor-friendly.
     formatter = structlog.stdlib.ProcessorFormatter(
-        processor=(
-            structlog.processors.JSONRenderer()
-            if is_production
-            else structlog.dev.ConsoleRenderer(colors=False)
+        processor=structlog.processors.KeyValueRenderer(
+            sort_keys=False,
+            key_order=["timestamp", "level", "logger", "event"],
         ),
         foreign_pre_chain=shared_processors,
     )

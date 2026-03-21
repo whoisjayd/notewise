@@ -11,6 +11,37 @@ from yt_study.cli._context import CliProcessContext
 from yt_study.cli._single_runner import run_single_url
 
 
+_BATCH_FILE_ENCODINGS = ("utf-8", "utf-8-sig", "utf-16")
+
+
+def _read_batch_file_urls(input_path: Path) -> list[str]:
+    """Read batch-file URLs with Windows-friendly encoding fallbacks."""
+    last_decode_error: UnicodeDecodeError | None = None
+
+    for encoding in _BATCH_FILE_ENCODINGS:
+        try:
+            content = input_path.read_text(encoding=encoding)
+        except UnicodeDecodeError as error:
+            last_decode_error = error
+            continue
+
+        return [
+            line.strip()
+            for line in content.splitlines()
+            if line.strip() and not line.strip().startswith("#")
+        ]
+
+    if last_decode_error is not None:
+        raise last_decode_error
+
+    content = input_path.read_text(encoding="utf-8")
+    return [
+        line.strip()
+        for line in content.splitlines()
+        if line.strip() and not line.strip().startswith("#")
+    ]
+
+
 class CliProcessRunner(CliProcessContext):
     """Dispatch one CLI `process` input to single or batch execution."""
 
@@ -32,12 +63,7 @@ class CliProcessRunner(CliProcessContext):
                 return True
 
             try:
-                content = input_path.read_text(encoding="utf-8")
-                urls = [
-                    line.strip()
-                    for line in content.splitlines()
-                    if line.strip() and not line.strip().startswith("#")
-                ]
+                urls = _read_batch_file_urls(input_path)
             except Exception as error:
                 self.print_single_failure(
                     "Input Error",

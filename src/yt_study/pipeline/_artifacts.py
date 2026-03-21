@@ -54,6 +54,7 @@ async def generate_and_write_quiz(
         on_chunk=_on_quiz_chunk,
         on_combine=_on_quiz_combine,
     )
+    output_dir.mkdir(parents=True, exist_ok=True)
     quiz_path = output_dir / f"{sanitize_filename(quiz_name)}_quiz.md"
     quiz_path.write_text(quiz_notes, encoding="utf-8")
     emit(EventType.QUIZ_COMPLETE, video_id, title=title)
@@ -70,6 +71,7 @@ def export_transcript(
     """Export a transcript to disk and persist the export record."""
 
     safe_title = sanitize_filename(title)
+    output_dir.mkdir(parents=True, exist_ok=True)
 
     if export_format == "json":
         export_path = output_dir / f"{safe_title}_transcript.json"

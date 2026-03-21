@@ -13,6 +13,9 @@ from yt_study.cli._display import (
     UI_STATUS_MAP,
     emit_headless_event,
     print_batch_summary,
+    restore_console_after_live,
+    update_dashboard_chapter_slot,
+    use_transient_live_display,
 )
 from yt_study.cli._source_resolution import (
     batch_failure_label,
@@ -20,7 +23,7 @@ from yt_study.cli._source_resolution import (
     prepare_source,
 )
 from yt_study.cli._types import _BatchJobResult, _BatchVideoJob, _OrderedBatchFailure
-from yt_study.domain.events import PipelineEvent
+from yt_study.domain.events import EventType, PipelineEvent
 from yt_study.domain.results import PipelineResult
 from yt_study.errors import UserVisibleCliError
 from yt_study.pipeline.core import PipelineSharedState
@@ -43,6 +46,7 @@ async def run_batch_file(
             concurrency=batch_workers,
             playlist_name=f"Batch File: {input_path.name}",
             model_name=context.selected_model,
+            chapter_concurrency=context.config.max_concurrent_chapters,
         )
 
     shared_state = PipelineSharedState(semaphore=asyncio.Semaphore(batch_workers))
@@ -79,6 +83,22 @@ async def run_batch_file(
                     if dashboard is None:
                         emit_headless_event(context, event)
                         return
+                    if event.event_type == EventType.METADATA_START and hasattr(
+                        dashboard,
+                        "clear_chapter_workers",
+                    ):
+                        dashboard.clear_chapter_workers(_fallback_video_id)
+                    if event.event_type in (
+                        EventType.CHAPTER_GENERATING,
+                        EventType.CHAPTER_CHUNK_GENERATING,
+                        EventType.CHAPTER_COMBINING,
+                        EventType.CHAPTER_COMPLETE,
+                    ):
+                        update_dashboard_chapter_slot(
+                            dashboard,
+                            (latest_title or _fallback_video_id)[:40],
+                            event,
+                        )
                     if event.event_type not in UI_STATUS_MAP:
                         return
                     status_fn = UI_STATUS_MAP[event.event_type]
@@ -97,6 +117,8 @@ async def run_batch_file(
                 display_title = latest_title or fallback_video_id
 
                 if dashboard is not None:
+                    if hasattr(dashboard, "clear_chapter_workers"):
+                        dashboard.clear_chapter_workers(fallback_video_id)
                     dashboard.update_worker(worker_index, "[dim]Idle[/dim]")
                     if result.failure_count:
                         dashboard.add_failure(display_title)
@@ -129,6 +151,8 @@ async def run_batch_file(
                 display_title = latest_title or fallback_video_id
                 structlog.get_logger(__name__).exception("batch.video_failure")
                 if dashboard is not None:
+                    if hasattr(dashboard, "clear_chapter_workers"):
+                        dashboard.clear_chapter_workers(fallback_video_id)
                     dashboard.update_worker(worker_index, "[dim]Idle[/dim]")
                     dashboard.add_failure(display_title)
                 batch_results.append(
@@ -204,14 +228,21 @@ async def run_batch_file(
         await asyncio.gather(*workers)
 
     if dashboard is not None:
-        with context.live_cls(
+        live = context.live_cls(
             dashboard,
             refresh_per_second=10,
             console=context.console,
             screen=False,
-            transient=True,
-        ):
-            await run_batch_queue()
+            transient=use_transient_live_display(),
+        )
+        try:
+            with live:
+                await run_batch_queue()
+        finally:
+            stop_live = getattr(live, "stop", None)
+            if callable(stop_live):
+                stop_live()
+            restore_console_after_live(context.console)
     else:
         await run_batch_queue()
 

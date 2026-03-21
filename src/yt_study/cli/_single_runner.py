@@ -9,6 +9,8 @@ from yt_study.cli._display import (
     build_ui_event_handler,
     emit_headless_event,
     print_single_run_summary,
+    restore_console_after_live,
+    use_transient_live_display,
 )
 from yt_study.cli._formatters import print_cost_summary
 from yt_study.cli._source_resolution import failure_rows_for_result, prepare_source
@@ -71,26 +73,44 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
         return result.failure_count == 0
 
     concurrency = min(len(prepared.video_ids), context.config.max_concurrent_videos)
+    configured_chapter_concurrency = getattr(
+        context.config,
+        "max_concurrent_chapters",
+        0,
+    )
+    chapter_concurrency = (
+        configured_chapter_concurrency
+        if isinstance(configured_chapter_concurrency, int)
+        else 0
+    )
     dashboard = context.dashboard_cls(
         total_videos=len(prepared.video_ids),
         concurrency=concurrency,
         playlist_name=prepared.playlist_name,
         model_name=context.selected_model,
+        chapter_concurrency=chapter_concurrency,
     )
     slot_manager = _WorkerSlotManager(concurrency)
     on_event = build_ui_event_handler(dashboard, slot_manager)
 
-    with context.live_cls(
+    live = context.live_cls(
         dashboard,
         refresh_per_second=10,
         console=context.console,
         screen=False,
-        transient=True,
-    ):
-        result = cast(
-            PipelineResult,
-            await pipeline.run(prepared.video_ids, on_event=on_event),
-        )
+        transient=use_transient_live_display(),
+    )
+    try:
+        with live:
+            result = cast(
+                PipelineResult,
+                await pipeline.run(prepared.video_ids, on_event=on_event),
+            )
+    finally:
+        stop_live = getattr(live, "stop", None)
+        if callable(stop_live):
+            stop_live()
+        restore_console_after_live(context.console)
 
     print_single_run_summary(context, result, dashboard)
     return result.failure_count == 0

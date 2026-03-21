@@ -7,7 +7,7 @@ import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
 import structlog
 
@@ -53,8 +53,6 @@ async def process_single_video(
                 return True
 
             current_cached_video = cached_video
-            if pipeline.force:
-                current_cached_video = await pipeline._get_cached_video(video_id)
 
             await pipeline._acquire_youtube_request_slot()
             meta = await pipeline_module.get_video_metadata(
@@ -90,16 +88,7 @@ async def process_single_video(
                 duration > config.chapter_generation_min_duration and chapters
             )
             output_target: Path | None = None
-
-            if pipeline.export_transcript:
-                pipeline_module.export_transcript(
-                    pipeline.db,
-                    transcript_obj,
-                    title,
-                    pipeline.output_dir,
-                    video_id,
-                    pipeline.export_transcript,
-                )
+            transcript_output_dir = pipeline.output_dir
 
             generation_start = time.perf_counter()
             usage_context = nullcontext(pipeline_module.UsageTotals())
@@ -129,14 +118,17 @@ async def process_single_video(
                         allow_existing_base=current_cached_video is not None,
                     )
                     output_target.mkdir(parents=True, exist_ok=True)
+                    transcript_output_dir = output_target
 
                     total_chapters = len(chapter_transcripts)
-                    for i, (chap_title, chap_text) in enumerate(
-                        chapter_transcripts.items(),
-                        1,
-                    ):
+                    ordered_chapters = list(chapter_transcripts.items())
+                    chapters_to_generate: dict[str, str] = {}
+                    chapter_targets: list[tuple[str, Path]] = []
+
+                    for i, (chap_title, chap_text) in enumerate(ordered_chapters, 1):
                         safe_chapter = sanitize_filename(chap_title)
                         chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
+                        chapter_targets.append((chap_title, chapter_file))
 
                         if not pipeline.force and chapter_file.exists():
                             logger.info(
@@ -145,49 +137,110 @@ async def process_single_video(
                             )
                             continue
 
-                        emit(
-                            EventType.CHAPTER_GENERATING,
-                            video_id,
-                            title=title,
-                            chapter_number=i,
-                            total_chapters=total_chapters,
-                        )
+                        chapters_to_generate[chap_title] = chap_text
 
-                        def _on_chapter_chunk(
-                            chunk_num: int,
-                            total: int,
-                            _i: int = i,
+                    if chapters_to_generate:
+                        chapter_indices = {
+                            chapter_title: index
+                            for index, (chapter_title, _) in enumerate(
+                                ordered_chapters,
+                                start=1,
+                            )
+                        }
+
+                        def _on_chapter_start(
+                            index: int,
+                            _total: int,
                         ) -> None:
+                            chapter_title = list(chapters_to_generate.keys())[index - 1]
                             emit(
-                                EventType.CHAPTER_CHUNK_GENERATING,
+                                EventType.CHAPTER_GENERATING,
                                 video_id,
                                 title=title,
-                                chapter_number=_i,
+                                chapter_number=chapter_indices[chapter_title],
                                 total_chapters=total_chapters,
-                                chunk_number=chunk_num,
-                                total_chunks=total,
                             )
 
-                        def _on_chapter_combine(
-                            total_parts: int,
-                            _i: int = i,
-                        ) -> None:
-                            emit(
-                                EventType.CHAPTER_COMBINING,
-                                video_id,
-                                title=title,
-                                chapter_number=_i,
-                                total_chapters=total_chapters,
-                                total_chunks=total_parts,
-                            )
-
-                        notes = await pipeline.generator.generate_single_chapter_notes(
-                            chapter_title=chap_title,
-                            chapter_text=chap_text,
-                            on_chunk=_on_chapter_chunk,
-                            on_combine=_on_chapter_combine,
+                        original_generate_single = (
+                            pipeline.generator.generate_single_chapter_notes
                         )
-                        chapter_file.write_text(notes, encoding="utf-8")
+
+                        async def _generate_single_chapter_notes_with_events(
+                            chapter_title: str,
+                            chapter_text: str,
+                            on_chunk: Callable[[int, int], None] | None = None,
+                            on_combine: Callable[[int], None] | None = None,
+                        ) -> str:
+                            chapter_number = chapter_indices[chapter_title]
+
+                            def _on_chapter_chunk(chunk_num: int, total: int) -> None:
+                                emit(
+                                    EventType.CHAPTER_CHUNK_GENERATING,
+                                    video_id,
+                                    title=title,
+                                    chapter_number=chapter_number,
+                                    total_chapters=total_chapters,
+                                    chunk_number=chunk_num,
+                                    total_chunks=total,
+                                )
+                                if on_chunk:
+                                    on_chunk(chunk_num, total)
+
+                            def _on_chapter_combine(total_parts: int) -> None:
+                                emit(
+                                    EventType.CHAPTER_COMBINING,
+                                    video_id,
+                                    title=title,
+                                    chapter_number=chapter_number,
+                                    total_chapters=total_chapters,
+                                    total_chunks=total_parts,
+                                )
+                                if on_combine:
+                                    on_combine(total_parts)
+
+                            try:
+                                return cast(
+                                    str,
+                                    await original_generate_single(
+                                        chapter_title=chapter_title,
+                                        chapter_text=chapter_text,
+                                        on_chunk=_on_chapter_chunk,
+                                        on_combine=_on_chapter_combine,
+                                    ),
+                                )
+                            finally:
+                                emit(
+                                    EventType.CHAPTER_COMPLETE,
+                                    video_id,
+                                    title=title,
+                                    chapter_number=chapter_number,
+                                    total_chapters=total_chapters,
+                                )
+
+                        pipeline.generator.generate_single_chapter_notes = (
+                            _generate_single_chapter_notes_with_events
+                        )
+                        try:
+                            generate_chapter_notes = (
+                                pipeline.generator.generate_chapter_notes_concurrent
+                            )
+                            generated_chapter_notes = await generate_chapter_notes(
+                                chapters_to_generate,
+                                max_concurrent=config.max_concurrent_chapters,
+                                semaphore=pipeline._chapter_semaphore,
+                                video_title=title,
+                                on_chapter_start=_on_chapter_start,
+                            )
+                        finally:
+                            pipeline.generator.generate_single_chapter_notes = (
+                                original_generate_single
+                            )
+
+                        for chapter_title, chapter_file in chapter_targets:
+                            notes = generated_chapter_notes.get(chapter_title)
+                            if notes is None:
+                                continue
+                            chapter_file.write_text(notes, encoding="utf-8")
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)
 
@@ -222,6 +275,15 @@ async def process_single_video(
                     )
                     output_target.parent.mkdir(parents=True, exist_ok=True)
                     output_target.write_text(notes, encoding="utf-8")
+                    transcript_output_dir = output_target.parent
+
+                if pipeline.export_transcript_format:
+                    pipeline._export_transcript(
+                        transcript_obj,
+                        title,
+                        transcript_output_dir,
+                        video_id,
+                    )
 
                 if pipeline.quiz and output_target is not None:
                     quiz_output_dir = (

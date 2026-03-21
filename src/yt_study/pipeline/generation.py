@@ -1,5 +1,7 @@
 """Study material generator with chunking and combining logic."""
 
+from __future__ import annotations
+
 import asyncio
 import re
 from collections.abc import Callable
@@ -11,7 +13,6 @@ from yt_study._constants import DEFAULT_MAX_CONCURRENT_CHAPTERS, DEFAULT_TEMPERA
 from yt_study.config import settings as config
 from yt_study.llm.prompts.chapter_notes import (
     get_chapter_prompt,
-    get_combine_chapters_prompt,
 )
 from yt_study.llm.prompts.quiz import (
     QUIZ_SYSTEM_PROMPT,
@@ -295,53 +296,12 @@ class StudyMaterialGenerator:
             max_tokens=self.max_tokens,
         )
 
-    async def generate_chapter_based_notes(
-        self,
-        chapter_transcripts: dict[str, str],
-        video_title: str = "Video",
-    ) -> str:
-        """
-        Generate study notes using chapter-based approach.
-
-        Args:
-            chapter_transcripts: Dictionary mapping chapter titles to transcript text.
-            video_title: Video title for logging.
-
-        Returns:
-            Complete study notes organized by chapters.
-        """
-        total_chapters = len(chapter_transcripts)
-        logger.info(f"{video_title}: Generating {total_chapters} chapters...")
-
-        chapter_notes = {}
-
-        for i, (chapter_title, chapter_text) in enumerate(
-            chapter_transcripts.items(), 1
-        ):
-            logger.info(
-                f"{video_title}: Chapter {i}/{total_chapters}: {chapter_title[:30]}..."
-            )
-            notes = await self.generate_single_chapter_notes(
-                chapter_title=chapter_title,
-                chapter_text=chapter_text,
-            )
-            chapter_notes[chapter_title] = notes
-
-        logger.info(f"{video_title}: Combining chapter notes...")
-        final_notes = await self.provider.generate(
-            system_prompt=CHAPTER_SYSTEM_PROMPT,
-            user_prompt=get_combine_chapters_prompt(chapter_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
-        )
-        logger.info(f"Completed chapter-based notes for {video_title}")
-        return final_notes
-
     async def generate_chapter_notes_concurrent(
         self,
         chapter_transcripts: dict[str, str],
         *,
         max_concurrent: int = DEFAULT_MAX_CONCURRENT_CHAPTERS,
+        semaphore: asyncio.Semaphore | None = None,
         video_title: str = "Video",
         on_chapter_start: Callable[[int, int], None] | None = None,
     ) -> dict[str, str]:
@@ -357,7 +317,7 @@ class StudyMaterialGenerator:
             Mapping of chapter title to generated notes, in input order.
         """
         total = len(chapter_transcripts)
-        sem = asyncio.Semaphore(max_concurrent)
+        sem = semaphore or asyncio.Semaphore(max(1, max_concurrent))
 
         async def _generate_one(
             idx: int, ch_title: str, ch_text: str

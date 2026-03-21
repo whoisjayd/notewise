@@ -6,9 +6,13 @@ import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from rich.console import Console
 from sqlalchemy.exc import SQLAlchemyError
 
+from yt_study.cli._formatters import print_cost_summary
+from yt_study.domain.results import PipelineMetrics
 from yt_study.llm.provider import UsageTotals
+from yt_study.pipeline._artifacts import export_transcript, generate_and_write_quiz
 from yt_study.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
@@ -21,6 +25,7 @@ from yt_study.pipeline.core import (
     PipelineSharedState,
     run_pipeline,
 )
+from yt_study.youtube.transcript import TranscriptSegment, VideoTranscript
 
 
 def _make_pipeline(temp_output_dir, mock_llm_provider):
@@ -50,6 +55,23 @@ def test_usage_coercion_helpers_handle_non_numeric_values():
     assert totals.cost_usd == 0.0025
 
 
+def test_pipeline_metrics_bool_truth_table():
+    """Zero metrics should be falsy; any non-zero metric should be truthy."""
+    assert bool(PipelineMetrics()) is False
+    assert bool(PipelineMetrics(total_tokens=1)) is True
+    assert bool(PipelineMetrics(cost_usd=0.01)) is True
+    assert bool(PipelineMetrics(transcript_seconds=0.5)) is True
+
+
+def test_print_cost_summary_skips_zero_metrics_output():
+    """No cost table should render when the metrics object is all-zero."""
+    console = Console(record=True, width=80)
+
+    print_cost_summary(console, PipelineMetrics())
+
+    assert console.export_text() == ""
+
+
 def test_usage_coercion_helpers_cover_bool_float_and_passthrough():
     """Usage coercion should handle bools, negatives, bad strings, and passthrough."""
     totals = UsageTotals(
@@ -69,7 +91,10 @@ def test_usage_coercion_helpers_cover_bool_float_and_passthrough():
 
 def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provider):
     """Pipelines built for batch work should reuse the shared semaphore and locks."""
-    shared_state = PipelineSharedState(semaphore=asyncio.Semaphore(3))
+    shared_state = PipelineSharedState(
+        semaphore=asyncio.Semaphore(3),
+        chapter_semaphore=asyncio.Semaphore(2),
+    )
 
     with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
         pipeline = CorePipeline(
@@ -79,6 +104,7 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
         )
 
     assert pipeline.semaphore is shared_state.semaphore
+    assert pipeline._chapter_semaphore is shared_state.chapter_semaphore
     assert pipeline._output_lock is shared_state.output_lock
     assert pipeline._reserved_output_targets is shared_state.reserved_output_targets
 
@@ -159,6 +185,52 @@ def test_emit_event_swallows_event_handler_errors(temp_output_dir, mock_llm_prov
 
     on_event.assert_called_once()
     mock_warning.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_generate_and_write_quiz_creates_output_directory(tmp_path):
+    """Quiz writing should create the destination directory before writing."""
+    generator = MagicMock()
+    generator.generate_quiz = AsyncMock(return_value="# Quiz")
+    output_dir = tmp_path / "nested" / "quiz"
+    emit = MagicMock()
+
+    await generate_and_write_quiz(
+        generator,
+        "transcript text",
+        "Study Subject",
+        output_dir=output_dir,
+        emit=emit,
+        video_id="vid1",
+        title="Study Subject",
+    )
+
+    assert (output_dir / "Study Subject_quiz.md").exists()
+
+
+def test_export_transcript_creates_output_directory(tmp_path):
+    """Transcript export should create its parent directory before writing."""
+    transcript = VideoTranscript(
+        video_id="vid1",
+        segments=[TranscriptSegment(text="hello", start=0.0, duration=1.0)],
+        language="English",
+        language_code="en",
+        is_generated=False,
+    )
+    db = MagicMock()
+    output_dir = tmp_path / "nested" / "transcripts"
+
+    export_path = export_transcript(
+        db,
+        transcript,
+        "Study Subject",
+        output_dir,
+        "vid1",
+        "txt",
+    )
+
+    assert export_path.exists()
+    assert export_path.parent == output_dir
 
 
 def test_estimate_tokens_used_falls_back_when_counter_raises(

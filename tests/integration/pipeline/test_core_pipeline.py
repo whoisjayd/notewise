@@ -155,6 +155,35 @@ def _make_transcript(video_id="vid123", text="transcript text"):
     )
 
 
+def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
+    """Model concurrent chapter generation via the single-chapter API."""
+
+    async def _generate(
+        chapter_transcripts: dict[str, str],
+        *,
+        on_chapter_start=None,
+        **kwargs,
+    ):
+        del kwargs
+        total = len(chapter_transcripts)
+        result: dict[str, str] = {}
+
+        for index, (chapter_title, chapter_text) in enumerate(
+            chapter_transcripts.items(),
+            start=1,
+        ):
+            if on_chapter_start is not None:
+                on_chapter_start(index, total)
+            result[chapter_title] = await generator.generate_single_chapter_notes(
+                chapter_title,
+                chapter_text,
+            )
+
+        return result
+
+    return AsyncMock(side_effect=_generate)
+
+
 @pytest.fixture()
 def pipeline(temp_output_dir, mock_llm_provider):
     with patch(
@@ -166,6 +195,9 @@ def pipeline(temp_output_dir, mock_llm_provider):
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
         p.generator.generate_single_chapter_notes = AsyncMock(
             return_value="# Chapter Notes"
+        )
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
         )
         return p
 
@@ -364,6 +396,9 @@ async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provid
         pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
         pipeline.generator.generate_single_chapter_notes = AsyncMock(
             return_value="# Chapter Notes"
+        )
+        pipeline.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(pipeline.generator)
         )
 
     with (
@@ -776,9 +811,16 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
     # Verify chapter events
     chapter_events = [e for e in events if e.event_type == EventType.CHAPTER_GENERATING]
     assert len(chapter_events) == 3
+    chapter_complete_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_COMPLETE
+    ]
+    assert len(chapter_complete_events) == 3
 
     # Verify chapter numbers and totals
     for i, event in enumerate(chapter_events, 1):
+        assert event.chapter_number == i
+        assert event.total_chapters == 3
+    for i, event in enumerate(chapter_complete_events, 1):
         assert event.chapter_number == i
         assert event.total_chapters == 3
 
@@ -849,6 +891,65 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
     assert len(chapter_combine_events) == 2
     assert [e.chapter_number for e in chapter_combine_events] == [1, 2]
     assert all(e.total_chunks == 2 for e in chapter_combine_events)
+    chapter_complete_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_COMPLETE
+    ]
+    assert len(chapter_complete_events) == 2
+    assert [e.chapter_number for e in chapter_complete_events] == [1, 2]
+
+
+@pytest.mark.asyncio
+async def test_run_failed_chapter_generation_still_emits_chapter_complete(
+    temp_output_dir, mock_llm_provider
+):
+    """Started chapter workers should always release their dashboard slot."""
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    async def _fail_chapter(
+        chapter_title,
+        chapter_text,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        del chapter_title, chapter_text, on_chunk, on_combine
+        raise RuntimeError("boom")
+
+    p.generator.generate_single_chapter_notes.side_effect = _fail_chapter
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            return_value=VideoMetadata(
+                video_id="dQw4w9WgXcQ",
+                title="Failure Video",
+                duration=7200,
+                chapters=[
+                    VideoChapter(title="Chapter 1", start_seconds=0, end_seconds=None)
+                ],
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.pipeline.core.split_transcript_by_chapters",
+            return_value={"Chapter 1": "text1"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_transcript = _make_transcript(text="full transcript")
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-chapter-failure"], on_event=events.append)
+
+    assert result.success_count == 0
+    chapter_events = [e for e in events if e.event_type == EventType.CHAPTER_GENERATING]
+    assert len(chapter_events) == 1
+    chapter_complete_events = [
+        e for e in events if e.event_type == EventType.CHAPTER_COMPLETE
+    ]
+    assert len(chapter_complete_events) == 1
+    assert chapter_complete_events[0].chapter_number == 1
 
 
 @pytest.mark.asyncio
@@ -925,6 +1026,61 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
     assert not (temp_output_dir / "Long Video_quiz.md").exists()
 
 
+@pytest.mark.asyncio
+async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
+    temp_output_dir, mock_llm_provider
+):
+    """Chapter-mode transcript exports should live in the per-video chapter folder."""
+    with patch(
+        "yt_study.pipeline.core.get_provider",
+        return_value=mock_llm_provider,
+    ):
+        p = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            export_transcript="txt",
+        )
+        p.generator = MagicMock()
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+        p.generator.generate_chapter_notes_concurrent = AsyncMock(
+            return_value={"Intro": "# Chapter Notes", "Part 2": "# Chapter Notes"}
+        )
+        p.generator.generate_quiz = AsyncMock(return_value="# Quiz")
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            return_value=VideoMetadata(
+                video_id="dQw4w9WgXcQ",
+                title="Long Video",
+                duration=7200,
+                chapters=[
+                    VideoChapter(title="Intro", start_seconds=0, end_seconds=120),
+                    VideoChapter(title="Part 2", start_seconds=120, end_seconds=None),
+                ],
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "yt_study.pipeline.core.split_transcript_by_chapters",
+            return_value={"Intro": "intro text", "Part 2": "body text"},
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_transcript = _make_transcript(text="full transcript")
+        mock_transcript.language_code = "en"
+        mock_fetch.return_value = mock_transcript
+
+        result = await p.run(["vid-transcript-dir"])
+
+    assert result.success_count == 1
+    chapter_dir = temp_output_dir / "Long Video"
+    assert (chapter_dir / "Long Video_transcript.txt").exists()
+    assert not (temp_output_dir / "Long Video_transcript.txt").exists()
+
+
 # ---------------------------------------------------------------------------
 # CorePipeline – playlist checkpointing (#38)
 # ---------------------------------------------------------------------------
@@ -950,6 +1106,9 @@ def _make_pipeline(
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
         p.generator.generate_single_chapter_notes = AsyncMock(
             return_value="# Chapter Notes"
+        )
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
         )
         p.generator.generate_quiz = AsyncMock(return_value="# Quiz")
         return p
@@ -1036,6 +1195,35 @@ async def test_checkpoint_force_reprocesses_existing(
     # File must now contain the regenerated content
     output_file = temp_output_dir / "Test Video.md"
     assert output_file.read_text(encoding="utf-8") == "# Notes"
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_force_skips_cache_lookup(temp_output_dir, mock_llm_provider):
+    """Force mode should bypass the cache lookup entirely."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
+    p._get_cached_video = AsyncMock(return_value=None)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid1",
+                    title="Force Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="fresh content")
+
+        result = await p.run(["vid1"])
+
+    assert result.success_count == 1
+    p._get_cached_video.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1556,6 +1744,12 @@ def _make_pipeline_with_export(
         )
         p.generator = MagicMock()
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
+        )
         return p
 
 
@@ -1670,6 +1864,12 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
         p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         p.generator = MagicMock()
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Chapter Notes"
+        )
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
+        )
 
     with (
         patch(

@@ -232,6 +232,42 @@ def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):  # noq
     assert pipeline_instance.run.await_count == 2
 
 
+def test_process_batch_file_success_prints_summary(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+    tmp_path,
+):
+    """Successful batch-file runs should print a final success summary."""
+    _, pipeline_instance = mock_pipeline
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(_VIDEO_URL, encoding="utf-8")
+
+    result = runner.invoke(app, ["process", str(batch_file)])
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+    assert "batch videos succeeded" in result.output
+    assert "Current log:" in result.output
+
+
+@pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
+def test_process_batch_file_reads_common_windows_encodings(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+    tmp_path,
+    encoding,
+):
+    """Batch files saved from Windows shells/editors should still be accepted."""
+    _, pipeline_instance = mock_pipeline
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(_VIDEO_URL, encoding=encoding)
+
+    result = runner.invoke(app, ["process", str(batch_file)])
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+
+
 def test_process_batch_file_runs_items_concurrently(tmp_path):
     """Batch-file entries should start in parallel up to the configured worker count."""
     batch_file = tmp_path / "urls.txt"
@@ -1025,20 +1061,118 @@ def test_process_ui_shows_detailed_pipeline_states(
         result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 0
-    statuses = [
+    worker_statuses = [
         call.args[1] for call in dashboard_instance.update_worker.call_args_list
     ]
-    rendered_statuses = "\n".join(statuses)
+    chapter_statuses = [
+        call.args[2] for call in dashboard_instance.start_chapter_worker.call_args_list
+    ] + [
+        call.args[1] for call in dashboard_instance.update_chapter_worker.call_args_list
+    ]
+    rendered_statuses = "\n".join(worker_statuses)
+    rendered_chapter_statuses = "\n".join(chapter_statuses)
     assert "Transcript Ready" in rendered_statuses
     assert "Chunk 1/3" in rendered_statuses
     assert "Combining 3 note parts" in rendered_statuses
-    assert "Ch 2/5, Part 1/2" in rendered_statuses
-    assert "Ch 2/5, Combining 2 parts" in rendered_statuses
+    assert "Ch 2/5" in rendered_statuses
+    assert "Ch 2/5, Part 1/2" in rendered_chapter_statuses
+    assert "Ch 2/5, Combining 2 parts" in rendered_chapter_statuses
     assert "Quiz" in rendered_statuses
     assert "Quiz Part 1/2" in rendered_statuses
     assert "Combining 2 quiz parts" in rendered_statuses
     assert "Quiz Ready" in rendered_statuses
     assert "Generated" in rendered_statuses
+
+
+def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
+    """Batch UI should also route chapter progress into chapter worker lanes."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(_VIDEO_URL, encoding="utf-8")
+
+    async def _run_with_chapter_events(video_ids, on_event=None):  # noqa: ANN001
+        if on_event:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_GENERATING,
+                    video_id=video_ids[0],
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.CHAPTER_CHUNK_GENERATING,
+                    video_id=video_ids[0],
+                    title="Video One",
+                    chapter_number=2,
+                    total_chapters=5,
+                    chunk_number=1,
+                    total_chunks=2,
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_chapter_events)
+    dashboard_instance = MagicMock()
+    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("yt_study.cli.app.Live"),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.max_concurrent_chapters = 3
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file)])
+
+    assert result.exit_code == 0
+    dashboard_instance.start_chapter_worker.assert_called()
+    dashboard_instance.update_chapter_worker.assert_called()
+    chapter_statuses = [
+        call.args[2] for call in dashboard_instance.start_chapter_worker.call_args_list
+    ] + [
+        call.args[1] for call in dashboard_instance.update_chapter_worker.call_args_list
+    ]
+    rendered_chapter_statuses = "\n".join(chapter_statuses)
+    assert "Ch 2/5" in rendered_chapter_statuses
+    assert "Part 1/2" in rendered_chapter_statuses
 
 
 def test_process_no_ui_failure_exits_nonzero(

@@ -20,6 +20,7 @@ class EventType(Enum):
     CHAPTER_GENERATING = "chapter_generating"
     CHAPTER_CHUNK_GENERATING = "chapter_chunk_generating"
     CHAPTER_COMBINING = "chapter_combining"
+    CHAPTER_COMPLETE = "chapter_complete"
     QUIZ_GENERATING = "quiz_generating"
     QUIZ_CHUNK_GENERATING = "quiz_chunk_generating"
     QUIZ_COMBINING = "quiz_combining"

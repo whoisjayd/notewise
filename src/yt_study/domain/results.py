@@ -16,6 +16,17 @@ class PipelineMetrics:
     transcript_seconds: float = 0.0
     generation_seconds: float = 0.0
 
+    def __bool__(self) -> bool:
+        """Return True only when at least one metric is non-zero."""
+        return bool(
+            self.total_tokens
+            or self.cost_usd
+            or self.transcript_seconds
+            or self.generation_seconds
+            or self.prompt_tokens
+            or self.completion_tokens
+        )
+
     def add_from(self, other: PipelineMetrics) -> None:
         """Accumulate another metrics snapshot into this instance."""
         self.prompt_tokens += other.prompt_tokens

@@ -160,6 +160,54 @@ class TestLLMProvider:
             with pytest.raises(LLMGenerationError, match="Failed to generate"):
                 await provider.generate("sys", "user")
 
+    @pytest.mark.asyncio
+    async def test_generate_reraises_existing_llm_generation_error(self):
+        """Domain errors should not be double-wrapped by the provider."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_acompletion.side_effect = LLMGenerationError("already normalized")
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError, match="already normalized") as exc:
+                await provider.generate("sys", "user")
+
+        assert str(exc.value) == "already normalized"
+
+    @pytest.mark.asyncio
+    async def test_generate_forwards_zero_max_tokens(self):
+        """Explicit max_tokens=0 should still be forwarded to LiteLLM."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user", max_tokens=0)
+
+        assert mock_acompletion.call_args.kwargs["max_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_forwards_positive_max_tokens(self):
+        """Explicit positive max_tokens should be forwarded to LiteLLM."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user", max_tokens=1)
+
+        assert mock_acompletion.call_args.kwargs["max_tokens"] == 1
+
     def test_get_provider_factory(self):
         """Test factory function."""
         provider = get_provider("claude-3")
