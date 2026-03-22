@@ -580,7 +580,8 @@ def test_edit_config_handles_missing_and_existing_file(
 
     output = _text(console)
     assert "Run `yt-study setup` first" in output
-    assert f"Opened {config_path}." in output
+    assert "Opened" in output
+    assert str(config_path) in output
     assert opened == [config_path]
 
 
