@@ -58,6 +58,7 @@ PRE_COMMIT := $(UV_RUN) pre-commit
 RUFF := $(UV_RUN) ruff
 TY := $(UV_RUN) ty
 PYTEST := $(UV) run --no-sync python -m pytest
+PYTEST_PARALLEL_FLAGS := -n auto --dist=loadfile
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
 
@@ -223,13 +224,14 @@ pre-commit: check test-fast ## Run checks + fast tests before commit
 # Testing
 # ==============================================================================
 test: ## Run full test suite
-	$(PYTEST) $(TEST_DIR) -v
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -v
 
 test-fast: ## Run tests in quiet mode
-	$(PYTEST) $(TEST_DIR) -q
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -q
 
 test-cov: ## Run tests with coverage report
 	$(PYTEST) $(TEST_DIR) \
+		$(PYTEST_PARALLEL_FLAGS) \
 		--cov=$(PKG_DIR) \
 		--cov-fail-under=90 \
 		--cov-report=term-missing \
@@ -248,7 +250,7 @@ test-watch: ## Run tests in watch mode
 	$(UV_RUN) ptw $(TEST_DIR) -v
 
 test-failed: ## Re-run only failed tests
-	$(PYTEST) $(TEST_DIR) --lf -v
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) --lf -v
 
 test-verbose: ## Run tests with maximal verbosity
 	$(PYTEST) $(TEST_DIR) -vv -s
