@@ -84,9 +84,9 @@ CLEAN_TARGETS := clean-cache clean-build clean-test
 # ==============================================================================
 .PHONY: help sync install install-dev dev-setup \
 	format format-check lint lint-check type-check deps-check security \
-	check verify audit quality pre-commit \
+	check verify fix audit quality pre-commit \
 	hooks-install hooks-run \
-	test test-fast test-cov test-watch test-failed test-verbose \
+	test test-unit test-integration test-fast test-cov test-watch test-failed test-verbose \
 	coverage-open \
 	build publish publish-test \
 	show-deps show-outdated update-deps \
@@ -114,6 +114,7 @@ help: ## Show all developer tasks
 	@echo "  type-check    Run ty type checker"
 	@echo "  deps-check    Detect unused/missing dependencies"
 	@echo "  security      Run bandit security scan"
+	@echo "  fix           Auto-fix formatting and lint issues"
 	@echo "  check         Run all quality checks (CI-safe)"
 	@echo "  verify        Run all quality checks with auto-fixes"
 	@echo "  audit         Run deps-check + security"
@@ -124,6 +125,8 @@ help: ## Show all developer tasks
 	@echo ""
 	@echo "Testing:"
 	@echo "  test          Run full test suite"
+	@echo "  test-unit     Run unit tests with coverage"
+	@echo "  test-integration Run integration tests"
 	@echo "  test-fast     Run tests in quiet mode"
 	@echo "  test-cov      Run tests with coverage report"
 	@echo "  coverage-open Generate and open HTML coverage report"
@@ -206,6 +209,8 @@ quality: check ## Alias for check
 
 verify: $(QUALITY_FIX_TARGETS) ## Run all quality checks with auto-fixes
 
+fix: format lint ## Auto-fix formatting and lint issues
+
 audit: deps-check security ## Run dependency and security audits
 
 # ==============================================================================
@@ -225,6 +230,16 @@ pre-commit: check test-fast ## Run checks + fast tests before commit
 # ==============================================================================
 test: ## Run full test suite
 	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -v
+
+test-unit: ## Run unit tests with coverage
+	$(PYTEST) $(TEST_DIR)/unit \
+		$(PYTEST_PARALLEL_FLAGS) \
+		--cov=$(PKG_DIR) \
+		--cov-report=term-missing \
+		-v
+
+test-integration: ## Run integration tests
+	$(PYTEST) $(TEST_DIR)/integration $(PYTEST_PARALLEL_FLAGS) -v
 
 test-fast: ## Run tests in quiet mode
 	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -q
