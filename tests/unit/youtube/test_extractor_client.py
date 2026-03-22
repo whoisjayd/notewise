@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import http.cookiejar
+from urllib.error import HTTPError
 
 import pytest
 
@@ -81,9 +82,7 @@ class TestAuthHeaders:
         jar.set_cookie(_make_cookie("__Secure-1PAPISID", "onep"))
         jar.set_cookie(_make_cookie("__Secure-3PAPISID", "threep"))
         client._cookie_jar = jar
-        monkeypatch.setattr(
-            "yt_study.youtube.extractor.client.time.time", lambda: 123.0
-        )
+        monkeypatch.setattr("yt_study.youtube.extractor._auth.time.time", lambda: 123.0)
 
         header = client._get_sid_authorization_header(
             origin="https://www.youtube.com",
@@ -503,7 +502,7 @@ class TestLowLevelHelpers:
         assert client._extract_delegated_session_id(ytcfg2) == "d1"
 
     def test_make_sid_authorization_includes_user_tag(self, monkeypatch):
-        monkeypatch.setattr("yt_study.youtube.extractor.client.time.time", lambda: 9.0)
+        monkeypatch.setattr("yt_study.youtube.extractor._auth.time.time", lambda: 9.0)
         header = ExtractorClient._make_sid_authorization(
             "SAPISIDHASH",
             "sid",
@@ -919,11 +918,11 @@ class TestDeeperExtractorBranches:
         assert result["subtitles"]["en"][0]["url"].endswith("fmt=json3")
         assert len(result["chapters"]) == 2
 
-    def test_extract_playlist_full_flow_private_and_entries(self, monkeypatch):
+    def test_extract_playlist_full_flow_public_title_and_entries(self, monkeypatch):
         client = ExtractorClient()
         data = {
             "playlistMetadataRenderer": {
-                "title": "My Private Playlist",
+                "title": "Private vs Public Cloud APIs",
                 "description": "desc",
             },
             "playlistSidebarPrimaryInfoRenderer": {
@@ -955,8 +954,38 @@ class TestDeeperExtractorBranches:
         assert result["id"] == "pl1"
         assert result["playlist_count"] == 3
         assert result["view_count"] == 1234
-        assert result["availability"] == "private"
+        assert result["availability"] == "public"
         assert result["entries"][0]["id"] == "v1"
+
+    def test_extract_playlist_private_alert_marks_private(self, monkeypatch):
+        client = ExtractorClient()
+        data = {
+            "playlistMetadataRenderer": {
+                "title": "Anything",
+                "description": "desc",
+            },
+            "playlistSidebarPrimaryInfoRenderer": {"stats": []},
+            "playlistSidebarSecondaryInfoRenderer": {},
+            "alerts": [
+                {
+                    "alertRenderer": {
+                        "text": {"simpleText": "This is a private playlist"},
+                    }
+                }
+            ],
+        }
+
+        monkeypatch.setattr(client, "_extract_playlist_id", lambda _target: "pl1")
+        monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
+        monkeypatch.setattr(client, "_extract_ytcfg", lambda _html: {})
+        monkeypatch.setattr(
+            client, "_extract_innertube_api_key", lambda _html, _ytcfg: None
+        )
+        monkeypatch.setattr(client, "_extract_initial_data", lambda _html: data)
+
+        result = client._extract_playlist("pl1", include_entries=False)
+
+        assert result["availability"] == "private"
 
     def test_extract_playlist_count_falls_back_to_entry_count(self, monkeypatch):
         client = ExtractorClient()
@@ -1030,6 +1059,62 @@ class TestDeeperExtractorBranches:
         monkeypatch.setattr(client, "_opener", _BadOpener())
         with pytest.raises(ExtractorError, match="Request failed"):
             client._fetch_text("https://x")
+
+    def test_fetch_text_retries_transient_http_503(self, monkeypatch):
+        client = ExtractorClient()
+        calls = {"count": 0}
+
+        class _Resp:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, exc_type, exc, tb):
+                return False
+
+            def read(self):
+                return b"hello"
+
+        class _Opener:
+            def open(self, req, timeout=30):
+                _ = timeout
+                calls["count"] += 1
+                if calls["count"] < 3:
+                    raise HTTPError(req.full_url, 503, "busy", hdrs=None, fp=None)
+                return _Resp()
+
+        monkeypatch.setattr(client, "_opener", _Opener())
+        monkeypatch.setattr(
+            "yt_study.youtube.extractor._transport.time.sleep",
+            lambda _seconds: None,
+        )
+        monkeypatch.setattr(
+            "yt_study.youtube.extractor._transport.random.uniform",
+            lambda _low, _high: 1.0,
+        )
+
+        assert client._fetch_text("https://x") == "hello"
+        assert calls["count"] == 3
+
+    def test_fetch_text_does_not_retry_http_404(self, monkeypatch):
+        client = ExtractorClient()
+        calls = {"count": 0}
+
+        class _Opener:
+            def open(self, req, timeout=30):
+                _ = timeout
+                calls["count"] += 1
+                raise HTTPError(req.full_url, 404, "missing", hdrs=None, fp=None)
+
+        monkeypatch.setattr(client, "_opener", _Opener())
+        monkeypatch.setattr(
+            "yt_study.youtube.extractor._transport.time.sleep",
+            lambda _seconds: None,
+        )
+
+        with pytest.raises(ExtractorError, match="Request failed"):
+            client._fetch_text("https://x")
+
+        assert calls["count"] == 1
 
     def test_fetch_json_wraps_generic_exceptions(self, monkeypatch):
         client = ExtractorClient()

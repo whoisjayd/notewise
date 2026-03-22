@@ -34,6 +34,8 @@ DEFAULT_MAX_CONCURRENT_CHAPTERS = 3
 TRANSCRIPT_MAX_RETRIES = 3
 PLAYLIST_MAX_RETRIES = 3
 LLM_NUM_RETRIES = 3
+HTTP_MAX_RETRIES = 3
+HTTP_BACKOFF_BASE = 1.0
 
 # ── Output ────────────────────────────────────────────────────────────────────
 MAX_FILENAME_LENGTH = 100

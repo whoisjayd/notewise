@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time  # noqa: F401
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any

@@ -44,15 +44,18 @@ async def fetch_transcript(
         languages = list(DEFAULT_LANGUAGES)
 
     retries = TRANSCRIPT_MAX_RETRIES
+    client = AsyncYouTubeExtractorClient(
+        YouTubeExtractorConfig(cookie_file=cookie_file)
+    )
     for attempt in range(retries):
         try:
             if on_request is not None:
                 await on_request()
 
             raw_transcript, transcript_meta, log_msg = await _fetch_async(
+                client,
                 video_id,
                 languages,
-                cookie_file,
             )
 
             logger.info(log_msg)
@@ -114,15 +117,12 @@ async def fetch_transcript(
 
 
 async def _fetch_async(
+    client: AsyncYouTubeExtractorClient,
     video_id: str,
     languages: list[str],
-    cookie_file: str | None = None,
 ) -> tuple[Any, Any, str]:
     """Async helper to interact with the async extractor client."""
     try:
-        client = AsyncYouTubeExtractorClient(
-            YouTubeExtractorConfig(cookie_file=cookie_file)
-        )
         payload = await client.transcript(
             video_id,
             languages=languages,

@@ -9,6 +9,9 @@ import pytest
 
 from yt_study.config import get_cache_db_path
 from yt_study.errors import (
+    ExtractionError as ExtractorError,
+)
+from yt_study.errors import (
     IPBlockError as YouTubeIPBlockError,
 )
 from yt_study.errors import (
@@ -606,6 +609,34 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     assert not expected_file.exists(), (
         "Fallback file should NOT exist on total metadata faileo_id"
     )
+
+
+@pytest.mark.asyncio
+async def test_run_metadata_extraction_error_surfaces_to_user(pipeline):
+    """Extractor metadata failures should fail the run instead of faking data."""
+    with (
+        patch(
+            "yt_study.pipeline.core.get_video_metadata",
+            side_effect=ExtractorError("metadata backend unavailable"),
+        ),
+        patch(
+            "yt_study.pipeline.core.fetch_transcript",
+            new_callable=AsyncMock,
+        ) as mock_fetch,
+        patch(
+            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            return_value=True,
+        ),
+    ):
+        result = await pipeline.run(["myVideoId"])
+
+    assert result.failure_count == 1
+    assert result.errors["myVideoId"] == (
+        "We couldn't process this video. "
+        "Check the current session log for technical details."
+    )
+    assert not (pipeline.output_dir / "myVideoId.md").exists()
+    mock_fetch.assert_not_awaited()
 
 
 # ---------------------------------------------------------------------------

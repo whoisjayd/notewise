@@ -7,11 +7,14 @@ from html import unescape
 from typing import Any
 from xml.etree import ElementTree
 
+import structlog
+
 from yt_study.youtube._constants import TRANSCRIPT_FORMAT_PRIORITY
 
 
 EXT_PRIORITY = TRANSCRIPT_FORMAT_PRIORITY
 _TAG_RE = re.compile(r"<[^>]+>")
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -110,7 +113,14 @@ def _pick_language(
             if key not in seen:
                 seen.add(key)
                 return key
-    return sorted(by_lang.keys())[0]
+    fallback = sorted(by_lang.keys())[0]
+    logger.warning(
+        "transcript.language_fallback",
+        requested=requested,
+        available=sorted(by_lang.keys()),
+        selected=fallback,
+    )
+    return fallback
 
 
 def _pick_best_track(tracks: list[dict[str, Any]]) -> dict[str, Any] | None:

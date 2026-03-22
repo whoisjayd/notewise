@@ -158,6 +158,7 @@ class TestFetchTranscript:
         result = await fetch_transcript("video123")
         assert isinstance(result, VideoTranscript)
         assert client.transcript.call_count == 3
+        mock_extractor_client["transcript"].assert_called_once()
 
     @pytest.mark.asyncio
     async def test_fetch_transcript_ip_block(self, mock_extractor_client):
@@ -217,7 +218,7 @@ class TestFetchTranscript:
         )
 
         with pytest.raises(TranscriptError, match="No usable transcript found"):
-            await _fetch_async("video123", ["en"])
+            await _fetch_async(client, "video123", ["en"])
 
     @pytest.mark.asyncio
     async def test_fetch_async_success_with_unknown_track_name(
@@ -231,7 +232,7 @@ class TestFetchTranscript:
             "is_generated": True,
         }
 
-        raw, meta, message = await _fetch_async("video123", ["en"])
+        raw, meta, message = await _fetch_async(client, "video123", ["en"])
 
         assert raw[0]["text"] == "ok"
         assert meta.language == "en"

@@ -52,7 +52,7 @@ def _extract_playlist(
     if playlist_count is None:
         playlist_count = len(entries)
 
-    availability = "private" if "private" in title.lower() else "public"
+    availability = _playlist_availability(client, data)
 
     return {
         "id": playlist_id,
@@ -67,6 +67,27 @@ def _extract_playlist(
         "playlist_count": playlist_count,
         "entries": entries,
     }
+
+
+def _playlist_availability(client: Any, data: dict[str, Any]) -> str:
+    """Infer playlist availability from structured page alerts, not title text."""
+    for obj in client._find_key(data, "alertRenderer"):
+        renderer = obj.get("alertRenderer") or {}
+        if not isinstance(renderer, dict):
+            continue
+        text = client._get_text(renderer.get("text")) or client._get_text(
+            renderer.get("title")
+        )
+        if not text:
+            continue
+        lowered = text.lower()
+        if "private playlist" in lowered or (
+            "playlist" in lowered and "private" in lowered
+        ):
+            return "private"
+        if "sign in" in lowered or "login" in lowered:
+            return "private"
+    return "public"
 
 
 def _extract_playlist_entries_paginated(
@@ -171,3 +192,6 @@ class _PlaylistMixin:
 
     def _extract_continuation_token(self, node: Any) -> str | None:
         return _extract_continuation_token(self, node)
+
+    def _playlist_availability(self, data: dict[str, Any]) -> str:
+        return _playlist_availability(self, data)

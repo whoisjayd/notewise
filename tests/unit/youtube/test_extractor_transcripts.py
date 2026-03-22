@@ -58,6 +58,34 @@ class TestSelectTrack:
         assert selection is not None
         assert selection.language_code == "en-US"
 
+    def test_select_track_logs_when_forced_to_fallback_language(self, monkeypatch):
+        subtitles = {"fr": [{"ext": "json3", "url": "https://x/sub?fmt=json3"}]}
+        warning_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
+
+        def _warning(*args, **kwargs):  # noqa: ANN002, ANN003
+            warning_calls.append((args, kwargs))
+
+        monkeypatch.setattr(tx.logger, "warning", _warning)
+
+        selection = tx.select_track(
+            subtitles=subtitles,
+            automatic_captions={},
+            languages=["en"],
+        )
+
+        assert selection is not None
+        assert selection.language_code == "fr"
+        assert warning_calls == [
+            (
+                ("transcript.language_fallback",),
+                {
+                    "requested": ["en"],
+                    "available": ["fr"],
+                    "selected": "fr",
+                },
+            )
+        ]
+
 
 class TestParsePayload:
     def test_parse_transcript_payload_json3(self):

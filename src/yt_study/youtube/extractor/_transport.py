@@ -4,9 +4,16 @@ from __future__ import annotations
 
 import copy
 import json
+import random
+import time
+from http.client import RemoteDisconnected
 from typing import Any, cast
+from urllib.error import HTTPError, URLError
 from urllib.request import Request
 
+import structlog
+
+from yt_study._constants import HTTP_BACKOFF_BASE, HTTP_MAX_RETRIES
 from yt_study.errors import ExtractionError
 from yt_study.youtube._constants import (
     ANDROID_CLIENT_NAME,
@@ -25,10 +32,79 @@ from ._parsers import (
 )
 
 
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _is_retryable_transport_error(exc: Exception) -> bool:
+    """Return whether the opener exception is safe to retry."""
+    if isinstance(exc, HTTPError):
+        return exc.code in {429, 500, 502, 503, 504}
+    if isinstance(exc, (TimeoutError, ConnectionResetError, ConnectionAbortedError)):
+        return True
+    if isinstance(exc, RemoteDisconnected):
+        return True
+    if isinstance(exc, URLError):
+        reason = exc.reason
+        if isinstance(
+            reason,
+            (
+                TimeoutError,
+                ConnectionResetError,
+                ConnectionAbortedError,
+                RemoteDisconnected,
+            ),
+        ):
+            return True
+        lowered = str(reason).lower()
+        return any(
+            token in lowered
+            for token in (
+                "timed out",
+                "timeout",
+                "connection reset",
+                "connection aborted",
+                "remote end closed connection",
+            )
+        )
+    return False
+
+
+def _retry_backoff_seconds(attempt: int) -> float:
+    """Return exponential backoff with bounded jitter for one retry attempt."""
+    return float(HTTP_BACKOFF_BASE * (2**attempt) * random.uniform(0.8, 1.2))
+
+
+def _fetch_with_retry(
+    operation: Any,
+    *,
+    url: str,
+) -> Any:
+    """Run one transport operation with bounded transient retry/backoff."""
+    for attempt in range(HTTP_MAX_RETRIES + 1):
+        try:
+            return operation()
+        except Exception as exc:
+            if not _is_retryable_transport_error(exc) or attempt >= HTTP_MAX_RETRIES:
+                raise
+            backoff_seconds = _retry_backoff_seconds(attempt)
+            logger.warning(
+                "youtube.transport_retry",
+                url=url,
+                attempt=attempt + 1,
+                max_retries=HTTP_MAX_RETRIES,
+                error=str(exc),
+                backoff_seconds=round(backoff_seconds, 3),
+            )
+            time.sleep(backoff_seconds)
+
+
 def _fetch_text(client: Any, url: str) -> str:
     req = Request(url=url, headers=_auth_ops._default_headers(), method="GET")
     try:
-        with client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+        with _fetch_with_retry(
+            lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
+            url=url,
+        ) as resp:
             body = resp.read()
             if isinstance(body, bytes):
                 return body.decode("utf-8", errors="replace")
@@ -50,7 +126,10 @@ def _fetch_json(
         method="POST",
     )
     try:
-        with client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS) as resp:
+        with _fetch_with_retry(
+            lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
+            url=url,
+        ) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         data = json.loads(body)
         if not isinstance(data, dict):
@@ -292,3 +371,7 @@ class _TransportMixin:
         context: dict[str, Any],
     ) -> dict[str, str]:
         return _generate_api_headers(self, ytcfg, context)
+
+    @staticmethod
+    def _fetch_with_retry(operation: Any, *, url: str) -> Any:
+        return _fetch_with_retry(operation, url=url)
