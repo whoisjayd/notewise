@@ -581,9 +581,10 @@ def test_edit_config_handles_missing_and_existing_file(
     admin.edit_config(console)
 
     output = _text(console)
+    normalized_output = output.replace("\n", "").replace("\r", "")
     assert "Run `yt-study setup` first" in output
     assert "Opened" in output
-    assert str(config_path) in output
+    assert str(config_path) in normalized_output
     assert opened == [config_path]
 
 
@@ -702,6 +703,7 @@ def test_render_logs_tail_and_clean_logs_handle_missing_paths(
     admin.clean_logs(console, all_logs=False, older_than_days=30)
 
     output = _text(console)
+    normalized_output = output.replace("\n", "").replace("\r", "")
     assert "No log files found." in output
     assert "No log directory found at" in output
-    assert str(missing_dir) in output
+    assert str(missing_dir) in normalized_output

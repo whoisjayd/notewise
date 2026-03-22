@@ -6,6 +6,8 @@ import sqlite3
 from contextlib import closing
 from datetime import datetime, timedelta, timezone
 
+import pytest
+
 from yt_study.storage.repository import DatabaseRepository
 
 
@@ -208,7 +210,7 @@ def test_get_stats_returns_totals_and_model_breakdown(tmp_path):
     assert stats.total_videos_processed == 2
     assert stats.total_runs == 3
     assert stats.total_tokens_used == 60
-    assert stats.total_cost_usd == 0.6
+    assert stats.total_cost_usd == pytest.approx(0.6)
     assert [row.model for row in stats.models] == ["model-a", "model-b"]
     assert stats.models[0].videos_processed == 1
     assert stats.models[0].run_count == 2
