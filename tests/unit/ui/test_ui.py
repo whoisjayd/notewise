@@ -30,6 +30,18 @@ def test_dashboard_updates():
     assert "Processing..." in dash.worker_progress.tasks[task_id].description
 
 
+def test_dashboard_update_worker_keeps_preformatted_markup():
+    """Styled worker strings should pass through without extra wrapping."""
+    dash = PipelineDashboard(10, 1, "List", "Model")
+
+    dash.update_worker(0, "[cyan]Already styled[/cyan]")
+
+    task_id = dash.worker_tasks[0]
+    assert dash.worker_progress.tasks[task_id].description == (
+        "[cyan]Already styled[/cyan]"
+    )
+
+
 def test_dashboard_chapter_updates():
     """Chapter worker slots should be independently updatable."""
     dash = PipelineDashboard(10, 2, "List", "Model", chapter_concurrency=2)
@@ -119,6 +131,33 @@ def test_dashboard_rendering():
     assert "Chapter Tasks" in output
     assert "List" in output
     assert "Model" in output
+
+
+def test_dashboard_rendering_shows_failures_before_completions():
+    """Recent failures should render ahead of completions."""
+    dash = PipelineDashboard(10, 1, "List", "Model")
+    dash.add_completion("Completed Video")
+    dash.add_failure("Failed Video")
+
+    console = Console(width=100)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert output.index("Failed Video") < output.index("Completed Video")
+
+
+def test_dashboard_rendering_uses_unicode_ellipsis_for_long_titles():
+    """Long activity titles should clamp with a single Unicode ellipsis."""
+    dash = PipelineDashboard(10, 1, "List", "Model")
+    dash.add_completion("A" * 80)
+
+    console = Console(width=100)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "…" in output
 
 
 def test_dashboard_rendering_empty():

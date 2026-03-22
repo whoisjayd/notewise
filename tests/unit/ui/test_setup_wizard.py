@@ -1,6 +1,6 @@
 """Tests for the setup wizard."""
 
-from unittest.mock import mock_open, patch
+from unittest.mock import MagicMock, mock_open, patch
 
 from yt_study.ui.setup_wizard import (
     CURATED_FALLBACK_MODELS,
@@ -51,6 +51,24 @@ class TestConfigIO:
         ):
             config = load_config()
             assert config == {}
+
+    def test_load_config_strips_wrapped_quotes(self):
+        """Quoted env-style values should load without their wrapper quotes."""
+        quoted_config = (
+            'GEMINI_API_KEY="quoted-key"\n'
+            "OUTPUT_DIR='/tmp/notes'\n"
+            "DEFAULT_MODEL=gemini/gemini-2.5-flash\n"
+        )
+
+        with (
+            patch("pathlib.Path.exists", return_value=True),
+            patch("pathlib.Path.open", mock_open(read_data=quoted_config)),
+        ):
+            config = load_config()
+
+        assert config["GEMINI_API_KEY"] == "quoted-key"
+        assert config["OUTPUT_DIR"] == "/tmp/notes"
+        assert config["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
 
     def test_save_config(self):
         """Test saving configuration merges with existing."""
@@ -286,6 +304,22 @@ class TestInteractiveFlow:
             selected = select_model("gemini", models)
             assert selected == "gemini/gemini-1.5-pro"
 
+    def test_select_model_invalid_input_is_visible(self):
+        """Unexpected model input should print guidance and re-prompt."""
+        mock_console = MagicMock()
+        models = {"p1": ["model-0"]}
+
+        with (
+            patch("yt_study.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["wat", "1"]),
+        ):
+            selected = select_model("p1", models, console=mock_console)
+
+        assert selected == "model-0"
+        mock_console.print.assert_any_call(
+            "[red]Invalid choice. Enter a model number or use n/p to navigate.[/red]"
+        )
+
     def test_get_api_key_new(self):
         """Test entering a new API key."""
         with (
@@ -416,3 +450,56 @@ class TestWizardOrchestration:
         ):  # Do not reconfigure
             config = run_setup_wizard(force=False)
             assert config == {"exists": "true"}
+
+    def test_run_setup_wizard_uses_injected_console(self):
+        """Wizard should thread an injected console through helper calls."""
+        mock_console = MagicMock()
+
+        with (
+            patch("yt_study.ui.setup_wizard.load_config", return_value={}),
+            patch(
+                "yt_study.ui.setup_wizard.get_available_models",
+                return_value={"gemini": ["gemini-pro"]},
+            ) as mock_models,
+            patch(
+                "yt_study.ui.setup_wizard.select_provider",
+                return_value="gemini",
+            ) as mock_provider,
+            patch(
+                "yt_study.ui.setup_wizard.select_model",
+                return_value="gemini/gemini-pro",
+            ) as mock_model,
+            patch(
+                "yt_study.ui.setup_wizard.get_api_key",
+                return_value="new-key",
+            ) as mock_api_key,
+            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
+            patch("yt_study.ui.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True, console=mock_console)
+
+        assert config["DEFAULT_MODEL"] == "gemini/gemini-pro"
+        mock_models.assert_called_once_with(console=mock_console)
+        mock_provider.assert_called_once_with(
+            {"gemini": ["gemini-pro"]},
+            console=mock_console,
+        )
+        mock_model.assert_called_once_with(
+            "gemini",
+            {"gemini": ["gemini-pro"]},
+            console=mock_console,
+        )
+        mock_api_key.assert_called_once_with(
+            "gemini",
+            None,
+            console=mock_console,
+        )
+        mock_save.assert_called_once_with(
+            {
+                "DEFAULT_MODEL": "gemini/gemini-pro",
+                "GEMINI_API_KEY": "new-key",
+                "OUTPUT_DIR": "/custom/out",
+                "MAX_CONCURRENT_VIDEOS": "10",
+            },
+            console=mock_console,
+        )

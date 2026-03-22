@@ -19,7 +19,6 @@ from yt_study._constants import (
 from yt_study.config import get_state_dir
 
 
-console = Console()
 LEGACY_CONFIG_KEYS = set(APP_LEGACY_CONFIG_KEYS)
 
 
@@ -139,6 +138,18 @@ _NATIVE_PROVIDER_PREFIXES = {
 }
 
 
+def _resolve_console(console: Console | None) -> Console:
+    """Return the provided console or create a fresh one for this flow."""
+    return console if console is not None else Console()
+
+
+def _strip_wrapped_quotes(value: str) -> str:
+    """Remove one layer of matching quotes from config values."""
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
+        return value[1:-1]
+    return value
+
+
 def get_config_path() -> Path:
     """Get path to user config file."""
     config_dir = get_state_dir()
@@ -158,20 +169,27 @@ def load_config() -> dict[str, str]:
                     line = line.strip()
                     if line and not line.startswith("#") and "=" in line:
                         key, value = line.split("=", 1)
-                        loaded_config[key.strip()] = value.strip()
+                        loaded_config[key.strip()] = _strip_wrapped_quotes(
+                            value.strip()
+                        )
         except Exception:
             pass
 
     return loaded_config
 
 
-def save_config(new_config: dict[str, str]) -> None:
+def save_config(
+    new_config: dict[str, str],
+    *,
+    console: Console | None = None,
+) -> None:
     """
     Save configuration to file, preserving existing keys.
 
     Args:
         new_config: Dictionary of new configuration values to merge/update.
     """
+    active_console = _resolve_console(console)
     config_path = get_config_path()
     current_config = load_config()
 
@@ -200,13 +218,14 @@ def save_config(new_config: dict[str, str]) -> None:
             if key not in priority_keys:
                 f.write(f"{key}={value}\n")
 
-    console.print(
+    active_console.print(
         f"\n[green]✓[/green] Configuration saved to: [cyan]{config_path}[/cyan]"
     )
 
 
-def get_available_models() -> dict[str, list[str]]:
+def get_available_models(*, console: Console | None = None) -> dict[str, list[str]]:
     """Fetch available models from LiteLLM."""
+    active_console = _resolve_console(console)
     try:
         from litellm import model_cost, model_list
 
@@ -231,8 +250,10 @@ def get_available_models() -> dict[str, list[str]]:
         return provider_models
 
     except Exception as e:
-        console.print(f"[yellow]⚠ Could not fetch models from LiteLLM: {e}[/yellow]")
-        console.print("[yellow]Using fallback model list...[/yellow]")
+        active_console.print(
+            f"[yellow]⚠ Could not fetch models from LiteLLM: {e}[/yellow]"
+        )
+        active_console.print("[yellow]Using fallback model list...[/yellow]")
         return {
             provider: list(models)
             for provider, models in CURATED_FALLBACK_MODELS.items()
@@ -294,20 +315,31 @@ def _is_setup_safe_model(_model: str, metadata: dict[str, Any]) -> bool:
     return True
 
 
-def _prompt_positive_int(prompt: str, default: str) -> str:
+def _prompt_positive_int(
+    prompt: str,
+    default: str,
+    *,
+    console: Console | None = None,
+) -> str:
     """Prompt until the user enters a positive integer string."""
+    active_console = _resolve_console(console)
     while True:
         value = Prompt.ask(prompt, default=default).strip()
         if value.isdigit() and int(value) >= 1:
             return value
-        console.print(
+        active_console.print(
             "[red]Please enter a whole number greater than or equal to 1.[/red]"
         )
 
 
-def select_provider(available_models: dict[str, list[str]]) -> str:
+def select_provider(
+    available_models: dict[str, list[str]],
+    *,
+    console: Console | None = None,
+) -> str:
     """Interactive provider selection."""
-    console.print("\n[bold cyan]Select LLM Provider:[/bold cyan]\n")
+    active_console = _resolve_console(console)
+    active_console.print("\n[bold cyan]Select LLM Provider:[/bold cyan]\n")
 
     table = Table(show_header=True, header_style="bold magenta")
     table.add_column("#", style="dim", width=4)
@@ -324,8 +356,8 @@ def select_provider(available_models: dict[str, list[str]]) -> str:
         model_count = len(available_models.get(provider_key, []))
         table.add_row(str(i), config_data["name"], f"{model_count} models")
 
-    console.print(table)
-    console.print(f"\n[dim]Total providers: {len(providers_list)}[/dim]")
+    active_console.print(table)
+    active_console.print(f"\n[dim]Total providers: {len(providers_list)}[/dim]")
 
     while True:
         choice = Prompt.ask(
@@ -335,17 +367,27 @@ def select_provider(available_models: dict[str, list[str]]) -> str:
         return providers_list[int(choice) - 1]
 
 
-def select_model(provider_key: str, available_models: dict[str, list[str]]) -> str:
+def select_model(
+    provider_key: str,
+    available_models: dict[str, list[str]],
+    *,
+    console: Console | None = None,
+) -> str:
     """Interactive model selection."""
+    active_console = _resolve_console(console)
     provider_config = PROVIDER_CONFIG[provider_key]
     models = available_models.get(provider_key, [])
 
     if not models:
-        console.print(f"[yellow]No models found for {provider_config['name']}[/yellow]")
+        active_console.print(
+            f"[yellow]No models found for {provider_config['name']}[/yellow]"
+        )
         return f"{provider_key}/default"
 
-    console.print(f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n")
-    console.print(f"[dim]Showing {len(models)} available models[/dim]\n")
+    active_console.print(
+        f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
+    )
+    active_console.print(f"[dim]Showing {len(models)} available models[/dim]\n")
 
     page_size = 20
     current_page = 0
@@ -372,17 +414,17 @@ def select_model(provider_key: str, available_models: dict[str, list[str]]) -> s
 
             table.add_row(str(i), model_display)
 
-        console.print(table)
+        active_console.print(table)
 
         total_pages = (len(models) + page_size - 1) // page_size
-        console.print(
+        active_console.print(
             f"\n[dim]Page {current_page + 1}/{total_pages} | "
             f"Showing {start_idx + 1}-{end_idx} of {len(models)} "
             f"models[/dim]"
         )
 
         if total_pages > 1:
-            console.print(
+            active_console.print(
                 "[dim]Type 'n' for next page, 'p' for previous page, "
                 "or model number to select[/dim]"
             )
@@ -391,15 +433,15 @@ def select_model(provider_key: str, available_models: dict[str, list[str]]) -> s
 
         if choice.lower() == "n" and current_page < total_pages - 1:
             current_page += 1
-            console.clear()
-            console.print(
+            active_console.clear()
+            active_console.print(
                 f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
             )
             continue
         elif choice.lower() == "p" and current_page > 0:
             current_page -= 1
-            console.clear()
-            console.print(
+            active_console.clear()
+            active_console.print(
                 f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
             )
             continue
@@ -415,13 +457,25 @@ def select_model(provider_key: str, available_models: dict[str, list[str]]) -> s
 
             return selected
 
+        active_console.print(
+            "[red]Invalid choice. Enter a model number or use n/p to navigate.[/red]"
+        )
 
-def get_api_key(provider_key: str, existing_key: str | None = None) -> str:
+
+def get_api_key(
+    provider_key: str,
+    existing_key: str | None = None,
+    *,
+    console: Console | None = None,
+) -> str:
     """Prompt for API key."""
+    active_console = _resolve_console(console)
     provider = PROVIDER_CONFIG[provider_key]
 
-    console.print(f"\n[bold yellow]API Key Required:[/bold yellow] {provider['name']}")
-    console.print(
+    active_console.print(
+        f"\n[bold yellow]API Key Required:[/bold yellow] {provider['name']}"
+    )
+    active_console.print(
         f"[dim]Get your API key from:[/dim] "
         f"[link={provider['api_url']}]{provider['api_url']}[/link]\n"
     )
@@ -440,12 +494,16 @@ def get_api_key(provider_key: str, existing_key: str | None = None) -> str:
         api_key = Prompt.ask("Enter your API key", password=True)
         if api_key and len(api_key) > 10:
             return api_key
-        console.print("[red]Invalid API key. Please try again.[/red]")
+        active_console.print("[red]Invalid API key. Please try again.[/red]")
 
 
-def run_setup_wizard(force: bool = False) -> dict[str, str]:
+def run_setup_wizard(
+    force: bool = False,
+    console: Console | None = None,
+) -> dict[str, str]:
     """Run interactive setup wizard."""
-    console.print(
+    active_console = _resolve_console(console)
+    active_console.print(
         Panel(
             "[bold cyan]🎓 yt-study Setup Wizard[/bold cyan]\n\n"
             "Configure your LLM provider and API keys\n"
@@ -458,34 +516,34 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
     current_config = load_config()
 
     if current_config and not force:
-        console.print("\n[yellow]Existing configuration found.[/yellow]")
+        active_console.print("\n[yellow]Existing configuration found.[/yellow]")
         reconfigure = Confirm.ask("Do you want to reconfigure?", default=False)
         if not reconfigure:
-            console.print("[green]Using existing configuration.[/green]")
+            active_console.print("[green]Using existing configuration.[/green]")
             return current_config
 
-    console.print("\n[cyan]Fetching available models from LiteLLM...[/cyan]")
-    available_models = get_available_models()
-    console.print(
+    active_console.print("\n[cyan]Fetching available models from LiteLLM...[/cyan]")
+    available_models = get_available_models(console=active_console)
+    active_console.print(
         f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
         f"models across {len(available_models)} providers[/green]"
     )
 
-    provider_key = select_provider(available_models)
-    model = select_model(provider_key, available_models)
+    provider_key = select_provider(available_models, console=active_console)
+    model = select_model(provider_key, available_models, console=active_console)
 
     provider_info = PROVIDER_CONFIG[provider_key]
     existing_key = current_config.get(provider_info["env_var"])
-    api_key = get_api_key(provider_key, existing_key)
+    api_key = get_api_key(provider_key, existing_key, console=active_console)
 
-    console.print("\n[bold cyan]Output Directory:[/bold cyan]")
+    active_console.print("\n[bold cyan]Output Directory:[/bold cyan]")
     default_output = str(Path.cwd() / Path(DEFAULT_OUTPUT_DIR))
     if "OUTPUT_DIR" in current_config:
         default_output = current_config["OUTPUT_DIR"]
 
     output_dir = Prompt.ask("Where should notes be saved?", default=default_output)
 
-    console.print("\n[bold cyan]Concurrency:[/bold cyan]")
+    active_console.print("\n[bold cyan]Concurrency:[/bold cyan]")
     default_concurrency = current_config.get(
         "MAX_CONCURRENT_VIDEOS",
         str(DEFAULT_MAX_CONCURRENT_VIDEOS),
@@ -493,6 +551,7 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
     concurrency = _prompt_positive_int(
         "Max concurrent videos to process?",
         default_concurrency,
+        console=active_console,
     )
 
     new_config = {
@@ -502,10 +561,10 @@ def run_setup_wizard(force: bool = False) -> dict[str, str]:
         "MAX_CONCURRENT_VIDEOS": concurrency,
     }
 
-    save_config(new_config)
+    save_config(new_config, console=active_console)
 
-    console.print("\n[bold green]✓ Setup complete![/bold green]")
-    console.print(
+    active_console.print("\n[bold green]✓ Setup complete![/bold green]")
+    active_console.print(
         Panel(
             f"[dim]Selected model:[/dim] [cyan]{model}[/cyan]\n"
             f"[dim]Configuration saved to:[/dim] [cyan]{get_config_path()}[/cyan]\n\n"

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import deque
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -55,13 +56,13 @@ class _WorkerSlotManager:
     """Maps video IDs to dashboard worker slot indices (event-loop only)."""
 
     def __init__(self, concurrency: int) -> None:
-        self._available: list[int] = list(range(concurrency))
+        self._available: deque[int] = deque(range(concurrency))
         self._assigned: dict[str, int] = {}
 
     def acquire(self, video_id: str) -> int | None:
         """Assign the next available slot to *video_id*."""
         if self._available:
-            slot = self._available.pop(0)
+            slot = self._available.popleft()
             self._assigned[video_id] = slot
             return slot
         return None

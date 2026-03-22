@@ -6,6 +6,9 @@ import os
 from collections.abc import Callable
 from typing import Any
 
+import structlog
+from rich.markup import escape
+
 from yt_study.cli._context import CliProcessContext
 from yt_study.cli._formatters import print_cost_summary, print_run_summary
 from yt_study.cli._types import (
@@ -19,6 +22,8 @@ from yt_study.logging import get_session_log_path
 
 
 _DashboardStatusFn = Callable[[str, PipelineEvent], str]
+logger = structlog.get_logger(__name__)
+_TITLE_LIMIT = 40
 
 HEADLESS_LABELS: dict[EventType, str] = {
     EventType.METADATA_START: "Fetching metadata",
@@ -41,53 +46,54 @@ HEADLESS_LABELS: dict[EventType, str] = {
 }
 
 UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
-    EventType.METADATA_START: lambda title, _: (
-        f"[yellow]{title}... (Metadata)[/yellow]"
-    ),
-    EventType.METADATA_FETCHED: lambda title, _: f"[cyan]{title}... (Fetched)[/cyan]",
+    EventType.METADATA_START: lambda title, _: f"[yellow]{title}… (Metadata)[/yellow]",
+    EventType.METADATA_FETCHED: lambda title, _: f"[cyan]{title}… (Fetched)[/cyan]",
     EventType.TRANSCRIPT_FETCHING: lambda title, _: (
-        f"[cyan]> {title}... (Transcript)[/cyan]"
+        f"[cyan]> {title}… (Transcript)[/cyan]"
     ),
     EventType.TRANSCRIPT_FETCHED: lambda title, _: (
-        f"[green]OK {title}... (Transcript Ready)[/green]"
+        f"[green]OK {title}… (Transcript Ready)[/green]"
     ),
     EventType.GENERATION_START: lambda title, _: (
-        f"[cyan]* {title}... (Generating)[/cyan]"
+        f"[cyan]* {title}… (Generating)[/cyan]"
     ),
     EventType.CHUNK_GENERATING: lambda title, event: (
-        f"[cyan]* {title}... (Chunk {event.chunk_number}/{event.total_chunks})[/cyan]"
+        f"[cyan]* {title}… (Chunk {event.chunk_number}/{event.total_chunks})[/cyan]"
     ),
     EventType.GENERATION_COMBINING: lambda title, event: (
-        f"[cyan]* {title}... (Combining {event.total_chunks} note parts)[/cyan]"
+        f"[cyan]* {title}… (Combining {event.total_chunks} note parts)[/cyan]"
     ),
     EventType.CHAPTER_GENERATING: lambda title, event: (
-        f"[cyan]* {title}... (Ch {event.chapter_number}/{event.total_chapters})[/cyan]"
+        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters})[/cyan]"
     ),
     EventType.CHAPTER_CHUNK_GENERATING: lambda title, event: (
-        f"[cyan]* {title}... (Ch {event.chapter_number}/{event.total_chapters},"
+        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters},"
         f" Part {event.chunk_number}/{event.total_chunks})[/cyan]"
     ),
     EventType.CHAPTER_COMBINING: lambda title, event: (
-        f"[cyan]* {title}... (Ch {event.chapter_number}/{event.total_chapters},"
+        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters},"
         f" Combining {event.total_chunks} parts)[/cyan]"
     ),
-    EventType.QUIZ_GENERATING: lambda title, _: (
-        f"[magenta]* {title}... (Quiz)[/magenta]"
-    ),
+    EventType.QUIZ_GENERATING: lambda title, _: f"[magenta]* {title}… (Quiz)[/magenta]",
     EventType.QUIZ_CHUNK_GENERATING: lambda title, event: (
         "[magenta]* "
-        f"{title}... (Quiz Part {event.chunk_number}/{event.total_chunks})[/magenta]"
+        f"{title}… (Quiz Part {event.chunk_number}/{event.total_chunks})[/magenta]"
     ),
     EventType.QUIZ_COMBINING: lambda title, event: (
-        f"[magenta]* {title}... (Combining {event.total_chunks} quiz parts)[/magenta]"
+        f"[magenta]* {title}… (Combining {event.total_chunks} quiz parts)[/magenta]"
     ),
     EventType.QUIZ_COMPLETE: lambda title, _: (
-        f"[green]OK {title}... (Quiz Ready)[/green]"
+        f"[green]OK {title}… (Quiz Ready)[/green]"
     ),
     EventType.GENERATION_COMPLETE: lambda title, _: (
-        f"[green]OK {title}... (Generated)[/green]"
+        f"[green]OK {title}… (Generated)[/green]"
     ),
 }
+
+
+def _truncate_title(title: str, *, limit: int = _TITLE_LIMIT) -> str:
+    """Trim event titles to the dashboard width before status suffixes."""
+    return title[:limit] if len(title) > limit else title
 
 
 def use_transient_live_display() -> bool:
@@ -149,21 +155,30 @@ def build_ui_event_handler(
     slot_manager: _WorkerSlotManager,
 ) -> Callable[[PipelineEvent], None]:
     """Build the Rich dashboard event bridge for a single run."""
+    warned_slot_exhaustion: set[str] = set()
 
     def on_event(event: PipelineEvent) -> None:
         video_id = event.video_id
-        title = (event.title or video_id)[:40]
+        title = escape(_truncate_title(event.title or video_id))
         slot = slot_manager.get(video_id)
 
         if event.event_type == EventType.METADATA_START:
             assigned = slot_manager.acquire(video_id)
             if assigned is not None:
                 slot = assigned
+                warned_slot_exhaustion.discard(video_id)
                 if hasattr(dashboard, "clear_chapter_workers"):
                     dashboard.clear_chapter_workers(video_id)
                 status_fn = UI_STATUS_MAP.get(event.event_type)
                 if status_fn:
                     dashboard.update_worker(assigned, status_fn(title, event))
+            elif video_id not in warned_slot_exhaustion:
+                warned_slot_exhaustion.add(video_id)
+                logger.warning(
+                    "ui.worker_slot_exhausted",
+                    video_id=video_id,
+                    title=event.title or video_id,
+                )
 
         elif event.event_type in UI_STATUS_MAP and slot is not None:
             status_fn = UI_STATUS_MAP[event.event_type]
@@ -183,6 +198,7 @@ def build_ui_event_handler(
             EventType.VIDEO_SKIPPED,
             EventType.VIDEO_FAILED,
         ):
+            warned_slot_exhaustion.discard(video_id)
             released = slot_manager.release(video_id)
             if released is not None:
                 if hasattr(dashboard, "clear_chapter_workers"):

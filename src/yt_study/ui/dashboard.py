@@ -34,6 +34,11 @@ class PipelineDashboard:
     - Failures
     """
 
+    @staticmethod
+    def _truncate_title(title: str, *, limit: int) -> str:
+        """Clamp long titles to a UI-friendly width using a single ellipsis."""
+        return f"{title[:limit]}…" if len(title) > limit else title
+
     def __init__(
         self,
         total_videos: int,
@@ -112,20 +117,14 @@ class PipelineDashboard:
             self._chapter_slot_keys.append(None)
             self._chapter_slot_video_ids.append(None)
 
-    @staticmethod
-    def _format_status(status: str, style: str = "") -> str:
-        """Return one Rich task description string."""
-        return f"[{style}]{status}[/{style}]" if style else status
-
     def _set_task_description(
         self,
         progress: Progress,
         task_id: TaskID,
         status: str,
-        style: str = "",
     ) -> None:
         """Apply one worker description update."""
-        progress.update(task_id, description=self._format_status(status, style))
+        progress.update(task_id, description=status)
 
     def _chapter_slot_index(self, chapter_key: str) -> int | None:
         """Return the assigned slot index for one active chapter key."""
@@ -141,25 +140,23 @@ class PipelineDashboard:
         except ValueError:
             return None
 
-    def update_worker(self, index: int, status: str, style: str = "") -> None:
+    def update_worker(self, index: int, status: str) -> None:
         """
         Update a specific worker's status text.
 
         Args:
             index: Worker index (0-based).
             status: New status text.
-            style: Optional Rich style tag to wrap the text.
         """
         if 0 <= index < len(self.worker_tasks):
             task_id = self.worker_tasks[index]
-            self._set_task_description(self.worker_progress, task_id, status, style)
+            self._set_task_description(self.worker_progress, task_id, status)
 
     def start_chapter_worker(
         self,
         chapter_key: str,
         video_id: str,
         status: str,
-        style: str = "",
     ) -> None:
         """Assign a chapter to a visible chapter worker slot."""
         if not self.chapter_tasks:
@@ -175,14 +172,12 @@ class PipelineDashboard:
             self.chapter_progress,
             self.chapter_tasks[slot_index],
             status,
-            style,
         )
 
     def update_chapter_worker(
         self,
         chapter_key: str,
         status: str,
-        style: str = "",
     ) -> None:
         """Update one assigned chapter worker slot."""
         slot_index = self._chapter_slot_index(chapter_key)
@@ -192,7 +187,6 @@ class PipelineDashboard:
             self.chapter_progress,
             self.chapter_tasks[slot_index],
             status,
-            style,
         )
 
     def complete_chapter_worker(self, chapter_key: str) -> None:
@@ -279,19 +273,19 @@ class PipelineDashboard:
 
         has_activity = False
 
-        if self.recent_completions:
-            has_activity = True
-            for title in self.recent_completions:
-                display_title = title[:60] + "..." if len(title) > 60 else title
-                safe_title = escape(display_title)
-                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
-
         if self.recent_failures:
             has_activity = True
             for title in self.recent_failures:
-                display_title = title[:60] + "..." if len(title) > 60 else title
+                display_title = self._truncate_title(title, limit=60)
                 safe_title = escape(display_title)
                 completed_table.add_row(f"[red]✗[/red] [dim]{safe_title}[/]")
+
+        if self.recent_completions:
+            has_activity = True
+            for title in self.recent_completions:
+                display_title = self._truncate_title(title, limit=60)
+                safe_title = escape(display_title)
+                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
 
         if not has_activity:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
