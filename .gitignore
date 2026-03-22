@@ -10,7 +10,6 @@ wheels/
 .venv
 .env
 .opencode/
-*cache*
 nul
 .coverage
 drafts/
@@ -28,3 +27,8 @@ codex*
 *tmp*
 *.log
 *codex*
+cookies.txt
+*.txt
+.context-mem
+output
+*_cache

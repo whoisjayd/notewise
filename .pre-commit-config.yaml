@@ -44,9 +44,9 @@ repos:
         entry: scripts/hooks/check-single-line-commit.sh
         language: script
         stages: [commit-msg]
-      - id: mypy
-        name: mypy (src/yt_study)
-        entry: uv run mypy src/yt_study
+      - id: ty
+        name: ty (src/yt_study)
+        entry: uv run ty check src/yt_study
         language: system
         pass_filenames: false
         types: [python]
@@ -57,7 +57,7 @@ repos:
         pass_filenames: false
       - id: pytest-fast
         name: pytest fast (pre-push)
-        entry: uv run --no-sync python -m pytest tests -q
+        entry: uv run --no-sync python -m pytest tests -q -n auto --dist=loadfile
         language: system
         pass_filenames: false
         stages: [pre-push]

@@ -34,8 +34,18 @@ class PipelineDashboard:
     - Failures
     """
 
+    @staticmethod
+    def _truncate_title(title: str, *, limit: int) -> str:
+        """Clamp long titles to a UI-friendly width using a single ellipsis."""
+        return f"{title[:limit]}…" if len(title) > limit else title
+
     def __init__(
-        self, total_videos: int, concurrency: int, playlist_name: str, model_name: str
+        self,
+        total_videos: int,
+        concurrency: int,
+        playlist_name: str,
+        model_name: str,
+        chapter_concurrency: int = 0,
     ):
         """
         Initialize the dashboard.
@@ -48,8 +58,12 @@ class PipelineDashboard:
         """
         self.playlist_name = playlist_name
         self.model_name = model_name
+        self.chapter_concurrency = max(0, chapter_concurrency)
         self.recent_completions: deque[str] = deque(maxlen=3)
         self.recent_failures: deque[str] = deque(maxlen=3)
+        self.skipped_count = 0
+        self.completed_count = 0
+        self.failed_count = 0
 
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
@@ -85,19 +99,120 @@ class PipelineDashboard:
             )
             self.worker_tasks.append(tid)
 
-    def update_worker(self, index: int, status: str, style: str = "") -> None:
+        # 3. Chapter worker progress bars, partitioned under each video worker.
+        self.chapter_progress = Progress(
+            TextColumn("[bold magenta]{task.fields[label]}[/bold magenta]"),
+            SpinnerColumn(),
+            TextColumn("{task.description}"),
+            expand=True,
+        )
+        self.chapter_tasks: list[TaskID] = []
+        self._chapter_slot_keys: list[str | None] = []
+        self._chapter_slot_video_ids: list[str | None] = []
+        for chapter_index in range(self.chapter_concurrency):
+            prefix = "└──" if chapter_index == self.chapter_concurrency - 1 else "├──"
+            task_id = self.chapter_progress.add_task(
+                "[dim]Idle[/dim]",
+                label=f"{prefix} Worker {chapter_index + 1}",
+                chapter_slot=chapter_index + 1,
+            )
+            self.chapter_tasks.append(task_id)
+            self._chapter_slot_keys.append(None)
+            self._chapter_slot_video_ids.append(None)
+
+    def _set_task_description(
+        self,
+        progress: Progress,
+        task_id: TaskID,
+        status: str,
+    ) -> None:
+        """Apply one worker description update."""
+        progress.update(task_id, description=status)
+
+    def _chapter_slot_index(self, chapter_key: str) -> int | None:
+        """Return the assigned slot index for one active chapter key."""
+        try:
+            return self._chapter_slot_keys.index(chapter_key)
+        except ValueError:
+            return None
+
+    def _first_free_chapter_slot(self) -> int | None:
+        """Return the first available chapter slot index."""
+        try:
+            return self._chapter_slot_keys.index(None)
+        except ValueError:
+            return None
+
+    def update_worker(self, index: int, status: str) -> None:
         """
         Update a specific worker's status text.
 
         Args:
             index: Worker index (0-based).
             status: New status text.
-            style: Optional Rich style tag to wrap the text.
         """
         if 0 <= index < len(self.worker_tasks):
             task_id = self.worker_tasks[index]
-            description = f"[{style}]{status}[/{style}]" if style else status
-            self.worker_progress.update(task_id, description=description)
+            self._set_task_description(self.worker_progress, task_id, status)
+
+    def start_chapter_worker(
+        self,
+        chapter_key: str,
+        video_id: str,
+        status: str,
+    ) -> None:
+        """Assign a chapter to a visible chapter worker slot."""
+        if not self.chapter_tasks:
+            return
+        slot_index = self._chapter_slot_index(chapter_key)
+        if slot_index is None:
+            slot_index = self._first_free_chapter_slot()
+        if slot_index is None:
+            return
+        self._chapter_slot_keys[slot_index] = chapter_key
+        self._chapter_slot_video_ids[slot_index] = video_id
+        self._set_task_description(
+            self.chapter_progress,
+            self.chapter_tasks[slot_index],
+            status,
+        )
+
+    def update_chapter_worker(
+        self,
+        chapter_key: str,
+        status: str,
+    ) -> None:
+        """Update one assigned chapter worker slot."""
+        slot_index = self._chapter_slot_index(chapter_key)
+        if slot_index is None:
+            return
+        self._set_task_description(
+            self.chapter_progress,
+            self.chapter_tasks[slot_index],
+            status,
+        )
+
+    def complete_chapter_worker(self, chapter_key: str) -> None:
+        """Release one chapter worker slot back to idle."""
+        slot_index = self._chapter_slot_index(chapter_key)
+        if slot_index is None:
+            return
+        self._chapter_slot_keys[slot_index] = None
+        self._chapter_slot_video_ids[slot_index] = None
+        self.chapter_progress.update(
+            self.chapter_tasks[slot_index],
+            description="[dim]Idle[/dim]",
+        )
+
+    def clear_chapter_workers(self, video_id: str | None = None) -> None:
+        """Reset all chapter worker slots, optionally only for one video."""
+        for slot_index, task_id in enumerate(self.chapter_tasks):
+            slot_video_id = self._chapter_slot_video_ids[slot_index]
+            if video_id is not None and slot_video_id != video_id:
+                continue
+            self._chapter_slot_keys[slot_index] = None
+            self._chapter_slot_video_ids[slot_index] = None
+            self.chapter_progress.update(task_id, description="[dim]Idle[/dim]")
 
     def add_completion(self, title: str) -> None:
         """
@@ -107,6 +222,10 @@ class PipelineDashboard:
             title: Title of the completed video.
         """
         self.recent_completions.appendleft(title)
+        if title.endswith(" (skipped)"):
+            self.skipped_count += 1
+        else:
+            self.completed_count += 1
         self.overall_progress.advance(self.overall_task)
 
     def add_failure(self, title: str) -> None:
@@ -117,6 +236,7 @@ class PipelineDashboard:
             title: Title of the failed video.
         """
         self.recent_failures.appendleft(title)
+        self.failed_count += 1
         # We assume failures still count towards "processing done" so we
         # advance the bar.
         self.overall_progress.advance(self.overall_task)
@@ -161,19 +281,19 @@ class PipelineDashboard:
 
         has_activity = False
 
-        if self.recent_completions:
-            has_activity = True
-            for title in self.recent_completions:
-                display_title = title[:60] + "..." if len(title) > 60 else title
-                safe_title = escape(display_title)
-                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
-
         if self.recent_failures:
             has_activity = True
             for title in self.recent_failures:
-                display_title = title[:60] + "..." if len(title) > 60 else title
+                display_title = self._truncate_title(title, limit=60)
                 safe_title = escape(display_title)
                 completed_table.add_row(f"[red]✗[/red] [dim]{safe_title}[/]")
+
+        if self.recent_completions:
+            has_activity = True
+            for title in self.recent_completions:
+                display_title = self._truncate_title(title, limit=60)
+                safe_title = escape(display_title)
+                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
 
         if not has_activity:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
@@ -201,16 +321,23 @@ class PipelineDashboard:
                 ]
             )
 
+        has_active_chapter_workers = any(
+            key is not None for key in self._chapter_slot_keys
+        )
+        if self.chapter_tasks and has_active_chapter_workers:
+            elements.extend(
+                [
+                    Text("🧩 Chapter Tasks", style="bold white"),
+                    self.chapter_progress,
+                    Rule(style="dim"),
+                ]
+            )
+
         elements.extend(
             [Text("✅ Recent Activity", style="bold white"), completed_table]
         )
 
-        # Type casting for Group
-        # Elements are mixed types (Table, Rule, Progress, Text) which
-        # satisfy RenderableType
-        # but mypy struggles with the list inference
-
-        body = Group(*elements)  # type: ignore
+        body = Group(*elements)
 
         return Panel(
             body,

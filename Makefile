@@ -13,8 +13,9 @@ ifeq ($(OS),Windows_NT)
 	RM_FILE := del /Q /F
 	RM_DIR := rmdir /S /Q
 	FIND_PYCACHE := for /d /r . %%d in (__pycache__) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
-	FIND_CACHE := for /d /r . %%d in (.ruff_cache .mypy_cache .pytest_cache) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
+	FIND_CACHE := for /d /r . %%d in (.ruff_cache .ty_cache .pytest_cache) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
 	FIND_EGG := for /d /r . %%d in (*.egg-info) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
+	FIND_EMPTY_DIRS := powershell -NoProfile -Command "Get-ChildItem -Directory -Recurse | Where-Object { (Get-ChildItem -Force -LiteralPath $${PSItem}.FullName | Measure-Object).Count -eq 0 -and $${PSItem}.FullName -notmatch '\\.venv\\' } | Sort-Object FullName -Descending | ForEach-Object { Remove-Item -LiteralPath $${PSItem}.FullName -Force -Recurse }"
 	FIND_PYC := del /S /Q *.pyc *.pyo 2>$(DEVNULL) || echo >$(DEVNULL)
 	CHECK_DIR = @if exist $(1) $(RM_DIR) $(1) 2>$(DEVNULL)
 	CHECK_FILE = @if exist $(1) $(RM_FILE) $(1) 2>$(DEVNULL)
@@ -27,8 +28,9 @@ else
 	RM_FILE := rm -f
 	RM_DIR := rm -rf
 	FIND_PYCACHE := find . -type d -name "__pycache__" -exec rm -rf {} + 2>$(DEVNULL) || true
-	FIND_CACHE := find . -type d \( -name ".ruff_cache" -o -name ".mypy_cache" -o -name ".pytest_cache" \) -exec rm -rf {} + 2>$(DEVNULL) || true
+	FIND_CACHE := find . -type d \( -name ".ruff_cache" -o -name ".ty_cache" -o -name ".pytest_cache" \) -exec rm -rf {} + 2>$(DEVNULL) || true
 	FIND_EGG := find . -type d -name "*.egg-info" -exec rm -rf {} + 2>$(DEVNULL) || true
+	FIND_EMPTY_DIRS := find . -type d -empty -not -path "./.venv/*" -not -path "./.venv" -exec rmdir {} + 2>$(DEVNULL) || true
 	FIND_PYC := find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>$(DEVNULL) || true
 	CHECK_DIR = @$(RM_DIR) $(1) 2>$(DEVNULL) || true
 	CHECK_FILE = @$(RM_FILE) $(1) 2>$(DEVNULL) || true
@@ -54,8 +56,9 @@ UV_RUN := $(UV) run
 PIP := $(UV) pip
 PRE_COMMIT := $(UV_RUN) pre-commit
 RUFF := $(UV_RUN) ruff
-MYPY := $(UV_RUN) mypy
+TY := $(UV_RUN) ty
 PYTEST := $(UV) run --no-sync python -m pytest
+PYTEST_PARALLEL_FLAGS := -n auto --dist=loadfile
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
 
@@ -81,9 +84,9 @@ CLEAN_TARGETS := clean-cache clean-build clean-test
 # ==============================================================================
 .PHONY: help sync install install-dev dev-setup \
 	format format-check lint lint-check type-check deps-check security \
-	check verify audit quality pre-commit \
+	check verify fix audit quality pre-commit \
 	hooks-install hooks-run \
-	test test-fast test-cov test-watch test-failed test-verbose \
+	test test-unit test-integration test-fast test-cov test-watch test-failed test-verbose \
 	coverage-open \
 	build publish publish-test \
 	show-deps show-outdated update-deps \
@@ -108,9 +111,10 @@ help: ## Show all developer tasks
 	@echo "  format-check  Check code formatting"
 	@echo "  lint          Run ruff with auto-fix"
 	@echo "  lint-check    Run ruff without auto-fix"
-	@echo "  type-check    Run mypy type checker"
+	@echo "  type-check    Run ty type checker"
 	@echo "  deps-check    Detect unused/missing dependencies"
 	@echo "  security      Run bandit security scan"
+	@echo "  fix           Auto-fix formatting and lint issues"
 	@echo "  check         Run all quality checks (CI-safe)"
 	@echo "  verify        Run all quality checks with auto-fixes"
 	@echo "  audit         Run deps-check + security"
@@ -121,6 +125,8 @@ help: ## Show all developer tasks
 	@echo ""
 	@echo "Testing:"
 	@echo "  test          Run full test suite"
+	@echo "  test-unit     Run unit tests with coverage"
+	@echo "  test-integration Run integration tests"
 	@echo "  test-fast     Run tests in quiet mode"
 	@echo "  test-cov      Run tests with coverage report"
 	@echo "  coverage-open Generate and open HTML coverage report"
@@ -186,7 +192,7 @@ lint-check: ## Run ruff without auto-fix
 # Code Quality - Type Checking & Security
 # ==============================================================================
 type-check: ## Run static type checks
-	$(MYPY) $(PKG_DIR)
+	$(TY) check $(PKG_DIR)
 
 deps-check: ## Detect unused/missing dependencies
 	$(DEPTRY) $(SRC_DIR)
@@ -202,6 +208,8 @@ check: $(QUALITY_CHECK_TARGETS) ## Run all quality checks (CI-safe)
 quality: check ## Alias for check
 
 verify: $(QUALITY_FIX_TARGETS) ## Run all quality checks with auto-fixes
+
+fix: format lint ## Auto-fix formatting and lint issues
 
 audit: deps-check security ## Run dependency and security audits
 
@@ -221,14 +229,26 @@ pre-commit: check test-fast ## Run checks + fast tests before commit
 # Testing
 # ==============================================================================
 test: ## Run full test suite
-	$(PYTEST) $(TEST_DIR) -v
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -v
+
+test-unit: ## Run unit tests with coverage
+	$(PYTEST) $(TEST_DIR)/unit \
+		$(PYTEST_PARALLEL_FLAGS) \
+		--cov=$(PKG_DIR) \
+		--cov-report=term-missing \
+		-v
+
+test-integration: ## Run integration tests
+	$(PYTEST) $(TEST_DIR)/integration $(PYTEST_PARALLEL_FLAGS) -v
 
 test-fast: ## Run tests in quiet mode
-	$(PYTEST) $(TEST_DIR) -q
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -q
 
 test-cov: ## Run tests with coverage report
 	$(PYTEST) $(TEST_DIR) \
+		$(PYTEST_PARALLEL_FLAGS) \
 		--cov=$(PKG_DIR) \
+		--cov-fail-under=90 \
 		--cov-report=term-missing \
 		--cov-report=xml \
 		--cov-report=html \
@@ -245,7 +265,7 @@ test-watch: ## Run tests in watch mode
 	$(UV_RUN) ptw $(TEST_DIR) -v
 
 test-failed: ## Re-run only failed tests
-	$(PYTEST) $(TEST_DIR) --lf -v
+	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) --lf -v
 
 test-verbose: ## Run tests with maximal verbosity
 	$(PYTEST) $(TEST_DIR) -vv -s
@@ -295,7 +315,10 @@ clean-test: ## Remove test artifacts
 	$(call CHECK_FILE,.coverage)
 	$(call CHECK_FILE,coverage.xml)
 
-clean: $(CLEAN_TARGETS) ## Remove all generated files
+clean-empty-dirs: ## Remove empty directories created by build and refactor churn
+	@$(FIND_EMPTY_DIRS)
+
+clean: $(CLEAN_TARGETS) clean-empty-dirs ## Remove all generated files
 
 clean-all: clean ## Remove generated files and virtualenvs
 	$(call CHECK_DIR,.venv)
@@ -311,7 +334,7 @@ info: ## Show tool and interpreter versions
 	@$(PYTHON_CMD) --version 2>$(DEVNULL) || echo "Python: not found"
 	@$(UV) --version 2>$(DEVNULL) || echo "uv: not found"
 	@$(RUFF) --version 2>$(DEVNULL) || echo "ruff: not found"
-	@$(MYPY) --version 2>$(DEVNULL) || echo "mypy: not found"
+	@$(TY) --version 2>$(DEVNULL) || echo "ty: not found"
 	@$(PYTEST) --version 2>$(DEVNULL) || echo "pytest: not found"
 
 # ==============================================================================

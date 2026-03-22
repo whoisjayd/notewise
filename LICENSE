@@ -1,6 +1,7 @@
-MIT License
+MIT License with Attribution Requirement
 
-Copyright (c) 2026 yt-study contributors
+Copyright (c) 2026 whoisjayd (https://github.com/whoisjayd)
+Repository: https://github.com/whoisjayd/yt-study
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -9,8 +10,28 @@ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
 copies of the Software, and to permit persons to whom the Software is
 furnished to do so, subject to the following conditions:
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+1.  ATTRIBUTION REQUIREMENT — If you use, distribute, embed, or build upon
+    this Software (or any substantial portion of it) in a project, product,
+    service, publication, or derivative work, you MUST:
+
+    a) Retain this copyright notice and license in all copies or substantial
+    portions of the Software.
+
+    b) Provide clear, visible credit to the original project in your
+    documentation, README, about page, or wherever attribution is
+    customarily given. The credit must include: - The project name: yt-study - The author: whoisjayd - A direct link to: https://github.com/whoisjayd/yt-study
+
+    Example attribution (adapt the format to your context):
+
+         "Powered by yt-study (https://github.com/whoisjayd/yt-study)
+          by whoisjayd, used under the MIT License with Attribution."
+
+    c) Not misrepresent the origin of the Software or claim authorship
+    of the original work.
+
+2.  The above copyright notice, this permission notice, and the attribution
+    requirement shall be included in all copies or substantial portions of
+    the Software.
 
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
 IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
@@ -19,3 +40,18 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+───────────────────────────────────────────────────────────────────────────────
+
+SUMMARY (not a substitute for the full license above):
+
+✅ Free to use personally, commercially, and in open-source projects
+✅ Free to modify and distribute
+✅ Free to sublicense
+✅ Free for private/internal, non-distributed use
+❗ Must credit yt-study + link to repo when distributing or publishing
+❗ Must include this license in copies or substantial portions
+❌ Cannot claim original authorship
+❌ No warranty provided
+
+───────────────────────────────────────────────────────────────────────────────

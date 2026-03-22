@@ -1,0 +1,371 @@
+"""Tests for LLM provider integration."""
+
+import logging
+from unittest.mock import MagicMock, patch
+
+import pytest
+
+from yt_study.errors import LLMGenerationError
+from yt_study.llm import provider as provider_mod
+from yt_study.llm.provider import (
+    LLMProvider,
+    UsageTotals,
+    _configure_litellm_runtime,
+    _summarize_error,
+    get_provider,
+)
+
+
+class TestLLMProvider:
+    """Test LLMProvider class."""
+
+    def test_init_validation(self, mock_config):  # noqa: ARG002
+        """Test initialization validates config."""
+        # Should verify key existence (via logging or just passing)
+        # Config fixture sets dummy keys, so this should pass
+        provider = LLMProvider(model="gemini/gemini-pro")
+        assert provider.model == "gemini/gemini-pro"
+
+    @pytest.mark.asyncio
+    async def test_generate_success(self):
+        """Test successful generation."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            # Setup mock response
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            result = await provider.generate("sys", "user")
+
+            assert result == "Generated content"
+            mock_acompletion.assert_called_once()
+
+            # Verify args passed to litellm
+            args, kwargs = mock_acompletion.call_args
+            assert kwargs["model"] == "gpt-4o"
+            assert kwargs["messages"] == [
+                {"role": "system", "content": "sys"},
+                {"role": "user", "content": "user"},
+            ]
+
+    @pytest.mark.asyncio
+    async def test_generate_cleanup_markdown(self):
+        """Test cleaning of markdown code blocks from response."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            # LLM returns content wrapped in ```markdown ... ```
+            mock_response.choices[
+                0
+            ].message.content = "```markdown\n# Title\nContent\n```"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            result = await provider.generate("sys", "user")
+
+            assert result == "# Title\nContent"
+
+    @pytest.mark.asyncio
+    async def test_generate_normalizes_block_content_payloads(self):
+        """Structured content blocks should be normalized into plain text."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = [
+                {"type": "text", "text": "First paragraph"},
+                {"type": "output_text", "text": "Second paragraph"},
+            ]
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            result = await provider.generate("sys", "user")
+
+            assert result == "First paragraph\nSecond paragraph"
+
+    @pytest.mark.asyncio
+    async def test_generate_collects_usage_from_litellm_response(self):
+        """Provider should accumulate prompt/completion metrics from response usage."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch(
+                "yt_study.llm.provider.completion_cost",
+                return_value=0.0042,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage.prompt_tokens = 12
+            mock_response.usage.completion_tokens = 34
+            mock_response.usage.total_tokens = 46
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            with provider.collect_usage() as usage:
+                await provider.generate("sys", "user")
+
+            assert usage == UsageTotals(
+                prompt_tokens=12,
+                completion_tokens=34,
+                total_tokens=46,
+                cost_usd=0.0042,
+            )
+
+    @pytest.mark.asyncio
+    async def test_generate_usage_defaults_to_zero_when_missing(self):
+        """Missing usage metadata should not break generation metrics collection."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage = None
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            with provider.collect_usage() as usage:
+                await provider.generate("sys", "user")
+
+            assert usage == UsageTotals()
+
+    @pytest.mark.asyncio
+    async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
+        """Nested usage scopes should preserve inner totals in the outer collector."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch(
+                "yt_study.llm.provider.completion_cost",
+                return_value=0.0025,
+            ),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_response.usage.prompt_tokens = 10
+            mock_response.usage.completion_tokens = 20
+            mock_response.usage.total_tokens = 30
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+
+            with (
+                provider.collect_usage() as outer,
+                provider.collect_usage() as inner,
+            ):
+                await provider.generate("sys", "user")
+
+            assert inner == UsageTotals(
+                prompt_tokens=10,
+                completion_tokens=20,
+                total_tokens=30,
+                cost_usd=0.0025,
+            )
+            assert outer == inner
+
+    @pytest.mark.asyncio
+    async def test_generate_failure(self):
+        """Test generation failure raises custom exception."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_acompletion.side_effect = Exception("API Error")
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError, match="Failed to generate"):
+                await provider.generate("sys", "user")
+
+    @pytest.mark.asyncio
+    async def test_generate_failure_sanitizes_logged_and_raised_error(self):
+        """Provider failures should keep details without leaking raw credentials."""
+        secret = "AIza" + "C" * 32
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("yt_study.llm.provider.logger.error") as mock_log_error,
+        ):
+            mock_acompletion.side_effect = Exception(f"gemini_api_key={secret}")
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError) as exc:
+                await provider.generate("sys", "user")
+
+        assert secret not in str(exc.value)
+        assert "[REDACTED]" in str(exc.value)
+        assert mock_log_error.call_args.kwargs["error_type"] == "Exception"
+        assert secret not in mock_log_error.call_args.kwargs["error"]
+        assert "[REDACTED]" in mock_log_error.call_args.kwargs["error"]
+
+    @pytest.mark.asyncio
+    async def test_generate_reraises_existing_llm_generation_error(self):
+        """Domain errors should not be double-wrapped by the provider."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_acompletion.side_effect = LLMGenerationError("already normalized")
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError, match="already normalized") as exc:
+                await provider.generate("sys", "user")
+
+        assert str(exc.value) == "already normalized"
+
+    @pytest.mark.asyncio
+    async def test_generate_forwards_zero_max_tokens(self):
+        """Explicit max_tokens=0 should still be forwarded to LiteLLM."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user", max_tokens=0)
+
+        assert mock_acompletion.call_args.kwargs["max_tokens"] == 0
+
+    @pytest.mark.asyncio
+    async def test_generate_forwards_positive_max_tokens(self):
+        """Explicit positive max_tokens should be forwarded to LiteLLM."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user", max_tokens=1)
+
+        assert mock_acompletion.call_args.kwargs["max_tokens"] == 1
+
+    def test_get_provider_factory(self):
+        """Test factory function."""
+        provider = get_provider("claude-3")
+        assert isinstance(provider, LLMProvider)
+        assert provider.model == "claude-3"
+
+    def test_extract_usage_supports_dict_payloads(self):
+        """Usage extraction should work for dict-like LiteLLM responses too."""
+        provider = LLMProvider("gpt-4o")
+        prompt, completion, total = provider._extract_usage(
+            {
+                "usage": {
+                    "prompt_tokens": 4,
+                    "completion_tokens": 8,
+                }
+            }
+        )
+
+        assert prompt == 4
+        assert completion == 8
+        assert total == 12
+
+    def test_extract_cost_returns_zero_when_litellm_raises(self):
+        """Cost extraction should fail closed when LiteLLM pricing lookup fails."""
+        provider = LLMProvider("gpt-4o")
+        response = MagicMock()
+        with patch(
+            "yt_study.llm.provider.completion_cost",
+            side_effect=RuntimeError("missing price map"),
+        ):
+            assert provider._extract_cost(response) == 0.0
+
+    def test_validate_config_logs_debug_for_unknown_provider(self):
+        """Unmapped models should log a debug hint instead of requiring a known key."""
+        with (
+            patch.object(
+                type(provider_mod.config._get_instance()),
+                "get_api_key_name_for_model",
+                return_value=None,
+            ),
+            patch("yt_study.llm.provider.logger.debug") as mock_debug,
+        ):
+            LLMProvider("custom/local-model")
+
+        mock_debug.assert_called_once()
+
+    def test_summarize_error_truncates_long_messages(self):
+        """Very long error messages should be clipped to the summary limit."""
+        summary = _summarize_error(Exception("x" * 600))
+        assert summary.endswith("...")
+        assert len(summary) == 502
+
+    def test_configure_litellm_runtime_handles_missing_verbose_logger(self):
+        """LiteLLM runtime setup should tolerate missing verbose logger objects."""
+        runtime = MagicMock()
+        runtime.verbose_logger = None
+
+        with patch("yt_study.llm.provider.litellm", runtime):
+            _configure_litellm_runtime()
+
+        assert runtime.set_verbose is False
+        assert runtime.suppress_debug_info is True
+
+    def test_configure_litellm_runtime_sets_verbose_logger_level(self):
+        """Verbose LiteLLM loggers should be forced to error-only mode."""
+        runtime = MagicMock()
+        runtime.verbose_logger = MagicMock()
+
+        with patch("yt_study.llm.provider.litellm", runtime):
+            _configure_litellm_runtime()
+
+        runtime.verbose_logger.setLevel.assert_called_once_with(logging.ERROR)
+        assert runtime.verbose_logger.propagate is False
+
+    def test_extract_usage_handles_invalid_values(self):
+        """Non-numeric usage payloads should fail closed to zero values."""
+        provider = LLMProvider("gpt-4o")
+        prompt, completion, total = provider._extract_usage(
+            {
+                "usage": {
+                    "prompt_tokens": "bad",
+                    "completion_tokens": object(),
+                    "total_tokens": None,
+                }
+            }
+        )
+
+        assert (prompt, completion, total) == (0, 0, 0)
+
+    def test_clean_content_handles_opening_fence_without_closing_fence(self):
+        """Single-sided code fences should still drop the opening fence line."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._clean_content("```markdown\nBody\n") == "Body"
+
+    def test_normalize_content_handles_none_and_nested_payloads(self):
+        """Nested block payloads should flatten into plain text safely."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._normalize_content(None) == ""
+        assert (
+            provider._normalize_content(
+                [
+                    {"content": {"text": "First"}},
+                    MagicMock(text="Second"),
+                    MagicMock(value="Third"),
+                ]
+            )
+            == "First\nSecond\nThird"
+        )
+
+    def test_normalize_content_ignores_unsupported_payloads(self):
+        """Unsupported block shapes should be ignored instead of stringified."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._normalize_content([{"foo": "bar"}, object()]) == ""
