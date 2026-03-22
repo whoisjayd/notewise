@@ -18,6 +18,12 @@ class VideoRecord(Base):
     id: Mapped[str] = mapped_column(String, primary_key=True, index=True)
     title: Mapped[str] = mapped_column(String, nullable=False)
     duration: Mapped[int] = mapped_column(Integer, nullable=False)
+    cached_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
 
     transcripts: Mapped[list[TranscriptRecord]] = relationship(
         back_populates="video", cascade="all, delete-orphan"

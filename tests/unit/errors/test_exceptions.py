@@ -148,6 +148,11 @@ class TestFormatUserError:
         msg = format_user_error(Exception("429 too many requests"))
         assert "rate" in msg.lower() or "limit" in msg.lower()
 
+    def test_auth_message_wins_over_permission_denied_wording(self):
+        msg = format_user_error(RuntimeError("Permission denied: invalid API key"))
+        assert "api key" in msg.lower()
+        assert "output files" not in msg.lower()
+
     def test_unknown_error_fallback(self):
         msg = format_user_error(RuntimeError("something weird happened"))
         assert len(msg) > 0

@@ -2,9 +2,20 @@
 
 from __future__ import annotations
 
+import os
+import time
+
 import structlog
 
-from yt_study.logging import configure_logging, redact_sensitive_text
+import yt_study.logging as logging_module
+from yt_study.logging import configure_logging, prune_log_files, redact_sensitive_text
+
+
+def _reset_logging_state() -> None:
+    logging_module._SESSION_LOG_PATH = None
+    logging_module._LOGGING_CONFIGURED = False
+    root_logger = logging_module.logging.getLogger()
+    root_logger.handlers.clear()
 
 
 def test_redact_sensitive_text_masks_common_secret_shapes():
@@ -23,6 +34,7 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
 
 def test_configure_logging_writes_plain_redacted_tracebacks(tmp_path):
     """Session logs should stay readable and redact sensitive structured values."""
+    _reset_logging_state()
     log_path = configure_logging(state_dir=tmp_path)
     assert log_path is not None
 
@@ -51,3 +63,39 @@ def test_configure_logging_writes_plain_redacted_tracebacks(tmp_path):
     assert "[REDACTED]" in text
     assert "Traceback (most recent call last)" in text
     assert "╭" not in text
+
+
+def test_configure_logging_is_idempotent(tmp_path):
+    """Repeated configure calls should reuse one session log file."""
+    _reset_logging_state()
+    first = configure_logging(state_dir=tmp_path)
+    second = configure_logging(state_dir=tmp_path)
+
+    assert first is not None
+    assert second == first
+    assert logging_module.get_session_log_path() == first
+    assert len(list((tmp_path / "logs").glob("*.log"))) == 1
+
+
+def test_prune_log_files_removes_only_old_inactive_logs(tmp_path):
+    """Log pruning should skip the active session log and remove stale files."""
+    _reset_logging_state()
+    active = configure_logging(state_dir=tmp_path)
+    assert active is not None
+    log_dir = tmp_path / "logs"
+    stale = log_dir / "stale.log"
+    fresh = log_dir / "fresh.log"
+    stale.write_text("old", encoding="utf-8")
+    fresh.write_text("new", encoding="utf-8")
+
+    old_time = time.time() - (10 * 24 * 60 * 60)
+    fresh_time = time.time() - (1 * 24 * 60 * 60)
+    os.utime(stale, (old_time, old_time))
+    os.utime(fresh, (fresh_time, fresh_time))
+
+    deleted = prune_log_files(older_than_days=7, state_dir=tmp_path)
+
+    assert deleted == 1
+    assert active.exists()
+    assert not stale.exists()
+    assert fresh.exists()

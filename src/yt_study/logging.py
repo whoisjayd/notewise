@@ -10,8 +10,9 @@ from __future__ import annotations
 import logging
 import os
 import re
+import threading
 from collections.abc import Mapping, MutableMapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -22,6 +23,8 @@ from yt_study._constants import LOGS_DIR_NAME, SESSION_LOG_PREFIX, STATE_DIR_NAM
 
 _NOISY_LOGGERS = ("LiteLLM", "litellm", "httpx", "httpcore")
 _SESSION_LOG_PATH: Path | None = None
+_LOGGING_LOCK = threading.Lock()
+_LOGGING_CONFIGURED = False
 _REDACTED = "[REDACTED]"
 _SENSITIVE_KEY_NAMES = frozenset(
     {
@@ -117,7 +120,45 @@ def _redact_event_dict(
 
 def get_session_log_path() -> Path | None:
     """Return the current session log file path, if configured."""
-    return _SESSION_LOG_PATH
+    with _LOGGING_LOCK:
+        return _SESSION_LOG_PATH
+
+
+def get_log_dir(state_dir: Path | None = None) -> Path:
+    """Return the directory that stores yt-study session logs."""
+    base = state_dir or (Path.home() / STATE_DIR_NAME)
+    return base / LOGS_DIR_NAME
+
+
+def prune_log_files(
+    *,
+    older_than_days: int = 7,
+    state_dir: Path | None = None,
+) -> int:
+    """Remove old session log files while keeping the active session log intact."""
+    log_dir = get_log_dir(state_dir)
+    if not log_dir.exists():
+        return 0
+
+    cutoff = datetime.now() - timedelta(days=max(older_than_days, 0))
+    deleted = 0
+    with _LOGGING_LOCK:
+        active_log = _SESSION_LOG_PATH
+        for log_path in log_dir.glob("*.log"):
+            if active_log is not None and log_path.resolve() == active_log.resolve():
+                continue
+            try:
+                modified = datetime.fromtimestamp(log_path.stat().st_mtime)
+            except OSError:
+                continue
+            if modified >= cutoff:
+                continue
+            try:
+                log_path.unlink()
+                deleted += 1
+            except OSError:
+                continue
+    return deleted
 
 
 def configure_logging(
@@ -137,68 +178,68 @@ def configure_logging(
     Returns:
         Path to the session log file, or None if file logging is unavailable.
     """
-    global _SESSION_LOG_PATH
+    global _LOGGING_CONFIGURED, _SESSION_LOG_PATH
     del env
+    with _LOGGING_LOCK:
+        if _LOGGING_CONFIGURED:
+            return _SESSION_LOG_PATH
 
-    # Suppress noisy third-party loggers early
-    os.environ.setdefault("LITELLM_LOG", "ERROR")
-    for name in _NOISY_LOGGERS:
-        logging.getLogger(name).setLevel(logging.ERROR)
-    logging.getLogger("httpx").setLevel(logging.WARNING)
+        # Suppress noisy third-party loggers early
+        os.environ.setdefault("LITELLM_LOG", "ERROR")
+        for name in _NOISY_LOGGERS:
+            logging.getLogger(name).setLevel(logging.ERROR)
+        logging.getLogger("httpx").setLevel(logging.WARNING)
 
-    # Shared processors applied to every log record
-    shared_processors: list[structlog.types.Processor] = [
-        structlog.contextvars.merge_contextvars,
-        structlog.stdlib.add_log_level,
-        structlog.stdlib.add_logger_name,
-        structlog.processors.TimeStamper(fmt="iso"),
-        structlog.processors.StackInfoRenderer(),
-        structlog.processors.format_exc_info,
-        _redact_event_dict,
-    ]
+        # Shared processors applied to every log record
+        shared_processors: list[structlog.types.Processor] = [
+            structlog.contextvars.merge_contextvars,
+            structlog.stdlib.add_log_level,
+            structlog.stdlib.add_logger_name,
+            structlog.processors.TimeStamper(fmt="iso"),
+            structlog.processors.StackInfoRenderer(),
+            structlog.processors.format_exc_info,
+            _redact_event_dict,
+        ]
 
-    # File logs should stay plain-text and editor-friendly.
-    formatter = structlog.stdlib.ProcessorFormatter(
-        processor=structlog.processors.KeyValueRenderer(
-            sort_keys=False,
-            key_order=["timestamp", "level", "logger", "event"],
-        ),
-        foreign_pre_chain=shared_processors,
-    )
+        formatter = structlog.stdlib.ProcessorFormatter(
+            processor=structlog.processors.KeyValueRenderer(
+                sort_keys=False,
+                key_order=["timestamp", "level", "logger", "event"],
+            ),
+            foreign_pre_chain=shared_processors,
+        )
 
-    root = logging.getLogger()
-    root.setLevel(logging.DEBUG)
-    root.handlers.clear()
+        root = logging.getLogger()
+        root.setLevel(logging.DEBUG)
+        root.handlers.clear()
 
-    # Console handler — CRITICAL+1 keeps terminal clean for end users
-    console_handler = logging.NullHandler()
-    console_handler.setLevel(logging.CRITICAL + 1)
-    root.addHandler(console_handler)
+        console_handler = logging.NullHandler()
+        console_handler.setLevel(logging.CRITICAL + 1)
+        root.addHandler(console_handler)
 
-    # File handler — session-isolated, DEBUG+
-    session_log: Path | None = None
-    try:
-        base = state_dir or (Path.home() / STATE_DIR_NAME)
-        log_dir = base / LOGS_DIR_NAME
-        log_dir.mkdir(parents=True, exist_ok=True)
-        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
-        fh = logging.FileHandler(session_log, encoding="utf-8")
-        fh.setLevel(logging.DEBUG)
-        fh.setFormatter(formatter)
-        root.addHandler(fh)
-        _SESSION_LOG_PATH = session_log
-    except Exception:
-        pass  # Non-fatal; continue without file logging
+        session_log: Path | None = None
+        try:
+            base = state_dir or (Path.home() / STATE_DIR_NAME)
+            log_dir = base / LOGS_DIR_NAME
+            log_dir.mkdir(parents=True, exist_ok=True)
+            ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
+            file_handler = logging.FileHandler(session_log, encoding="utf-8")
+            file_handler.setLevel(logging.DEBUG)
+            file_handler.setFormatter(formatter)
+            root.addHandler(file_handler)
+            _SESSION_LOG_PATH = session_log
+        except Exception:
+            _SESSION_LOG_PATH = None
 
-    structlog.configure(
-        processors=[
-            *shared_processors,
-            structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
-        ],
-        logger_factory=structlog.stdlib.LoggerFactory(),
-        wrapper_class=structlog.stdlib.BoundLogger,
-        cache_logger_on_first_use=True,
-    )
-
-    return session_log
+        structlog.configure(
+            processors=[
+                *shared_processors,
+                structlog.stdlib.ProcessorFormatter.wrap_for_formatter,
+            ],
+            logger_factory=structlog.stdlib.LoggerFactory(),
+            wrapper_class=structlog.stdlib.BoundLogger,
+            cache_logger_on_first_use=True,
+        )
+        _LOGGING_CONFIGURED = True
+        return session_log

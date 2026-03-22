@@ -282,8 +282,8 @@ def test_get_run_stats_orders_rows_chronologically(tmp_path):
 
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute(
-            "INSERT INTO video (id, title, duration) VALUES (?, ?, ?)",
-            ("video-1", "Video One", 120),
+            "INSERT INTO video (id, title, duration, cached_at) VALUES (?, ?, ?, ?)",
+            ("video-1", "Video One", 120, "2026-03-13 10:00:00+00:00"),
         )
         connection.execute(
             """

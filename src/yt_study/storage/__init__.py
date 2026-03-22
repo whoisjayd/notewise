@@ -3,7 +3,16 @@
 from yt_study._constants import CACHE_DB_FILENAME
 
 from .repository import DatabaseRepository
-from .schemas import ExportRecordSchema, RunStatsSchema, TranscriptSchema, VideoSchema
+from .schemas import (
+    CacheSummarySchema,
+    ExportRecordSchema,
+    ModelStatsSchema,
+    RecentVideoSchema,
+    RunStatsSchema,
+    StatsSummarySchema,
+    TranscriptSchema,
+    VideoSchema,
+)
 
 
 __all__ = [
@@ -13,4 +22,8 @@ __all__ = [
     "TranscriptSchema",
     "RunStatsSchema",
     "ExportRecordSchema",
+    "RecentVideoSchema",
+    "ModelStatsSchema",
+    "StatsSummarySchema",
+    "CacheSummarySchema",
 ]

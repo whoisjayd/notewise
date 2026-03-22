@@ -10,7 +10,6 @@ wheels/
 .venv
 .env
 .opencode/
-*cache*
 nul
 .coverage
 drafts/
@@ -32,3 +31,4 @@ cookies.txt
 *.txt
 .context-mem
 output
+*_cache

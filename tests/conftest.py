@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from yt_study.pipeline import clear_youtube_limiters
 from yt_study.storage import DatabaseRepository
 
 
@@ -34,6 +35,7 @@ def isolate_state_dir(tmp_path, monkeypatch):
     monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
     yield
     DatabaseRepository.close_all_instances()
+    clear_youtube_limiters()
 
 
 @pytest.fixture

@@ -4,17 +4,26 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import ClassVar
 
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
-from .migrations import repair_runstats_schema
+from .migrations import run_migrations
 from .models import Base, ExportRecord, RunStatsRecord, TranscriptRecord, VideoRecord
-from .schemas import ExportRecordSchema, RunStatsSchema, TranscriptSchema, VideoSchema
+from .schemas import (
+    CacheSummarySchema,
+    ExportRecordSchema,
+    ModelStatsSchema,
+    RecentVideoSchema,
+    RunStatsSchema,
+    StatsSummarySchema,
+    TranscriptSchema,
+    VideoSchema,
+)
 
 
 class DatabaseRepository:
@@ -34,7 +43,7 @@ class DatabaseRepository:
         self._write_lock = threading.Lock()
         Base.metadata.create_all(self._engine)
         with self._engine.begin() as conn:
-            repair_runstats_schema(conn)
+            run_migrations(conn)
 
     # ── Singleton management ──────────────────────────────────────────────────
 
@@ -108,6 +117,140 @@ class DatabaseRepository:
             )
             return [RunStatsSchema.model_validate(r) for r in records]
 
+    def get_recent_videos(self, limit: int = 10) -> list[RecentVideoSchema]:
+        """Return recently processed videos joined with their latest run record."""
+        latest_runs = (
+            select(
+                RunStatsRecord.video_id.label("video_id"),
+                func.max(RunStatsRecord.id).label("latest_run_id"),
+            )
+            .group_by(RunStatsRecord.video_id)
+            .subquery()
+        )
+
+        with Session(self._engine) as session:
+            rows = session.execute(
+                select(VideoRecord, RunStatsRecord)
+                .join(latest_runs, VideoRecord.id == latest_runs.c.video_id)
+                .join(RunStatsRecord, RunStatsRecord.id == latest_runs.c.latest_run_id)
+                .order_by(RunStatsRecord.timestamp.desc(), RunStatsRecord.id.desc())
+                .limit(max(limit, 1))
+            ).all()
+
+        return [
+            RecentVideoSchema(
+                id=video.id,
+                title=video.title,
+                duration=video.duration,
+                cached_at=video.cached_at,
+                last_run_at=run.timestamp,
+                model=run.model,
+                cost_usd=run.cost_usd,
+                tokens_used=run.tokens_used,
+            )
+            for video, run in rows
+        ]
+
+    def get_stats(
+        self,
+        since_days: int | None = None,
+        model: str | None = None,
+    ) -> StatsSummarySchema:
+        """Return aggregate processing statistics with a per-model breakdown."""
+        filters = []
+        if since_days is not None:
+            cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+            filters.append(RunStatsRecord.timestamp >= cutoff)
+        if model is not None:
+            filters.append(RunStatsRecord.model == model)
+
+        with Session(self._engine) as session:
+            totals = session.execute(
+                select(
+                    func.count(func.distinct(RunStatsRecord.video_id)),
+                    func.count(RunStatsRecord.id),
+                    func.coalesce(func.sum(RunStatsRecord.tokens_used), 0),
+                    func.coalesce(func.sum(RunStatsRecord.prompt_tokens), 0),
+                    func.coalesce(func.sum(RunStatsRecord.completion_tokens), 0),
+                    func.coalesce(func.sum(RunStatsRecord.cost_usd), 0.0),
+                    func.coalesce(func.sum(RunStatsRecord.transcript_seconds), 0.0),
+                    func.coalesce(func.sum(RunStatsRecord.generation_seconds), 0.0),
+                ).where(*filters)
+            ).one()
+            model_rows = session.execute(
+                select(
+                    RunStatsRecord.model,
+                    func.count(func.distinct(RunStatsRecord.video_id)),
+                    func.count(RunStatsRecord.id),
+                    func.coalesce(func.sum(RunStatsRecord.tokens_used), 0),
+                    func.coalesce(func.sum(RunStatsRecord.prompt_tokens), 0),
+                    func.coalesce(func.sum(RunStatsRecord.completion_tokens), 0),
+                    func.coalesce(func.sum(RunStatsRecord.cost_usd), 0.0),
+                    func.coalesce(func.sum(RunStatsRecord.transcript_seconds), 0.0),
+                    func.coalesce(func.sum(RunStatsRecord.generation_seconds), 0.0),
+                )
+                .where(*filters)
+                .group_by(RunStatsRecord.model)
+                .order_by(
+                    func.coalesce(func.sum(RunStatsRecord.cost_usd), 0.0).desc(),
+                    RunStatsRecord.model.asc(),
+                )
+            ).all()
+
+        return StatsSummarySchema(
+            total_videos_processed=int(totals[0] or 0),
+            total_runs=int(totals[1] or 0),
+            total_tokens_used=int(totals[2] or 0),
+            total_prompt_tokens=int(totals[3] or 0),
+            total_completion_tokens=int(totals[4] or 0),
+            total_cost_usd=float(totals[5] or 0.0),
+            total_transcript_seconds=float(totals[6] or 0.0),
+            total_generation_seconds=float(totals[7] or 0.0),
+            models=[
+                ModelStatsSchema(
+                    model=str(row[0]),
+                    videos_processed=int(row[1] or 0),
+                    run_count=int(row[2] or 0),
+                    total_tokens_used=int(row[3] or 0),
+                    total_prompt_tokens=int(row[4] or 0),
+                    total_completion_tokens=int(row[5] or 0),
+                    total_cost_usd=float(row[6] or 0.0),
+                    total_transcript_seconds=float(row[7] or 0.0),
+                    total_generation_seconds=float(row[8] or 0.0),
+                )
+                for row in model_rows
+            ],
+        )
+
+    def get_cache_summary(self) -> CacheSummarySchema:
+        """Return aggregate cache metadata for cache-info style commands."""
+        with Session(self._engine) as session:
+            video_totals = session.execute(
+                select(
+                    func.count(VideoRecord.id),
+                    func.min(VideoRecord.cached_at),
+                    func.max(VideoRecord.cached_at),
+                )
+            ).one()
+            transcript_count = session.execute(
+                select(func.count(TranscriptRecord.id))
+            ).scalar_one()
+            run_count = session.execute(
+                select(func.count(RunStatsRecord.id))
+            ).scalar_one()
+            export_count = session.execute(
+                select(func.count(ExportRecord.id))
+            ).scalar_one()
+
+        return CacheSummarySchema(
+            total_videos=int(video_totals[0] or 0),
+            total_transcripts=int(transcript_count or 0),
+            total_runs=int(run_count or 0),
+            total_exports=int(export_count or 0),
+            oldest_cached_at=video_totals[1],
+            newest_cached_at=video_totals[2],
+        )
+
     def get_export_records(self, video_id: str) -> list[ExportRecordSchema]:
         """Load all export records for a video."""
         with Session(self._engine) as session:
@@ -121,6 +264,23 @@ class DatabaseRepository:
                 .all()
             )
             return [ExportRecordSchema.model_validate(r) for r in records]
+
+    def prune_old_entries(self, older_than_days: int = 30) -> int:
+        """Delete cached videos older than the provided age threshold."""
+        cutoff = datetime.now(timezone.utc) - timedelta(days=max(older_than_days, 0))
+        with self._write_lock, Session(self._engine) as session:
+            stale_videos = (
+                session.execute(
+                    select(VideoRecord).where(VideoRecord.cached_at < cutoff)
+                )
+                .scalars()
+                .all()
+            )
+            deleted_count = len(stale_videos)
+            for video in stale_videos:
+                session.delete(video)
+            session.commit()
+        return deleted_count
 
     # ── Write operations ──────────────────────────────────────────────────────
 
@@ -161,13 +321,20 @@ class DatabaseRepository:
     ) -> None:
         """Persist metadata, transcript, and run stats in one transaction."""
         with self._write_lock, Session(self._engine) as session:
+            cached_at = datetime.now(timezone.utc)
             video = session.get(VideoRecord, video_id)
             if video is None:
-                video = VideoRecord(id=video_id, title=title, duration=duration)
+                video = VideoRecord(
+                    id=video_id,
+                    title=title,
+                    duration=duration,
+                    cached_at=cached_at,
+                )
                 session.add(video)
             else:
                 video.title = title
                 video.duration = duration
+                video.cached_at = cached_at
 
             transcript = session.execute(
                 select(TranscriptRecord).where(TranscriptRecord.video_id == video_id)

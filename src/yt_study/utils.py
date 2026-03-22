@@ -22,13 +22,13 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*\x00-\x1f\x7f]', "", name)
     name = re.sub(r"\s+", " ", name)
     name = name.strip().rstrip(".")
-    name = name[:100].rstrip(" .")
     if not name:
         return "untitled"
     if _RESERVED.match(name):
-        name = f"_{name}"[:100].rstrip(" .")
-        if not name:
-            return "untitled"
+        name = f"_{name}"
+    name = name[:100].rstrip(" .")
+    if not name:
+        return "untitled"
     return name
 
 

@@ -193,7 +193,18 @@ def format_user_error(error: Exception) -> str:
             "Please try again later."
         )
 
-    if any(kw in text for kw in ("api key", "unauthorized", "authentication")):
+    if any(
+        kw in text
+        for kw in (
+            "api key",
+            "unauthorized",
+            "authentication",
+            "invalid api key",
+            "permission_denied",
+            "permission denied for model",
+            "forbidden",
+        )
+    ):
         return (
             "The selected model or provider is not configured correctly. "
             "Check your API key and try again."

@@ -17,6 +17,7 @@ class VideoSchema(BaseModel):
     id: str
     title: str
     duration: int
+    cached_at: datetime | None = None
 
 
 class TranscriptSchema(BaseModel):
@@ -51,3 +52,47 @@ class ExportRecordSchema(BaseModel):
     format: str
     output_path: str
     timestamp: datetime
+
+
+class RecentVideoSchema(BaseModel):
+    id: str
+    title: str
+    duration: int
+    cached_at: datetime | None = None
+    last_run_at: datetime
+    model: str
+    cost_usd: float = 0.0
+    tokens_used: int = 0
+
+
+class ModelStatsSchema(BaseModel):
+    model: str
+    videos_processed: int
+    run_count: int
+    total_tokens_used: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_cost_usd: float = 0.0
+    total_transcript_seconds: float = 0.0
+    total_generation_seconds: float = 0.0
+
+
+class StatsSummarySchema(BaseModel):
+    total_videos_processed: int = 0
+    total_runs: int = 0
+    total_tokens_used: int = 0
+    total_prompt_tokens: int = 0
+    total_completion_tokens: int = 0
+    total_cost_usd: float = 0.0
+    total_transcript_seconds: float = 0.0
+    total_generation_seconds: float = 0.0
+    models: list[ModelStatsSchema] = []
+
+
+class CacheSummarySchema(BaseModel):
+    total_videos: int = 0
+    total_transcripts: int = 0
+    total_runs: int = 0
+    total_exports: int = 0
+    oldest_cached_at: datetime | None = None
+    newest_cached_at: datetime | None = None

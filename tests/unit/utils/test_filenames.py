@@ -69,6 +69,14 @@ def test_sanitize_reserved_at_100_chars():
     assert result.startswith("_")
 
 
+def test_sanitize_reserved_prefix_happens_before_truncation():
+    """Reserved-name protection should survive truncation at the 100-char boundary."""
+    raw = "NUL." + ("a" * 120)
+    result = sanitize_filename(raw)
+    assert len(result) <= 100
+    assert result.startswith("_")
+
+
 def test_safe_output_path(tmp_path):
     result = safe_output_path(tmp_path, "Video: Title")
     assert result == tmp_path / "Video Title"
