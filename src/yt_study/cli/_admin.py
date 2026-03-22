@@ -7,6 +7,7 @@ import sqlite3
 import subprocess
 import sys
 from collections.abc import Callable
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -395,7 +396,7 @@ def render_doctor(console: Console) -> None:
     db_ok = True
     if db_path.exists():
         try:
-            with sqlite3.connect(db_path) as connection:
+            with closing(sqlite3.connect(db_path)) as connection:
                 connection.execute("PRAGMA quick_check")
             db_status = f"{db_path} ({_human_size(db_path.stat().st_size)})"
         except sqlite3.Error as error:

@@ -13,7 +13,7 @@ ifeq ($(OS),Windows_NT)
 	RM_FILE := del /Q /F
 	RM_DIR := rmdir /S /Q
 	FIND_PYCACHE := for /d /r . %%d in (__pycache__) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
-	FIND_CACHE := for /d /r . %%d in (.ruff_cache .mypy_cache .pytest_cache) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
+	FIND_CACHE := for /d /r . %%d in (.ruff_cache .ty_cache .pytest_cache) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
 	FIND_EGG := for /d /r . %%d in (*.egg-info) do @if exist "%%d" $(RM_DIR) "%%d" 2>$(DEVNULL)
 	FIND_EMPTY_DIRS := powershell -NoProfile -Command "Get-ChildItem -Directory -Recurse | Where-Object { (Get-ChildItem -Force -LiteralPath $${PSItem}.FullName | Measure-Object).Count -eq 0 -and $${PSItem}.FullName -notmatch '\\.venv\\' } | Sort-Object FullName -Descending | ForEach-Object { Remove-Item -LiteralPath $${PSItem}.FullName -Force -Recurse }"
 	FIND_PYC := del /S /Q *.pyc *.pyo 2>$(DEVNULL) || echo >$(DEVNULL)
@@ -28,7 +28,7 @@ else
 	RM_FILE := rm -f
 	RM_DIR := rm -rf
 	FIND_PYCACHE := find . -type d -name "__pycache__" -exec rm -rf {} + 2>$(DEVNULL) || true
-	FIND_CACHE := find . -type d \( -name ".ruff_cache" -o -name ".mypy_cache" -o -name ".pytest_cache" \) -exec rm -rf {} + 2>$(DEVNULL) || true
+	FIND_CACHE := find . -type d \( -name ".ruff_cache" -o -name ".ty_cache" -o -name ".pytest_cache" \) -exec rm -rf {} + 2>$(DEVNULL) || true
 	FIND_EGG := find . -type d -name "*.egg-info" -exec rm -rf {} + 2>$(DEVNULL) || true
 	FIND_EMPTY_DIRS := find . -type d -empty -not -path "./.venv/*" -not -path "./.venv" -exec rmdir {} + 2>$(DEVNULL) || true
 	FIND_PYC := find . -type f \( -name "*.pyc" -o -name "*.pyo" \) -delete 2>$(DEVNULL) || true
@@ -56,7 +56,7 @@ UV_RUN := $(UV) run
 PIP := $(UV) pip
 PRE_COMMIT := $(UV_RUN) pre-commit
 RUFF := $(UV_RUN) ruff
-MYPY := $(UV_RUN) mypy
+TY := $(UV_RUN) ty
 PYTEST := $(UV) run --no-sync python -m pytest
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
@@ -110,7 +110,7 @@ help: ## Show all developer tasks
 	@echo "  format-check  Check code formatting"
 	@echo "  lint          Run ruff with auto-fix"
 	@echo "  lint-check    Run ruff without auto-fix"
-	@echo "  type-check    Run mypy type checker"
+	@echo "  type-check    Run ty type checker"
 	@echo "  deps-check    Detect unused/missing dependencies"
 	@echo "  security      Run bandit security scan"
 	@echo "  check         Run all quality checks (CI-safe)"
@@ -188,7 +188,7 @@ lint-check: ## Run ruff without auto-fix
 # Code Quality - Type Checking & Security
 # ==============================================================================
 type-check: ## Run static type checks
-	$(MYPY) $(PKG_DIR)
+	$(TY) check $(PKG_DIR)
 
 deps-check: ## Detect unused/missing dependencies
 	$(DEPTRY) $(SRC_DIR)
@@ -231,6 +231,7 @@ test-fast: ## Run tests in quiet mode
 test-cov: ## Run tests with coverage report
 	$(PYTEST) $(TEST_DIR) \
 		--cov=$(PKG_DIR) \
+		--cov-fail-under=90 \
 		--cov-report=term-missing \
 		--cov-report=xml \
 		--cov-report=html \
@@ -316,7 +317,7 @@ info: ## Show tool and interpreter versions
 	@$(PYTHON_CMD) --version 2>$(DEVNULL) || echo "Python: not found"
 	@$(UV) --version 2>$(DEVNULL) || echo "uv: not found"
 	@$(RUFF) --version 2>$(DEVNULL) || echo "ruff: not found"
-	@$(MYPY) --version 2>$(DEVNULL) || echo "mypy: not found"
+	@$(TY) --version 2>$(DEVNULL) || echo "ty: not found"
 	@$(PYTEST) --version 2>$(DEVNULL) || echo "pytest: not found"
 
 # ==============================================================================

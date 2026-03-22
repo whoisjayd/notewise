@@ -7,25 +7,22 @@ from rich.text import Text
 
 
 _BANNER_LINES = [
-    r" __   __ _______       _______ _______ _     _ ______  _     _",
-    r" \ \ / /   |          |______   |     |     | |     \  \   / ",
-    r"  \ V /    |          ______|   |     |_____| |_____/   \_/  ",
-    r"   \_/     |          _______   |     _     _ ______  _     _",
-    r"    |      |          |______   |     |     | |     \  \___/ ",
-    r"    |      |_____     ______|   |     |_____| |_____/ _/   \_",
+    r"Y   Y TTTTT   SSS  TTTTT U   U DDDD   Y   Y",
+    r" Y Y    T    S       T   U   U D   D   Y Y ",
+    r"  Y     T     SSS    T   U   U D   D    Y  ",
+    r"  Y     T        S   T   U   U D   D    Y  ",
+    r"  Y     T     SSS    T    UUU  DDDD     Y  ",
 ]
 
-# Light → deep blue step — all vivid, all readable
 _LINE_COLORS = [
-    "bold color(159)",  # pale sky blue
-    "bold color(117)",  # light blue
-    "bold color(75)",  # cornflower blue
-    "bold color(33)",  # bright blue
-    "bold color(27)",  # royal blue
-    "bold color(21)",  # deep blue
+    "bold color(159)",
+    "bold color(117)",
+    "bold color(75)",
+    "bold color(33)",
+    "bold color(27)",
 ]
 
-_ASCII_RULE_WIDTH = 78
+_RULE_WIDTH = 45
 
 
 def _get_version() -> str:
@@ -38,35 +35,34 @@ def _get_version() -> str:
 
 
 def _tagline(version: str) -> Text:
-    t = Text("> ", style="color(240)")
-    t.append("AI-powered YouTube study notes", style="bright_white")
-    t.append(" - ", style="")
-    t.append(f"v{version}", style="bold color(159)")
-    t.append(" - ", style="")
-    t.append("playlists", style="color(75)")
-    t.append(" - ", style="color(240)")
-    t.append("batches", style="color(75)")
-    t.append(" - ", style="color(240)")
-    t.append("quizzes", style="color(75)")
-    return t
+    tagline = Text("  ", style="color(240)")
+    tagline.append("AI-powered YouTube study notes", style="bright_white")
+    tagline.append("   ", style="")
+    tagline.append(f"v{version}", style="bold color(159)")
+    return tagline
 
 
 def _print_rule(console: Console, *, style: str) -> None:
-    """Render an ASCII-safe separator for Windows legacy consoles."""
-    console.print("-" * _ASCII_RULE_WIDTH, style=style, highlight=False)
+    """Render an ASCII-safe separator for Windows and redirected output."""
+    console.print("-" * _RULE_WIDTH, style=style, highlight=False)
+
+
+def _print_banner_lines(console: Console) -> None:
+    for line, color in zip(_BANNER_LINES, _LINE_COLORS, strict=True):
+        console.print(line, style=color, highlight=False)
 
 
 def print_banner(console: Console) -> None:
-    """Print the yt-study brand banner."""
-    version = _get_version()
-
-    for line, color in zip(_BANNER_LINES, _LINE_COLORS, strict=True):
-        console.print(line, style=color, highlight=False)
+    """Print the primary yt-study banner."""
+    console.print()
+    _print_banner_lines(console)
+    console.print()
     _print_rule(console, style="color(75)")
-    console.print(_tagline(version))
+    console.print(_tagline(_get_version()))
     _print_rule(console, style="color(27)")
+    console.print()
 
 
 def print_help_banner(console: Console) -> None:
-    """Print the help banner with the full brand treatment."""
+    """Print the help banner."""
     print_banner(console)

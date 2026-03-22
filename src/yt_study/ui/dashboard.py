@@ -337,12 +337,7 @@ class PipelineDashboard:
             [Text("✅ Recent Activity", style="bold white"), completed_table]
         )
 
-        # Type casting for Group
-        # Elements are mixed types (Table, Rule, Progress, Text) which
-        # satisfy RenderableType
-        # but mypy struggles with the list inference
-
-        body = Group(*elements)  # type: ignore
+        body = Group(*elements)
 
         return Panel(
             body,

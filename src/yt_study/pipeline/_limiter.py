@@ -38,11 +38,21 @@ class FallbackAsyncLimiter:
         return None
 
 
-ImportedAsyncLimiter: Any
-try:
-    from aiolimiter import AsyncLimiter as ImportedAsyncLimiter
-except ModuleNotFoundError:
-    ImportedAsyncLimiter = None
+def _create_limiter(
+    requests_per_minute: int,
+    *,
+    time_period: float,
+) -> LimiterProtocol:
+    """Create the best available limiter implementation for this runtime."""
+    try:
+        from aiolimiter import AsyncLimiter
+    except ModuleNotFoundError:
+        return FallbackAsyncLimiter(
+            max_rate=requests_per_minute,
+            time_period=time_period,
+        )
+
+    return AsyncLimiter(max_rate=requests_per_minute, time_period=time_period)
 
 
 _GLOBAL_YOUTUBE_LIMITERS: dict[tuple[int, int], Any] = {}
@@ -62,11 +72,7 @@ def get_youtube_limiter(requests_per_minute: int) -> LimiterProtocol:
     key = (loop_key, requests_per_minute)
     limiter = _GLOBAL_YOUTUBE_LIMITERS.get(key)
     if limiter is None:
-        limiter = (
-            ImportedAsyncLimiter(max_rate=requests_per_minute, time_period=60)
-            if ImportedAsyncLimiter is not None
-            else FallbackAsyncLimiter(max_rate=requests_per_minute, time_period=60)
-        )
+        limiter = _create_limiter(requests_per_minute, time_period=60)
         _GLOBAL_YOUTUBE_LIMITERS[key] = limiter
     return limiter
 

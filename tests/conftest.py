@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import gc
 import importlib
 import inspect
 from unittest.mock import AsyncMock, MagicMock
@@ -32,10 +33,14 @@ def sample_playlist_id() -> str:
 @pytest.fixture(autouse=True)
 def isolate_state_dir(tmp_path, monkeypatch):
     """Redirect ~/.yt-study to a tmp dir so tests never touch real state."""
+    DatabaseRepository.close_all_instances()
+    clear_youtube_limiters()
+    gc.collect()
     monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
     yield
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
+    gc.collect()
 
 
 @pytest.fixture

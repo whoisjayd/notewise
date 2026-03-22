@@ -55,10 +55,7 @@ async def get_video_metadata(
     video_data = await get_video_details(video_id, cookie_file)
     title = str(video_data.get("title") or video_id)
     duration = _coerce_int(video_data.get("duration"))
-    raw_chapters = video_data.get("chapters")
-    chapters = _map_video_chapters(
-        raw_chapters if isinstance(raw_chapters, list) else []
-    )
+    chapters = _map_video_chapters(_coerce_raw_chapters(video_data.get("chapters")))
 
     return VideoMetadata(
         video_id=video_id,
@@ -121,6 +118,23 @@ def _map_video_chapters(raw_chapters: list[dict[str, object]]) -> list[VideoChap
                 end_seconds=_coerce_int(end_time) if end_time is not None else None,
             )
         )
+    return chapters
+
+
+def _coerce_raw_chapters(value: object | None) -> list[dict[str, object]]:
+    """Return only dict-like chapter payloads from the raw extractor value."""
+    if not isinstance(value, list):
+        return []
+
+    chapters: list[dict[str, object]] = []
+    for chapter in value:
+        if not isinstance(chapter, dict):
+            continue
+        normalized: dict[str, object] = {}
+        for key, item in chapter.items():
+            if isinstance(key, str):
+                normalized[key] = item
+        chapters.append(normalized)
     return chapters
 
 

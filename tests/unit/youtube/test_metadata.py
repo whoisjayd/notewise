@@ -21,7 +21,12 @@ from yt_study.youtube.metadata import (
     _check_video_availability as _raise_if_video_data_requires_public_access,
 )
 from yt_study.youtube.metadata import (
+    _coerce_int,
+    _coerce_raw_chapters,
+    _map_video_chapters,
     get_playlist_info,
+    get_source_metadata,
+    get_video_details,
     get_video_metadata,
 )
 
@@ -133,6 +138,19 @@ class TestVideoMetadata:
         ):
             await get_video_metadata("video123")
 
+    @pytest.mark.asyncio
+    async def test_get_video_details_preserves_domain_error(
+        self,
+        mock_extractor_client,
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.video_metadata_full.side_effect = PublicAccessRequiredError(
+            "cookie-file required"
+        )
+
+        with pytest.raises(PublicAccessRequiredError):
+            await get_video_details("video123")
+
 
 class TestPlaylistMetadata:
     """Test playlist metadata extraction."""
@@ -177,8 +195,100 @@ class TestPlaylistMetadata:
         ):
             await get_playlist_info("pl123")
 
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_falls_back_to_nested_data_title(
+        self, mock_extractor_client
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "title": "",
+            "data": {
+                "availability": "public",
+                "title": "Nested Title",
+                "playlist_count": "4",
+            },
+        }
+
+        title, count = await get_playlist_info("pl123")
+
+        assert title == "Nested Title"
+        assert count == 4
+
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_falls_back_to_generated_title(
+        self, mock_extractor_client
+    ):
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {
+            "title": "",
+            "data": {"availability": "public", "playlist_count": "5"},
+        }
+
+        title, count = await get_playlist_info("pl123")
+
+        assert title == "playlist_pl123"
+        assert count == 5
+
+    @pytest.mark.asyncio
+    async def test_get_playlist_info_wraps_generic_error(self, mock_extractor_client):
+        """Unexpected playlist failures should still raise PlaylistError."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.side_effect = RuntimeError("boom")
+
+        with pytest.raises(PlaylistError, match="Could not access playlist pl123"):
+            await get_playlist_info("pl123")
+
+    @pytest.mark.asyncio
+    async def test_get_source_metadata_forwards_target_and_cookie(
+        self, mock_extractor_client
+    ):
+        """Raw metadata helper should delegate directly to the extractor client."""
+        client = mock_extractor_client["metadata"].return_value
+        client.metadata.return_value = {"title": "Video"}
+
+        result = await get_source_metadata(
+            "https://youtube.com/watch?v=abc",
+            "cookies.txt",
+        )
+
+        assert result == {"title": "Video"}
+        client.metadata.assert_awaited_once_with("https://youtube.com/watch?v=abc")
+
 
 class TestMetadataAccessHelpers:
+    def test_coerce_int_handles_mixed_values(self):
+        assert _coerce_int(True) == 1
+        assert _coerce_int(4.8) == 4
+        assert _coerce_int("7") == 7
+        assert _coerce_int("bad", default=9) == 9
+
+    def test_coerce_raw_chapters_filters_invalid_items(self):
+        chapters = _coerce_raw_chapters(
+            [
+                {"title": "Intro", "start_time": 0, 9: "bad-key"},
+                "skip-me",
+                {"title": "End", "end_time": 120},
+            ]
+        )
+
+        assert chapters == [
+            {"title": "Intro", "start_time": 0},
+            {"title": "End", "end_time": 120},
+        ]
+
+    def test_coerce_raw_chapters_rejects_non_list_values(self):
+        assert _coerce_raw_chapters(None) == []
+        assert _coerce_raw_chapters("bad") == []
+
+    def test_map_video_chapters_uses_default_titles_and_optional_end(self):
+        chapters = _map_video_chapters([{"start_time": "0"}, {"end_time": 42}])
+
+        assert chapters[0].title == "Chapter 1"
+        assert chapters[0].start_seconds == 0
+        assert chapters[0].end_seconds is None
+        assert chapters[1].title == "Chapter 2"
+        assert chapters[1].end_seconds == 42
+
     @pytest.mark.parametrize(
         "availability", ["private", "login_required", "unavailable", "age_restricted"]
     )

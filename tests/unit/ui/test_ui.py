@@ -70,6 +70,38 @@ def test_dashboard_clear_chapter_workers():
     assert "Other video" in third_slot.description
 
 
+def test_dashboard_start_chapter_worker_ignores_when_no_slots() -> None:
+    """No chapter worker should start when dashboard chapter concurrency is zero."""
+    dash = PipelineDashboard(10, 1, "List", "Model", chapter_concurrency=0)
+
+    dash.start_chapter_worker("vid1:1", "vid1", "Busy")
+
+    assert dash.chapter_tasks == []
+
+
+def test_dashboard_start_chapter_worker_drops_when_all_slots_busy() -> None:
+    """Extra chapter jobs should be ignored when all chapter slots are occupied."""
+    dash = PipelineDashboard(10, 1, "List", "Model", chapter_concurrency=1)
+    dash.start_chapter_worker("vid1:1", "vid1", "Busy")
+    original = dash.chapter_progress.tasks[dash.chapter_tasks[0]].description
+
+    dash.start_chapter_worker("vid2:1", "vid2", "Other busy")
+
+    assert dash.chapter_progress.tasks[dash.chapter_tasks[0]].description == original
+
+
+def test_dashboard_update_and_complete_missing_chapter_slot_are_safe() -> None:
+    """Unknown chapter keys should not raise during update or completion."""
+    dash = PipelineDashboard(10, 1, "List", "Model", chapter_concurrency=1)
+
+    dash.update_chapter_worker("missing", "Ignored")
+    dash.complete_chapter_worker("missing")
+
+    assert dash.chapter_progress.tasks[dash.chapter_tasks[0]].description == (
+        "[dim]Idle[/dim]"
+    )
+
+
 def test_dashboard_updates_invalid_index():
     """Test updating worker with invalid index (should be safe)."""
     dash = PipelineDashboard(10, 2, "List", "Model")
@@ -86,6 +118,16 @@ def test_dashboard_completion():
 
     assert "Video 1" in dash.recent_completions
     assert dash.overall_progress.tasks[0].completed == 1
+
+
+def test_dashboard_skipped_completion_tracks_skipped_count() -> None:
+    """Skipped completions should increment the skipped counter, not completed."""
+    dash = PipelineDashboard(10, 1, "List", "Model")
+
+    dash.add_completion("Video 1 (skipped)")
+
+    assert dash.skipped_count == 1
+    assert dash.completed_count == 0
 
 
 def test_dashboard_failure():
@@ -105,6 +147,17 @@ def test_dashboard_total_update():
     dash.set_total_videos(4)
 
     assert dash.overall_progress.tasks[0].total == 4
+
+
+def test_dashboard_update_overall_status() -> None:
+    """Overall progress description should be mutable at runtime."""
+    dash = PipelineDashboard(1, 1, "List", "Model")
+
+    dash.update_overall_status("Resolving playlist")
+
+    assert dash.overall_progress.tasks[dash.overall_task].description == (
+        "Resolving playlist"
+    )
 
 
 def test_dashboard_rendering():
@@ -170,3 +223,16 @@ def test_dashboard_rendering_empty():
 
     output = capture.get()
     assert "No videos completed yet" in output
+
+
+def test_dashboard_rendering_without_workers_omits_active_tasks() -> None:
+    """Zero-worker dashboards should omit the active-tasks section."""
+    dash = PipelineDashboard(10, 0, "List", "Model")
+
+    console = Console(width=100)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Active Tasks" not in output
+    assert "Recent Activity" in output

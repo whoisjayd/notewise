@@ -15,6 +15,8 @@ def _reset_logging_state() -> None:
     logging_module._SESSION_LOG_PATH = None
     logging_module._LOGGING_CONFIGURED = False
     root_logger = logging_module.logging.getLogger()
+    for handler in list(root_logger.handlers):
+        handler.close()
     root_logger.handlers.clear()
 
 

@@ -33,13 +33,7 @@ def _read_batch_file_urls(input_path: Path) -> list[str]:
 
     if last_decode_error is not None:
         raise last_decode_error
-
-    content = input_path.read_text(encoding="utf-8")
-    return [
-        line.strip()
-        for line in content.splitlines()
-        if line.strip() and not line.strip().startswith("#")
-    ]
+    raise UnicodeDecodeError("utf-8", b"", 0, 0, "No supported encoding matched")
 
 
 class CliProcessRunner(CliProcessContext):

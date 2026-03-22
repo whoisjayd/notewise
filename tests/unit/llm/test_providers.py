@@ -1,13 +1,17 @@
 """Tests for LLM provider integration."""
 
+import logging
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from yt_study.errors import LLMGenerationError
+from yt_study.llm import provider as provider_mod
 from yt_study.llm.provider import (
     LLMProvider,
     UsageTotals,
+    _configure_litellm_runtime,
+    _summarize_error,
     get_provider,
 )
 
@@ -280,3 +284,88 @@ class TestLLMProvider:
             side_effect=RuntimeError("missing price map"),
         ):
             assert provider._extract_cost(response) == 0.0
+
+    def test_validate_config_logs_debug_for_unknown_provider(self):
+        """Unmapped models should log a debug hint instead of requiring a known key."""
+        with (
+            patch.object(
+                type(provider_mod.config._get_instance()),
+                "get_api_key_name_for_model",
+                return_value=None,
+            ),
+            patch("yt_study.llm.provider.logger.debug") as mock_debug,
+        ):
+            LLMProvider("custom/local-model")
+
+        mock_debug.assert_called_once()
+
+    def test_summarize_error_truncates_long_messages(self):
+        """Very long error messages should be clipped to the summary limit."""
+        summary = _summarize_error(Exception("x" * 600))
+        assert summary.endswith("...")
+        assert len(summary) == 502
+
+    def test_configure_litellm_runtime_handles_missing_verbose_logger(self):
+        """LiteLLM runtime setup should tolerate missing verbose logger objects."""
+        runtime = MagicMock()
+        runtime.verbose_logger = None
+
+        with patch("yt_study.llm.provider.litellm", runtime):
+            _configure_litellm_runtime()
+
+        assert runtime.set_verbose is False
+        assert runtime.suppress_debug_info is True
+
+    def test_configure_litellm_runtime_sets_verbose_logger_level(self):
+        """Verbose LiteLLM loggers should be forced to error-only mode."""
+        runtime = MagicMock()
+        runtime.verbose_logger = MagicMock()
+
+        with patch("yt_study.llm.provider.litellm", runtime):
+            _configure_litellm_runtime()
+
+        runtime.verbose_logger.setLevel.assert_called_once_with(logging.ERROR)
+        assert runtime.verbose_logger.propagate is False
+
+    def test_extract_usage_handles_invalid_values(self):
+        """Non-numeric usage payloads should fail closed to zero values."""
+        provider = LLMProvider("gpt-4o")
+        prompt, completion, total = provider._extract_usage(
+            {
+                "usage": {
+                    "prompt_tokens": "bad",
+                    "completion_tokens": object(),
+                    "total_tokens": None,
+                }
+            }
+        )
+
+        assert (prompt, completion, total) == (0, 0, 0)
+
+    def test_clean_content_handles_opening_fence_without_closing_fence(self):
+        """Single-sided code fences should still drop the opening fence line."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._clean_content("```markdown\nBody\n") == "Body"
+
+    def test_normalize_content_handles_none_and_nested_payloads(self):
+        """Nested block payloads should flatten into plain text safely."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._normalize_content(None) == ""
+        assert (
+            provider._normalize_content(
+                [
+                    {"content": {"text": "First"}},
+                    MagicMock(text="Second"),
+                    MagicMock(value="Third"),
+                ]
+            )
+            == "First\nSecond\nThird"
+        )
+
+    def test_normalize_content_ignores_unsupported_payloads(self):
+        """Unsupported block shapes should be ignored instead of stringified."""
+        provider = LLMProvider("gpt-4o")
+
+        assert provider._normalize_content([{"foo": "bar"}, object()]) == ""

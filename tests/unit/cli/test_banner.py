@@ -1,0 +1,47 @@
+"""Tests for CLI banner helpers."""
+
+from __future__ import annotations
+
+import builtins
+
+from rich.console import Console
+
+from yt_study.cli import _banner
+
+
+def test_get_version_falls_back_to_dev_when_import_fails(monkeypatch) -> None:
+    """Missing package metadata should fall back to the dev banner version."""
+    real_import = builtins.__import__
+
+    def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
+        if name == "yt_study" and "__version__" in fromlist:
+            raise ImportError("missing version")
+        return real_import(name, globals, locals, fromlist, level)
+
+    monkeypatch.setattr(builtins, "__import__", fake_import)
+
+    assert _banner._get_version() == "dev"
+
+
+def test_print_banner_renders_dev_version(monkeypatch) -> None:
+    """The banner should render a readable fallback version string."""
+    console = Console(record=True, width=120)
+    monkeypatch.setattr(_banner, "_get_version", lambda: "dev")
+
+    _banner.print_banner(console)
+
+    output = console.export_text()
+    assert "AI-powered YouTube study notes" in output
+    assert "vdev" in output
+
+
+def test_print_help_banner_delegates_to_main_banner(monkeypatch) -> None:
+    """Help output should reuse the primary banner renderer."""
+    console = Console(record=True, width=120)
+    called: list[Console] = []
+
+    monkeypatch.setattr(_banner, "print_banner", lambda target: called.append(target))
+
+    _banner.print_help_banner(console)
+
+    assert called == [console]

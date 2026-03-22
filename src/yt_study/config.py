@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any, cast
 
 from pydantic import Field
+from pydantic.fields import FieldInfo
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -126,7 +127,10 @@ class UserConfigSource(PydanticBaseSettingsSource):
         self._cached_env_file = result
         return self._cached_env_file
 
-    def get_field_value(self, _field: Any, field_name: str) -> tuple[Any, str, bool]:
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> tuple[Any, str, bool]:
+        del field
         data = self._load_env_file()
         # Try field_name and alias lookups
         for lookup in (field_name, field_name.lower()):
@@ -265,13 +269,13 @@ class _LazyAppSettings:
     def _get_instance(self) -> AppSettings:
         instance = cast(AppSettings | None, object.__getattribute__(self, "_instance"))
         if instance is None:
-            instance = AppSettings()  # type: ignore[call-arg]
+            instance = AppSettings()
             object.__setattr__(self, "_instance", instance)
         return instance
 
     def reload(self) -> AppSettings:
         """Rebuild the settings object from the current environment."""
-        instance = AppSettings()  # type: ignore[call-arg]
+        instance = AppSettings()
         object.__setattr__(self, "_instance", instance)
         return instance
 
