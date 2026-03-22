@@ -54,13 +54,11 @@ def test_open_with_system_app_uses_startfile_on_windows(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     opened: list[Path] = []
-    monkeypatch.setattr(admin.os, "name", "nt", raising=False)
-    monkeypatch.setattr(
-        admin.os,
-        "startfile",
-        lambda path: opened.append(path),
-        raising=False,
+    fake_os = SimpleNamespace(
+        name="nt",
+        startfile=lambda path: opened.append(path),
     )
+    monkeypatch.setattr(admin, "os", fake_os)
 
     admin._open_with_system_app(Path("example.txt"))
 
@@ -71,8 +69,10 @@ def test_open_with_system_app_uses_platform_defaults(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     calls: list[list[str]] = []
-    monkeypatch.setattr(admin.os, "name", "posix", raising=False)
-    monkeypatch.setattr(admin.sys, "platform", "darwin")
+    fake_os = SimpleNamespace(name="posix")
+    fake_sys = SimpleNamespace(platform="darwin")
+    monkeypatch.setattr(admin, "os", fake_os)
+    monkeypatch.setattr(admin, "sys", fake_sys)
 
     def _record_run(args: list[str], check: bool) -> None:
         del check
@@ -81,7 +81,7 @@ def test_open_with_system_app_uses_platform_defaults(
     monkeypatch.setattr(admin.subprocess, "run", _record_run)
 
     admin._open_with_system_app(Path("example.txt"))
-    monkeypatch.setattr(admin.sys, "platform", "linux")
+    fake_sys.platform = "linux"
     admin._open_with_system_app(Path("example.txt"))
 
     assert calls == [["open", "example.txt"], ["xdg-open", "example.txt"]]
@@ -104,7 +104,10 @@ def test_open_in_editor_prefers_editor_env(monkeypatch: pytest.MonkeyPatch) -> N
 
 def test_open_in_editor_platform_defaults(monkeypatch: pytest.MonkeyPatch) -> None:
     calls: list[list[str]] = []
-    monkeypatch.delenv("EDITOR", raising=False)
+    fake_os = SimpleNamespace(name="nt", environ={})
+    fake_sys = SimpleNamespace(platform="darwin")
+    monkeypatch.setattr(admin, "os", fake_os)
+    monkeypatch.setattr(admin, "sys", fake_sys)
 
     def _record_run(args: list[str], check: bool) -> None:
         del check
@@ -112,14 +115,13 @@ def test_open_in_editor_platform_defaults(monkeypatch: pytest.MonkeyPatch) -> No
 
     monkeypatch.setattr(admin.subprocess, "run", _record_run)
 
-    monkeypatch.setattr(admin.os, "name", "nt", raising=False)
     admin._open_in_editor(Path("config.env"))
 
-    monkeypatch.setattr(admin.os, "name", "posix", raising=False)
-    monkeypatch.setattr(admin.sys, "platform", "darwin")
+    fake_os.name = "posix"
+    fake_sys.platform = "darwin"
     admin._open_in_editor(Path("config.env"))
 
-    monkeypatch.setattr(admin.sys, "platform", "linux")
+    fake_sys.platform = "linux"
     admin._open_in_editor(Path("config.env"))
 
     assert calls == [
