@@ -1464,7 +1464,29 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
     mock_config_exists,  # noqa: ARG001
     tmp_path,
 ):
-    """Skipped dashboard entries should be plain text instead of raw markup."""
+    """Skipped single-video runs should clear the live dashboard before summary."""
+
+    class FakeLive:
+        instances: list["FakeLive"] = []
+
+        def __init__(
+            self,
+            *_args,
+            transient=False,
+            **_kwargs,
+        ):  # noqa: ANN002, ANN003
+            self.transient = transient
+            self.stopped = False
+            self.__class__.instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+        def stop(self) -> None:
+            self.stopped = True
 
     async def _run_with_skip(video_ids, on_event=None):  # noqa: ARG001
         if on_event is not None:
@@ -1496,7 +1518,17 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(side_effect=_run_with_skip)
     dashboard_instance = MagicMock()
-    dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
+    dashboard_instance.configure_mock(
+        recent_completions=[],
+        recent_failures=[],
+        skipped_count=0,
+    )
+
+    def _record_completion(title):  # noqa: ANN001
+        if title.endswith(" (skipped)"):
+            dashboard_instance.skipped_count += 1
+
+    dashboard_instance.add_completion.side_effect = _record_completion
 
     with (
         patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
@@ -1509,7 +1541,7 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
             "yt_study.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("yt_study.cli.app.Live"),
+        patch("yt_study.cli.app.Live", FakeLive),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1525,6 +1557,210 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
 
     assert result.exit_code == 0
     dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+    assert FakeLive.instances[0].transient is True
+
+
+def test_process_playlist_all_skipped_clears_live_dashboard(tmp_path):
+    """Skip-only playlist runs should also exit the live dashboard transiently."""
+
+    class FakeLive:
+        instances: list["FakeLive"] = []
+
+        def __init__(
+            self,
+            *_args,
+            transient=False,
+            **_kwargs,
+        ):  # noqa: ANN002, ANN003
+            self.transient = transient
+            self.__class__.instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+        def stop(self) -> None:
+            return None
+
+    async def _run_playlist_skip(video_ids, on_event=None):  # noqa: ANN001
+        if on_event is not None:
+            for video_id, title in zip(
+                video_ids,
+                ["Video One", "Video Two"],
+                strict=True,
+            ):
+                on_event(
+                    PipelineEvent(
+                        event_type=EventType.METADATA_START,
+                        video_id=video_id,
+                        title=title,
+                    )
+                )
+                on_event(
+                    PipelineEvent(
+                        event_type=EventType.VIDEO_SKIPPED,
+                        video_id=video_id,
+                        title=title,
+                    )
+                )
+        return PipelineResult(
+            success_count=2,
+            failure_count=0,
+            total_count=2,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_playlist_skip)
+    dashboard_instance = MagicMock()
+    dashboard_instance.configure_mock(
+        recent_completions=[],
+        recent_failures=[],
+        skipped_count=0,
+    )
+
+    def _record_playlist_completion(title):  # noqa: ANN001
+        if title.endswith(" (skipped)"):
+            dashboard_instance.skipped_count += 1
+
+    dashboard_instance.add_completion.side_effect = _record_playlist_completion
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_playlist("PL_SKIP"),
+        ),
+        patch(
+            "yt_study.cli.app.extract_playlist_videos",
+            new_callable=AsyncMock,
+            return_value=["vid1", "vid2"],
+        ),
+        patch(
+            "yt_study.cli.app.get_playlist_info",
+            new_callable=AsyncMock,
+            return_value=("Skipped Playlist", 2),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("yt_study.cli.app.Live", FakeLive),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.max_concurrent_chapters = 3
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(
+            app, ["process", "https://youtube.com/playlist?list=PL_SKIP"]
+        )
+
+    assert result.exit_code == 0
+    assert FakeLive.instances[0].transient is True
+
+
+def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
+    """Skip-only batch runs should clear the dashboard before the summary."""
+
+    class FakeLive:
+        instances: list["FakeLive"] = []
+
+        def __init__(
+            self,
+            *_args,
+            transient=False,
+            **_kwargs,
+        ):  # noqa: ANN002, ANN003
+            self.transient = transient
+            self.__class__.instances.append(self)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+            return False
+
+        def stop(self) -> None:
+            return None
+
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(_VIDEO_URL, encoding="utf-8")
+
+    async def _run_with_skip(video_ids, on_event=None):  # noqa: ANN001
+        if on_event is not None:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.METADATA_START,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SKIPPED,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_skip)
+    dashboard_instance = MagicMock()
+    dashboard_instance.configure_mock(
+        recent_completions=[],
+        recent_failures=[],
+        skipped_count=0,
+    )
+
+    def _record_completion(title):  # noqa: ANN001
+        if title.endswith(" (skipped)"):
+            dashboard_instance.skipped_count += 1
+
+    dashboard_instance.add_completion.side_effect = _record_completion
+
+    with (
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "yt_study.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video("vid1"),
+        ),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("yt_study.cli.app.Live", FakeLive),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.max_concurrent_chapters = 3
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file)])
+
+    assert result.exit_code == 0
+    dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+    assert FakeLive.instances[0].transient is True
 
 
 def test_process_playlist_deduplicates_video_ids_before_pipeline(

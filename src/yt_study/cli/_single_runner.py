@@ -10,6 +10,7 @@ from yt_study.cli._display import (
     emit_headless_event,
     print_single_run_summary,
     restore_console_after_live,
+    should_clear_dashboard_after_run,
     use_transient_live_display,
 )
 from yt_study.cli._formatters import print_cost_summary
@@ -106,6 +107,8 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
                 PipelineResult,
                 await pipeline.run(prepared.video_ids, on_event=on_event),
             )
+            if should_clear_dashboard_after_run(dashboard, result):
+                live.transient = True
     finally:
         stop_live = getattr(live, "stop", None)
         if callable(stop_live):

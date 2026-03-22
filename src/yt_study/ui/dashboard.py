@@ -61,6 +61,9 @@ class PipelineDashboard:
         self.chapter_concurrency = max(0, chapter_concurrency)
         self.recent_completions: deque[str] = deque(maxlen=3)
         self.recent_failures: deque[str] = deque(maxlen=3)
+        self.skipped_count = 0
+        self.completed_count = 0
+        self.failed_count = 0
 
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
@@ -219,6 +222,10 @@ class PipelineDashboard:
             title: Title of the completed video.
         """
         self.recent_completions.appendleft(title)
+        if title.endswith(" (skipped)"):
+            self.skipped_count += 1
+        else:
+            self.completed_count += 1
         self.overall_progress.advance(self.overall_task)
 
     def add_failure(self, title: str) -> None:
@@ -229,6 +236,7 @@ class PipelineDashboard:
             title: Title of the failed video.
         """
         self.recent_failures.appendleft(title)
+        self.failed_count += 1
         # We assume failures still count towards "processing done" so we
         # advance the bar.
         self.overall_progress.advance(self.overall_task)

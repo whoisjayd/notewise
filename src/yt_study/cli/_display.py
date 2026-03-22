@@ -17,7 +17,7 @@ from yt_study.cli._types import (
     _WorkerSlotManager,
 )
 from yt_study.domain.events import EventType, PipelineEvent
-from yt_study.domain.results import PipelineMetrics
+from yt_study.domain.results import PipelineMetrics, PipelineResult
 from yt_study.logging import get_session_log_path
 
 
@@ -245,6 +245,16 @@ def update_dashboard_chapter_slot(
         )
         return
     dashboard.update_chapter_worker(chapter_key, status_fn(title, event))
+
+
+def should_clear_dashboard_after_run(
+    dashboard: Any,
+    result: PipelineResult,
+) -> bool:
+    """Return True when a skipped-only run should clear the live dashboard."""
+    if result.failure_count or result.success_count == 0:
+        return False
+    return int(getattr(dashboard, "skipped_count", 0) or 0) == result.success_count
 
 
 def print_single_run_summary(

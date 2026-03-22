@@ -14,6 +14,7 @@ from yt_study.cli._display import (
     emit_headless_event,
     print_batch_summary,
     restore_console_after_live,
+    should_clear_dashboard_after_run,
     update_dashboard_chapter_slot,
     use_transient_live_display,
 )
@@ -66,6 +67,7 @@ async def run_batch_file(
 
             latest_title = job.video_id
             fallback_video_id = job.video_id
+            was_skipped = False
             try:
                 pipeline = context.build_pipeline(
                     job.output_dir,
@@ -78,8 +80,11 @@ async def run_batch_file(
                     _fallback_video_id: str = fallback_video_id,
                 ) -> None:
                     nonlocal latest_title
+                    nonlocal was_skipped
                     if event.title:
                         latest_title = event.title
+                    if event.event_type == EventType.VIDEO_SKIPPED:
+                        was_skipped = True
                     if dashboard is None:
                         emit_headless_event(context, event)
                         return
@@ -115,6 +120,9 @@ async def run_batch_file(
                     ),
                 )
                 display_title = latest_title or fallback_video_id
+                completion_title = (
+                    f"{display_title} (skipped)" if was_skipped else display_title
+                )
 
                 if dashboard is not None:
                     if hasattr(dashboard, "clear_chapter_workers"):
@@ -123,7 +131,7 @@ async def run_batch_file(
                     if result.failure_count:
                         dashboard.add_failure(display_title)
                     else:
-                        dashboard.add_completion(display_title)
+                        dashboard.add_completion(completion_title)
 
                 failure_row = None
                 if result.failure_count:
@@ -238,6 +246,24 @@ async def run_batch_file(
         try:
             with live:
                 await run_batch_queue()
+                synthetic_result = PipelineResult(
+                    success_count=sum(1 for result in batch_results if result.success),
+                    failure_count=len(
+                        [
+                            *early_failures,
+                            *[
+                                result.failure_row
+                                for result in batch_results
+                                if result.failure_row is not None
+                            ],
+                        ]
+                    ),
+                    total_count=total_jobs,
+                    video_ids=[result.display_title for result in batch_results],
+                    errors={},
+                )
+                if should_clear_dashboard_after_run(dashboard, synthetic_result):
+                    live.transient = True
         finally:
             stop_live = getattr(live, "stop", None)
             if callable(stop_live):
