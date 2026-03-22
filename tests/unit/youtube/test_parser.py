@@ -92,6 +92,18 @@ class TestURLParsing:
         assert parsed.video_id == "dQw4w9WgXcQ"
         assert parsed.playlist_id is None
 
+    def test_bare_video_id(self):
+        """Bare 11-char video IDs should be accepted by the parser."""
+        parsed = parse_youtube_url("dQw4w9WgXcQ")
+        assert parsed.url_type == "video"
+        assert parsed.video_id == "dQw4w9WgXcQ"
+
+    def test_bare_playlist_id(self):
+        """Common bare playlist IDs should also be accepted."""
+        parsed = parse_youtube_url("PLtest123456789")
+        assert parsed.url_type == "playlist"
+        assert parsed.playlist_id == "PLtest123456789"
+
     def test_playlist_url(self):
         """Test parsing playlist URL."""
         url = "https://www.youtube.com/playlist?list=PLtest123"

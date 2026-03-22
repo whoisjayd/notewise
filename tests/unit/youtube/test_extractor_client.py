@@ -1012,7 +1012,7 @@ class TestDeeperExtractorBranches:
 
         assert result["playlist_count"] == 1
 
-    def test_extract_playlist_entries_paginated_breaks_on_call_error(self, monkeypatch):
+    def test_extract_playlist_entries_paginated_raises_on_call_error(self, monkeypatch):
         client = ExtractorClient()
         data = {
             "continuationCommand": {"token": "tok1"},
@@ -1024,11 +1024,10 @@ class TestDeeperExtractorBranches:
             lambda **_kwargs: (_ for _ in ()).throw(RuntimeError("stop")),
         )
 
-        entries = client._extract_playlist_entries_paginated(
-            data, api_key="k", ytcfg={}
-        )
-
-        assert [e["id"] for e in entries] == ["id1"]
+        with pytest.raises(
+            ExtractorError, match="Failed to fetch playlist continuation page: stop"
+        ):
+            client._extract_playlist_entries_paginated(data, api_key="k", ytcfg={})
 
     def test_fetch_text_success_and_error(self, monkeypatch):
         client = ExtractorClient()

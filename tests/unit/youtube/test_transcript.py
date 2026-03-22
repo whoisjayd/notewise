@@ -49,15 +49,15 @@ class TestTranscriptHelpers:
         [
             (
                 Exception("This video is members only"),
-                "Members-only YouTube videos are not supported",
+                "cookie-file",
             ),
             (
                 Exception("This video is age restricted"),
-                "Age-restricted YouTube videos are not supported",
+                "cookie-file",
             ),
             (
                 Exception("Please sign in to continue"),
-                "Sign-in-only YouTube videos are not supported",
+                "cookie-file",
             ),
         ],
     )
@@ -134,7 +134,7 @@ class TestFetchTranscript:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Private YouTube videos are not supported",
+            match="cookie-file",
         ):
             await fetch_transcript("video123")
 

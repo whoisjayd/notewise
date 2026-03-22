@@ -23,7 +23,12 @@ from yt_study.cli._source_resolution import (
     ordered_batch_failures_from_error,
     prepare_source,
 )
-from yt_study.cli._types import _BatchJobResult, _BatchVideoJob, _OrderedBatchFailure
+from yt_study.cli._types import (
+    ResolvedSource,
+    _BatchJobResult,
+    _BatchVideoJob,
+    _OrderedBatchFailure,
+)
 from yt_study.domain.events import EventType, PipelineEvent
 from yt_study.domain.results import PipelineResult
 from yt_study.errors import UserVisibleCliError
@@ -184,42 +189,87 @@ async def run_batch_file(
 
     async def enqueue_batch_jobs() -> None:
         nonlocal total_jobs
-        for item_index, batch_url in enumerate(urls, start=1):
-            if dashboard is not None:
-                dashboard.update_overall_status(
-                    f"Resolving batch entry {item_index}/{len(urls)}"
-                )
-            try:
-                prepared = await prepare_source(context, batch_url)
-            except UserVisibleCliError as error:
-                early_failures.extend(
-                    ordered_batch_failures_from_error(item_index, batch_url, error)
-                )
-                continue
+        resolution_concurrency = min(3, max(1, len(urls)))
+        resolution_gate = asyncio.Semaphore(resolution_concurrency)
+        resolved_sources: asyncio.Queue[
+            tuple[int, str, ResolvedSource | None, UserVisibleCliError | None]
+        ] = asyncio.Queue()
 
-            if not prepared.video_ids:
-                early_failures.append(
-                    _OrderedBatchFailure(
-                        sort_key=(item_index, 1),
-                        item=prepared.label,
-                        message="No videos found to process.",
-                    )
-                )
-                continue
+        async def resolve_source(
+            item_index: int,
+            batch_url: str,
+        ) -> None:
+            async with resolution_gate:
+                try:
+                    prepared = await prepare_source(context, batch_url)
+                except UserVisibleCliError as error:
+                    await resolved_sources.put((item_index, batch_url, None, error))
+                    return
+                await resolved_sources.put((item_index, batch_url, prepared, None))
 
-            for video_index, video_id in enumerate(prepared.video_ids, start=1):
-                total_jobs += 1
+        if context.no_ui and len(urls) >= 10:
+            context.console.print(
+                f"Preflight: resolving {len(urls)} batch entries with up to "
+                f"{resolution_concurrency} concurrent lookups."
+            )
+
+        tasks = [
+            asyncio.create_task(resolve_source(item_index, batch_url))
+            for item_index, batch_url in enumerate(urls, start=1)
+        ]
+
+        try:
+            for resolved_count in range(1, len(urls) + 1):
+                (
+                    item_index,
+                    batch_url,
+                    prepared_obj,
+                    error,
+                ) = await resolved_sources.get()
                 if dashboard is not None:
-                    dashboard.set_total_videos(total_jobs)
-                await job_queue.put(
-                    _BatchVideoJob(
-                        sort_key=(item_index, video_index),
-                        video_id=video_id,
-                        output_dir=prepared.output_dir,
-                        source_label=prepared.label,
-                        is_playlist_video=prepared.is_playlist,
+                    dashboard.update_overall_status(
+                        "Preflight: "
+                        f"{resolved_count}/{len(urls)} sources resolved • "
+                        f"{total_jobs} videos queued"
                     )
-                )
+                if error is not None:
+                    early_failures.extend(
+                        ordered_batch_failures_from_error(item_index, batch_url, error)
+                    )
+                    continue
+
+                prepared = prepared_obj
+                if prepared is None or not prepared.video_ids:
+                    label = batch_url if prepared is None else prepared.label
+                    early_failures.append(
+                        _OrderedBatchFailure(
+                            sort_key=(item_index, 1),
+                            item=label,
+                            message="No videos found to process.",
+                        )
+                    )
+                    continue
+
+                for video_index, video_id in enumerate(prepared.video_ids, start=1):
+                    total_jobs += 1
+                    if dashboard is not None:
+                        dashboard.set_total_videos(total_jobs)
+                        dashboard.update_overall_status(
+                            "Preflight: "
+                            f"{resolved_count}/{len(urls)} sources resolved • "
+                            f"{total_jobs} videos queued"
+                        )
+                    await job_queue.put(
+                        _BatchVideoJob(
+                            sort_key=(item_index, video_index),
+                            video_id=video_id,
+                            output_dir=prepared.output_dir,
+                            source_label=prepared.label,
+                            is_playlist_video=prepared.is_playlist,
+                        )
+                    )
+        finally:
+            await asyncio.gather(*tasks)
 
         if dashboard is not None:
             dashboard.update_overall_status("")

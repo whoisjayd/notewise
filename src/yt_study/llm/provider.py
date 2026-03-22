@@ -170,7 +170,9 @@ class LLMProvider:
             if not response.choices or not response.choices[0].message.content:
                 raise LLMGenerationError("Received empty response from LLM provider")
 
-            content = response.choices[0].message.content.strip()
+            content = self._normalize_content(response.choices[0].message.content)
+            if not content:
+                raise LLMGenerationError("Received empty response from LLM provider")
             return self._clean_content(content)
 
         except LLMGenerationError:
@@ -270,6 +272,46 @@ class LLMProvider:
                 return "\n".join(lines[1:]).strip().removesuffix("```").strip()
 
         return content
+
+    def _normalize_content(self, content: Any) -> str:
+        """Normalize string or block-style provider payloads to plain text."""
+        if isinstance(content, str):
+            return content.strip()
+
+        def _extract_text(value: Any) -> list[str]:
+            if value is None:
+                return []
+            if isinstance(value, str):
+                stripped = value.strip()
+                return [stripped] if stripped else []
+            if isinstance(value, dict):
+                for key in ("text", "content", "value"):
+                    nested = value.get(key)
+                    if isinstance(nested, str):
+                        stripped = nested.strip()
+                        return [stripped] if stripped else []
+                    if isinstance(nested, dict):
+                        return _extract_text(nested)
+                return []
+            if isinstance(value, list):
+                parts: list[str] = []
+                for item in value:
+                    parts.extend(_extract_text(item))
+                return parts
+
+            text_attr = getattr(value, "text", None)
+            if isinstance(text_attr, str):
+                stripped = text_attr.strip()
+                return [stripped] if stripped else []
+
+            value_attr = getattr(value, "value", None)
+            if isinstance(value_attr, str):
+                stripped = value_attr.strip()
+                return [stripped] if stripped else []
+
+            return []
+
+        return "\n".join(_extract_text(content)).strip()
 
 
 def get_provider(model: str = DEFAULT_MODEL) -> LLMProvider:

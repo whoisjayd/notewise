@@ -2,7 +2,12 @@
 
 import pytest
 
-from yt_study.errors import ExtractionError as ExtractorError
+from yt_study.errors import (
+    ExtractionError as ExtractorError,
+)
+from yt_study.errors import (
+    PlaylistError,
+)
 from yt_study.errors import (
     VideoUnavailableError as PublicAccessRequiredError,
 )
@@ -15,7 +20,10 @@ from yt_study.youtube.metadata import (
 from yt_study.youtube.metadata import (
     _check_video_availability as _raise_if_video_data_requires_public_access,
 )
-from yt_study.youtube.metadata import get_playlist_info, get_video_metadata
+from yt_study.youtube.metadata import (
+    get_playlist_info,
+    get_video_metadata,
+)
 
 
 class TestVideoMetadata:
@@ -81,7 +89,26 @@ class TestVideoMetadata:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Make the video unlisted or public to process it",
+            match="cookie-file",
+        ):
+            await get_video_metadata("video123")
+
+    @pytest.mark.asyncio
+    async def test_get_video_metadata_unavailable_video_raises_invalid_style_error(
+        self, mock_extractor_client
+    ):
+        """Unavailable videos should suggest invalid/unavailable instead of sign-in."""
+        client = mock_extractor_client["metadata"].return_value
+        client.video_metadata_full.return_value = {
+            "title": "Unavailable",
+            "duration": 0,
+            "availability": "unavailable",
+            "chapters": [],
+        }
+
+        with pytest.raises(
+            PublicAccessRequiredError,
+            match="isn't available",
         ):
             await get_video_metadata("video123")
 
@@ -126,14 +153,12 @@ class TestPlaylistMetadata:
 
     @pytest.mark.asyncio
     async def test_get_playlist_info_failure(self, mock_extractor_client):
-        """Playlist failures should use fallback title and count."""
+        """Extractor failures should surface as actionable playlist errors."""
         client = mock_extractor_client["metadata"].return_value
         client.metadata.side_effect = ExtractorError("Access Denied")
 
-        title, count = await get_playlist_info("pl123")
-
-        assert title == "playlist_pl123"
-        assert count == 0
+        with pytest.raises(PlaylistError, match="Could not access playlist pl123"):
+            await get_playlist_info("pl123")
 
     @pytest.mark.asyncio
     async def test_get_playlist_info_private_playlist_raises(
@@ -148,7 +173,7 @@ class TestPlaylistMetadata:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Make the playlist unlisted or public to process it",
+            match="cookie-file",
         ):
             await get_playlist_info("pl123")
 

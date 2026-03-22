@@ -68,6 +68,25 @@ class TestLLMProvider:
             assert result == "# Title\nContent"
 
     @pytest.mark.asyncio
+    async def test_generate_normalizes_block_content_payloads(self):
+        """Structured content blocks should be normalized into plain text."""
+        with (
+            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = [
+                {"type": "text", "text": "First paragraph"},
+                {"type": "output_text", "text": "Second paragraph"},
+            ]
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            result = await provider.generate("sys", "user")
+
+            assert result == "First paragraph\nSecond paragraph"
+
+    @pytest.mark.asyncio
     async def test_generate_collects_usage_from_litellm_response(self):
         """Provider should accumulate prompt/completion metrics from response usage."""
         with (

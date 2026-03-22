@@ -233,6 +233,13 @@ class CorePipeline:
             self._reserved_output_targets.add(target)
             return target
 
+    async def _release_output_target(self, target: Path | None) -> None:
+        """Release an in-memory reservation once processing for that target ends."""
+        if target is None:
+            return
+        async with self._output_lock:
+            self._reserved_output_targets.discard(target)
+
     def _emit_event(
         self,
         on_event: Callable[[PipelineEvent], None] | None,

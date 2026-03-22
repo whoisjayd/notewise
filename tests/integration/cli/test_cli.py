@@ -1,6 +1,7 @@
 """Tests for CLI entry point."""
 
 import asyncio
+import sys
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
@@ -67,14 +68,19 @@ def reset_cli_app_globals():
     import yt_study.cli.app as cli_app_module
 
     patch_points = (
+        "_console",
         "config",
         "CorePipeline",
         "parse_youtube_url",
         "extract_playlist_videos",
         "get_playlist_info",
+        "get_video_metadata",
+        "get_video_details",
+        "get_source_metadata",
         "PipelineDashboard",
         "Live",
         "run_setup_wizard",
+        "show_current_config",
     )
     for name in patch_points:
         setattr(cli_app_module, name, None)
@@ -203,7 +209,93 @@ def test_callback_help():
     """Test callback shows help when no command."""
     result = runner.invoke(app)
     assert result.exit_code == 0
-    assert "Usage" in result.stdout
+    assert "Quick Start" in result.stdout
+    assert "yt-study process" in result.stdout
+
+
+@pytest.mark.parametrize(
+    ("argv", "expected"),
+    [
+        (["version"], "version"),
+        (["config-path"], "No configuration found"),
+        (["stats"], "No cache database found yet"),
+        (["history"], "No processed video history found yet"),
+        (["info"], "yt-study Info"),
+        (["doctor"], "Doctor"),
+        (["cache", "info"], "No cache database found"),
+        (["logs"], "No log files found"),
+    ],
+)
+def test_fast_commands_do_not_import_runtime(tmp_path, monkeypatch, argv, expected):
+    """Non-processing CLI commands should not pull in the process runtime."""
+    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    sys.modules.pop("yt_study.cli._runtime", None)
+
+    result = runner.invoke(app, argv)
+
+    assert result.exit_code == 0
+    assert expected in result.stdout
+    assert "yt_study.cli._runtime" not in sys.modules
+
+
+def test_setup_show_displays_current_config_without_runtime_import(
+    tmp_path,
+    monkeypatch,
+):
+    """setup --show should be read-only and stay on the fast path."""
+    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    config_dir = tmp_path / ".yt-study"
+    config_dir.mkdir()
+    (config_dir / "config.env").write_text(
+        "DEFAULT_MODEL=gemini/gemini-2.5-flash\nGEMINI_API_KEY=secret-value",
+        encoding="utf-8",
+    )
+    sys.modules.pop("yt_study.cli._runtime", None)
+
+    result = runner.invoke(app, ["setup", "--show"])
+
+    assert result.exit_code == 0
+    assert "Current Configuration" in result.stdout
+    assert "secret-value" not in result.stdout
+    assert "yt_study.cli._runtime" not in sys.modules
+
+
+def test_config_command_displays_masked_config(tmp_path, monkeypatch):
+    """The dedicated config command should expose masked current settings."""
+    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    config_dir = tmp_path / ".yt-study"
+    config_dir.mkdir()
+    (config_dir / "config.env").write_text(
+        "DEFAULT_MODEL=gemini/gemini-2.5-flash\nGEMINI_API_KEY=secret-value",
+        encoding="utf-8",
+    )
+    sys.modules.pop("yt_study.cli._runtime", None)
+
+    result = runner.invoke(app, ["config"])
+
+    assert result.exit_code == 0
+    assert "Current Configuration" in result.stdout
+    assert "secret-value" not in result.stdout
+    assert "yt_study.cli._runtime" not in sys.modules
+
+
+def test_cache_shortcuts_match_subcommands(tmp_path, monkeypatch):
+    """cache --info/--show should work as ergonomic aliases for subcommands."""
+    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    sys.modules.pop("yt_study.cli._runtime", None)
+
+    result = runner.invoke(app, ["cache", "--info"])
+
+    assert result.exit_code == 0
+    assert "No cache database found" in result.stdout
+    assert "yt_study.cli._runtime" not in sys.modules
+
+
+def test_cache_show_shortcut_requires_video_id():
+    """cache --show should surface a normal missing-value error."""
+    result = runner.invoke(app, ["cache", "--show"])
+
+    assert result.exit_code == 2
 
 
 # ---------------------------------------------------------------------------
@@ -220,6 +312,16 @@ def test_process_url_success(mock_config_exists, mock_pipeline):  # noqa: ARG001
     pipeline_instance.run.assert_awaited_once()
 
 
+def test_process_bare_video_id_success(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    """Bare video IDs should work anywhere a single video URL works."""
+    _, pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process", "dQw4w9WgXcQ"])
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+
+
 def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
     """Test processing a batch file calls pipeline once per URL."""
     _, pipeline_instance = mock_pipeline
@@ -230,6 +332,50 @@ def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):  # noq
 
     assert result.exit_code == 0
     assert pipeline_instance.run.await_count == 2
+
+
+def test_info_accepts_bare_video_id():
+    """The info command should accept a bare video id without a traceback."""
+
+    with (
+        patch(
+            "yt_study.cli.app.get_video_details",
+            new_callable=AsyncMock,
+        ) as mock_video_details,
+        patch(
+            "yt_study.cli.app.get_source_metadata",
+            new_callable=AsyncMock,
+        ) as mock_source_meta,
+        patch("yt_study.cli.app.config") as mock_config,
+    ):
+        mock_video_details.return_value = {
+            "title": "Bare Video",
+            "duration": 125,
+            "uploader": "Channel Name",
+            "view_count": 12345,
+            "chapters": [],
+            "subtitles": {"en": []},
+            "automatic_captions": {"en": []},
+        }
+        mock_source_meta.return_value = {}
+        mock_config.youtube_cookie_file = None
+
+        result = runner.invoke(app, ["info", "dQw4w9WgXcQ"])
+
+    assert result.exit_code == 0
+    assert "Bare Video" in result.stdout
+    assert "Channel Name" in result.stdout
+    assert "Traceback" not in result.stdout
+    mock_source_meta.assert_not_awaited()
+
+
+def test_info_invalid_bare_id_shows_clean_error():
+    """Invalid bare ids should fail cleanly without exposing a traceback."""
+    result = runner.invoke(app, ["info", "not-a-youtube-id"])
+
+    assert result.exit_code == 1
+    assert "Input Error" in result.stdout
+    assert "Traceback" not in result.stdout
 
 
 def test_process_batch_file_success_prints_summary(
@@ -322,6 +468,82 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
         mock_config.max_concurrent_videos = 2
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", str(batch_file), "--no-ui"])
+
+    assert result.exit_code == 0
+    assert pipeline_instance.run.await_count == 2
+
+
+def test_process_batch_preflight_feeds_workers_before_all_sources_finish(tmp_path):
+    """Resolved sources should reach workers before the slowest source finishes."""
+    batch_file = tmp_path / "urls.txt"
+    batch_file.write_text(
+        "\n".join(
+            [
+                "https://youtube.com/watch?v=slowfirst01A",
+                "https://youtube.com/watch?v=fastsecondB",
+            ]
+        ),
+        encoding="utf-8",
+    )
+
+    slow_started = None
+    allow_slow_finish = None
+
+    async def _prepare_source(_context, batch_url):  # noqa: ANN001
+        nonlocal slow_started, allow_slow_finish
+        if slow_started is None or allow_slow_finish is None:
+            slow_started = asyncio.Event()
+            allow_slow_finish = asyncio.Event()
+
+        video_id = batch_url.rsplit("=", 1)[-1]
+        prepared = MagicMock()
+        prepared.video_ids = [video_id]
+        prepared.output_dir = tmp_path
+        prepared.label = video_id
+        prepared.is_playlist = False
+        prepared.playlist_name = None
+
+        if "slowfirst" in video_id:
+            slow_started.set()
+            await asyncio.wait_for(allow_slow_finish.wait(), timeout=0.2)
+            return prepared
+
+        await asyncio.wait_for(slow_started.wait(), timeout=0.2)
+        return prepared
+
+    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+        assert allow_slow_finish is not None
+        allow_slow_finish.set()
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run)
+
+    with (
+        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("yt_study.cli.app.config") as mock_config,
+        patch("yt_study.cli._batch_runner.prepare_source", side_effect=_prepare_source),
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.max_concurrent_chapters = 3
         mock_config.youtube_requests_per_minute = 10
         mock_config.youtube_cookie_file = None
         mock_config.get_api_key_name_for_model.return_value = None

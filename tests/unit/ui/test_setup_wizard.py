@@ -4,13 +4,16 @@ from unittest.mock import MagicMock, mock_open, patch
 
 from yt_study.ui.setup_wizard import (
     CURATED_FALLBACK_MODELS,
+    _strip_wrapped_quotes,
     get_api_key,
     get_available_models,
+    get_config_path,
     load_config,
     run_setup_wizard,
     save_config,
     select_model,
     select_provider,
+    show_current_config,
 )
 
 
@@ -129,6 +132,56 @@ class TestConfigIO:
         assert "YOUTUBE_SAVE_OAUTH_TOKEN" not in written_content
         assert "YOUTUBE_OAUTH_TOKEN_FILE" not in written_content
         assert "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN" not in written_content
+
+    def test_show_current_config_masks_api_keys(self):
+        """Read-only config display should mask secret values."""
+        console = MagicMock()
+        with (
+            patch(
+                "yt_study.ui.setup_wizard.load_config",
+                return_value={
+                    "DEFAULT_MODEL": "gemini/gemini-2.5-flash",
+                    "GEMINI_API_KEY": "secret-api-key-value",
+                },
+            ),
+            patch(
+                "yt_study.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            current = show_current_config(console=console)
+
+        assert current["GEMINI_API_KEY"] == "secret-api-key-value"
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "secret-api-key-value" not in rendered
+        assert console.print.call_count >= 2
+
+    def test_show_current_config_handles_missing_config(self):
+        """Read-only config display should report missing config cleanly."""
+        console = MagicMock()
+        with patch("yt_study.ui.setup_wizard.load_config", return_value={}):
+            current = show_current_config(console=console)
+
+        assert current == {}
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "No configuration found" in rendered
+
+    def test_strip_wrapped_quotes_handles_python_raw_string_prefix(self):
+        """Displayed config values should normalize r\"...\" path literals."""
+        assert _strip_wrapped_quotes('r"D:\\tmp\\out"') == "D:\\tmp\\out"
+
+    def test_show_current_config_reports_read_errors(self):
+        """Unreadable config files should not be misreported as missing config."""
+        console = MagicMock()
+        with patch(
+            "yt_study.ui.setup_wizard.load_config",
+            side_effect=RuntimeError("Failed to read configuration"),
+        ):
+            current = show_current_config(console=console)
+
+        assert current == {}
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "Failed to read configuration" in rendered
 
 
 class TestModelFetching:

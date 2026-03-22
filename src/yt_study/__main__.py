@@ -2,11 +2,24 @@
 
 from __future__ import annotations
 
-from yt_study.cli.app import app
+import sys
+
+
+def _is_help_invocation(argv: list[str]) -> bool:
+    """Return True when the current argv explicitly asks for help output."""
+    return any(arg in {"--help", "-h"} for arg in argv)
 
 
 def main() -> None:
     """Run the Typer application."""
+    from yt_study.cli._banner import print_help_banner
+    from yt_study.cli.app import _get_console, app
+
+    if _is_help_invocation(sys.argv[1:]):
+        console = _get_console()
+        print_help_banner(console)
+        console.print()
+
     app()
 
 

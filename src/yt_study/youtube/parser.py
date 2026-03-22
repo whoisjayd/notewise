@@ -8,6 +8,17 @@ from yt_study.errors import ValidationError
 
 
 _VIDEO_ID_PATTERN = re.compile(r"^[0-9A-Za-z_-]{11}$")
+_BARE_ID_PATTERN = re.compile(r"^[0-9A-Za-z_-]+$")
+_PLAYLIST_ID_PREFIXES = (
+    "PL",
+    "UU",
+    "LL",
+    "FL",
+    "RD",
+    "UL",
+    "WL",
+    "OLAK5uy_",
+)
 
 
 def extract_video_id(url: str) -> str | None:
@@ -101,6 +112,10 @@ def parse_youtube_url(url: str) -> ParsedURL:
     if not url or not isinstance(url, str):
         raise ValidationError("URL must be a non-empty string")
 
+    bare_input = _parse_bare_youtube_id(url)
+    if bare_input is not None:
+        return bare_input
+
     # Check for playlist first
     playlist_id = extract_playlist_id(url)
     if playlist_id:
@@ -116,6 +131,18 @@ def parse_youtube_url(url: str) -> ParsedURL:
         return ParsedURL(url_type="video", video_id=video_id)
 
     raise ValidationError(f"Invalid YouTube URL: {url}")
+
+
+def _parse_bare_youtube_id(value: str) -> ParsedURL | None:
+    """Interpret a bare YouTube video or playlist id without requiring a URL."""
+    candidate = value.strip()
+    if not candidate or candidate != value or not _BARE_ID_PATTERN.fullmatch(candidate):
+        return None
+    if _is_video_id(candidate):
+        return ParsedURL(url_type="video", video_id=candidate)
+    if _looks_like_playlist_id(candidate):
+        return ParsedURL(url_type="playlist", playlist_id=candidate)
+    return None
 
 
 def _parse_supported_youtube_url(url: str) -> ParseResult | None:
@@ -141,6 +168,11 @@ def _normalized_hostname(parsed: ParseResult) -> str | None:
 def _is_video_id(candidate: str | None) -> bool:
     """Return True when a candidate string looks like a YouTube video ID."""
     return bool(candidate and _VIDEO_ID_PATTERN.fullmatch(candidate))
+
+
+def _looks_like_playlist_id(candidate: str) -> bool:
+    """Return True when a bare string looks like a YouTube playlist id."""
+    return len(candidate) >= 12 and candidate.startswith(_PLAYLIST_ID_PREFIXES)
 
 
 def _first_query_value(

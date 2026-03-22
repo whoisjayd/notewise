@@ -71,7 +71,7 @@ class TestPlaylistExtraction:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="not supported",
+            match="cookie-file",
         ):
             await extract_playlist_videos("pl123")
 
@@ -89,7 +89,7 @@ class TestPlaylistExtraction:
 
         with pytest.raises(
             PublicAccessRequiredError,
-            match="Sign-in-only YouTube videos are not supported",
+            match="cookie-file",
         ):
             await extract_playlist_videos("pl123")
 

@@ -37,6 +37,7 @@ async def process_single_video(
 
     emit = pipeline._emit_event(on_event)
     async with pipeline.semaphore:
+        reserved_targets: list[Path] = []
         try:
             emit(EventType.METADATA_START, video_id)
 
@@ -115,8 +116,10 @@ async def process_single_video(
                     output_target = await pipeline._reserve_output_target(
                         pipeline.output_dir / sanitize_filename(title),
                         video_id,
-                        allow_existing_base=current_cached_video is not None,
+                        allow_existing_base=pipeline.force
+                        or current_cached_video is not None,
                     )
+                    reserved_targets.append(output_target)
                     output_target.mkdir(parents=True, exist_ok=True)
                     transcript_output_dir = output_target
 
@@ -271,8 +274,10 @@ async def process_single_video(
                     output_target = await pipeline._reserve_output_target(
                         pipeline.output_dir / f"{sanitize_filename(title)}.md",
                         video_id,
-                        allow_existing_base=current_cached_video is not None,
+                        allow_existing_base=pipeline.force
+                        or current_cached_video is not None,
                     )
+                    reserved_targets.append(output_target)
                     output_target.parent.mkdir(parents=True, exist_ok=True)
                     output_target.write_text(notes, encoding="utf-8")
                     transcript_output_dir = output_target.parent
@@ -355,6 +360,9 @@ async def process_single_video(
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
+        finally:
+            for target in reserved_targets:
+                await pipeline._release_output_target(target)
 
 
 async def run_pipeline(

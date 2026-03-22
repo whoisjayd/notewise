@@ -7,6 +7,7 @@ import structlog
 from yt_study.domain.youtube import VideoChapter, VideoMetadata
 from yt_study.errors import (
     ExtractionError,
+    PlaylistError,
     VideoUnavailableError,
     raise_if_video_unavailable,
 )
@@ -51,6 +52,27 @@ async def get_video_metadata(
     cookie_file: str | None = None,
 ) -> VideoMetadata:
     """Fetch title, duration, and chapters for one video in a single call."""
+    video_data = await get_video_details(video_id, cookie_file)
+    title = str(video_data.get("title") or video_id)
+    duration = _coerce_int(video_data.get("duration"))
+    raw_chapters = video_data.get("chapters")
+    chapters = _map_video_chapters(
+        raw_chapters if isinstance(raw_chapters, list) else []
+    )
+
+    return VideoMetadata(
+        video_id=video_id,
+        title=title,
+        duration=duration,
+        chapters=chapters,
+    )
+
+
+async def get_video_details(
+    video_id: str,
+    cookie_file: str | None = None,
+) -> dict[str, object]:
+    """Fetch the full extractor payload for a single video."""
     try:
         client = _client(cookie_file)
         video_data = await client.video_metadata_full(_video_url(video_id))
@@ -61,17 +83,7 @@ async def get_video_metadata(
             "availability": video_data.get("availability"),
         }
         _check_video_availability(data_fields)
-
-        title = str(video_data.get("title") or video_id)
-        duration = _coerce_int(video_data.get("duration"))
-        chapters = _map_video_chapters(video_data.get("chapters") or [])
-
-        return VideoMetadata(
-            video_id=video_id,
-            title=title,
-            duration=duration,
-            chapters=chapters,
-        )
+        return video_data
     except VideoUnavailableError:
         raise
     except ExtractionError as error:
@@ -125,6 +137,14 @@ def _playlist_url(playlist_id: str) -> str:
     return YOUTUBE_PLAYLIST_URL.format(playlist_id=playlist_id)
 
 
+async def get_source_metadata(
+    target: str,
+    cookie_file: str | None = None,
+) -> dict[str, object]:
+    """Return the raw extractor metadata payload for a video or playlist target."""
+    return await _client(cookie_file).metadata(target)
+
+
 async def get_playlist_info(
     playlist_id: str,
     cookie_file: str | None = None,
@@ -139,7 +159,15 @@ async def get_playlist_info(
         return str(title), _coerce_int(count)
     except VideoUnavailableError:
         raise
+    except ExtractionError as error:
+        raise_if_video_unavailable(str(error))
+        logger.warning("metadata.playlist_fetch_failed", error=str(error))
+        raise PlaylistError(
+            f"Could not access playlist {playlist_id}: {error}"
+        ) from error
     except Exception as error:
         raise_if_video_unavailable(str(error))
         logger.warning("metadata.playlist_fetch_failed", error=str(error))
-    return f"playlist_{playlist_id}", 0
+        raise PlaylistError(
+            f"Could not access playlist {playlist_id}: {error}"
+        ) from error

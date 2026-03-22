@@ -102,15 +102,17 @@ def raise_if_video_unavailable(
         or text.strip().endswith("is private")
     ):
         raise VideoUnavailableError(
-            "Private YouTube videos are not supported. "
-            "Make the video unlisted or public to process it.",
+            "This YouTube content is private. "
+            "Retry with --cookie-file / --cookies from an account that can view it, "
+            "or make it unlisted or public.",
             video_id=video_id,
             reason="private",
         )
     if "members-only" in text or "members only" in text:
         raise VideoUnavailableError(
-            "Members-only YouTube videos are not supported. "
-            "Use a public or unlisted video to process it.",
+            "This YouTube content is members-only. "
+            "Retry with --cookie-file / --cookies from an account that has access, "
+            "or use a public or unlisted alternative.",
             video_id=video_id,
             reason="members_only",
         )
@@ -122,12 +124,30 @@ def raise_if_video_unavailable(
     ):
         raise VideoUnavailableError(
             (
-                "Age-restricted YouTube videos are not supported. "
-                "Use a public or unlisted video without sign-in requirements "
-                "to process it."
+                "This YouTube content is age-restricted. "
+                "Retry with --cookie-file / --cookies from an eligible account, "
+                "or use a public or unrestricted alternative."
             ),
             video_id=video_id,
             reason="age_restricted",
+        )
+    if any(
+        marker in text
+        for marker in (
+            "video unavailable",
+            "video is unavailable",
+            "not found",
+            "does not exist",
+            "no video found",
+            "removed",
+            "deleted",
+        )
+    ):
+        raise VideoUnavailableError(
+            "This YouTube content isn't available. "
+            "Check that the ID is correct and that the video or playlist is public.",
+            video_id=video_id,
+            reason="unavailable",
         )
     if (
         "sign in" in text
@@ -138,8 +158,8 @@ def raise_if_video_unavailable(
         or "log in" in text
     ):
         raise VideoUnavailableError(
-            "Sign-in-only YouTube videos are not supported. "
-            "Use a public or unlisted video to process it.",
+            "This YouTube content requires sign-in. "
+            "Retry with --cookie-file / --cookies, or use a public or unlisted video.",
             video_id=video_id,
             reason="login_required",
         )

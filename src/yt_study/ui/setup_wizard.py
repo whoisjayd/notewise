@@ -1,12 +1,9 @@
 """Configuration wizard for yt-study."""
 
-from pathlib import Path
-from typing import Any
+from __future__ import annotations
 
-from rich.console import Console
-from rich.panel import Panel
-from rich.prompt import Confirm, Prompt
-from rich.table import Table
+from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 from yt_study._constants import (
     CONFIG_FILENAME,
@@ -17,6 +14,10 @@ from yt_study._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
 )
 from yt_study.config import get_state_dir
+
+
+if TYPE_CHECKING:
+    from rich.console import Console
 
 
 LEGACY_CONFIG_KEYS = set(APP_LEGACY_CONFIG_KEYS)
@@ -140,11 +141,20 @@ _NATIVE_PROVIDER_PREFIXES = {
 
 def _resolve_console(console: Console | None) -> Console:
     """Return the provided console or create a fresh one for this flow."""
+    from rich.console import Console
+
     return console if console is not None else Console()
 
 
 def _strip_wrapped_quotes(value: str) -> str:
     """Remove one layer of matching quotes from config values."""
+    if (
+        len(value) >= 3
+        and value[0] in {"r", "R"}
+        and value[1] == value[-1]
+        and value[1] in {'"', "'"}
+    ):
+        return value[2:-1]
     if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
         return value[1:-1]
     return value
@@ -157,7 +167,7 @@ def get_config_path() -> Path:
     return config_dir / CONFIG_FILENAME
 
 
-def load_config() -> dict[str, str]:
+def load_config(*, suppress_errors: bool = False) -> dict[str, str]:
     """Load existing configuration."""
     config_path = get_config_path()
     loaded_config = {}
@@ -172,10 +182,23 @@ def load_config() -> dict[str, str]:
                         loaded_config[key.strip()] = _strip_wrapped_quotes(
                             value.strip()
                         )
-        except Exception:
-            pass
+        except Exception as error:
+            if suppress_errors:
+                return {}
+            raise RuntimeError(
+                f"Failed to read configuration from {config_path}: {error}"
+            ) from error
 
     return loaded_config
+
+
+def _mask_secret(value: str | None) -> str:
+    """Return a partially masked secret for read-only config display."""
+    if not value:
+        return "(not set)"
+    if len(value) <= 8:
+        return "***"
+    return f"{value[:6]}...{value[-4:]} (set)"
 
 
 def save_config(
@@ -191,7 +214,7 @@ def save_config(
     """
     active_console = _resolve_console(console)
     config_path = get_config_path()
-    current_config = load_config()
+    current_config = load_config(suppress_errors=True)
 
     current_config.update(new_config)
     for key in LEGACY_CONFIG_KEYS:
@@ -221,6 +244,39 @@ def save_config(
     active_console.print(
         f"\n[green]✓[/green] Configuration saved to: [cyan]{config_path}[/cyan]"
     )
+
+
+def show_current_config(*, console: Console | None = None) -> dict[str, str]:
+    """Display the current config in a read-only, masked form."""
+    from rich.table import Table
+
+    active_console = _resolve_console(console)
+    config_path = get_config_path()
+    try:
+        current_config = load_config()
+    except RuntimeError as error:
+        active_console.print(f"[red]{error}[/red]")
+        return {}
+
+    if not current_config:
+        active_console.print(
+            f"[yellow]No configuration found at {config_path}.[/yellow]"
+        )
+        return {}
+
+    table = Table(title="Current Configuration", border_style="cyan")
+    table.add_column("Key", style="bold cyan", no_wrap=True)
+    table.add_column("Value")
+
+    for key in sorted(current_config):
+        value = current_config[key]
+        if "KEY" in key or "TOKEN" in key or "SECRET" in key:
+            value = _mask_secret(value)
+        table.add_row(key, value)
+
+    active_console.print(f"[dim]Config:[/dim] {config_path}")
+    active_console.print(table)
+    return current_config
 
 
 def get_available_models(*, console: Console | None = None) -> dict[str, list[str]]:
@@ -322,6 +378,8 @@ def _prompt_positive_int(
     console: Console | None = None,
 ) -> str:
     """Prompt until the user enters a positive integer string."""
+    from rich.prompt import Prompt
+
     active_console = _resolve_console(console)
     while True:
         value = Prompt.ask(prompt, default=default).strip()
@@ -338,6 +396,9 @@ def select_provider(
     console: Console | None = None,
 ) -> str:
     """Interactive provider selection."""
+    from rich.prompt import Prompt
+    from rich.table import Table
+
     active_console = _resolve_console(console)
     active_console.print("\n[bold cyan]Select LLM Provider:[/bold cyan]\n")
 
@@ -374,6 +435,9 @@ def select_model(
     console: Console | None = None,
 ) -> str:
     """Interactive model selection."""
+    from rich.prompt import Prompt
+    from rich.table import Table
+
     active_console = _resolve_console(console)
     provider_config = PROVIDER_CONFIG[provider_key]
     models = available_models.get(provider_key, [])
@@ -469,6 +533,8 @@ def get_api_key(
     console: Console | None = None,
 ) -> str:
     """Prompt for API key."""
+    from rich.prompt import Confirm, Prompt
+
     active_console = _resolve_console(console)
     provider = PROVIDER_CONFIG[provider_key]
 
@@ -502,6 +568,9 @@ def run_setup_wizard(
     console: Console | None = None,
 ) -> dict[str, str]:
     """Run interactive setup wizard."""
+    from rich.panel import Panel
+    from rich.prompt import Confirm, Prompt
+
     active_console = _resolve_console(console)
     active_console.print(
         Panel(

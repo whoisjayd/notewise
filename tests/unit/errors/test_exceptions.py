@@ -97,6 +97,8 @@ class TestRaiseIfVideoUnavailable:
             ("age restricted content", "age_restricted"),
             ("age-restricted video", "age_restricted"),
             ("sign in to confirm your age", "age_restricted"),
+            ("video unavailable", "unavailable"),
+            ("video not found", "unavailable"),
             ("please sign in to view", "login_required"),
             ("sign in required", "login_required"),
             ("requires login to view", "login_required"),

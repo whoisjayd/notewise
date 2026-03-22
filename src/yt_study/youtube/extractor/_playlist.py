@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from yt_study.errors import ExtractionError
 from yt_study.youtube._constants import (
     MAX_PLAYLIST_PAGES,
     YOUTUBE_PLAYLIST_URL,
@@ -116,8 +117,10 @@ def _extract_playlist_entries_paginated(
                 ytcfg=ytcfg or {},
                 body={"continuation": token},
             )
-        except Exception:
-            break
+        except Exception as error:
+            raise ExtractionError(
+                f"Failed to fetch playlist continuation page: {error}"
+            ) from error
         out.extend(client._extract_playlist_entries(page, seen))
         token = client._extract_continuation_token(page)
     return out

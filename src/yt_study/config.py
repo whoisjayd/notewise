@@ -91,11 +91,19 @@ def get_cache_db_path() -> Path:
 class UserConfigSource(PydanticBaseSettingsSource):
     """Load settings from ~/.yt-study/config.env (KEY=VALUE format)."""
 
+    def __init__(self, settings_cls: type[BaseSettings]) -> None:
+        super().__init__(settings_cls)
+        self._cached_env_file: dict[str, str] | None = None
+
     def _load_env_file(self) -> dict[str, str]:
         """Parse the config.env file and return a key->value mapping."""
+        if self._cached_env_file is not None:
+            return self._cached_env_file
+
         path = get_state_dir() / CONFIG_FILENAME
         if not path.exists():
-            return {}
+            self._cached_env_file = {}
+            return self._cached_env_file
         result: dict[str, str] = {}
         try:
             for line in path.read_text(encoding="utf-8").splitlines():
@@ -112,8 +120,11 @@ class UserConfigSource(PydanticBaseSettingsSource):
                         os.environ[key] = value
                     result[key.lower()] = value
         except Exception:
-            pass
-        return result
+            self._cached_env_file = {}
+            return self._cached_env_file
+
+        self._cached_env_file = result
+        return self._cached_env_file
 
     def get_field_value(self, _field: Any, field_name: str) -> tuple[Any, str, bool]:
         data = self._load_env_file()

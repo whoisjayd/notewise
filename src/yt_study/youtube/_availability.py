@@ -10,22 +10,29 @@ def raise_for_video_availability(data: dict[str, object]) -> None:
     availability = str(data.get("availability") or "").lower()
     if availability == "private":
         raise VideoUnavailableError(
-            "Private YouTube videos are not supported. "
-            "Make the video unlisted or public to process it.",
+            "This YouTube video is private. "
+            "Retry with --cookie-file / --cookies from an account that can view it, "
+            "or make the video unlisted or public.",
             reason="private",
         )
-    if availability in {"login_required", "unavailable"}:
+    if availability == "login_required":
         raise VideoUnavailableError(
-            "Sign-in-only YouTube videos are not supported. "
-            "Use a public or unlisted video to process it.",
+            "This YouTube video requires sign-in. "
+            "Retry with --cookie-file / --cookies, or use a public or unlisted video.",
             reason="login_required",
+        )
+    if availability == "unavailable":
+        raise VideoUnavailableError(
+            "This YouTube video isn't available. "
+            "Check that the ID is correct and that the video is public or unlisted.",
+            reason="unavailable",
         )
     if availability == "age_restricted":
         raise VideoUnavailableError(
             (
-                "Age-restricted YouTube videos are not supported. "
-                "Use a public or unlisted video without sign-in requirements "
-                "to process it."
+                "This YouTube video is age-restricted. "
+                "Retry with --cookie-file / --cookies from an eligible account, "
+                "or use a public or unrestricted video."
             ),
             reason="age_restricted",
         )
@@ -36,7 +43,14 @@ def raise_for_playlist_availability(data: dict[str, object]) -> None:
     availability = str(data.get("availability") or "").lower()
     if availability == "private":
         raise VideoUnavailableError(
-            "Private YouTube playlists are not supported. "
-            "Make the playlist unlisted or public to process it.",
+            "This YouTube playlist is private. "
+            "Retry with --cookie-file / --cookies from an account that can view it, "
+            "or make the playlist unlisted or public.",
             reason="private",
+        )
+    if availability == "unavailable":
+        raise VideoUnavailableError(
+            "This YouTube playlist isn't available. "
+            "Check that the ID is correct and that the playlist is public or unlisted.",
+            reason="unavailable",
         )

@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import os
+from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
 
 from yt_study.config import AppSettings as Config
+from yt_study.config import UserConfigSource
 
 
 class TestConfig:
@@ -146,6 +148,38 @@ class TestConfig:
         monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
         cfg = Config()
         assert cfg.max_concurrent_videos == 5
+
+    def test_user_config_source_caches_file_parse_per_instance(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """A single settings-source instance should only parse config.env once."""
+        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+        config_dir = tmp_path / ".yt-study"
+        config_dir.mkdir()
+        config_path = config_dir / "config.env"
+        config_path.write_text(
+            "DEFAULT_MODEL=gemini/gemini-2.5-flash",
+            encoding="utf-8",
+        )
+
+        read_calls = 0
+        original_read_text = Path.read_text
+
+        def _counting_read_text(path: Path, *args, **kwargs):  # noqa: ANN001
+            nonlocal read_calls
+            read_calls += 1
+            return original_read_text(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", _counting_read_text)
+
+        source = UserConfigSource(Config)
+        source.get_field_value(None, "default_model")
+        source.get_field_value(None, "default_model")
+        source()
+
+        assert read_calls == 1
 
 
 class TestGetApiKeyNameForModel:
