@@ -1,0 +1,2 @@
+# Keep parser-sensitive MDX pages untouched by Prettier.
+*.mdx

@@ -1,0 +1,197 @@
+---
+title: Testing
+sidebarTitle: Testing
+description: Test suite structure, conventions, and how to write good tests for yt-study.
+icon: flask-conical
+---
+
+<Info>
+  Keep unit tests fully mocked, use integration tests for filesystem and DB behavior, and reserve E2E for smoke-level network validation.
+</Info>
+
+---
+
+## Test suite structure
+
+```text
+tests/
+├── conftest.py                        # shared fixtures for all layers
+├── unit/                              # fully mocked — fast, no network or disk I/O
+│   ├── cli/
+│   │   ├── test_admin.py
+│   │   ├── test_app_helpers.py
+│   │   ├── test_banner.py
+│   │   ├── test_display.py
+│   │   ├── test_formatters.py
+│   │   ├── test_runtime.py
+│   │   └── test_source_resolution.py
+│   ├── config/
+│   ├── errors/
+│   ├── llm/
+│   ├── pipeline/
+│   ├── storage/
+│   ├── ui/
+│   ├── utils/
+│   └── youtube/
+├── integration/                       # real SQLite & filesystem — no network
+│   ├── cli/
+│   ├── pipeline/
+│   └── storage/
+└── e2e/                               # real YouTube network calls (smoke tests)
+    └── test_public_smoke.py
+```
+
+---
+
+## Running tests
+
+```bash
+# Full suite (parallel)
+make test
+uv run python -m pytest -n auto --dist=loadfile
+
+# Unit tests only
+make test-unit
+uv run python -m pytest tests/unit -n auto
+
+# Integration tests only
+make test-integration
+uv run python -m pytest tests/integration
+
+# E2E (requires network + API key)
+uv run pytest tests/e2e -v
+
+# Specific file
+uv run pytest tests/unit/youtube/test_parser.py -v
+
+# Specific test
+uv run pytest tests/unit/youtube/test_parser.py::test_extract_video_id_standard -v
+```
+
+<Tabs>
+  <Tab title="Daily developer loop">
+    ```bash
+    make test-unit
+    uv run pytest tests/unit/cli -q
+    uv run pytest tests/unit/pipeline -q
+    ```
+  </Tab>
+  <Tab title="Pre-PR validation">
+    ```bash
+    make quality
+    make test
+    ```
+  </Tab>
+  <Tab title="Focused debugging">
+    ```bash
+    uv run pytest tests/unit/youtube/test_parser.py -v
+    uv run pytest tests/integration/cli/test_cli.py -v
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Coverage
+
+CI requires **≥ 90% coverage** on the unit test suite.
+
+```bash
+uv run python -m pytest tests/unit \
+  --cov=src/yt_study \
+  --cov-report=term-missing
+
+uv run python -m pytest tests/unit \
+  --cov=src/yt_study \
+  --cov-report=html
+open htmlcov/index.html
+```
+
+<Tip>
+  Treat `term-missing` output as the primary signal when closing coverage gaps.
+</Tip>
+
+---
+
+## Writing unit tests
+
+### Conventions
+
+- Test files: `test_*.py`
+- Test classes: `Test*`
+- Test functions: `test_*`
+- All unit tests must mock external I/O — no real network calls, no real filesystem writes (use `tmp_path` for disk operations)
+
+### Mocking external calls
+
+```python
+def test_fetch_transcript(mocker):
+    mock_fetch = mocker.patch(
+        "yt_study.youtube.transcript.fetch_transcript",
+        return_value=mock_transcript,
+    )
+    ...
+    mock_fetch.assert_called_once_with("VIDEO_ID", languages=["en"])
+```
+
+### Async tests
+
+No special decorator needed (`asyncio_mode = "auto"`):
+
+```python
+async def test_pipeline_run(mocker):
+    mocker.patch("yt_study.pipeline._execution.fetch_transcript", ...)
+    result = await pipeline.run(["VIDEO_ID"])
+    assert result.success_count == 1
+```
+
+### Shared fixtures
+
+Fixtures shared across the whole suite live in `tests/conftest.py`. Module-level fixtures used in only one file stay in that file.
+
+---
+
+## Writing integration tests
+
+Integration tests use real SQLite databases (via `tmp_path`) and the real filesystem. They must not make network calls.
+
+```python
+def test_repository_lifecycle(tmp_path):
+    db_path = tmp_path / ".yt_study_cache.db"
+    repo = DatabaseRepository(db_path)
+    ...
+```
+
+---
+
+## Writing E2E tests
+
+E2E tests make real YouTube requests. They should:
+
+- Only use publicly accessible videos
+- Be designed to pass with no LLM API key (test URL parsing and transcript fetching only)
+- Be marked as smoke tests
+
+```python
+# tests/e2e/test_public_smoke.py
+def test_public_video_transcript_fetch():
+    ...  # uses a known-stable public video
+```
+
+<Warning>
+  Do not add flaky E2E cases that depend on unstable videos or strict timing assumptions.
+</Warning>
+
+---
+
+## pytest configuration
+
+From `pyproject.toml`:
+
+```toml
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-ra"
+```

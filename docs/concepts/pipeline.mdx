@@ -1,0 +1,160 @@
+---
+title: The Processing Pipeline
+sidebarTitle: Pipeline
+description: How yt-study processes a video — step by step.
+icon: workflow
+---
+
+Every video yt-study processes goes through the same sequence. Understanding the pipeline helps you predict output behavior, tune concurrency, and debug problems.
+
+---
+
+## Pipeline flowchart
+
+```text
+URL / Video ID
+      │
+      ▼
+1. Parse & Validate URL
+      │
+      ▼
+2. Fetch Video Metadata ──── cache hit? ──► VIDEO_SKIPPED
+      │                                         │
+      ▼                                   output exists &
+3. Fetch Transcript                       no --force? → skip
+      │
+      ▼
+4. Chunk & Generate
+      │
+      ├── chapters present & duration > 1 hr?
+      │         ▼ YES
+      │   4a. Chapter-level generation (concurrent)
+      │         └── per chapter: chunk → generate → combine
+      │
+      └── NO: 4b. Flat generation (chunk → generate → combine)
+      │
+      ▼
+5. Write output artifacts
+      ├── Standard video    → <title>.md
+      ├── Chapter-aware     → directory with 01_<chapter>.md …
+      ├── --quiz            → <title>_quiz.md
+      └── --export-transcript → <title>_transcript.txt/.json
+      │
+      ▼
+6. Persist to SQLite cache
+      │
+      ▼
+7. Emit VIDEO_SUCCESS / VIDEO_FAILED
+```
+
+---
+
+## Step details
+
+<AccordionGroup>
+  <Accordion title="1 · Parse & Validate URL" icon="link" defaultOpen>
+    **Module:** `youtube/parser.py` → `parse_youtube_url()`
+
+    Accepts any of these as input:
+
+    - Full YouTube watch URL (`https://youtube.com/watch?v=...`)
+    - Short URL (`https://youtu.be/...`)
+    - Embed URL or Shorts URL
+    - Bare 11-character video ID
+    - Bare playlist ID (`PL`, `UU`, `LL`, `FL`, `RD`, `UL`, `WL`, `OLAK5uy_`)
+    - Playlist URL (`?list=...`)
+    - Path to a `.txt` batch file (one URL per line)
+
+    Returns a `ParsedURL` domain object with `url_type` (`"video"` or `"playlist"`), `video_id`, and/or `playlist_id`. For playlists, `extract_playlist_videos()` expands into individual video IDs before the pipeline starts.
+  </Accordion>
+
+  <Accordion title="2 · Fetch Video Metadata" icon="info">
+    **Module:** `youtube/metadata.py` → `get_video_metadata()`
+
+    Retrieves title, duration (seconds), and chapter list. Two early-exit checks:
+
+    - **Cache hit** — if the video ID is in SQLite cache and `--force` is not set → emit `VIDEO_SKIPPED`.
+    - **Output path check** — if notes already exist in the output directory and `--force` is not set → skip.
+  </Accordion>
+
+  <Accordion title="3 · Fetch Transcript" icon="captions">
+    **Module:** `youtube/transcript.py` → `fetch_transcript()`
+
+    Tries languages in the preference list in order (default: `["en"]`), falling back to the next if unavailable. If a `cookie_file` is configured, it is used for all requests — enabling private video access.
+
+    - **Retries:** up to 3 attempts with backoff on network errors.
+    - Returns a `VideoTranscript` with a list of `TranscriptSegment` (text, start time, duration).
+  </Accordion>
+
+  <Accordion title="4 · Chunk & Generate" icon="sparkles">
+    **Module:** `pipeline/generation.py` → `StudyMaterialGenerator`
+
+    Token counting uses LiteLLM's `token_counter` with the configured model. If the transcript exceeds **4,000 tokens** (`DEFAULT_CHUNK_SIZE`), it is split into overlapping 200-token chunks, split on sentence boundaries where possible.
+
+    **4a — Chapter-level generation**
+
+    Activated when the video has chapters **and** duration exceeds 3,600 seconds (1 hour).
+
+    - Chapters processed concurrently, up to 3 at a time.
+    - Each chapter is independently chunked and reduced to a Markdown document.
+    - Events: `CHAPTER_GENERATING` → `CHAPTER_CHUNK_GENERATING` → `CHAPTER_COMBINING` → `CHAPTER_COMPLETE`
+
+    **4b — Flat generation**
+
+    Used for short videos or videos without chapter data.
+
+    - Single-pass for small transcripts, multi-chunk with a combine step for large ones.
+    - Events: `GENERATION_START` → `CHUNK_GENERATING` → `GENERATION_COMBINING` → `GENERATION_COMPLETE`
+  </Accordion>
+
+  <Accordion title="5 · Write Outputs" icon="file-pen">
+    **Module:** `pipeline/_artifacts.py`
+
+    | Condition | Output |
+    | --- | --- |
+    | Standard video | `<OUTPUT_DIR>/<sanitized title>.md` |
+    | Chapter-aware video | `<OUTPUT_DIR>/<title>/01_<chapter>.md`, `02_<chapter>.md`, … |
+    | `--quiz` | `<title>_quiz.md` alongside notes |
+    | `--export-transcript txt` | `<title>_transcript.txt` |
+    | `--export-transcript json` | `<title>_transcript.json` |
+  </Accordion>
+
+  <Accordion title="6 · Persist to Cache" icon="database">
+    **Module:** `storage/repository.py` → `DatabaseRepository.aupsert_video_cache()`
+
+    After a successful run, the following are written to SQLite:
+
+    - Video metadata (id, title, duration)
+    - Raw transcript text and language
+    - Token usage (prompt, completion, total)
+    - Cost estimate (USD)
+    - Timing (transcript fetch seconds, generation seconds)
+    - Model name
+
+    This powers skip-if-already-processed logic and the `stats` / `history` commands.
+  </Accordion>
+
+  <Accordion title="7 · Events & Result" icon="bell">
+    `PipelineEvent` objects are emitted via the `on_event` callback throughout. The CLI subscribes via `PipelineDashboard` to update the live terminal UI.
+
+    At the end, `CorePipeline.run()` returns a `PipelineResult` with `success_count`, `failure_count`, `total_count`, `errors`, and `metrics`.
+
+    See [Pipeline Events](/reference/pipeline-events) for the full event type reference.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Concurrency model
+
+yt-study uses `asyncio` throughout.
+
+| Semaphore | Default | Config key |
+| --- | --- | --- |
+| Video-level concurrency | `5` | `MAX_CONCURRENT_VIDEOS` |
+| Chapter-level concurrency | `3` | Code default only |
+| YouTube request rate | `10` / min | `YOUTUBE_REQUESTS_PER_MINUTE` |
+
+In batch runs, videos are processed concurrently up to `MAX_CONCURRENT_VIDEOS`. Within a single long video with chapters, chapters are processed concurrently up to `DEFAULT_MAX_CONCURRENT_CHAPTERS`.
+
+A `PipelineSharedState` object is passed into `CorePipeline` during batch runs so all video instances share the same semaphores.

@@ -1,0 +1,106 @@
+---
+title: Installation
+sidebarTitle: Installation
+description: Install yt-study using pip, uv, or Docker.
+icon: download
+---
+
+## Requirements
+
+- Python **3.10 or newer** (3.10, 3.11, 3.12, and 3.13 are all tested in CI)
+- An API key for at least one [supported LLM provider](/concepts/providers)
+
+---
+
+## Install
+
+<Tabs>
+  <Tab title="uv (recommended)">
+    [uv](https://github.com/astral-sh/uv) installs yt-study as an isolated tool — no virtualenv pollution:
+
+    ```bash
+    uv tool install yt-study
+    ```
+
+    Upgrade:
+
+    ```bash
+    uv tool upgrade yt-study
+    ```
+
+    <Tip>
+      uv is the recommended approach. It keeps yt-study fully isolated, manages Python versions automatically, and is significantly faster than pip.
+    </Tip>
+  </Tab>
+
+  <Tab title="pip">
+    ```bash
+    pip install yt-study
+    ```
+
+    Upgrade:
+
+    ```bash
+    pip install --upgrade yt-study
+    ```
+  </Tab>
+
+  <Tab title="Docker">
+    Pre-built images are published to the GitHub Container Registry on every release:
+
+    ```bash
+    docker pull ghcr.io/whoisjayd/yt-study:latest
+    ```
+
+    Quick run:
+
+    ```bash
+    docker run --rm \
+      -e GEMINI_API_KEY="your_key_here" \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process "https://youtube.com/watch?v=VIDEO_ID" --no-ui
+    ```
+
+    The container runs as a non-root user (`appuser`, uid 1001). Mount `/output` to access generated files from the host.
+
+    <Note>
+      See the [Docker guide](/guides/docker) for persistent cache, cookie files, and full environment variable reference.
+    </Note>
+  </Tab>
+</Tabs>
+
+---
+
+## Verify
+
+After installing, confirm yt-study is on your `PATH`:
+
+```bash
+yt-study version
+```
+
+Expected output:
+
+```text
+yt-study version 0.2.6
+```
+
+---
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/getting-started/quickstart">
+    Run your first video in under 5 minutes.
+  </Card>
+  <Card title="Configuration" icon="settings" href="/getting-started/configuration">
+    Set up your API key and config file.
+  </Card>
+  <Card title="Development setup" icon="code-2" href="/development/setup">
+    Clone, install dev dependencies, and run tests.
+  </Card>
+  <Card title="Docker guide" icon="box" href="/guides/docker">
+    Full Docker usage with volumes and env vars.
+  </Card>
+</CardGroup>

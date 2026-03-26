@@ -1,0 +1,100 @@
+---
+title: Quick Start
+sidebarTitle: Quick Start
+description: Get your first AI-powered study notes in under 5 minutes.
+icon: rocket
+---
+
+<Info>
+  This guide is optimized for first-time setup. You only need to run `setup` once — all subsequent runs use the saved config.
+</Info>
+
+<Steps>
+  <Step title="Install yt-study">
+    ```bash
+    uv tool install yt-study
+    ```
+
+    Need pip or Docker instead? See [Installation](/getting-started/installation).
+  </Step>
+
+  <Step title="Get an API key">
+    The default model is **Gemini 2.5 Flash** — free tier, no billing required.
+
+    1. Visit [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+    2. Create a new API key
+    3. Copy it for the next step
+
+    <Note>
+      Any supported provider works. See [LLM Providers](/concepts/providers) for OpenAI, Anthropic, Groq, and more.
+    </Note>
+  </Step>
+
+  <Step title="Run the setup wizard">
+    ```bash
+    yt-study setup
+    ```
+
+    The interactive wizard prompts for your provider and API key, then writes `~/.yt-study/config.env`. Run this once.
+  </Step>
+
+  <Step title="Process a video">
+    ```bash
+    yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+    ```
+
+    A live progress dashboard shows while yt-study fetches the transcript and generates notes. When finished, open `./output/` to find your Markdown study notes.
+  </Step>
+</Steps>
+
+---
+
+## Example session
+
+```bash
+$ yt-study process "https://youtube.com/watch?v=dQw4w9WgXcQ"
+
+ yt-study  v0.2.6
+
+Processing 1 video...
+
+ Video Title
+   ✔ Metadata fetched
+   ✔ Transcript fetched  (en, 342 segments)
+   ✔ Notes generated  (3 chunks)
+   ✔ Written → output/Video Title.md
+
+────────────────────────────────────────
+  1 processed · 0 failed · 12.4s · $0.0004
+```
+
+---
+
+## What to try next
+
+<CardGroup cols={2}>
+  <Card title="Process a playlist" icon="list" href="/guides/playlists-and-batch">
+    ```bash
+    yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
+    ```
+  </Card>
+  <Card title="Generate a quiz" icon="circle-help" href="/guides/single-video">
+    ```bash
+    yt-study process "URL" --quiz
+    ```
+  </Card>
+  <Card title="Switch LLM model" icon="brain" href="/concepts/providers">
+    ```bash
+    yt-study process "URL" --model gpt-4o
+    ```
+  </Card>
+  <Card title="Batch file" icon="file-text" href="/guides/playlists-and-batch">
+    ```bash
+    yt-study process my-urls.txt -o ./notes
+    ```
+  </Card>
+</CardGroup>
+
+<Tip>
+  If a run fails, start with `yt-study doctor` → `yt-study config` → `yt-study logs --tail 80`. See [Troubleshooting](/guides/troubleshooting) for the full guide.
+</Tip>

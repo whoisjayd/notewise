@@ -1,0 +1,181 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "willow",
+  "name": "yt-study",
+  "description": "Convert YouTube videos and playlists into AI-powered study notes from your terminal.",
+  "colors": {
+    "primary": "#2563eb",
+    "light": "#60a5fa",
+    "dark": "#1d4ed8"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "favicon": "/favicon.svg",
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/whoisjayd/yt-study"
+      },
+      {
+        "label": "PyPI",
+        "href": "https://pypi.org/project/yt-study/"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Get Started",
+      "href": "/getting-started/quickstart"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/whoisjayd/yt-study",
+      "x": "https://x.com/whynotjaydeep"
+    }
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "href": "https://github.com/whoisjayd/yt-study",
+          "icon": "github"
+        },
+        {
+          "anchor": "PyPI",
+          "href": "https://pypi.org/project/yt-study/",
+          "icon": "package"
+        },
+        {
+          "anchor": "Issues",
+          "href": "https://github.com/whoisjayd/yt-study/issues",
+          "icon": "circle-dot"
+        }
+      ]
+    },
+    "tabs": [
+      {
+        "tab": "Docs",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "icon": "rocket",
+            "pages": [
+              "index",
+              "getting-started/installation",
+              "getting-started/quickstart",
+              "getting-started/configuration"
+            ]
+          },
+          {
+            "group": "How It Works",
+            "icon": "cpu",
+            "pages": [
+              "concepts/architecture",
+              "concepts/pipeline",
+              "concepts/providers"
+            ]
+          },
+          {
+            "group": "Guides",
+            "icon": "compass",
+            "pages": [
+              "guides/single-video",
+              "guides/playlists-and-batch",
+              "guides/private-videos",
+              "guides/docker",
+              "guides/cache-and-logs",
+              "guides/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "CLI",
+        "icon": "terminal",
+        "groups": [
+          {
+            "group": "Commands",
+            "icon": "square-terminal",
+            "pages": [
+              "cli/overview",
+              "cli/process"
+            ]
+          },
+          {
+            "group": "Setup & Config",
+            "icon": "sliders-horizontal",
+            "pages": [
+              "cli/setup-and-config"
+            ]
+          },
+          {
+            "group": "Operations",
+            "icon": "activity",
+            "pages": [
+              "cli/operations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "icon": "library",
+        "groups": [
+          {
+            "group": "Configuration",
+            "icon": "settings",
+            "pages": [
+              "reference/configuration"
+            ]
+          },
+          {
+            "group": "Output & Storage",
+            "icon": "folder-open",
+            "pages": [
+              "reference/output-format",
+              "reference/storage-schema"
+            ]
+          },
+          {
+            "group": "Pipeline & Errors",
+            "icon": "triangle-alert",
+            "pages": [
+              "reference/pipeline-events",
+              "reference/errors"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "icon": "code-2",
+        "groups": [
+          {
+            "group": "Local Setup",
+            "icon": "laptop",
+            "pages": [
+              "development/setup",
+              "development/testing",
+              "development/ci-cd"
+            ]
+          },
+          {
+            "group": "Contributing",
+            "icon": "git-pull-request",
+            "pages": [
+              "development/documentation",
+              "development/ai-discovery"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "search": {
+    "prompt": "Search yt-study docs..."
+  }
+}

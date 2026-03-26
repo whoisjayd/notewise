@@ -1,0 +1,104 @@
+---
+title: CI/CD
+sidebarTitle: CI/CD
+description: GitHub Actions workflows, quality gates, and release process.
+icon: git-branch
+---
+
+All workflows live in `.github/workflows/`.
+
+---
+
+## Workflows
+
+<AccordionGroup>
+  <Accordion title="ci-main.yml — Full validation" icon="shield-check" defaultOpen>
+    Runs on push to `main`, weekly schedule (Sundays at midnight), manual dispatch, and when called from other workflows.
+
+    Primary Python version: **3.12**.
+
+    | Job | Description |
+    | --- | --- |
+    | `format-check` | `ruff format --check` |
+    | `lint-check` | `ruff check` |
+    | `type-check` | `ty check` |
+    | `startup-smoke` | `yt-study version` — ensures the package imports cleanly |
+    | `unit-tests` | `pytest` with `--cov-fail-under=90`; uploads coverage to Codecov |
+    | `matrix-tests` | `pytest` on Ubuntu / Windows / macOS × Python 3.10 / 3.11 / 3.12 |
+  </Accordion>
+
+  <Accordion title="pr-gate.yml — PR validation" icon="git-pull-request">
+    Runs on every pull request to `main`. Calls `ci-main.yml` as a reusable workflow. All jobs must pass before merge.
+  </Accordion>
+
+  <Accordion title="ghcr.yml — Docker image" icon="box">
+    Builds and pushes the Docker image to `ghcr.io/whoisjayd/yt-study` on every push to `main` and on version tags.
+  </Accordion>
+
+  <Accordion title="release.yml — PyPI release" icon="upload">
+    Triggered when a tag matching `v*` is pushed. Builds the wheel and sdist, then publishes to PyPI using **Trusted Publishing** (no API key stored in secrets).
+  </Accordion>
+
+  <Accordion title="Supporting workflows" icon="settings">
+    | Workflow | Description |
+    | --- | --- |
+    | `issue-form-labels.yml` | Auto-labels issues based on form template |
+    | `labeler.yml` | Auto-labels PRs based on changed files |
+    | `labelsyncer.yml` | Keeps GitHub label definitions in sync |
+    | `stale.yml` | Marks and closes stale issues/PRs |
+    | `dependabot.yml` | Automated dependency updates |
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Quality gates
+
+Every PR must pass all of these before merge:
+
+<Steps>
+  <Step title="ruff format --check">No unformatted code.</Step>
+  <Step title="ruff check">No lint errors.</Step>
+  <Step title="ty check">No type errors.</Step>
+  <Step title="Startup smoke">
+    `yt-study version` — package imports without error.
+  </Step>
+  <Step title="pytest --cov-fail-under=90">
+    Coverage ≥ 90% on the unit test suite.
+  </Step>
+  <Step title="Matrix tests">
+    All supported OS / Python version combinations.
+  </Step>
+</Steps>
+
+---
+
+## Release process
+
+<Steps>
+  <Step title="Bump the version">
+    Update `__version__` in `src/yt_study/__init__.py` and `version` in `pyproject.toml`.
+  </Step>
+  <Step title="Merge to main">
+    Open a PR with the version bump and merge after CI passes.
+  </Step>
+  <Step title="Tag the release">
+    ```bash
+    git tag v0.X.Y && git push origin v0.X.Y
+    ```
+  </Step>
+  <Step title="Automated publish">
+    `release.yml` builds and publishes to PyPI. `ghcr.yml` builds and pushes a new Docker image. Both run automatically.
+  </Step>
+</Steps>
+
+---
+
+## Running CI locally
+
+```bash
+make ci         # full CI pipeline
+
+make quality    # format-check + lint + type-check + security + deps
+make test       # full test suite with coverage
+```

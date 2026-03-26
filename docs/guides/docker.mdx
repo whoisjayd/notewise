@@ -1,0 +1,125 @@
+---
+title: Docker
+sidebarTitle: Docker
+description: Run yt-study in a container for reproducible, stateless processing.
+icon: box
+---
+
+yt-study ships a minimal two-stage Docker image. The builder stage installs dependencies with uv; the runtime stage copies only the virtual environment and runs as a non-root user.
+
+| Property | Value |
+| --- | --- |
+| Base image | `python:3.13-slim` |
+| User | `appuser` (uid 1001) |
+| Entrypoint | `yt-study` |
+| Default volume | `/output` |
+| Working directory | `/output` |
+
+---
+
+## Pull the image
+
+```bash
+docker pull ghcr.io/whoisjayd/yt-study:latest
+```
+
+---
+
+## Usage examples
+
+<AccordionGroup>
+  <Accordion title="Basic usage" icon="play" defaultOpen>
+    ```bash
+    docker run --rm \
+      -e GEMINI_API_KEY="your_key_here" \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process "https://youtube.com/watch?v=VIDEO_ID" --no-ui
+    ```
+
+    Generated files are written to `/output` inside the container. Mount a host directory there to access them.
+  </Accordion>
+
+  <Accordion title="Different provider" icon="brain">
+    ```bash
+    docker run --rm \
+      -e OPENAI_API_KEY="sk-..." \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process "URL" --model gpt-4o --no-ui
+    ```
+  </Accordion>
+
+  <Accordion title="Batch processing" icon="list">
+    ```bash
+    docker run --rm \
+      -e GEMINI_API_KEY="your_key" \
+      -v "$(pwd)/urls.txt:/urls.txt:ro" \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process /urls.txt --no-ui
+    ```
+  </Accordion>
+
+  <Accordion title="With a cookie file" icon="lock">
+    ```bash
+    docker run --rm \
+      -e GEMINI_API_KEY="your_key" \
+      -e YOUTUBE_COOKIE_FILE="/cookies/youtube.txt" \
+      -v "$(pwd)/cookies:/cookies:ro" \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process "URL" --no-ui
+    ```
+  </Accordion>
+
+  <Accordion title="Persistent cache" icon="database">
+    To preserve the SQLite cache across container runs, mount the state directory:
+
+    ```bash
+    docker run --rm \
+      -e GEMINI_API_KEY="your_key" \
+      -v "$(pwd)/yt-study-state:/home/appuser/.yt-study" \
+      -v "$(pwd)/output:/output" \
+      ghcr.io/whoisjayd/yt-study:latest \
+      process "URL" --no-ui
+    ```
+
+    <Note>
+      The container user is `appuser` (uid 1001). The state directory is `/home/appuser/.yt-study`.
+    </Note>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Environment variables
+
+All configuration keys can be passed as `-e` flags:
+
+```bash
+docker run --rm \
+  -e GEMINI_API_KEY="your_key" \
+  -e DEFAULT_MODEL="gemini/gemini-2.5-flash" \
+  -e MAX_CONCURRENT_VIDEOS="3" \
+  -e TEMPERATURE="0.5" \
+  -v "$(pwd)/output:/output" \
+  ghcr.io/whoisjayd/yt-study:latest \
+  process "URL" --no-ui
+```
+
+See [Configuration Reference](/reference/configuration) for all available keys.
+
+---
+
+## Build locally
+
+```bash
+git clone https://github.com/whoisjayd/yt-study
+cd yt-study
+docker build -t yt-study:local .
+docker run --rm \
+  -e GEMINI_API_KEY="your_key" \
+  -v "$(pwd)/output:/output" \
+  yt-study:local process "URL" --no-ui
+```

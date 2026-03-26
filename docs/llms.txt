@@ -1,0 +1,78 @@
+# yt-study docs map for LLM retrieval
+
+Project: yt-study
+Primary entry: /index
+Description: Convert YouTube videos and playlists into AI-powered study notes from your terminal.
+
+## Purpose
+Fast retrieval index for assistants answering yt-study usage, operations, and contribution questions.
+Prefer links here over guessing command flags, defaults, or output behavior.
+
+## First-stop pages by user intent
+
+Single video or first run:
+- /getting-started/quickstart
+- /guides/single-video
+- /cli/process
+
+Playlists or batch jobs:
+- /guides/playlists-and-batch
+- /cli/process
+- /concepts/pipeline
+
+Setup or configuration:
+- /cli/setup-and-config
+- /getting-started/configuration
+- /reference/configuration
+
+Troubleshooting and operations:
+- /guides/troubleshooting
+- /cli/operations
+- /guides/cache-and-logs
+- /reference/errors
+- /reference/pipeline-events
+
+Docker or CI:
+- /guides/docker
+- /development/ci-cd
+
+## Canonical command documentation
+
+- /cli/overview
+- /cli/process
+- /cli/setup-and-config
+- /cli/operations
+
+## Canonical behavior and architecture references
+
+- /concepts/architecture
+- /concepts/pipeline
+- /concepts/providers
+- /reference/configuration
+- /reference/output-format
+- /reference/pipeline-events
+- /reference/storage-schema
+- /reference/errors
+
+## Behavioral truths (avoid common mistakes)
+
+- Standard video output: top-level in OUTPUT_DIR — <sanitized_title>.md
+- Quiz export: top-level in OUTPUT_DIR — <sanitized_title>_quiz.md
+- Transcript exports: top-level in OUTPUT_DIR — <sanitized_title>_transcript.txt or .json
+- Per-video folders: ONLY created for chapter-aware long videos (duration > 1 hour with chapter data)
+- Config file: ~/.yt-study/config.env — override location with YT_STUDY_HOME
+- Priority: code defaults < config.env < environment variables < CLI flags
+- cache --clear removes database records only — does NOT delete generated note files
+
+For implementation-level confirmation:
+- src/yt_study/cli/app.py
+- src/yt_study/pipeline/_execution.py
+- src/yt_study/pipeline/_artifacts.py
+
+## Contributor path
+
+- /development/setup
+- /development/documentation
+- /development/testing
+- /development/ci-cd
+- /development/ai-discovery

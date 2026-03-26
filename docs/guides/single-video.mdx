@@ -1,0 +1,133 @@
+---
+title: Process a Single Video
+sidebarTitle: Single Video
+description: Generate study notes from one YouTube video with all available options.
+icon: play
+---
+
+## Basic usage
+
+```bash
+yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+```
+
+Notes are written to `./output/<sanitized video title>.md` by default.
+
+---
+
+## Accepted URL formats
+
+```bash
+# Standard watch URL
+yt-study process "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# Short URL
+yt-study process "https://youtu.be/dQw4w9WgXcQ"
+
+# Shorts URL
+yt-study process "https://www.youtube.com/shorts/dQw4w9WgXcQ"
+
+# Embed URL
+yt-study process "https://www.youtube.com/embed/dQw4w9WgXcQ"
+
+# Bare 11-character video ID
+yt-study process dQw4w9WgXcQ
+```
+
+---
+
+## Common options
+
+<AccordionGroup>
+  <Accordion title="Change output directory" icon="folder-open">
+    ```bash
+    yt-study process "URL" --output ~/my-notes
+    yt-study process "URL" -o ~/my-notes
+    ```
+  </Accordion>
+
+  <Accordion title="Use a specific model" icon="brain">
+    ```bash
+    yt-study process "URL" --model gpt-4o
+    yt-study process "URL" --model anthropic/claude-3-5-sonnet-20241022
+    yt-study process "URL" -m groq/llama3-70b-8192
+    ```
+  </Accordion>
+
+  <Accordion title="Adjust LLM temperature" icon="thermometer">
+    ```bash
+    yt-study process "URL" --temperature 0.3   # deterministic
+    yt-study process "URL" --temperature 0.9   # creative
+    yt-study process "URL" -t 0.5
+    ```
+  </Accordion>
+
+  <Accordion title="Generate a quiz" icon="circle-help">
+    ```bash
+    yt-study process "URL" --quiz
+    ```
+
+    Produces `<title>_quiz.md` — 10–15 multiple-choice questions with answers and explanations.
+  </Accordion>
+
+  <Accordion title="Export the raw transcript" icon="file-text">
+    ```bash
+    yt-study process "URL" --export-transcript txt    # plain text
+    yt-study process "URL" --export-transcript json   # JSON with timestamps
+    ```
+
+    See [Output Format](/reference/output-format) for the exact file structure.
+  </Accordion>
+
+  <Accordion title="Set transcript language" icon="languages">
+    ```bash
+    yt-study process "URL" --language hi        # Hindi first, English fallback
+    yt-study process "URL" -l fr -l en          # French, then English
+    ```
+
+    The flag is repeatable — yt-study tries each language in order and falls back to the next if unavailable.
+  </Accordion>
+
+  <Accordion title="Re-process a cached video" icon="rotate-cw">
+    By default, videos already in cache with existing output are skipped. Use `--force` to override:
+
+    ```bash
+    yt-study process "URL" --force
+    yt-study process "URL" -F
+    ```
+  </Accordion>
+
+  <Accordion title="Non-interactive / CI mode" icon="server">
+    ```bash
+    yt-study process "URL" --no-ui
+    ```
+
+    Disables the Rich live dashboard and prints plain progress lines to stdout. Suitable for cron jobs, CI pipelines, and log aggregators.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Output files
+
+```text
+output/
+├── Video Title.md
+├── Video Title_quiz.md              # only with --quiz
+├── Video Title_transcript.txt       # only with --export-transcript txt
+└── Video Title_transcript.json      # only with --export-transcript json
+```
+
+<Note>
+  Chapter-aware videos (longer than 1 hour with chapter data) use a directory layout instead. See [Output Format](/reference/output-format).
+</Note>
+
+---
+
+## Inspect without processing
+
+```bash
+yt-study info "https://youtube.com/watch?v=VIDEO_ID"
+```
+
+Fetches title, duration, chapter count, and available transcript languages — without generating any notes.

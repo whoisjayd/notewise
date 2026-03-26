@@ -1,0 +1,131 @@
+---
+title: Setup & Configuration Commands
+sidebarTitle: Setup & Config
+description: Bootstrap, inspect, and edit yt-study configuration from the CLI.
+icon: sliders-horizontal
+---
+
+<Info>
+  Use these commands to bootstrap setup, validate resolved runtime config, and safely edit configuration. For the full settings reference see [Configuration Reference](/reference/configuration).
+</Info>
+
+---
+
+## Quick command map
+
+<Tabs>
+  <Tab title="First run">
+    ```bash
+    yt-study setup
+    yt-study config
+    yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+    ```
+  </Tab>
+  <Tab title="Inspect config">
+    ```bash
+    yt-study config
+    yt-study config-path
+    ```
+  </Tab>
+  <Tab title="Edit & verify">
+    ```bash
+    yt-study edit-config
+    yt-study config
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## `yt-study setup`
+
+Run the interactive setup wizard. Prompts for your LLM provider and API key, then writes `~/.yt-study/config.env`.
+
+```bash
+yt-study setup
+yt-study setup --force    # re-run even when config already exists
+yt-study setup --show     # display current config and exit
+```
+
+| Option | Description |
+| --- | --- |
+| `--force` / `-f` | Re-run wizard even when config already exists |
+| `--show` | Display current config and exit |
+
+---
+
+## `yt-study config`
+
+Show the fully resolved runtime configuration. API keys are masked.
+
+```bash
+yt-study config
+```
+
+---
+
+## `yt-study config-path`
+
+Print the config file path and whether it exists.
+
+```bash
+yt-study config-path
+```
+
+---
+
+## `yt-study edit-config`
+
+Open `config.env` in your `$EDITOR`. On Windows, Notepad is used when `EDITOR` is not set.
+
+```bash
+yt-study edit-config
+```
+
+---
+
+## Key files
+
+| File | Purpose |
+| --- | --- |
+| `~/.yt-study/config.env` | Primary config file |
+| `~/.yt-study/.yt_study_cache.db` | SQLite cache |
+| `~/.yt-study/logs/` | Session log files |
+
+Override the state directory:
+
+```bash
+export YT_STUDY_HOME=/custom/path
+```
+
+---
+
+## Common setup issues
+
+<AccordionGroup>
+  <Accordion title="setup says config already exists">
+    Re-run with force:
+
+    ```bash
+    yt-study setup --force
+    ```
+  </Accordion>
+
+  <Accordion title="Need to verify which config file is active">
+    ```bash
+    yt-study config-path
+    ```
+
+    If `YT_STUDY_HOME` is set, yt-study resolves config from that directory.
+  </Accordion>
+
+  <Accordion title="API key looks set but calls still fail">
+    Confirm model/key pairing in resolved config:
+
+    ```bash
+    yt-study config
+    ```
+
+    Verify `DEFAULT_MODEL` and the matching provider API key are both present.
+  </Accordion>
+</AccordionGroup>

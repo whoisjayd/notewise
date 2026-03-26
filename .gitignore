@@ -28,7 +28,7 @@ codex*
 *.log
 *codex*
 cookies.txt
-*.txt
 .context-mem
 output
 *_cache
+urls.txt

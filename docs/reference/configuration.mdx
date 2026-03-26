@@ -1,0 +1,212 @@
+---
+title: Configuration Reference
+sidebarTitle: Configuration
+description: Complete reference for all yt-study configuration settings, defaults, and CLI overrides.
+icon: settings
+---
+
+<Info>
+  This is the canonical reference for all config keys and defaults. For the getting-started walkthrough, see [Configuration](/getting-started/configuration).
+</Info>
+
+## File location
+
+```text
+~/.yt-study/config.env
+```
+
+Override the config directory:
+
+```bash
+export YT_STUDY_HOME=/custom/path
+```
+
+---
+
+## Load order
+
+| Priority | Source | Notes |
+| --- | --- | --- |
+| 1 (lowest) | Code defaults | Built-in values in `_constants.py` |
+| 2 | `~/.yt-study/config.env` | Written by `yt-study setup` |
+| 3 | Environment variables | Always override config file |
+| 4 (highest) | CLI flags | Per-run only (e.g. `--model`, `--output`) |
+
+---
+
+## Settings reference
+
+### `DEFAULT_MODEL`
+
+**Type:** `string` · **Default:** `gemini/gemini-2.5-flash`
+
+The LiteLLM-format model string used when `--model` is not passed on the CLI.
+
+```bash
+DEFAULT_MODEL=gpt-4o
+DEFAULT_MODEL=anthropic/claude-3-5-sonnet-20241022
+DEFAULT_MODEL=groq/llama3-70b-8192
+```
+
+See [LLM Providers](/concepts/providers) for the full routing table.
+
+---
+
+### API keys
+
+Set the key matching the provider of your chosen model. Only the key(s) you actually use need to be set.
+
+| Key | Provider |
+| --- | --- |
+| `GEMINI_API_KEY` | Google Gemini / Vertex AI |
+| `OPENAI_API_KEY` | OpenAI |
+| `ANTHROPIC_API_KEY` | Anthropic |
+| `GROQ_API_KEY` | Groq |
+| `XAI_API_KEY` | xAI (Grok) |
+| `MISTRAL_API_KEY` | Mistral AI |
+| `COHERE_API_KEY` | Cohere |
+| `DEEPSEEK_API_KEY` | DeepSeek |
+
+---
+
+### `TEMPERATURE`
+
+**Type:** `float`, range `0.0`–`1.0` · **Default:** `0.7`
+
+LLM sampling temperature. Lower values produce more deterministic output; higher values produce more varied output.
+
+```bash
+TEMPERATURE=0.3   # focused, consistent
+TEMPERATURE=0.7   # balanced (default)
+TEMPERATURE=0.9   # creative
+```
+
+---
+
+### `MAX_TOKENS`
+
+**Type:** `integer > 0` · **Default:** _(unset — uses the model's own default)_
+
+Maximum tokens per LLM response. Set this to control costs or fit within a model's output token limit.
+
+```bash
+MAX_TOKENS=2000
+```
+
+---
+
+### `OUTPUT_DIR`
+
+**Type:** `path` · **Default:** `./output`
+
+Directory where study notes are written. Relative paths resolve from the current working directory.
+
+```bash
+OUTPUT_DIR=~/study-notes
+OUTPUT_DIR=/data/yt-study-output
+```
+
+---
+
+### `MAX_CONCURRENT_VIDEOS`
+
+**Type:** `integer > 0` · **Default:** `5`
+
+Maximum videos processed in parallel during a batch or playlist run.
+
+```bash
+MAX_CONCURRENT_VIDEOS=3    # gentler on APIs
+MAX_CONCURRENT_VIDEOS=10   # faster for large batches
+```
+
+---
+
+### `YOUTUBE_REQUESTS_PER_MINUTE`
+
+**Type:** `integer > 0` · **Default:** `10`
+
+Rate limit for YouTube HTTP requests shared across all concurrent workers. Reduce if you encounter rate-limit errors.
+
+```bash
+YOUTUBE_REQUESTS_PER_MINUTE=5
+```
+
+---
+
+### `YOUTUBE_COOKIE_FILE`
+
+**Type:** `path` · **Default:** _(unset)_
+
+Path to a Netscape-format `.txt` cookies file for private, age-gated, or members-only videos.
+
+```bash
+YOUTUBE_COOKIE_FILE=/home/user/youtube-cookies.txt
+```
+
+See [Private Videos](/guides/private-videos) for export instructions.
+
+---
+
+## Code-only defaults
+
+These constants are not exposed in `config.env`. Change them by editing `src/yt_study/_constants.py`.
+
+| Constant | Default | Description |
+| --- | --- | --- |
+| `DEFAULT_CHUNK_SIZE` | `4000` tokens | Max tokens per transcript chunk before splitting |
+| `DEFAULT_CHUNK_OVERLAP` | `200` tokens | Token overlap between consecutive chunks |
+| `DEFAULT_CHAPTER_MIN_DURATION` | `3600` seconds | Min duration to activate chapter-level generation |
+| `DEFAULT_MAX_CONCURRENT_CHAPTERS` | `3` | Max parallel chapter generation tasks |
+| `DEFAULT_LANGUAGES` | `["en"]` | Default transcript language preference list |
+| `TRANSCRIPT_MAX_RETRIES` | `3` | Retry attempts for transcript fetch |
+| `LLM_NUM_RETRIES` | `3` | Retry attempts for LLM API calls |
+| `HTTP_MAX_RETRIES` | `3` | Retry attempts for YouTube HTTP requests |
+| `MAX_FILENAME_LENGTH` | `100` | Max characters in generated output filenames |
+
+---
+
+## CLI overrides
+
+CLI flags take the highest priority — they override both `config.env` and environment variables for the duration of that single run.
+
+| Config key | CLI flag |
+| --- | --- |
+| `DEFAULT_MODEL` | `--model` / `-m` |
+| `OUTPUT_DIR` | `--output` / `-o` |
+| `TEMPERATURE` | `--temperature` / `-t` |
+| `MAX_TOKENS` | `--max-tokens` / `-k` |
+| `YOUTUBE_COOKIE_FILE` | `--cookie-file` / `--cookies` |
+| _(transcript languages)_ | `--language` / `-l` |
+
+---
+
+## Example config.env
+
+```bash
+# ~/.yt-study/config.env
+
+DEFAULT_MODEL=gemini/gemini-2.5-flash
+OUTPUT_DIR=~/study-notes
+MAX_CONCURRENT_VIDEOS=3
+TEMPERATURE=0.7
+# MAX_TOKENS=2000
+
+GEMINI_API_KEY=your_key_here
+# OPENAI_API_KEY=sk-...
+# ANTHROPIC_API_KEY=sk-ant-...
+```
+
+---
+
+## Deprecated keys
+
+These keys are silently ignored if present in `config.env` — they existed in earlier versions and were removed:
+
+- `YOUTUBE_USE_OAUTH`
+- `YOUTUBE_SAVE_OAUTH_TOKEN`
+- `YOUTUBE_OAUTH_TOKEN_FILE`
+- `YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN`
+
+<Warning>
+  Deprecated keys are ignored silently. Remove them from old config files to avoid confusion.
+</Warning>

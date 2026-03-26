@@ -1,0 +1,109 @@
+---
+title: Pipeline Events
+sidebarTitle: Pipeline Events
+description: Event stream emitted during processing — the canonical progress interface for dashboard and custom UI integrations.
+icon: bell
+---
+
+<Info>
+  Treat pipeline events as the canonical progress interface for dashboard and custom UI integrations. Do not derive progress from log text.
+</Info>
+
+yt-study emits typed events from the processing pipeline. The Rich dashboard and plain `--no-ui` output modes both subscribe to this stream.
+
+---
+
+## Event object
+
+`PipelineEvent` fields:
+
+<CardGroup cols={3}>
+  <Card title="Identity" icon="fingerprint">
+    `event_type`, `video_id`, `title`
+  </Card>
+  <Card title="Progress" icon="gauge">
+    `chapter_number`, `total_chapters`, `chunk_number`, `total_chunks`
+  </Card>
+  <Card title="Outcome" icon="file-check">
+    `error`, `output_path`
+  </Card>
+</CardGroup>
+
+---
+
+## All event types
+
+| Event type | Meaning |
+| --- | --- |
+| `PIPELINE_START` | Pipeline run started |
+| `PIPELINE_COMPLETE` | Pipeline run finished |
+| `METADATA_START` | Metadata fetch started |
+| `METADATA_FETCHED` | Metadata fetched successfully |
+| `TRANSCRIPT_FETCHING` | Transcript retrieval started |
+| `TRANSCRIPT_FETCHED` | Transcript retrieval complete |
+| `GENERATION_START` | Flat generation started |
+| `CHUNK_GENERATING` | Transcript chunk generation in progress |
+| `GENERATION_COMBINING` | Multi-chunk combine stage |
+| `GENERATION_COMPLETE` | Main notes generation complete |
+| `CHAPTER_GENERATING` | Chapter generation started |
+| `CHAPTER_CHUNK_GENERATING` | Chapter chunk generation progress |
+| `CHAPTER_COMBINING` | Chapter combine stage |
+| `CHAPTER_COMPLETE` | Chapter generation complete |
+| `QUIZ_GENERATING` | Quiz generation started |
+| `QUIZ_CHUNK_GENERATING` | Quiz chunk generation progress |
+| `QUIZ_COMBINING` | Quiz combine stage |
+| `QUIZ_COMPLETE` | Quiz generation complete |
+| `VIDEO_SUCCESS` | Video completed successfully |
+| `VIDEO_SKIPPED` | Video skipped due to cache/output checks |
+| `VIDEO_FAILED` | Video failed with error context |
+
+---
+
+## Typical event sequences
+
+<Tabs>
+  <Tab title="Standard video">
+    ```text
+    PIPELINE_START
+    METADATA_START → METADATA_FETCHED
+    TRANSCRIPT_FETCHING → TRANSCRIPT_FETCHED
+    GENERATION_START
+    CHUNK_GENERATING × n
+    GENERATION_COMBINING  (only if multi-chunk)
+    GENERATION_COMPLETE
+    VIDEO_SUCCESS
+    PIPELINE_COMPLETE
+    ```
+  </Tab>
+  <Tab title="Chapter-aware video">
+    ```text
+    PIPELINE_START
+    METADATA_START → METADATA_FETCHED
+    TRANSCRIPT_FETCHING → TRANSCRIPT_FETCHED
+    ┌─ CHAPTER_GENERATING
+    │  CHAPTER_CHUNK_GENERATING × n
+    │  CHAPTER_COMBINING
+    └─ CHAPTER_COMPLETE
+    (repeated per chapter, concurrent)
+    GENERATION_COMPLETE
+    VIDEO_SUCCESS
+    PIPELINE_COMPLETE
+    ```
+  </Tab>
+  <Tab title="Skipped video">
+    ```text
+    PIPELINE_START
+    METADATA_START → METADATA_FETCHED
+    VIDEO_SKIPPED
+    PIPELINE_COMPLETE
+    ```
+  </Tab>
+</Tabs>
+
+---
+
+## Integration guidance
+
+- Use events as the source of truth for progress UI.
+- For custom frontends, subscribe through the pipeline `on_event` callback and render by `event_type`.
+- Avoid deriving progress solely from log text — the event stream is the stable API.

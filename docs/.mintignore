@@ -1,0 +1,6 @@
+# Keep docs source fully indexable; only ignore local/editor artifacts.
+
+.DS_Store
+Thumbs.db
+_.tmp
+_.bak
