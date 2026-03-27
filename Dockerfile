@@ -1,7 +1,6 @@
 # syntax=docker/dockerfile:1
 
 ARG PYTHON_VERSION=3.13
-ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
 ARG APP_NAME=notewise
 ARG APP_UID=1001
 ARG APP_GID=1001
@@ -9,13 +8,15 @@ ARG APP_ROOT=/app
 ARG APP_HOME=/home/notewise
 ARG APP_OUTPUT_DIR=/output
 
+FROM ghcr.io/astral-sh/uv:latest AS uv
+
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS builder
 
 # Copy the uv binary from the official distroless image — no pip overhead
-COPY --from=${UV_IMAGE} /uv /uvx /bin/
+COPY --from=uv /uv /uvx /bin/
 
 # Compile bytecode at install time for faster cold-start in the runtime stage
 ENV UV_COMPILE_BYTECODE=1 \
