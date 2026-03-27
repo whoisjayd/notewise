@@ -1,5 +1,5 @@
 name: Bug Report
-description: Report a reproducible bug in yt-study
+description: Report a reproducible bug in notewise
 title: "[Bug]: "
 labels: ["type:bug", "triage"]
 body:
@@ -24,7 +24,7 @@ body:
       label: Reproduction Steps
       description: Exact steps and input used to trigger the issue.
       placeholder: |
-        1. Run: yt-study process "..."
+        1. Run: notewise process "..."
         2. Observe: ...
         3. Expected: ...
     validations:
@@ -47,8 +47,8 @@ body:
     id: version
     attributes:
       label: Version
-      description: Output of `yt-study version`
-      placeholder: yt-study version 0.2.2
+      description: Output of `notewise version`
+      placeholder: notewise version 1.0.0
     validations:
       required: true
   - type: input
@@ -122,7 +122,7 @@ body:
     id: config
     attributes:
       label: Relevant Config (Sanitized)
-      description: Optional. Include non-sensitive values from `~/.yt-study/config.env`.
+      description: Optional. Include non-sensitive values from `~/.notewise/config.env`.
       placeholder: |
         DEFAULT_MODEL=...
         MAX_CONCURRENT_VIDEOS=...

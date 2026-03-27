@@ -31,7 +31,7 @@ _SRC_ROOT = _REPO_ROOT / "src"
 
 
 def _prepare_live_state_dir() -> Path:
-    state_dir = Path(os.environ["YT_STUDY_HOME"])
+    state_dir = Path(os.environ["NOTEWISE_HOME"])
     state_dir.mkdir(parents=True, exist_ok=True)
     (state_dir / "config.env").write_text(
         f"DEFAULT_MODEL={_DEFAULT_MODEL}\n",
@@ -49,7 +49,7 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
         f"{_SRC_ROOT}{os.pathsep}{pythonpath}" if pythonpath else str(_SRC_ROOT)
     )
     return subprocess.run(
-        [sys.executable, "-m", "yt_study", *args],
+        [sys.executable, "-m", "notewise", *args],
         cwd=_REPO_ROOT,
         env=env,
         capture_output=True,

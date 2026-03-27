@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Enforce formatting
-        run: uv run ruff format --check src/yt_study tests
+        run: uv run ruff format --check src/notewise tests
 
   lint-check:
     name: Lint Check
@@ -46,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run linter
-        run: uv run ruff check src/yt_study tests
+        run: uv run ruff check src/notewise tests
 
   type-check:
     name: Type Check
@@ -62,7 +62,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run ty
-        run: uv run ty check src/yt_study
+        run: uv run ty check src/notewise
 
   startup-smoke:
     name: Startup Smoke
@@ -78,7 +78,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Ensure version command starts successfully
-        run: uv run yt-study version
+        run: uv run notewise version
 
   unit-tests:
     name: Unit Tests (3.12, coverage)
@@ -94,12 +94,12 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run tests with coverage
-        run: uv run python -m pytest -n auto --dist=loadfile --cov=src/yt_study --cov-fail-under=90 --cov-report=xml
+        run: uv run python -m pytest -n auto --dist=loadfile --cov=src/notewise --cov-fail-under=90 --cov-report=xml
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v5
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
-          slug: whoisjayd/yt-study
+          slug: whoisjayd/notewise
 
   matrix-tests:
     name: Matrix Tests

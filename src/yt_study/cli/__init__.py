@@ -1,1 +1,0 @@
-"""yt-study CLI package."""

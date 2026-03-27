@@ -1,11 +1,11 @@
-# yt-study docs map for LLM retrieval
+# notewise docs map for LLM retrieval
 
-Project: yt-study
+Project: notewise
 Primary entry: /index
 Description: Convert YouTube videos and playlists into AI-powered study notes from your terminal.
 
 ## Purpose
-Fast retrieval index for assistants answering yt-study usage, operations, and contribution questions.
+Fast retrieval index for assistants answering notewise usage, operations, and contribution questions.
 Prefer links here over guessing command flags, defaults, or output behavior.
 
 ## First-stop pages by user intent
@@ -60,14 +60,14 @@ Docker or CI:
 - Quiz export: top-level in OUTPUT_DIR — <sanitized_title>_quiz.md
 - Transcript exports: top-level in OUTPUT_DIR — <sanitized_title>_transcript.txt or .json
 - Per-video folders: ONLY created for chapter-aware long videos (duration > 1 hour with chapter data)
-- Config file: ~/.yt-study/config.env — override location with YT_STUDY_HOME
+- Config file: ~/.notewise/config.env — override location with NOTEWISE_HOME
 - Priority: code defaults < config.env < environment variables < CLI flags
 - cache --clear removes database records only — does NOT delete generated note files
 
 For implementation-level confirmation:
-- src/yt_study/cli/app.py
-- src/yt_study/pipeline/_execution.py
-- src/yt_study/pipeline/_artifacts.py
+- src/notewise/cli/app.py
+- src/notewise/pipeline/_execution.py
+- src/notewise/pipeline/_artifacts.py
 
 ## Contributor path
 

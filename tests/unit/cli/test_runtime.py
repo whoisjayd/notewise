@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yt_study.cli import _runtime
+from notewise.cli import _runtime
 
 
 def test_read_batch_file_urls_supports_utf16(tmp_path: Path) -> None:

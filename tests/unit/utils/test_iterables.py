@@ -1,6 +1,6 @@
 """Tests for iterable utility helpers."""
 
-from yt_study.utils import dedupe_ordered
+from notewise.utils import dedupe_ordered
 
 
 def test_dedupe_ordered_removes_duplicates():

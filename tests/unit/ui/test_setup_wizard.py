@@ -2,7 +2,7 @@
 
 from unittest.mock import MagicMock, mock_open, patch
 
-from yt_study.ui.setup_wizard import (
+from notewise.ui.setup_wizard import (
     CURATED_FALLBACK_MODELS,
     _strip_wrapped_quotes,
     get_api_key,
@@ -80,11 +80,11 @@ class TestConfigIO:
         mock_path = Path("dummy_path")
         with (
             patch(
-                "yt_study.ui.setup_wizard.load_config",
+                "notewise.ui.setup_wizard.load_config",
                 return_value={"OLD_KEY": "old_val"},
             ),
             patch("pathlib.Path.open", mock_open()) as mock_file,
-            patch("yt_study.ui.setup_wizard.get_config_path", return_value=mock_path),
+            patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
             save_config(new_config)
@@ -108,7 +108,7 @@ class TestConfigIO:
         mock_path = Path("dummy_path")
         with (
             patch(
-                "yt_study.ui.setup_wizard.load_config",
+                "notewise.ui.setup_wizard.load_config",
                 return_value={
                     "YOUTUBE_USE_OAUTH": "true",
                     "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
@@ -118,7 +118,7 @@ class TestConfigIO:
                 },
             ),
             patch("pathlib.Path.open", mock_open()) as mock_file,
-            patch("yt_study.ui.setup_wizard.get_config_path", return_value=mock_path),
+            patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             save_config({"DEFAULT_MODEL": "new_model"})
 
@@ -138,14 +138,14 @@ class TestConfigIO:
         console = MagicMock()
         with (
             patch(
-                "yt_study.ui.setup_wizard.load_config",
+                "notewise.ui.setup_wizard.load_config",
                 return_value={
                     "DEFAULT_MODEL": "gemini/gemini-2.5-flash",
                     "GEMINI_API_KEY": "secret-api-key-value",
                 },
             ),
             patch(
-                "yt_study.ui.setup_wizard.get_config_path",
+                "notewise.ui.setup_wizard.get_config_path",
                 return_value=get_config_path(),
             ),
         ):
@@ -159,7 +159,7 @@ class TestConfigIO:
     def test_show_current_config_handles_missing_config(self):
         """Read-only config display should report missing config cleanly."""
         console = MagicMock()
-        with patch("yt_study.ui.setup_wizard.load_config", return_value={}):
+        with patch("notewise.ui.setup_wizard.load_config", return_value={}):
             current = show_current_config(console=console)
 
         assert current == {}
@@ -174,7 +174,7 @@ class TestConfigIO:
         """Unreadable config files should not be misreported as missing config."""
         console = MagicMock()
         with patch(
-            "yt_study.ui.setup_wizard.load_config",
+            "notewise.ui.setup_wizard.load_config",
             side_effect=RuntimeError("Failed to read configuration"),
         ):
             current = show_current_config(console=console)
@@ -321,7 +321,7 @@ class TestInteractiveFlow:
         }
 
         with (
-            patch("yt_study.ui.setup_wizard.PROVIDER_CONFIG", test_config),
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", test_config),
             patch("rich.prompt.Prompt.ask", return_value="2"),
         ):
             result = select_provider({"p1": [], "p2": []})
@@ -337,7 +337,7 @@ class TestInteractiveFlow:
         inputs = ["n", "p", "1"]
 
         with (
-            patch("yt_study.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
             patch("rich.prompt.Prompt.ask", side_effect=inputs),
         ):
             selected = select_model("p1", models)
@@ -349,7 +349,7 @@ class TestInteractiveFlow:
 
         with (
             patch(
-                "yt_study.ui.setup_wizard.PROVIDER_CONFIG",
+                "notewise.ui.setup_wizard.PROVIDER_CONFIG",
                 {"gemini": {"name": "Google"}},
             ),
             patch("rich.prompt.Prompt.ask", return_value="1"),
@@ -363,7 +363,7 @@ class TestInteractiveFlow:
         models = {"p1": ["model-0"]}
 
         with (
-            patch("yt_study.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
             patch("rich.prompt.Prompt.ask", side_effect=["wat", "1"]),
         ):
             selected = select_model("p1", models, console=mock_console)
@@ -408,19 +408,19 @@ class TestWizardOrchestration:
         """Test full setup flow."""
         # Mocks
         with (
-            patch("yt_study.ui.setup_wizard.load_config", return_value={}),
+            patch("notewise.ui.setup_wizard.load_config", return_value={}),
             patch(
-                "yt_study.ui.setup_wizard.get_available_models",
+                "notewise.ui.setup_wizard.get_available_models",
                 return_value={"gemini": ["gemini-pro"]},
             ),
-            patch("yt_study.ui.setup_wizard.select_provider", return_value="gemini"),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="gemini"),
             patch(
-                "yt_study.ui.setup_wizard.select_model",
+                "notewise.ui.setup_wizard.select_model",
                 return_value="gemini/gemini-pro",
             ),
-            patch("yt_study.ui.setup_wizard.get_api_key", return_value="new-key"),
+            patch("notewise.ui.setup_wizard.get_api_key", return_value="new-key"),
             patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
-            patch("yt_study.ui.setup_wizard.save_config") as mock_save,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True)
 
@@ -434,22 +434,22 @@ class TestWizardOrchestration:
     def test_run_setup_wizard_reprompts_for_invalid_concurrency(self):
         """Wizard should reject invalid concurrency input before saving config."""
         with (
-            patch("yt_study.ui.setup_wizard.load_config", return_value={}),
+            patch("notewise.ui.setup_wizard.load_config", return_value={}),
             patch(
-                "yt_study.ui.setup_wizard.get_available_models",
+                "notewise.ui.setup_wizard.get_available_models",
                 return_value={"gemini": ["gemini-pro"]},
             ),
-            patch("yt_study.ui.setup_wizard.select_provider", return_value="gemini"),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="gemini"),
             patch(
-                "yt_study.ui.setup_wizard.select_model",
+                "notewise.ui.setup_wizard.select_model",
                 return_value="gemini/gemini-pro",
             ),
-            patch("yt_study.ui.setup_wizard.get_api_key", return_value="new-key"),
+            patch("notewise.ui.setup_wizard.get_api_key", return_value="new-key"),
             patch(
                 "rich.prompt.Prompt.ask",
                 side_effect=["/custom/out", "zero", "0", "7"],
             ),
-            patch("yt_study.ui.setup_wizard.save_config") as mock_save,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True)
 
@@ -470,19 +470,19 @@ class TestWizardOrchestration:
         }
 
         with (
-            patch("yt_study.ui.setup_wizard.load_config", return_value=existing_config),
+            patch("notewise.ui.setup_wizard.load_config", return_value=existing_config),
             patch(
-                "yt_study.ui.setup_wizard.get_available_models",
+                "notewise.ui.setup_wizard.get_available_models",
                 return_value={"gemini": ["gemini-pro"]},
             ),
-            patch("yt_study.ui.setup_wizard.select_provider", return_value="gemini"),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="gemini"),
             patch(
-                "yt_study.ui.setup_wizard.select_model",
+                "notewise.ui.setup_wizard.select_model",
                 return_value="gemini/gemini-pro",
             ),
-            patch("yt_study.ui.setup_wizard.get_api_key", return_value="existing-key"),
+            patch("notewise.ui.setup_wizard.get_api_key", return_value="existing-key"),
             patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
-            patch("yt_study.ui.setup_wizard.save_config") as mock_save,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True)
 
@@ -496,7 +496,7 @@ class TestWizardOrchestration:
         """Test skipping setup if config exists."""
         with (
             patch(
-                "yt_study.ui.setup_wizard.load_config",
+                "notewise.ui.setup_wizard.load_config",
                 return_value={"exists": "true"},
             ),
             patch("rich.prompt.Confirm.ask", return_value=False),
@@ -509,25 +509,25 @@ class TestWizardOrchestration:
         mock_console = MagicMock()
 
         with (
-            patch("yt_study.ui.setup_wizard.load_config", return_value={}),
+            patch("notewise.ui.setup_wizard.load_config", return_value={}),
             patch(
-                "yt_study.ui.setup_wizard.get_available_models",
+                "notewise.ui.setup_wizard.get_available_models",
                 return_value={"gemini": ["gemini-pro"]},
             ) as mock_models,
             patch(
-                "yt_study.ui.setup_wizard.select_provider",
+                "notewise.ui.setup_wizard.select_provider",
                 return_value="gemini",
             ) as mock_provider,
             patch(
-                "yt_study.ui.setup_wizard.select_model",
+                "notewise.ui.setup_wizard.select_model",
                 return_value="gemini/gemini-pro",
             ) as mock_model,
             patch(
-                "yt_study.ui.setup_wizard.get_api_key",
+                "notewise.ui.setup_wizard.get_api_key",
                 return_value="new-key",
             ) as mock_api_key,
             patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "10"]),
-            patch("yt_study.ui.setup_wizard.save_config") as mock_save,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
         ):
             config = run_setup_wizard(force=True, console=mock_console)
 

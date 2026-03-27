@@ -1,5 +1,5 @@
 ---
-title: yt-study
+title: NoteWise
 description: Convert any YouTube video, playlist, or batch of URLs into structured AI-powered study notes — straight from your terminal.
 icon: house
 ---
@@ -7,11 +7,11 @@ icon: house
 <img
   className="block dark:hidden"
   src="/favicon.svg"
-  alt="yt-study logo"
+  alt="NoteWise logo"
   style={{ width: "72px", height: "72px", marginBottom: "1.5rem" }}
 />
 
-**yt-study** is a command-line tool that turns YouTube content into comprehensive Markdown study notes — powered by the LLM of your choice, with no browser required.
+**NoteWise** is a command-line tool that turns YouTube content into comprehensive Markdown study notes — powered by the LLM of your choice, with no browser required.
 
 <Info>
   Built for learners and builders who want repeatable, automatable study workflows from long-form video content.
@@ -43,19 +43,19 @@ icon: house
 <Tabs>
   <Tab title="Single video">
     ```bash
-    yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+    notewise process "https://youtube.com/watch?v=VIDEO_ID"
     ```
     Best for focused notes from one lecture or tutorial.
   </Tab>
   <Tab title="Playlist">
     ```bash
-    yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
+    notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
     ```
     Best for full course conversion with concurrent processing.
   </Tab>
   <Tab title="Batch file">
     ```bash
-    yt-study process my-urls.txt -o ./course-notes
+    notewise process my-urls.txt -o ./course-notes
     ```
     Best for scripted workflows and repeatable pipelines.
   </Tab>
@@ -64,7 +64,7 @@ icon: house
     docker run --rm \
       -e GEMINI_API_KEY="your_key" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "URL" --no-ui
     ```
     Best for CI or containerized environments.
@@ -127,9 +127,9 @@ icon: house
 ## Example session
 
 ```bash
-$ yt-study process "https://youtube.com/watch?v=dQw4w9WgXcQ"
+$ notewise process "https://youtube.com/watch?v=dQw4w9WgXcQ"
 
- yt-study  v0.2.6
+ notewise  v1.0.0
 
 Processing 1 video...
 

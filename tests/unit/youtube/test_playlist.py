@@ -2,10 +2,10 @@
 
 import pytest
 
-from yt_study.errors import ExtractionError as ExtractorError
-from yt_study.errors import PlaylistError
-from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
-from yt_study.youtube.playlist import extract_playlist_videos
+from notewise.errors import ExtractionError as ExtractorError
+from notewise.errors import PlaylistError
+from notewise.errors import VideoUnavailableError as PublicAccessRequiredError
+from notewise.youtube.playlist import extract_playlist_videos
 
 
 class TestPlaylistExtraction:
@@ -115,7 +115,7 @@ class TestPlaylistExtraction:
         self, mock_extractor_client
     ):
         """_extract_async should log title when attempt is first and title exists."""
-        from yt_study.youtube.playlist import _extract_async
+        from notewise.youtube.playlist import _extract_async
 
         client = mock_extractor_client["playlist"].return_value
         client.playlist.return_value = {

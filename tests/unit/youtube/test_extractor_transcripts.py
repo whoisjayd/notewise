@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import json
 
-from yt_study.youtube.extractor import _parsers as tx
+from notewise.youtube.extractor import _parsers as tx
 
 
 class TestSelectTrack:

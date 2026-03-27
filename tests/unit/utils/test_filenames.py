@@ -2,7 +2,7 @@
 
 import pytest
 
-from yt_study.utils import safe_output_path, sanitize_filename
+from notewise.utils import safe_output_path, sanitize_filename
 
 
 @pytest.mark.parametrize(

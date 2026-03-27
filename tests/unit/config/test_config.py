@@ -8,8 +8,8 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from yt_study.config import AppSettings as Config
-from yt_study.config import UserConfigSource
+from notewise.config import AppSettings as Config
+from notewise.config import UserConfigSource
 
 
 class TestConfig:
@@ -37,8 +37,8 @@ class TestConfig:
         """Config.env file is loaded and sets values."""
         monkeypatch.delenv("OPENAI_API_KEY", raising=False)
         monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-        config_dir = tmp_path / ".yt-study"
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
         config_dir.mkdir()
         (config_dir / "config.env").write_text(
             "OPENAI_API_KEY=file_key\nMAX_CONCURRENT_VIDEOS=10"
@@ -116,9 +116,9 @@ class TestConfig:
         self, tmp_path, monkeypatch
     ):
         """Config file strips quotes; unknown keys are silently ignored."""
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
         monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-        config_dir = tmp_path / ".yt-study"
+        config_dir = tmp_path / ".notewise"
         config_dir.mkdir()
         (config_dir / "config.env").write_text(
             'GEMINI_API_KEY="quoted_key"\nUNKNOWN_KEY=ignored\n'
@@ -131,7 +131,7 @@ class TestConfig:
         self, tmp_path, monkeypatch
     ):
         """Unreadable config file doesn't crash; defaults are used."""
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
         monkeypatch.delenv("DEFAULT_MODEL", raising=False)
         # No config.env file → no crash, just defaults
         cfg = Config()
@@ -155,8 +155,8 @@ class TestConfig:
         monkeypatch,
     ):
         """A single settings-source instance should only parse config.env once."""
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-        config_dir = tmp_path / ".yt-study"
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
         config_dir.mkdir()
         config_path = config_dir / "config.env"
         config_path.write_text(

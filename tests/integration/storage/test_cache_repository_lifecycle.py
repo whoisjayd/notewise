@@ -8,7 +8,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from yt_study.storage.repository import DatabaseRepository
+from notewise.storage.repository import DatabaseRepository
 
 
 def test_legacy_cache_db_is_upgraded_to_latest_schema_version(tmp_path):

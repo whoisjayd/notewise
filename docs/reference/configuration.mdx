@@ -1,7 +1,7 @@
 ---
 title: Configuration Reference
 sidebarTitle: Configuration
-description: Complete reference for all yt-study configuration settings, defaults, and CLI overrides.
+description: Complete reference for all notewise configuration settings, defaults, and CLI overrides.
 icon: settings
 ---
 
@@ -12,13 +12,13 @@ icon: settings
 ## File location
 
 ```text
-~/.yt-study/config.env
+~/.notewise/config.env
 ```
 
 Override the config directory:
 
 ```bash
-export YT_STUDY_HOME=/custom/path
+export NOTEWISE_HOME=/custom/path
 ```
 
 ---
@@ -28,7 +28,7 @@ export YT_STUDY_HOME=/custom/path
 | Priority | Source | Notes |
 | --- | --- | --- |
 | 1 (lowest) | Code defaults | Built-in values in `_constants.py` |
-| 2 | `~/.yt-study/config.env` | Written by `yt-study setup` |
+| 2 | `~/.notewise/config.env` | Written by `notewise setup` |
 | 3 | Environment variables | Always override config file |
 | 4 (highest) | CLI flags | Per-run only (e.g. `--model`, `--output`) |
 
@@ -103,7 +103,7 @@ Directory where study notes are written. Relative paths resolve from the current
 
 ```bash
 OUTPUT_DIR=~/study-notes
-OUTPUT_DIR=/data/yt-study-output
+OUTPUT_DIR=/data/notewise-output
 ```
 
 ---
@@ -149,7 +149,7 @@ See [Private Videos](/guides/private-videos) for export instructions.
 
 ## Code-only defaults
 
-These constants are not exposed in `config.env`. Change them by editing `src/yt_study/_constants.py`.
+These constants are not exposed in `config.env`. Change them by editing `src/notewise/_constants.py`.
 
 | Constant | Default | Description |
 | --- | --- | --- |
@@ -183,7 +183,7 @@ CLI flags take the highest priority — they override both `config.env` and envi
 ## Example config.env
 
 ```bash
-# ~/.yt-study/config.env
+# ~/.notewise/config.env
 
 DEFAULT_MODEL=gemini/gemini-2.5-flash
 OUTPUT_DIR=~/study-notes

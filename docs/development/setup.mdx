@@ -1,7 +1,7 @@
 ---
 title: Development Setup
 sidebarTitle: Setup
-description: Set up a local development environment for yt-study.
+description: Set up a local development environment for notewise.
 icon: laptop
 ---
 
@@ -18,8 +18,8 @@ icon: laptop
 <Steps>
   <Step title="Clone the repository">
     ```bash
-    git clone https://github.com/whoisjayd/yt-study
-    cd yt-study
+    git clone https://github.com/whoisjayd/notewise
+    cd notewise
     ```
   </Step>
   <Step title="Install all dependencies">
@@ -38,7 +38,7 @@ icon: laptop
   </Step>
   <Step title="Verify the setup">
     ```bash
-    uv run yt-study version
+    uv run notewise version
     uv run pytest tests/unit -q
     ```
   </Step>
@@ -66,24 +66,24 @@ icon: laptop
 <Tabs>
   <Tab title="Formatting">
     ```bash
-    uv run ruff format --check src/yt_study tests   # check
-    uv run ruff format src/yt_study tests            # auto-fix
+    uv run ruff format --check src/notewise tests   # check
+    uv run ruff format src/notewise tests            # auto-fix
     ```
   </Tab>
   <Tab title="Linting">
     ```bash
-    uv run ruff check src/yt_study tests             # check
-    uv run ruff check --fix src/yt_study tests       # auto-fix
+    uv run ruff check src/notewise tests             # check
+    uv run ruff check --fix src/notewise tests       # auto-fix
     ```
   </Tab>
   <Tab title="Type checking">
     ```bash
-    uv run ty check src/yt_study
+    uv run ty check src/notewise
     ```
   </Tab>
   <Tab title="Security">
     ```bash
-    uv run bandit -c pyproject.toml -r src/yt_study
+    uv run bandit -c pyproject.toml -r src/notewise
     ```
   </Tab>
   <Tab title="Dependency hygiene">
@@ -106,7 +106,7 @@ uv run pytest tests/unit/pipeline/test_core.py::TestCorePipeline -v
 
 # With HTML coverage report
 uv run python -m pytest tests/unit \
-  --cov=src/yt_study \
+  --cov=src/notewise \
   --cov-report=html
 open htmlcov/index.html
 ```
@@ -119,10 +119,10 @@ No real API key is needed to run unit tests — all external calls are mocked. F
 
 ```bash
 export GEMINI_API_KEY=your_key_here
-uv run yt-study process "URL"
+uv run notewise process "URL"
 ```
 
-Or create `~/.yt-study/config.env` via `uv run yt-study setup`.
+Or create `~/.notewise/config.env` via `uv run notewise setup`.
 
 ---
 
@@ -142,6 +142,6 @@ Always commit the updated `uv.lock`.
 ```bash
 make build
 # Produces:
-# dist/yt_study-X.Y.Z-py3-none-any.whl
-# dist/yt_study-X.Y.Z.tar.gz
+# dist/notewise-X.Y.Z-py3-none-any.whl
+# dist/notewise-X.Y.Z.tar.gz
 ```

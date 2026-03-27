@@ -1,26 +1,35 @@
 ---
 title: Docker
 sidebarTitle: Docker
-description: Run yt-study in a container for reproducible, stateless processing.
+description: Run NoteWise in a container with stable tags, a dedicated runtime user, and persistent state when needed.
 icon: box
 ---
 
-yt-study ships a minimal two-stage Docker image. The builder stage installs dependencies with uv; the runtime stage copies only the virtual environment and runs as a non-root user.
+NoteWise ships a two-stage Docker image tuned for CLI workloads. The builder stage installs dependencies with `uv`; the runtime stage copies only the virtual environment, runs as a dedicated `notewise` user, and keeps writable state under `/home/notewise/.notewise`.
 
 | Property | Value |
 | --- | --- |
 | Base image | `python:3.13-slim` |
-| User | `appuser` (uid 1001) |
-| Entrypoint | `yt-study` |
+| User | `notewise` (uid 1001) |
+| Entrypoint | `notewise` |
 | Default volume | `/output` |
 | Working directory | `/output` |
+| State directory | `/home/notewise/.notewise` |
 
 ---
 
 ## Pull the image
 
 ```bash
-docker pull ghcr.io/whoisjayd/yt-study:latest
+docker pull ghcr.io/whoisjayd/notewise:latest
+```
+
+Release builds also publish versioned tags:
+
+```bash
+docker pull ghcr.io/whoisjayd/notewise:1.0.0
+docker pull ghcr.io/whoisjayd/notewise:1.0
+docker pull ghcr.io/whoisjayd/notewise:1
 ```
 
 ---
@@ -33,7 +42,7 @@ docker pull ghcr.io/whoisjayd/yt-study:latest
     docker run --rm \
       -e GEMINI_API_KEY="your_key_here" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "https://youtube.com/watch?v=VIDEO_ID" --no-ui
     ```
 
@@ -45,7 +54,7 @@ docker pull ghcr.io/whoisjayd/yt-study:latest
     docker run --rm \
       -e OPENAI_API_KEY="sk-..." \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "URL" --model gpt-4o --no-ui
     ```
   </Accordion>
@@ -56,7 +65,7 @@ docker pull ghcr.io/whoisjayd/yt-study:latest
       -e GEMINI_API_KEY="your_key" \
       -v "$(pwd)/urls.txt:/urls.txt:ro" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process /urls.txt --no-ui
     ```
   </Accordion>
@@ -68,7 +77,7 @@ docker pull ghcr.io/whoisjayd/yt-study:latest
       -e YOUTUBE_COOKIE_FILE="/cookies/youtube.txt" \
       -v "$(pwd)/cookies:/cookies:ro" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "URL" --no-ui
     ```
   </Accordion>
@@ -79,14 +88,14 @@ docker pull ghcr.io/whoisjayd/yt-study:latest
     ```bash
     docker run --rm \
       -e GEMINI_API_KEY="your_key" \
-      -v "$(pwd)/yt-study-state:/home/appuser/.yt-study" \
+      -v "$(pwd)/notewise-state:/home/notewise/.notewise" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "URL" --no-ui
     ```
 
     <Note>
-      The container user is `appuser` (uid 1001). The state directory is `/home/appuser/.yt-study`.
+      The container user is `notewise` (uid 1001). The state directory is `/home/notewise/.notewise`.
     </Note>
   </Accordion>
 </AccordionGroup>
@@ -104,7 +113,7 @@ docker run --rm \
   -e MAX_CONCURRENT_VIDEOS="3" \
   -e TEMPERATURE="0.5" \
   -v "$(pwd)/output:/output" \
-  ghcr.io/whoisjayd/yt-study:latest \
+  ghcr.io/whoisjayd/notewise:latest \
   process "URL" --no-ui
 ```
 
@@ -115,11 +124,11 @@ See [Configuration Reference](/reference/configuration) for all available keys.
 ## Build locally
 
 ```bash
-git clone https://github.com/whoisjayd/yt-study
-cd yt-study
-docker build -t yt-study:local .
+git clone https://github.com/whoisjayd/notewise
+cd notewise
+docker build -t notewise:local .
 docker run --rm \
   -e GEMINI_API_KEY="your_key" \
   -v "$(pwd)/output:/output" \
-  yt-study:local process "URL" --no-ui
+  notewise:local process "URL" --no-ui
 ```

@@ -4,19 +4,19 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from yt_study.errors import ExtractionError as ExtractorError
-from yt_study.errors import (
+from notewise.errors import ExtractionError as ExtractorError
+from notewise.errors import (
     IPBlockError as YouTubeIPBlockError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     TranscriptUnavailableError as TranscriptError,
 )
-from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
-from yt_study.errors import (
+from notewise.errors import VideoUnavailableError as PublicAccessRequiredError
+from notewise.errors import (
     raise_if_video_unavailable as _raise_if_public_access_required,
 )
-from yt_study.youtube.metadata import VideoChapter
-from yt_study.youtube.transcript import (
+from notewise.youtube.metadata import VideoChapter
+from notewise.youtube.transcript import (
     TranscriptSegment,
     VideoTranscript,
     _extract_error_reason,
@@ -202,7 +202,7 @@ class TestFetchTranscript:
         """Unknown repeated failures should end as TranscriptError."""
         client = mock_extractor_client["transcript"].return_value
         client.transcript.side_effect = ExtractorError("network down")
-        monkeypatch.setattr("yt_study.youtube.transcript.asyncio.sleep", AsyncMock())
+        monkeypatch.setattr("notewise.youtube.transcript.asyncio.sleep", AsyncMock())
 
         with pytest.raises(TranscriptError, match="Could not fetch transcript"):
             await fetch_transcript("video123")

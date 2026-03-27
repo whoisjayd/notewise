@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from yt_study.pipeline import clear_youtube_limiters
-from yt_study.storage import DatabaseRepository
+from notewise.pipeline import clear_youtube_limiters
+from notewise.storage import DatabaseRepository
 
 
 # ── Simple value fixtures ─────────────────────────────────────────────────────
@@ -32,11 +32,11 @@ def sample_playlist_id() -> str:
 
 @pytest.fixture(autouse=True)
 def isolate_state_dir(tmp_path, monkeypatch):
-    """Redirect ~/.yt-study to a tmp dir so tests never touch real state."""
+    """Redirect ~/.notewise to a tmp dir so tests never touch real state."""
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
     gc.collect()
-    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
     yield
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
@@ -58,7 +58,7 @@ def mock_config(monkeypatch):
     """Real AppSettings instance with dummy API keys injected."""
     monkeypatch.setenv("GEMINI_API_KEY", "dummy_gemini_key")
     monkeypatch.setenv("OPENAI_API_KEY", "dummy_openai_key")
-    from yt_study.config import settings as config
+    from notewise.config import settings as config
 
     return config
 
@@ -107,9 +107,9 @@ def mock_extractor_client(monkeypatch):
         return cls_mock
 
     return {
-        "metadata": _patch("yt_study.youtube.metadata.AsyncYouTubeExtractorClient"),
-        "transcript": _patch("yt_study.youtube.transcript.AsyncYouTubeExtractorClient"),
-        "playlist": _patch("yt_study.youtube.playlist.AsyncYouTubeExtractorClient"),
+        "metadata": _patch("notewise.youtube.metadata.AsyncYouTubeExtractorClient"),
+        "transcript": _patch("notewise.youtube.transcript.AsyncYouTubeExtractorClient"),
+        "playlist": _patch("notewise.youtube.playlist.AsyncYouTubeExtractorClient"),
     }
 
 

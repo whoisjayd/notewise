@@ -7,8 +7,8 @@ from unittest.mock import MagicMock, patch
 
 from rich.console import Console
 
-from yt_study.cli._context import CliProcessContext
-from yt_study.cli._display import (
+from notewise.cli._context import CliProcessContext
+from notewise.cli._display import (
     build_ui_event_handler,
     emit_headless_event,
     print_batch_summary,
@@ -17,14 +17,14 @@ from yt_study.cli._display import (
     update_dashboard_chapter_slot,
     use_transient_live_display,
 )
-from yt_study.cli._types import (
+from notewise.cli._types import (
     _BatchJobResult,
     _OrderedBatchFailure,
     _WorkerSlotManager,
 )
-from yt_study.domain.events import EventType, PipelineEvent
-from yt_study.domain.results import PipelineMetrics, PipelineResult
-from yt_study.ui.dashboard import PipelineDashboard
+from notewise.domain.events import EventType, PipelineEvent
+from notewise.domain.results import PipelineMetrics, PipelineResult
+from notewise.ui.dashboard import PipelineDashboard
 
 
 def test_worker_slot_manager_reuses_released_slots_in_queue_order() -> None:
@@ -52,7 +52,7 @@ def test_build_ui_event_handler_logs_slot_exhaustion_once_per_video() -> None:
         )
     )
 
-    with patch("yt_study.cli._display.logger") as mock_logger:
+    with patch("notewise.cli._display.logger") as mock_logger:
         on_event(
             PipelineEvent(
                 event_type=EventType.METADATA_START,
@@ -98,10 +98,10 @@ def test_build_ui_event_handler_escapes_worker_titles() -> None:
 
 def test_use_transient_live_display_respects_platform(monkeypatch) -> None:
     """Windows consoles should avoid transient live cleanup."""
-    monkeypatch.setattr("yt_study.cli._display.os.name", "nt")
+    monkeypatch.setattr("notewise.cli._display.os.name", "nt")
     assert use_transient_live_display() is False
 
-    monkeypatch.setattr("yt_study.cli._display.os.name", "posix")
+    monkeypatch.setattr("notewise.cli._display.os.name", "posix")
     assert use_transient_live_display() is True
 
 
@@ -315,8 +315,8 @@ def test_print_batch_summary_success_path() -> None:
     ]
 
     with (
-        patch("yt_study.cli._display.print_cost_summary") as print_cost,
-        patch("yt_study.cli._display.get_session_log_path", return_value="session.log"),
+        patch("notewise.cli._display.print_cost_summary") as print_cost,
+        patch("notewise.cli._display.get_session_log_path", return_value="session.log"),
     ):
         failed = print_batch_summary(
             context,

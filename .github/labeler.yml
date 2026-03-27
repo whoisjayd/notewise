@@ -2,25 +2,25 @@
 "area:cli":
   - changed-files:
       - any-glob-to-any-file:
-          - src/yt_study/cli.py
-          - src/yt_study/ui/**
+          - src/notewise/cli.py
+          - src/notewise/ui/**
 
 "area:core":
   - changed-files:
       - any-glob-to-any-file:
-          - src/yt_study/pipeline/**
-          - src/yt_study/config.py
+          - src/notewise/pipeline/**
+          - src/notewise/config.py
 
 "area:llm":
   - changed-files:
       - any-glob-to-any-file:
-          - src/yt_study/llm/**
-          - src/yt_study/prompts/**
+          - src/notewise/llm/**
+          - src/notewise/prompts/**
 
 "area:youtube":
   - changed-files:
       - any-glob-to-any-file:
-          - src/yt_study/youtube/**
+          - src/notewise/youtube/**
 
 "area:docs":
   - changed-files:

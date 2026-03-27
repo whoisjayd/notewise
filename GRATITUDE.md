@@ -1,6 +1,6 @@
 # Open Source Gratitude
 
-yt-study exists because of open-source software and the people who maintain it.
+notewise exists because of open-source software and the people who maintain it.
 
 This file acknowledges the major libraries and tools used directly in this project. It may not list every transitive dependency, but each one is appreciated.
 

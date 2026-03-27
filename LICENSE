@@ -1,7 +1,7 @@
 MIT License with Attribution Requirement
 
 Copyright (c) 2026 whoisjayd (https://github.com/whoisjayd)
-Repository: https://github.com/whoisjayd/yt-study
+Repository: https://github.com/whoisjayd/notewise
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -19,11 +19,11 @@ furnished to do so, subject to the following conditions:
 
     b) Provide clear, visible credit to the original project in your
     documentation, README, about page, or wherever attribution is
-    customarily given. The credit must include: - The project name: yt-study - The author: whoisjayd - A direct link to: https://github.com/whoisjayd/yt-study
+    customarily given. The credit must include: - The project name: NoteWise - The author: whoisjayd - A direct link to: https://github.com/whoisjayd/notewise
 
     Example attribution (adapt the format to your context):
 
-         "Powered by yt-study (https://github.com/whoisjayd/yt-study)
+         "Powered by NoteWise (https://github.com/whoisjayd/notewise)
           by whoisjayd, used under the MIT License with Attribution."
 
     c) Not misrepresent the origin of the Software or claim authorship
@@ -49,7 +49,7 @@ SUMMARY (not a substitute for the full license above):
 ✅ Free to modify and distribute
 ✅ Free to sublicense
 ✅ Free for private/internal, non-distributed use
-❗ Must credit yt-study + link to repo when distributing or publishing
+❗ Must credit NoteWise + link to repo when distributing or publishing
 ❗ Must include this license in copies or substantial portions
 ❌ Cannot claim original authorship
 ❌ No warranty provided

@@ -6,7 +6,7 @@ import builtins
 
 from rich.console import Console
 
-from yt_study.cli import _banner
+from notewise.cli import _banner
 
 
 def test_get_version_falls_back_to_dev_when_import_fails(monkeypatch) -> None:
@@ -14,7 +14,7 @@ def test_get_version_falls_back_to_dev_when_import_fails(monkeypatch) -> None:
     real_import = builtins.__import__
 
     def fake_import(name, globals=None, locals=None, fromlist=(), level=0):
-        if name == "yt_study" and "__version__" in fromlist:
+        if name == "notewise" and "__version__" in fromlist:
             raise ImportError("missing version")
         return real_import(name, globals, locals, fromlist, level)
 

@@ -5,7 +5,7 @@ description: Use a cookie file to process videos that require sign-in.
 icon: lock
 ---
 
-Some YouTube videos require sign-in — age-restricted content, members-only videos, or private videos shared with your account. yt-study supports these via a Netscape-format cookies file.
+Some YouTube videos require sign-in — age-restricted content, members-only videos, or private videos shared with your account. notewise supports these via a Netscape-format cookies file.
 
 ---
 
@@ -33,7 +33,7 @@ You need a browser extension that exports cookies in Netscape format:
 ## Pass the cookie file
 
 ```bash
-yt-study process "URL" --cookie-file ./youtube-cookies.txt
+notewise process "URL" --cookie-file ./youtube-cookies.txt
 ```
 
 ---
@@ -41,7 +41,7 @@ yt-study process "URL" --cookie-file ./youtube-cookies.txt
 ## Set permanently in config
 
 ```bash
-# ~/.yt-study/config.env
+# ~/.notewise/config.env
 YOUTUBE_COOKIE_FILE=/home/user/youtube-cookies.txt
 ```
 
@@ -49,7 +49,7 @@ Or via environment variable:
 
 ```bash
 export YOUTUBE_COOKIE_FILE=/home/user/youtube-cookies.txt
-yt-study process "URL"
+notewise process "URL"
 ```
 
 ---
@@ -64,7 +64,7 @@ docker run --rm \
   -e YOUTUBE_COOKIE_FILE="/cookies/youtube.txt" \
   -v "$(pwd)/cookies:/cookies:ro" \
   -v "$(pwd)/output:/output" \
-  ghcr.io/whoisjayd/yt-study:latest \
+  ghcr.io/whoisjayd/notewise:latest \
   process "URL" --no-ui
 ```
 

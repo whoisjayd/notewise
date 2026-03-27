@@ -1,7 +1,7 @@
 ---
 title: Installation
 sidebarTitle: Installation
-description: Install yt-study using pip, uv, or Docker.
+description: Install NoteWise using uv, pipx, pip, standalone binaries, or Docker.
 icon: download
 ---
 
@@ -16,40 +16,62 @@ icon: download
 
 <Tabs>
   <Tab title="uv (recommended)">
-    [uv](https://github.com/astral-sh/uv) installs yt-study as an isolated tool — no virtualenv pollution:
+    [uv](https://github.com/astral-sh/uv) installs `notewise` as an isolated global tool and makes the command available anywhere on your `PATH`:
 
     ```bash
-    uv tool install yt-study
+    uv tool install notewise
     ```
 
     Upgrade:
 
     ```bash
-    uv tool upgrade yt-study
+    uv tool upgrade notewise
     ```
 
     <Tip>
-      uv is the recommended approach. It keeps yt-study fully isolated, manages Python versions automatically, and is significantly faster than pip.
+      `uv tool install` is the cleanest Python-based install for a global CLI. It keeps `notewise` isolated, manages Python versions automatically, and avoids virtualenv clutter.
+    </Tip>
+  </Tab>
+
+  <Tab title="pipx">
+    [`pipx`](https://pipx.pypa.io/stable/) installs `notewise` as a globally available CLI while keeping its dependencies isolated:
+
+    ```bash
+    pipx install notewise
+    ```
+
+    Upgrade:
+
+    ```bash
+    pipx upgrade notewise
+    ```
+
+    <Tip>
+      If you want `notewise` available from any shell and prefer PyPI-based installs, `pipx` is the best fit after `uv`.
     </Tip>
   </Tab>
 
   <Tab title="pip">
     ```bash
-    pip install yt-study
+    pip install notewise
     ```
 
     Upgrade:
 
     ```bash
-    pip install --upgrade yt-study
+    pip install --upgrade notewise
     ```
+
+    <Note>
+      Plain `pip install` places the `notewise` executable in the current Python environment's scripts directory. For a command that works globally without manual PATH work, prefer `uv tool install notewise`, `pipx install notewise`, or the standalone installer scripts below.
+    </Note>
   </Tab>
 
   <Tab title="Docker">
     Pre-built images are published to the GitHub Container Registry on every release:
 
     ```bash
-    docker pull ghcr.io/whoisjayd/yt-study:latest
+    docker pull ghcr.io/whoisjayd/notewise:latest
     ```
 
     Quick run:
@@ -58,7 +80,7 @@ icon: download
     docker run --rm \
       -e GEMINI_API_KEY="your_key_here" \
       -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/yt-study:latest \
+      ghcr.io/whoisjayd/notewise:latest \
       process "https://youtube.com/watch?v=VIDEO_ID" --no-ui
     ```
 
@@ -68,22 +90,65 @@ icon: download
       See the [Docker guide](/guides/docker) for persistent cache, cookie files, and full environment variable reference.
     </Note>
   </Tab>
+  <Tab title="Standalone binaries">
+    Every tagged release publishes standalone binaries for Linux, macOS, and Windows in [GitHub Releases](https://github.com/whoisjayd/notewise/releases).
+
+    Download the archive for your platform, extract it, and run:
+
+    ```bash
+    ./notewise version
+    ```
+
+    On Windows, run:
+
+    ```powershell
+    .\notewise.exe version
+    ```
+
+    <Tip>
+      Standalone binaries are useful when you do not want to manage a Python environment locally. The installer scripts below also add the install directory to your `PATH`.
+    </Tip>
+  </Tab>
 </Tabs>
+
+## Installer scripts
+
+Every release publishes `install.sh` and `install.ps1` alongside the binaries and `SHA256SUMS.txt`.
+
+- `install.sh` installs to `~/.local/bin` by default, appends that directory to your shell profile, and verifies the release checksum before installing.
+- `install.ps1` installs to `%LOCALAPPDATA%\Programs\NoteWise`, updates the user PATH, and verifies the release checksum before installing.
+- Set `NOTEWISE_INSTALL_DIR` to override the install location in either script.
+
+Examples:
+
+```bash
+curl -fsSL https://github.com/whoisjayd/notewise/releases/latest/download/install.sh | sh
+```
+
+```powershell
+irm https://github.com/whoisjayd/notewise/releases/latest/download/install.ps1 | iex
+```
 
 ---
 
 ## Verify
 
-After installing, confirm yt-study is on your `PATH`:
+After installing, confirm `notewise` is on your `PATH`:
 
 ```bash
-yt-study version
+notewise version
 ```
 
 Expected output:
 
 ```text
-yt-study version 0.2.6
+notewise version 1.0.0
+```
+
+To check for a newer release later and see the right upgrade command for your install:
+
+```bash
+notewise update
 ```
 
 ---

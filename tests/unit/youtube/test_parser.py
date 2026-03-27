@@ -2,8 +2,8 @@
 
 import pytest
 
-from yt_study.errors import ValidationError
-from yt_study.youtube.parser import (
+from notewise.errors import ValidationError
+from notewise.youtube.parser import (
     extract_playlist_id,
     extract_video_id,
     parse_youtube_url,
@@ -73,7 +73,7 @@ class TestPlaylistIDExtraction:
             raise RuntimeError("bad")
 
         monkeypatch.setattr(
-            "yt_study.youtube.parser._parse_supported_youtube_url",
+            "notewise.youtube.parser._parse_supported_youtube_url",
             _boom,
         )
         assert (
@@ -133,6 +133,6 @@ class TestURLParsing:
 
     def test_first_query_value_returns_none_for_missing_key(self):
         """Test that first_query_value returns None for a missing key."""
-        from yt_study.youtube.parser import _first_query_value
+        from notewise.youtube.parser import _first_query_value
 
         assert _first_query_value({}, "v") is None

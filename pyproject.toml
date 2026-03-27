@@ -1,6 +1,6 @@
 [project]
-name = "yt-study"
-version = "0.2.7"
+name = "notewise"
+version = "1.0.0"
 description = "Convert YouTube videos into AI-powered study notes with chapter support"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -32,20 +32,20 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/whoisjayd/yt-study"
-Repository = "https://github.com/whoisjayd/yt-study"
-Issues = "https://github.com/whoisjayd/yt-study/issues"
-Documentation = "https://github.com/whoisjayd/yt-study"
+Homepage = "https://github.com/whoisjayd/notewise"
+Repository = "https://github.com/whoisjayd/notewise"
+Issues = "https://github.com/whoisjayd/notewise/issues"
+Documentation = "https://github.com/whoisjayd/notewise"
 
 [project.scripts]
-yt-study = "yt_study.__main__:main"
+notewise = "notewise.__main__:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/yt_study"]
+packages = ["src/notewise"]
 
 [tool.hatch.build.targets.sdist]
 include = [
@@ -59,6 +59,7 @@ include = [
 [dependency-groups]
 dev = [
     "pre-commit>=4.5.1",
+    "pyinstaller>=6.16.0",
     "pytest>=9.0.2",
     "pytest-xdist>=3.8.0",
     "pytest-cov>=7.0.0",
@@ -90,7 +91,7 @@ select = [
 ignore = []
 
 [tool.ruff.lint.isort]
-known-first-party = ["yt_study"]
+known-first-party = ["notewise"]
 force-single-line = false
 lines-after-imports = 2
 section-order = [
@@ -112,7 +113,7 @@ python-version = "3.10"
 root = ["./src"]
 
 [tool.ty.src]
-include = ["src/yt_study"]
+include = ["src/notewise"]
 
 [tool.pytest.ini_options]
 addopts = "-ra"
@@ -124,7 +125,7 @@ python_classes = "Test*"
 python_functions = "test_*"
 
 [tool.coverage.run]
-source = ["src/yt_study"]
+source = ["src/notewise"]
 omit = ["*/tests/*", "*/__pycache__/*"]
 concurrency = ["thread"]
 branch = true

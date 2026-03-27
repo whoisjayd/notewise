@@ -1,19 +1,28 @@
 # syntax=docker/dockerfile:1
 
+ARG PYTHON_VERSION=3.13
+ARG UV_IMAGE=ghcr.io/astral-sh/uv:latest
+ARG APP_NAME=notewise
+ARG APP_UID=1001
+ARG APP_GID=1001
+ARG APP_ROOT=/app
+ARG APP_HOME=/home/notewise
+ARG APP_OUTPUT_DIR=/output
+
 # ---------------------------------------------------------------------------
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim AS builder
+FROM python:${PYTHON_VERSION}-slim AS builder
 
 # Copy the uv binary from the official distroless image — no pip overhead
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+COPY --from=${UV_IMAGE} /uv /uvx /bin/
 
 # Compile bytecode at install time for faster cold-start in the runtime stage
-ENV UV_COMPILE_BYTECODE=1
-# Required when using a cache mount so uv copies files instead of hard-linking
-ENV UV_LINK_MODE=copy
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1
 
-WORKDIR /app
+WORKDIR ${APP_ROOT}
 
 # ── Layer 1: install dependencies only (not the project itself) ──────────────
 # Bind-mounting uv.lock and pyproject.toml keeps them out of the image layer,
@@ -35,30 +44,47 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------------------------------------------------------------------------
 # Stage 2 — runtime
 # ---------------------------------------------------------------------------
-FROM python:3.13-slim AS runtime
+FROM python:${PYTHON_VERSION}-slim AS runtime
 
-LABEL org.opencontainers.image.title="yt-study" \
-      org.opencontainers.image.description="Convert YouTube videos into AI-powered study notes" \
+ARG APP_NAME
+ARG APP_UID
+ARG APP_GID
+ARG APP_ROOT
+ARG APP_HOME
+ARG APP_OUTPUT_DIR
+
+LABEL org.opencontainers.image.title="NoteWise" \
+      org.opencontainers.image.description="Convert YouTube videos and playlists into AI-powered study notes" \
+      org.opencontainers.image.url="https://github.com/whoisjayd/notewise" \
+      org.opencontainers.image.documentation="https://github.com/whoisjayd/notewise/tree/main/docs" \
       org.opencontainers.image.licenses="MIT" \
-      org.opencontainers.image.source="https://github.com/whoisjayd/yt-study"
+      org.opencontainers.image.source="https://github.com/whoisjayd/notewise"
 
 # Copy only the virtual environment — source code stays in the builder
-COPY --from=builder /app/.venv /app/.venv
+COPY --from=builder ${APP_ROOT}/.venv ${APP_ROOT}/.venv
 
-# Activate the virtual environment
-ENV VIRTUAL_ENV="/app/.venv"
-ENV PATH="/app/.venv/bin:$PATH"
+ENV VIRTUAL_ENV="${APP_ROOT}/.venv" \
+    PATH="${APP_ROOT}/.venv/bin:$PATH" \
+    PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    HOME="${APP_HOME}" \
+    NOTEWISE_HOME="${APP_HOME}/.notewise"
 
-# Ensure clean output and skip runtime bytecode writes (already compiled)
-ENV PYTHONUNBUFFERED=1
-ENV PYTHONDONTWRITEBYTECODE=1
+RUN groupadd --gid "${APP_GID}" "${APP_NAME}" \
+    && useradd \
+        --uid "${APP_UID}" \
+        --gid "${APP_GID}" \
+        --create-home \
+        --home-dir "${APP_HOME}" \
+        --no-log-init \
+        --shell /usr/sbin/nologin \
+        "${APP_NAME}" \
+    && mkdir -p "${APP_OUTPUT_DIR}" "${NOTEWISE_HOME}" \
+    && chown -R "${APP_UID}:${APP_GID}" "${APP_ROOT}" "${APP_OUTPUT_DIR}" "${APP_HOME}"
 
-# Run as a non-root user for security
-RUN useradd --create-home --no-log-init --uid 1001 appuser
-USER appuser
+USER ${APP_NAME}
+VOLUME ["/output", "/home/notewise/.notewise"]
+WORKDIR ${APP_OUTPUT_DIR}
 
-# Default output directory — mount a host volume here to access generated files
-VOLUME ["/output"]
-WORKDIR /output
-
-ENTRYPOINT ["yt-study"]
+ENTRYPOINT ["notewise"]
+CMD ["--help"]

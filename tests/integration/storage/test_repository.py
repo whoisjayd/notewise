@@ -7,8 +7,8 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
-from yt_study.config import get_cache_db_path
-from yt_study.storage import CACHE_DB_FILENAME, DatabaseRepository, VideoSchema
+from notewise.config import get_cache_db_path
+from notewise.storage import CACHE_DB_FILENAME, DatabaseRepository, VideoSchema
 
 
 @pytest.fixture
@@ -191,11 +191,11 @@ class TestSchemaMigration:
 
 class TestCacheDbPath:
     def test_cache_db_path_uses_state_dir(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
         path = get_cache_db_path()
-        assert path.parent == tmp_path / ".yt-study"
+        assert path.parent == tmp_path / ".notewise"
         assert path.name == CACHE_DB_FILENAME
 
     def test_cache_db_path_is_stable(self, monkeypatch, tmp_path):
-        monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
         assert get_cache_db_path() == get_cache_db_path()

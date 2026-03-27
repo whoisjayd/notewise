@@ -8,9 +8,9 @@ from pathlib import Path
 
 import pytest
 
-from yt_study.config import get_cache_db_path
-from yt_study.storage import CACHE_DB_FILENAME
-from yt_study.storage.repository import DatabaseRepository as DatabaseManager
+from notewise.config import get_cache_db_path
+from notewise.storage import CACHE_DB_FILENAME
+from notewise.storage.repository import DatabaseRepository as DatabaseManager
 
 
 def build_cache_db_path():
@@ -34,10 +34,10 @@ def test_database_manager_singleton_for_same_path(tmp_path):
 
 
 def test_build_cache_db_path_scopes_under_user_config_dir():
-    """Cache DB path should be stable and stored under ~/.yt-study."""
+    """Cache DB path should be stable and stored under ~/.notewise."""
     cache_path = build_cache_db_path()
 
-    assert cache_path.parent == Path(os.environ["YT_STUDY_HOME"])
+    assert cache_path.parent == Path(os.environ["NOTEWISE_HOME"])
     assert cache_path.name == CACHE_DB_FILENAME
 
 

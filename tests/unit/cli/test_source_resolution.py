@@ -7,14 +7,14 @@ from types import SimpleNamespace
 
 import pytest
 
-from yt_study.cli._source_resolution import (
+from notewise.cli._source_resolution import (
     batch_failure_label,
     failure_rows_for_result,
     ordered_batch_failures_from_error,
     prepare_source,
 )
-from yt_study.cli._types import ResolvedSource, _BatchVideoJob
-from yt_study.errors import PlaylistError, UserVisibleCliError
+from notewise.cli._types import ResolvedSource, _BatchVideoJob
+from notewise.errors import PlaylistError, UserVisibleCliError
 
 
 @pytest.mark.asyncio

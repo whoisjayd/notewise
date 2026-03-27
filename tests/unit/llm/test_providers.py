@@ -5,9 +5,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from yt_study.errors import LLMGenerationError
-from yt_study.llm import provider as provider_mod
-from yt_study.llm.provider import (
+from notewise.errors import LLMGenerationError
+from notewise.llm import provider as provider_mod
+from notewise.llm.provider import (
     LLMProvider,
     UsageTotals,
     _configure_litellm_runtime,
@@ -30,8 +30,8 @@ class TestLLMProvider:
     async def test_generate_success(self):
         """Test successful generation."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             # Setup mock response
             mock_response = MagicMock()
@@ -56,8 +56,8 @@ class TestLLMProvider:
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_response = MagicMock()
             # LLM returns content wrapped in ```markdown ... ```
@@ -75,8 +75,8 @@ class TestLLMProvider:
     async def test_generate_normalizes_block_content_payloads(self):
         """Structured content blocks should be normalized into plain text."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = [
@@ -94,9 +94,9 @@ class TestLLMProvider:
     async def test_generate_collects_usage_from_litellm_response(self):
         """Provider should accumulate prompt/completion metrics from response usage."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
             patch(
-                "yt_study.llm.provider.completion_cost",
+                "notewise.llm.provider.completion_cost",
                 return_value=0.0042,
             ),
         ):
@@ -122,8 +122,8 @@ class TestLLMProvider:
     async def test_generate_usage_defaults_to_zero_when_missing(self):
         """Missing usage metadata should not break generation metrics collection."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -140,9 +140,9 @@ class TestLLMProvider:
     async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
         """Nested usage scopes should preserve inner totals in the outer collector."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
             patch(
-                "yt_study.llm.provider.completion_cost",
+                "notewise.llm.provider.completion_cost",
                 return_value=0.0025,
             ),
         ):
@@ -173,8 +173,8 @@ class TestLLMProvider:
     async def test_generate_failure(self):
         """Test generation failure raises custom exception."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_acompletion.side_effect = Exception("API Error")
 
@@ -188,9 +188,9 @@ class TestLLMProvider:
         """Provider failures should keep details without leaking raw credentials."""
         secret = "AIza" + "C" * 32
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
-            patch("yt_study.llm.provider.logger.error") as mock_log_error,
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.logger.error") as mock_log_error,
         ):
             mock_acompletion.side_effect = Exception(f"gemini_api_key={secret}")
 
@@ -209,8 +209,8 @@ class TestLLMProvider:
     async def test_generate_reraises_existing_llm_generation_error(self):
         """Domain errors should not be double-wrapped by the provider."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_acompletion.side_effect = LLMGenerationError("already normalized")
 
@@ -225,8 +225,8 @@ class TestLLMProvider:
     async def test_generate_forwards_zero_max_tokens(self):
         """Explicit max_tokens=0 should still be forwarded to LiteLLM."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -241,8 +241,8 @@ class TestLLMProvider:
     async def test_generate_forwards_positive_max_tokens(self):
         """Explicit positive max_tokens should be forwarded to LiteLLM."""
         with (
-            patch("yt_study.llm.provider.acompletion") as mock_acompletion,
-            patch("yt_study.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
         ):
             mock_response = MagicMock()
             mock_response.choices[0].message.content = "Generated content"
@@ -280,7 +280,7 @@ class TestLLMProvider:
         provider = LLMProvider("gpt-4o")
         response = MagicMock()
         with patch(
-            "yt_study.llm.provider.completion_cost",
+            "notewise.llm.provider.completion_cost",
             side_effect=RuntimeError("missing price map"),
         ):
             assert provider._extract_cost(response) == 0.0
@@ -293,7 +293,7 @@ class TestLLMProvider:
                 "get_api_key_name_for_model",
                 return_value=None,
             ),
-            patch("yt_study.llm.provider.logger.debug") as mock_debug,
+            patch("notewise.llm.provider.logger.debug") as mock_debug,
         ):
             LLMProvider("custom/local-model")
 
@@ -310,7 +310,7 @@ class TestLLMProvider:
         runtime = MagicMock()
         runtime.verbose_logger = None
 
-        with patch("yt_study.llm.provider.litellm", runtime):
+        with patch("notewise.llm.provider.litellm", runtime):
             _configure_litellm_runtime()
 
         assert runtime.set_verbose is False
@@ -321,7 +321,7 @@ class TestLLMProvider:
         runtime = MagicMock()
         runtime.verbose_logger = MagicMock()
 
-        with patch("yt_study.llm.provider.litellm", runtime):
+        with patch("notewise.llm.provider.litellm", runtime):
             _configure_litellm_runtime()
 
         runtime.verbose_logger.setLevel.assert_called_once_with(logging.ERROR)

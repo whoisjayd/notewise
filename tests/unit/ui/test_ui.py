@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.panel import Panel
 
-from yt_study.ui.dashboard import PipelineDashboard
+from notewise.ui.dashboard import PipelineDashboard
 
 
 def test_dashboard_initialization():

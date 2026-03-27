@@ -9,10 +9,10 @@ icon: database
 
 ## The cache
 
-yt-study stores transcripts, video metadata, and run statistics in a local SQLite database:
+notewise stores transcripts, video metadata, and run statistics in a local SQLite database:
 
 ```text
-~/.yt-study/.yt_study_cache.db
+~/.notewise/.notewise_cache.db
 ```
 
 ### What the cache does
@@ -28,18 +28,18 @@ yt-study stores transcripts, video metadata, and run statistics in a local SQLit
 <AccordionGroup>
   <Accordion title="Inspect" icon="search" defaultOpen>
     ```bash
-    yt-study cache           # database metadata and entry counts
-    yt-study cache --info    # same as above, explicit
-    yt-study cache --show VIDEO_ID
-    yt-study cache show VIDEO_ID
+    notewise cache           # database metadata and entry counts
+    notewise cache --info    # same as above, explicit
+    notewise cache --show VIDEO_ID
+    notewise cache show VIDEO_ID
     ```
   </Accordion>
 
   <Accordion title="Clear" icon="trash-2">
     ```bash
-    yt-study cache --clear          # prompts for confirmation
-    yt-study cache --clear --yes    # skip confirmation
-    yt-study cache clear --yes
+    notewise cache --clear          # prompts for confirmation
+    notewise cache --clear --yes    # skip confirmation
+    notewise cache clear --yes
     ```
 
     <Warning>
@@ -49,8 +49,8 @@ yt-study stores transcripts, video metadata, and run statistics in a local SQLit
 
   <Accordion title="Prune old entries" icon="scissors">
     ```bash
-    yt-study cache --prune 30              # entries older than 30 days
-    yt-study cache prune --older-than 14   # entries older than 14 days
+    notewise cache --prune 30              # entries older than 30 days
+    notewise cache prune --older-than 14   # entries older than 14 days
     ```
   </Accordion>
 </AccordionGroup>
@@ -58,17 +58,17 @@ yt-study stores transcripts, video metadata, and run statistics in a local SQLit
 ### Usage statistics
 
 ```bash
-yt-study stats                                       # all-time totals
-yt-study stats --model gemini/gemini-2.5-flash       # filter by model
-yt-study stats --since 7                             # last 7 days
-yt-study stats --since 30d                           # last 30 days
+notewise stats                                       # all-time totals
+notewise stats --model gemini/gemini-2.5-flash       # filter by model
+notewise stats --since 7                             # last 7 days
+notewise stats --since 30d                           # last 30 days
 ```
 
 ### Processing history
 
 ```bash
-yt-study history               # last 10 processed videos
-yt-study history --limit 25    # last 25
+notewise history               # last 10 processed videos
+notewise history --limit 25    # last 25
 ```
 
 ---
@@ -78,7 +78,7 @@ yt-study history --limit 25    # last 25
 Every `process` run writes a structured log to:
 
 ```text
-~/.yt-study/logs/yt-study-YYYYMMDD-HHMMSS.log
+~/.notewise/logs/notewise-YYYYMMDD-HHMMSS.log
 ```
 
 Logs use [structlog](https://www.structlog.org/) JSON format. API keys and sensitive values are automatically redacted.
@@ -86,17 +86,17 @@ Logs use [structlog](https://www.structlog.org/) JSON format. API keys and sensi
 ### View logs
 
 ```bash
-yt-study logs              # list recent log files
-yt-study logs --tail 50    # tail the latest log (last 50 lines)
-yt-study logs --open       # open the log directory in your file manager
+notewise logs              # list recent log files
+notewise logs --tail 50    # tail the latest log (last 50 lines)
+notewise logs --open       # open the log directory in your file manager
 ```
 
 ### Clean up logs
 
 ```bash
-yt-study logs clean                    # remove logs older than 7 days (default)
-yt-study logs clean --older-than 30    # remove logs older than 30 days
-yt-study logs clean --all              # remove all inactive log files
+notewise logs clean                    # remove logs older than 7 days (default)
+notewise logs clean --older-than 30    # remove logs older than 30 days
+notewise logs clean --all              # remove all inactive log files
 ```
 
 ---
@@ -106,11 +106,11 @@ yt-study logs clean --all              # remove all inactive log files
 Run a non-destructive check to verify config, cache, and logs are all in order:
 
 ```bash
-yt-study doctor
+notewise doctor
 ```
 
 This checks:
-- `~/.yt-study/config.env` exists and is readable
+- `~/.notewise/config.env` exists and is readable
 - SQLite cache can be opened
 - Log directory is writable
 - Configured model's API key appears to be set

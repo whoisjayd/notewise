@@ -2,26 +2,26 @@
 
 import pytest
 
-from yt_study.errors import (
+from notewise.errors import (
     ConfigurationError,
     ExtractionError,
     IPBlockError,
     LLMError,
     LLMGenerationError,
+    NoteWiseError,
     PersistenceError,
     PlaylistError,
     TranscriptUnavailableError,
     ValidationError,
     VideoUnavailableError,
     YouTubeError,
-    YtStudyError,
     format_user_error,
     raise_if_video_unavailable,
 )
 
 
 class TestExceptionHierarchy:
-    """All custom exceptions must descend from YtStudyError."""
+    """All custom exceptions must descend from NoteWiseError."""
 
     @pytest.mark.parametrize(
         "exc_class",
@@ -37,8 +37,8 @@ class TestExceptionHierarchy:
             PersistenceError,
         ],
     )
-    def test_all_are_yt_study_error_subclasses(self, exc_class):
-        assert issubclass(exc_class, YtStudyError)
+    def test_all_are_notewise_error_subclasses(self, exc_class):
+        assert issubclass(exc_class, NoteWiseError)
 
     def test_youtube_errors_are_youtube_error_subclasses(self):
         for cls in (
@@ -78,7 +78,7 @@ class TestExceptionContext:
         assert "reason='private'" in s
 
     def test_empty_context_str_is_clean(self):
-        exc = YtStudyError("plain message")
+        exc = NoteWiseError("plain message")
         assert str(exc) == "plain message"
 
 

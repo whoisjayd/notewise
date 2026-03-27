@@ -14,8 +14,8 @@ jobs:
     permissions:
       contents: read
 
-  build:
-    name: Build Distribution
+  build-dist:
+    name: Build Python Distribution
     needs: validate
     runs-on: ubuntu-latest
     permissions:
@@ -35,13 +35,76 @@ jobs:
           name: dist
           path: dist/*
 
-  publish:
+  build-binaries:
+    name: Build Binary (${{ matrix.artifact_name }})
+    needs: validate
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: linux
+            archive_ext: tar.gz
+          - os: macos-latest
+            artifact_name: macos
+            archive_ext: tar.gz
+          - os: windows-latest
+            artifact_name: windows
+            archive_ext: zip
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Build standalone binary
+        shell: pwsh
+        run: |
+          uv run pyinstaller `
+            --noconfirm `
+            --clean `
+            --onefile `
+            --name notewise `
+            --paths src `
+            src/notewise/__main__.py
+      - name: Archive standalone binary
+        shell: pwsh
+        run: |
+          $releaseTag = "${{ github.ref_name }}"
+          $artifactName = "${{ matrix.artifact_name }}"
+          $archiveExt = "${{ matrix.archive_ext }}"
+          $archName = "${{ runner.arch }}".ToLowerInvariant()
+          $binaryName = if ("${{ runner.os }}" -eq "Windows") { "notewise.exe" } else { "notewise" }
+          $archiveBase = "notewise-$releaseTag-$artifactName-$archName"
+
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Copy-Item "dist/$binaryName" "release/$binaryName"
+
+          if ($archiveExt -eq "zip") {
+            Compress-Archive -Path "release/$binaryName" -DestinationPath "release/$archiveBase.zip" -Force
+          }
+          else {
+            tar -czf "release/$archiveBase.tar.gz" -C release $binaryName
+          }
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: binary-${{ matrix.artifact_name }}
+          path: release/*
+
+  publish-pypi:
     name: Publish to PyPI
-    needs: build
+    needs: build-dist
     runs-on: ubuntu-latest
     environment:
       name: pypi
-      url: https://pypi.org/p/yt-study
+      url: https://pypi.org/p/notewise
     permissions:
       id-token: write
       attestations: write
@@ -61,6 +124,43 @@ jobs:
       - name: Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
+  github-release:
+    name: Publish GitHub Release
+    needs:
+      - build-dist
+      - build-binaries
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Python distribution artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: dist
+          path: dist
+
+      - name: Download standalone binary artifacts
+        uses: actions/download-artifact@v8
+        with:
+          pattern: binary-*
+          path: release-assets
+          merge-multiple: true
+
+      - name: Generate checksums
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > SHA256SUMS.txt
+          (
+            cd dist
+            sha256sum *
+          ) >> SHA256SUMS.txt
+          (
+            cd release-assets
+            sha256sum *
+          ) >> SHA256SUMS.txt
+          sha256sum scripts/install.sh scripts/install.ps1 >> SHA256SUMS.txt
+
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
         if: startsWith(github.ref, 'refs/tags/')
@@ -69,3 +169,7 @@ jobs:
           files: |
             dist/*.tar.gz
             dist/*.whl
+            release-assets/*
+            SHA256SUMS.txt
+            scripts/install.sh
+            scripts/install.ps1

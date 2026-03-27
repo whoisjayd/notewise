@@ -1,26 +1,26 @@
 <div align="center">
 
-# 🎓 yt-study
+# 🎓 NoteWise
 
 **Convert YouTube videos and playlists into comprehensive AI-powered study notes — from your terminal.**
 
 <br />
 
-<img src="https://img.shields.io/badge/version-0.2.6-4f86f7?style=flat-square" alt="version" /> <img src="https://img.shields.io/badge/status-beta-f59e0b?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/yt-study/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/yt-study?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
+<img src="https://img.shields.io/badge/version-1.0.0-4f86f7?style=flat-square" alt="version" /> <img src="https://img.shields.io/badge/status-stable-22c55e?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/notewise?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
 
 <br /><br />
 
-[**Why yt-study?**](#-why-yt-study) · [**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Installation**](#-installation) · [**Configuration**](#configuration) · [**Providers**](#-supported-providers) · [**Contributing**](CONTRIBUTING.md)
+[**Why NoteWise?**](#-why-notewise) · [**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Installation**](#-installation) · [**Configuration**](#configuration) · [**Providers**](#-supported-providers) · [**Contributing**](CONTRIBUTING.md)
 
 </div>
 
-## 💡 Why yt-study?
+## 💡 Why NoteWise?
 
 YouTube has become one of the richest learning platforms on the planet — university lectures, conference talks, technical deep-dives, language lessons, and entire courses are all freely available. But video is a passive medium. You watch, you nod, and two days later the details are gone.
 
-**yt-study was built to fix that gap.**
+**NoteWise was built to fix that gap.**
 
-The idea is simple: your time watching a video is valuable. The notes that _should_ come from it — the structured, searchable, reviewable kind — shouldn't require an extra hour of your day. yt-study automates exactly that step. Point it at any YouTube URL and walk away with Markdown study notes that are deeper and more comprehensive than most people would write by hand.
+The idea is simple: your time watching a video is valuable. The notes that _should_ come from it — the structured, searchable, reviewable kind — shouldn't require an extra hour of your day. NoteWise automates exactly that step. Point it at any YouTube URL and walk away with Markdown study notes that are deeper and more comprehensive than most people would write by hand.
 
 **Where it shines:**
 
@@ -52,13 +52,19 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 ### 1 · Install
 
 ```bash
-pip install yt-study
+uv tool install notewise
 ```
 
-Or with [uv](https://github.com/astral-sh/uv):
+Or with [pipx](https://pipx.pypa.io/stable/):
 
 ```bash
-uv tool install yt-study
+pipx install notewise
+```
+
+For standalone binaries with checksum verification and PATH setup:
+
+```bash
+curl -fsSL https://github.com/whoisjayd/notewise/releases/latest/download/install.sh | sh
 ```
 
 ### 2 · Configure
@@ -66,22 +72,22 @@ uv tool install yt-study
 Run the interactive setup wizard once to store your LLM API key:
 
 ```bash
-yt-study setup
+notewise setup
 ```
 
-This creates `~/.yt-study/config.env`. The default model is **Gemini 2.5 Flash** — grab a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey).
+This creates `~/.notewise/config.env`. The default model is **Gemini 2.5 Flash** — grab a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey).
 
 ### 3 · Generate Study Notes
 
 ```bash
 # Single video
-yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+notewise process "https://youtube.com/watch?v=VIDEO_ID"
 
 # Full playlist
-yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
+notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
 
 # Batch file (one URL per line)
-yt-study process my-course-urls.txt -o ./course-notes
+notewise process my-course-urls.txt -o ./course-notes
 ```
 
 Notes are written as Markdown files in `./output/` (or your configured directory).
@@ -93,43 +99,73 @@ Notes are written as Markdown files in `./output/` (or your configured directory
 - Python **3.10** or newer (3.10, 3.11, 3.12, and 3.13 are tested in CI)
 - An API key for at least one [supported LLM provider](#-supported-providers)
 
-### pip
-
-```bash
-pip install yt-study
-```
-
 ### uv (recommended)
 
 ```bash
-uv tool install yt-study
+uv tool install notewise
 ```
+
+### pipx
+
+```bash
+pipx install notewise
+```
+
+### pip
+
+```bash
+pip install notewise
+```
+
+`uv tool install` and `pipx install` are the best choices when you want `notewise` available from anywhere on your system `PATH`. Plain `pip install` installs the CLI into the active Python environment.
+
+### Standalone Binary Installer
+
+```bash
+curl -fsSL https://github.com/whoisjayd/notewise/releases/latest/download/install.sh | sh
+```
+
+On Windows:
+
+```powershell
+irm https://github.com/whoisjayd/notewise/releases/latest/download/install.ps1 | iex
+```
+
+Both installer scripts verify `SHA256SUMS.txt`, install the release binary, and update your user-level `PATH`.
 
 ### Docker
 
 ```bash
-docker pull ghcr.io/whoisjayd/yt-study:latest
+docker pull ghcr.io/whoisjayd/notewise:latest
 
 docker run --rm \
   -e GEMINI_API_KEY="your_key" \
   -v "$(pwd)/output:/output" \
-  ghcr.io/whoisjayd/yt-study:latest \
+  ghcr.io/whoisjayd/notewise:latest \
   process "https://youtube.com/watch?v=VIDEO_ID"
 ```
 
 ### Development Install
 
 ```bash
-git clone https://github.com/whoisjayd/yt-study
-cd yt-study
+git clone https://github.com/whoisjayd/notewise
+cd notewise
 uv sync --dev
+```
+
+### Updating
+
+Check for a newer release and print the recommended upgrade command for your install:
+
+```bash
+notewise update
 ```
 
 <a id="configuration"></a>
 
 ## ⚙️ Configuration
 
-yt-study reads configuration from `~/.yt-study/config.env` (created by `yt-study setup`).
+notewise reads configuration from `~/.notewise/config.env` (created by `notewise setup`).
 Environment variables always take precedence over the config file.
 
 ### Key Settings
@@ -144,19 +180,19 @@ Environment variables always take precedence over the config file.
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request rate limit         |
 | `YOUTUBE_COOKIE_FILE`         | _(none)_                  | Path to Netscape cookies file      |
 
-Override any setting per-run via CLI flags — run `yt-study process --help` for all options.
+Override any setting per-run via CLI flags — run `notewise process --help` for all options.
 
 ### State Directory
 
-All persistent state (config, cache, logs) lives in `~/.yt-study/` by default. Override with:
+All persistent state (config, cache, logs) lives in `~/.notewise/` by default. Override with:
 
 ```bash
-export YT_STUDY_HOME=/path/to/custom/dir
+export NOTEWISE_HOME=/path/to/custom/dir
 ```
 
 ## 🤖 Supported Providers
 
-yt-study uses [LiteLLM](https://github.com/BerriAI/litellm) — any model string LiteLLM supports works here.
+notewise uses [LiteLLM](https://github.com/BerriAI/litellm) — any model string LiteLLM supports works here.
 
 | Provider      | Config Key          | Example Model String           |
 | ------------- | ------------------- | ------------------------------ |
@@ -172,13 +208,13 @@ yt-study uses [LiteLLM](https://github.com/BerriAI/litellm) — any model string
 Use any provider with `--model`:
 
 ```bash
-yt-study process "URL" --model claude-3-5-sonnet-20241022
+notewise process "URL" --model claude-3-5-sonnet-20241022
 ```
 
 ## 🖥️ CLI Reference
 
 ```
-yt-study [COMMAND] [OPTIONS]
+notewise [COMMAND] [OPTIONS]
 ```
 
 | Command         | Description                                                |
@@ -193,12 +229,13 @@ yt-study [COMMAND] [OPTIONS]
 | `edit-config`   | Open the config file in your editor                        |
 | `cache`         | Manage the local SQLite cache                              |
 | `logs`          | Inspect and manage session log files                       |
+| `update`        | Check for a newer release and print upgrade commands       |
 | `version`       | Print the installed version                                |
 
 ### `process` Options
 
 ```
-yt-study process URL [OPTIONS]
+notewise process URL [OPTIONS]
 
   -m, --model TEXT           LLM model (overrides config)
   -o, --output PATH          Output directory (overrides config)
@@ -242,7 +279,7 @@ The image is published to GHCR on every release:
 docker run --rm \
   -e GEMINI_API_KEY="your_key" \
   -v "$(pwd)/output:/output" \
-  ghcr.io/whoisjayd/yt-study:latest \
+  ghcr.io/whoisjayd/notewise:latest \
   process "https://youtube.com/watch?v=VIDEO_ID" --no-ui
 ```
 
@@ -252,8 +289,8 @@ Mount `/output` to access generated files on the host. The container runs as a n
 
 ```bash
 # Clone & install
-git clone https://github.com/whoisjayd/yt-study
-cd yt-study
+git clone https://github.com/whoisjayd/notewise
+cd notewise
 uv sync --dev
 
 # Run tests
@@ -270,33 +307,33 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contributor guide.
 
 ## 📋 Changelog
 
-See [GitHub Releases](https://github.com/whoisjayd/yt-study/releases) for the full history.
+See [GitHub Releases](https://github.com/whoisjayd/notewise/releases) for the full history.
 
 ## 📄 License
 
 [MIT with Attribution](LICENSE) — free to use, modify, and distribute.
-If you use yt-study in a project or build on top of it, you are required to include credit and a link back to this repository. See [LICENSE](LICENSE) for the full terms.
+If you use notewise in a project or build on top of it, you are required to include credit and a link back to this repository. See [LICENSE](LICENSE) for the full terms.
 
 ## 🤝 Contributing
 
 Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
 
-Found a bug? [Open an issue](https://github.com/whoisjayd/yt-study/issues/new/choose).
+Found a bug? [Open an issue](https://github.com/whoisjayd/notewise/issues/new/choose).
 Have a security concern? See [SECURITY.md](SECURITY.md).
 
 ## 🙏 Thank You
 
-yt-study is built on top of a great open-source ecosystem, and this project is deeply grateful to the maintainers behind those tools and libraries.
+notewise is built on top of a great open-source ecosystem, and this project is deeply grateful to the maintainers behind those tools and libraries.
 
 See [GRATITUDE.md](GRATITUDE.md) for full acknowledgements.
 
-And most importantly — **thank you to everyone who has used yt-study, filed issues, suggested features, or contributed code.** Every star, bug report, and PR makes this better.
+And most importantly — **thank you to everyone who has used notewise, filed issues, suggested features, or contributed code.** Every star, bug report, and PR makes this better.
 
-If yt-study helped you study smarter, learn faster, or just saved you some time — that's exactly why it was built. ⭐
+If notewise helped you study smarter, learn faster, or just saved you some time — that's exactly why it was built. ⭐
 
 <div align="center">
 <br />
 <sub>Built with ❤️ by <a href="https://github.com/whoisjayd">whoisjayd</a></sub>
 <br />
-<sub>If you use yt-study, please give credit — it takes two seconds and means a lot.</sub>
+<sub>If you use notewise, please give credit — it takes two seconds and means a lot.</sub>
 </div>

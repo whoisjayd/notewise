@@ -1,4 +1,4 @@
-# yt-study Makefile
+# notewise Makefile
 # Cross-platform development workflow for Linux, macOS, and Windows
 
 # ==============================================================================
@@ -66,7 +66,7 @@ BANDIT := $(UV_RUN) bandit
 # Directory Configuration
 # ==============================================================================
 SRC_DIR := src
-PKG_DIR := src/yt_study
+PKG_DIR := src/notewise
 TEST_DIR := tests
 BUILD_DIR := build
 DIST_DIR := dist
@@ -98,7 +98,7 @@ CLEAN_TARGETS := clean-cache clean-build clean-test
 # ==============================================================================
 help: ## Show all developer tasks
 	@echo ""
-	@echo "yt-study developer tasks (OS: $(DETECTED_OS))"
+	@echo "notewise developer tasks (OS: $(DETECTED_OS))"
 	@echo ""
 	@echo "Setup:"
 	@echo "  sync          Install all dependencies from lockfile"

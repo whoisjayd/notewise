@@ -27,7 +27,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Enforce formatting
-        run: uv run ruff format --check src/yt_study tests
+        run: uv run ruff format --check src/notewise tests
 
   lint-check:
     name: Lint Check
@@ -43,7 +43,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run linter
-        run: uv run ruff check src/yt_study tests
+        run: uv run ruff check src/notewise tests
 
   type-check:
     name: Type Check
@@ -59,7 +59,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run ty
-        run: uv run ty check src/yt_study
+        run: uv run ty check src/notewise
 
   tests:
     name: Unit Tests

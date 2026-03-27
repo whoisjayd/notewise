@@ -7,8 +7,8 @@ from types import SimpleNamespace
 
 from rich.console import Console
 
-from yt_study.cli import _formatters
-from yt_study.domain.results import PipelineMetrics, PipelineResult
+from notewise.cli import _formatters
+from notewise.domain.results import PipelineMetrics, PipelineResult
 
 
 def _console() -> Console:

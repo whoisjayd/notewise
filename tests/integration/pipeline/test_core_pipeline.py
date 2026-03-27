@@ -7,27 +7,27 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from yt_study.config import get_cache_db_path
-from yt_study.errors import (
+from notewise.config import get_cache_db_path
+from notewise.errors import (
     ExtractionError as ExtractorError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     IPBlockError as YouTubeIPBlockError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     VideoUnavailableError as PublicAccessRequiredError,
 )
-from yt_study.llm.provider import UsageTotals
-from yt_study.pipeline.core import (
+from notewise.llm.provider import UsageTotals
+from notewise.pipeline.core import (
     CorePipeline,
     EventType,
     PipelineEvent,
     PipelineResult,
     sanitize_filename,
 )
-from yt_study.storage import DatabaseRepository as DatabaseManager
-from yt_study.youtube.metadata import VideoChapter, VideoMetadata
-from yt_study.youtube.transcript import (
+from notewise.storage import DatabaseRepository as DatabaseManager
+from notewise.youtube.metadata import VideoChapter, VideoMetadata
+from notewise.youtube.transcript import (
     TranscriptSegment,
     VideoTranscript,
 )
@@ -190,7 +190,7 @@ def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
 @pytest.fixture()
 def pipeline(temp_output_dir, mock_llm_provider):
     with patch(
-        "yt_study.pipeline.core.get_provider",
+        "notewise.pipeline.core.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
@@ -243,7 +243,7 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
     """Output file must use the video title, not the raw video_id."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -254,11 +254,11 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -278,7 +278,7 @@ async def test_run_single_video_events_emitted(pipeline):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -289,11 +289,11 @@ async def test_run_single_video_events_emitted(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -334,7 +334,7 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -345,11 +345,11 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -380,7 +380,7 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
     temp_output_dir, mock_llm_provider
 ):
     """Pipelines in one process should share a single limiter by configured rate."""
-    with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         pipeline_one = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline_two = CorePipeline(model="mock-model", output_dir=temp_output_dir)
 
@@ -393,7 +393,7 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
 @pytest.mark.asyncio
 async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provider):
     """Pipeline should call metadata helpers directly and pass transcript hook."""
-    with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         pipeline = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline.generator = MagicMock()
         pipeline.generator.generate_study_notes = AsyncMock(return_value="# Notes")
@@ -406,17 +406,17 @@ async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provid
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             return_value=VideoMetadata(
                 video_id="vid-auth", title="Video Title", duration=100, chapters=[]
             ),
         ) as mock_metadata,
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -437,18 +437,18 @@ async def test_run_fails_early_for_private_video(pipeline):
     """Private videos should fail before transcript fetching starts."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
                 "Make the video unlisted or public to process it."
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -468,7 +468,7 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
     """Transcript-level private video failures should keep the clean message."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -479,7 +479,7 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
@@ -487,7 +487,7 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
             ),
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -510,7 +510,7 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -521,11 +521,11 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -552,7 +552,7 @@ async def test_run_chapters_none_does_not_raise(pipeline):
     """When get_video_chapters returns None the pipeline must not raise TypeError."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=7200, chapters=[]
@@ -560,11 +560,11 @@ async def test_run_chapters_none_does_not_raise(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -586,15 +586,15 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     """When title fetch raises, the output file is named after the video_id."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             side_effect=RuntimeError("network error"),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -616,15 +616,15 @@ async def test_run_metadata_extraction_error_surfaces_to_user(pipeline):
     """Extractor metadata failures should fail the run instead of faking data."""
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             side_effect=ExtractorError("metadata backend unavailable"),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -651,7 +651,7 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
@@ -659,12 +659,12 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=YouTubeIPBlockError("IP blocked"),
         ),
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -692,7 +692,7 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
@@ -700,12 +700,12 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=RuntimeError("network timeout"),
         ),
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -743,7 +743,7 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -754,14 +754,14 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
         ) as mock_split,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -809,7 +809,7 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -820,11 +820,11 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript", new_callable=AsyncMock
+            "notewise.pipeline.core.fetch_transcript", new_callable=AsyncMock
         ) as mock_fetch,
-        patch("yt_study.pipeline.core.split_transcript_by_chapters") as mock_split,
+        patch("notewise.pipeline.core.split_transcript_by_chapters") as mock_split,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -898,7 +898,7 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
             return_value={"Chapter 1": "text1", "Chapter 2": "text2"},
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -962,7 +962,7 @@ async def test_run_failed_chapter_generation_still_emits_chapter_complete(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
             return_value={"Chapter 1": "text1"},
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -1003,7 +1003,7 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
             ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch("yt_study.pipeline.core.split_transcript_by_chapters", return_value={}),
+        patch("notewise.pipeline.core.split_transcript_by_chapters", return_value={}),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         mock_transcript = _make_transcript(text="fallback transcript")
@@ -1040,7 +1040,7 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
             return_value={"Intro": "intro text", "Part 2": "body text"},
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -1063,7 +1063,7 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
 ):
     """Chapter-mode transcript exports should live in the per-video chapter folder."""
     with patch(
-        "yt_study.pipeline.core.get_provider",
+        "notewise.pipeline.core.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(
@@ -1095,7 +1095,7 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
             return_value={"Intro": "intro text", "Part 2": "body text"},
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -1117,19 +1117,19 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
 # ---------------------------------------------------------------------------
 
 _COMMON_PATCHES = dict(
-    metadata="yt_study.pipeline.core.get_video_metadata",
-    title="yt_study.pipeline.core.get_video_metadata",
-    duration="yt_study.pipeline.core.get_video_metadata",
-    chapters="yt_study.pipeline.core.get_video_metadata",
-    fetch="yt_study.pipeline.core.fetch_transcript",
-    api_key="yt_study.pipeline.core.CorePipeline._check_api_key",
+    metadata="notewise.pipeline.core.get_video_metadata",
+    title="notewise.pipeline.core.get_video_metadata",
+    duration="notewise.pipeline.core.get_video_metadata",
+    chapters="notewise.pipeline.core.get_video_metadata",
+    fetch="notewise.pipeline.core.fetch_transcript",
+    api_key="notewise.pipeline.core.CorePipeline._check_api_key",
 )
 
 
 def _make_pipeline(
     tmp_path, mock_llm_provider, force: bool = False, quiz: bool = False
 ):
-    with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         p = CorePipeline(
             model="mock-model", output_dir=tmp_path, force=force, quiz=quiz
         )
@@ -1567,7 +1567,7 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters",
             side_effect=[
                 {"Intro": "first chapter"},
                 {"Intro": "second chapter"},
@@ -1765,7 +1765,7 @@ def _make_pipeline_with_export(
 ) -> CorePipeline:
     """Create a pipeline with export_transcript enabled."""
     with patch(
-        "yt_study.pipeline.core.get_provider",
+        "notewise.pipeline.core.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(
@@ -1791,7 +1791,7 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1802,11 +1802,11 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -1829,7 +1829,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1840,11 +1840,11 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -1889,7 +1889,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
 async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
     """No transcript file is created when export_transcript is None."""
     with patch(
-        "yt_study.pipeline.core.get_provider",
+        "notewise.pipeline.core.get_provider",
         return_value=mock_llm_provider,
     ):
         p = CorePipeline(model="mock-model", output_dir=temp_output_dir)
@@ -1904,7 +1904,7 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1915,11 +1915,11 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):
@@ -1944,7 +1944,7 @@ async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "yt_study.pipeline.core.get_video_metadata",
+            "notewise.pipeline.core.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1955,11 +1955,11 @@ async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "yt_study.pipeline.core.fetch_transcript",
+            "notewise.pipeline.core.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "yt_study.pipeline.core.CorePipeline._check_api_key",
+            "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
         ),
     ):

@@ -9,27 +9,27 @@ import pytest
 from rich.console import Console
 from sqlalchemy.exc import SQLAlchemyError
 
-from yt_study.cli._formatters import print_cost_summary
-from yt_study.domain.results import PipelineMetrics
-from yt_study.llm.provider import UsageTotals
-from yt_study.pipeline._artifacts import export_transcript, generate_and_write_quiz
-from yt_study.pipeline._helpers import (
+from notewise.cli._formatters import print_cost_summary
+from notewise.domain.results import PipelineMetrics
+from notewise.llm.provider import UsageTotals
+from notewise.pipeline._artifacts import export_transcript, generate_and_write_quiz
+from notewise.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
     coerce_usage_totals,
 )
-from yt_study.pipeline.core import (
+from notewise.pipeline.core import (
     CorePipeline,
     EventType,
     PipelineResult,
     PipelineSharedState,
     run_pipeline,
 )
-from yt_study.youtube.transcript import TranscriptSegment, VideoTranscript
+from notewise.youtube.transcript import TranscriptSegment, VideoTranscript
 
 
 def _make_pipeline(temp_output_dir, mock_llm_provider):
-    with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         pipeline = CorePipeline(model="mock-model", output_dir=temp_output_dir)
         pipeline.generator = MagicMock()
         pipeline.generator.count_tokens.return_value = 12
@@ -96,7 +96,7 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
         chapter_semaphore=asyncio.Semaphore(2),
     )
 
-    with patch("yt_study.pipeline.core.get_provider", return_value=mock_llm_provider):
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         pipeline = CorePipeline(
             model="mock-model",
             output_dir=temp_output_dir,
@@ -156,7 +156,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
     pipeline_instance.run = AsyncMock(return_value=expected)
 
     with patch(
-        "yt_study.pipeline.core.CorePipeline",
+        "notewise.pipeline.core.CorePipeline",
         return_value=pipeline_instance,
     ) as mock_pipeline_cls:
         result = await run_pipeline(
@@ -180,7 +180,7 @@ def test_emit_event_swallows_event_handler_errors(temp_output_dir, mock_llm_prov
     on_event = MagicMock(side_effect=RuntimeError("ui boom"))
     emit = pipeline._emit_event(on_event)
 
-    with patch("yt_study.pipeline.core.logger.warning") as mock_warning:
+    with patch("notewise.pipeline.core.logger.warning") as mock_warning:
         emit(EventType.PIPELINE_START, "vid", title="Video")
 
     on_event.assert_called_once()

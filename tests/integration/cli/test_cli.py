@@ -7,9 +7,9 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
-from yt_study.cli.app import app
-from yt_study.errors import VideoUnavailableError as PublicAccessRequiredError
-from yt_study.pipeline.core import (
+from notewise.cli.app import app
+from notewise.errors import VideoUnavailableError as PublicAccessRequiredError
+from notewise.pipeline.core import (
     EventType,
     PipelineEvent,
     PipelineMetrics,
@@ -65,7 +65,7 @@ def _make_parsed_playlist(playlist_id: str = "PL123"):
 @pytest.fixture(autouse=True)
 def reset_cli_app_globals():
     """Keep app-level lazy globals from leaking between CLI tests."""
-    import yt_study.cli.app as cli_app_module
+    import notewise.cli.app as cli_app_module
 
     patch_points = (
         "_console",
@@ -96,7 +96,7 @@ def reset_cli_app_globals():
 
 @pytest.fixture
 def mock_config_exists():
-    with patch("yt_study.cli.app.check_config_exists", return_value=True):
+    with patch("notewise.cli.app.check_config_exists", return_value=True):
         yield
 
 
@@ -116,19 +116,19 @@ def mock_pipeline(tmp_path):
 
     with (
         patch(  # type: ignore[misc]
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ) as mock_cls,
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
         patch(
-            "yt_study.cli.app.PipelineDashboard",
+            "notewise.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("yt_study.cli.app.Live"),
+        patch("notewise.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -155,13 +155,13 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
 
     # Patch config to require FAKE_KEY for the selected model
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
         patch(
-            "yt_study.config.AppSettings.get_api_key_name_for_model",
+            "notewise.config.AppSettings.get_api_key_name_for_model",
             return_value="FAKE_KEY",
         ),
     ):
@@ -169,8 +169,8 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
 
     assert result.exit_code == 1
     assert "FAKE_KEY" in result.output
-    assert "yt-study: no configuration found." in result.output
-    assert "Run `yt-study setup` to get started." in result.output
+    assert "notewise: no configuration found." in result.output
+    assert "Run `notewise setup` to get started." in result.output
 
 
 def test_version():
@@ -198,7 +198,7 @@ def test_config_path_missing():
 
 def test_setup_command():
     """Test setup command triggers wizard."""
-    with patch("yt_study.cli.app.run_setup_wizard") as mock_wizard:
+    with patch("notewise.cli.app.run_setup_wizard") as mock_wizard:
         result = runner.invoke(app, ["setup"])
         assert result.exit_code == 0
         assert mock_wizard.call_count >= 1
@@ -210,7 +210,7 @@ def test_callback_help():
     result = runner.invoke(app)
     assert result.exit_code == 0
     assert "Quick Start" in result.stdout
-    assert "yt-study process" in result.stdout
+    assert "notewise process" in result.stdout
 
 
 @pytest.mark.parametrize(
@@ -220,7 +220,7 @@ def test_callback_help():
         (["config-path"], "No configuration found"),
         (["stats"], "No cache database found yet"),
         (["history"], "No processed video history found yet"),
-        (["info"], "yt-study Info"),
+        (["info"], "notewise Info"),
         (["doctor"], "Doctor"),
         (["cache", "info"], "No cache database found"),
         (["logs"], "No log files found"),
@@ -228,14 +228,14 @@ def test_callback_help():
 )
 def test_fast_commands_do_not_import_runtime(tmp_path, monkeypatch, argv, expected):
     """Non-processing CLI commands should not pull in the process runtime."""
-    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-    sys.modules.pop("yt_study.cli._runtime", None)
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    sys.modules.pop("notewise.cli._runtime", None)
 
     result = runner.invoke(app, argv)
 
     assert result.exit_code == 0
     assert expected in result.stdout
-    assert "yt_study.cli._runtime" not in sys.modules
+    assert "notewise.cli._runtime" not in sys.modules
 
 
 def test_setup_show_displays_current_config_without_runtime_import(
@@ -243,52 +243,52 @@ def test_setup_show_displays_current_config_without_runtime_import(
     monkeypatch,
 ):
     """setup --show should be read-only and stay on the fast path."""
-    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-    config_dir = tmp_path / ".yt-study"
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    config_dir = tmp_path / ".notewise"
     config_dir.mkdir()
     (config_dir / "config.env").write_text(
         "DEFAULT_MODEL=gemini/gemini-2.5-flash\nGEMINI_API_KEY=secret-value",
         encoding="utf-8",
     )
-    sys.modules.pop("yt_study.cli._runtime", None)
+    sys.modules.pop("notewise.cli._runtime", None)
 
     result = runner.invoke(app, ["setup", "--show"])
 
     assert result.exit_code == 0
     assert "Current Configuration" in result.stdout
     assert "secret-value" not in result.stdout
-    assert "yt_study.cli._runtime" not in sys.modules
+    assert "notewise.cli._runtime" not in sys.modules
 
 
 def test_config_command_displays_masked_config(tmp_path, monkeypatch):
     """The dedicated config command should expose masked current settings."""
-    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-    config_dir = tmp_path / ".yt-study"
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    config_dir = tmp_path / ".notewise"
     config_dir.mkdir()
     (config_dir / "config.env").write_text(
         "DEFAULT_MODEL=gemini/gemini-2.5-flash\nGEMINI_API_KEY=secret-value",
         encoding="utf-8",
     )
-    sys.modules.pop("yt_study.cli._runtime", None)
+    sys.modules.pop("notewise.cli._runtime", None)
 
     result = runner.invoke(app, ["config"])
 
     assert result.exit_code == 0
     assert "Current Configuration" in result.stdout
     assert "secret-value" not in result.stdout
-    assert "yt_study.cli._runtime" not in sys.modules
+    assert "notewise.cli._runtime" not in sys.modules
 
 
 def test_cache_shortcuts_match_subcommands(tmp_path, monkeypatch):
     """cache --info/--show should work as ergonomic aliases for subcommands."""
-    monkeypatch.setenv("YT_STUDY_HOME", str(tmp_path / ".yt-study"))
-    sys.modules.pop("yt_study.cli._runtime", None)
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    sys.modules.pop("notewise.cli._runtime", None)
 
     result = runner.invoke(app, ["cache", "--info"])
 
     assert result.exit_code == 0
     assert "No cache database found" in result.stdout
-    assert "yt_study.cli._runtime" not in sys.modules
+    assert "notewise.cli._runtime" not in sys.modules
 
 
 def test_cache_show_shortcut_requires_video_id():
@@ -339,14 +339,14 @@ def test_info_accepts_bare_video_id():
 
     with (
         patch(
-            "yt_study.cli.app.get_video_details",
+            "notewise.cli.app.get_video_details",
             new_callable=AsyncMock,
         ) as mock_video_details,
         patch(
-            "yt_study.cli.app.get_source_metadata",
+            "notewise.cli.app.get_source_metadata",
             new_callable=AsyncMock,
         ) as mock_source_meta,
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_video_details.return_value = {
             "title": "Bare Video",
@@ -454,13 +454,13 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.parse_youtube_url", side_effect=_parse),
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -532,10 +532,10 @@ def test_process_batch_preflight_feeds_workers_before_all_sources_finish(tmp_pat
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli._batch_runner.prepare_source", side_effect=_prepare_source),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli._batch_runner.prepare_source", side_effect=_prepare_source),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -585,23 +585,23 @@ def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
+        patch("notewise.cli.app.parse_youtube_url", side_effect=_parse),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["pl_vid1", "pl_vid2"],
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info",
+            "notewise.cli.app.get_playlist_info",
             new_callable=AsyncMock,
             return_value=("Batch Playlist", 2),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -670,14 +670,14 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
     pipeline_instance.run = AsyncMock(side_effect=_run)
 
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
-        patch("yt_study.cli.app.parse_youtube_url", side_effect=_parse),
+        patch("notewise.cli.app.parse_youtube_url", side_effect=_parse),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube playlists are not supported. "
@@ -685,9 +685,9 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
             ),
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info", new_callable=AsyncMock
+            "notewise.cli.app.get_playlist_info", new_callable=AsyncMock
         ) as mock_playlist_info,
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -793,11 +793,11 @@ def test_process_missing_config_reports_setup_instructions(monkeypatch, tmp_path
 
     with (
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.run_setup_wizard") as mock_setup,
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.run_setup_wizard") as mock_setup,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -812,8 +812,8 @@ def test_process_missing_config_reports_setup_instructions(monkeypatch, tmp_path
         result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 1
-    assert "yt-study: no configuration found." in result.output
-    assert "Run `yt-study setup` to get started." in result.output
+    assert "notewise: no configuration found." in result.output
+    assert "Run `notewise setup` to get started." in result.output
     mock_setup.assert_not_called()
 
 
@@ -845,7 +845,7 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
 def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
     """Invalid URLs should fail the command for shell automation."""
     with patch(
-        "yt_study.cli.app.parse_youtube_url",
+        "notewise.cli.app.parse_youtube_url",
         side_effect=ValueError("Not a YouTube URL"),
     ):
         result = runner.invoke(app, ["process", "not-a-url"])
@@ -859,13 +859,13 @@ def test_process_invalid_url_reports_input_error_before_api_key(monkeypatch):
     monkeypatch.delenv("FAKE_KEY", raising=False)
 
     with (
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.check_config_exists", return_value=True),
         patch(
-            "yt_study.config.AppSettings.get_api_key_name_for_model",
+            "notewise.config.AppSettings.get_api_key_name_for_model",
             return_value="FAKE_KEY",
         ),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             side_effect=ValueError("Not a YouTube URL"),
         ),
     ):
@@ -878,7 +878,7 @@ def test_process_invalid_url_reports_input_error_before_api_key(monkeypatch):
 
 def test_process_missing_batch_file_reports_file_error():
     """Missing batch-file paths should not be misreported as invalid YouTube URLs."""
-    with patch("yt_study.cli.app.check_config_exists", return_value=True):
+    with patch("notewise.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "missing_urls.txt"])
 
     assert result.exit_code == 1
@@ -888,7 +888,7 @@ def test_process_missing_batch_file_reports_file_error():
 
 def test_process_missing_nested_batch_file_reports_file_error():
     """Separator-only strings should stay on the URL-validation path."""
-    with patch("yt_study.cli.app.check_config_exists", return_value=True):
+    with patch("notewise.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "batches/urls"])
 
     assert result.exit_code == 1
@@ -898,7 +898,7 @@ def test_process_missing_nested_batch_file_reports_file_error():
 
 def test_process_missing_explicit_relative_batch_file_reports_file_error():
     """Relative paths with an explicit local prefix should still be treated as files."""
-    with patch("yt_study.cli.app.check_config_exists", return_value=True):
+    with patch("notewise.cli.app.check_config_exists", return_value=True):
         result = runner.invoke(app, ["process", "./batches/urls"])
 
     assert result.exit_code == 1
@@ -917,7 +917,7 @@ def test_process_no_ui_flag_runs_without_dashboard(
 ):
     """--no-ui skips PipelineDashboard and still runs the pipeline."""
     _, pipeline_instance = mock_pipeline
-    with patch("yt_study.cli.app.PipelineDashboard") as mock_dashboard_cls:
+    with patch("notewise.cli.app.PipelineDashboard") as mock_dashboard_cls:
         result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
 
     assert result.exit_code == 0
@@ -950,15 +950,15 @@ def test_process_no_ui_prints_done_summary(
 
     with (
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1003,15 +1003,15 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
 
     with (
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1098,22 +1098,22 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
     dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_UI"),
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info", new=AsyncMock(return_value=("P", 2))
+            "notewise.cli.app.get_playlist_info", new=AsyncMock(return_value=("P", 2))
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1", "vid2"],
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
-        patch("yt_study.cli.app.Live"),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("notewise.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1258,17 +1258,17 @@ def test_process_ui_shows_detailed_pipeline_states(
     dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
         patch(
-            "yt_study.cli.app.PipelineDashboard",
+            "notewise.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("yt_study.cli.app.Live"),
+        patch("notewise.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1362,14 +1362,14 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
     dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
-        patch("yt_study.cli.app.Live"),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("notewise.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1415,15 +1415,15 @@ def test_process_no_ui_failure_exits_nonzero(
 
     with (
         patch(
-            "yt_study.cli.app.CorePipeline",
+            "notewise.cli.app.CorePipeline",
             return_value=pipeline_instance,
         ),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.check_config_exists", return_value=True),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.check_config_exists", return_value=True),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1486,12 +1486,12 @@ def test_process_batch_file_no_ui_emits_headless_progress(tmp_path):
     pipeline_instance.run = AsyncMock(side_effect=_run_with_events)
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1519,13 +1519,13 @@ def test_process_env_only_config_does_not_launch_setup(monkeypatch, tmp_path):
     pipeline_instance.run = AsyncMock(return_value=_make_pipeline_result())
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video(),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.run_setup_wizard") as mock_setup,
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.run_setup_wizard") as mock_setup,
     ):
         mock_config.default_model = "openai/gpt-4o-mini"
         mock_config.default_output_dir = tmp_path
@@ -1551,21 +1551,21 @@ def test_process_empty_playlist_shows_no_videos_message(tmp_path):
     """Empty playlists should fail cleanly without rendering a 0/0 dashboard."""
     with (
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_EMPTY"),
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=[],
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info",
+            "notewise.cli.app.get_playlist_info",
             new_callable=AsyncMock,
             return_value=("Empty Playlist", 0),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.PipelineDashboard") as mock_dashboard_cls,
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.PipelineDashboard") as mock_dashboard_cls,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1603,22 +1603,22 @@ def test_process_playlist_failure_does_not_create_output_dir(tmp_path):
     )
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_DEFER"),
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1"],
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info",
+            "notewise.cli.app.get_playlist_info",
             new_callable=AsyncMock,
             return_value=("Deferred Playlist", 1),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = output_dir
@@ -1753,17 +1753,17 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
     dashboard_instance.add_completion.side_effect = _record_completion
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
         patch(
-            "yt_study.cli.app.PipelineDashboard",
+            "notewise.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ),
-        patch("yt_study.cli.app.Live", FakeLive),
+        patch("notewise.cli.app.Live", FakeLive),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1852,24 +1852,24 @@ def test_process_playlist_all_skipped_clears_live_dashboard(tmp_path):
     dashboard_instance.add_completion.side_effect = _record_playlist_completion
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_SKIP"),
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1", "vid2"],
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info",
+            "notewise.cli.app.get_playlist_info",
             new_callable=AsyncMock,
             return_value=("Skipped Playlist", 2),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
-        patch("yt_study.cli.app.Live", FakeLive),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("notewise.cli.app.Live", FakeLive),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1958,14 +1958,14 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
     dashboard_instance.add_completion.side_effect = _record_completion
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_video("vid1"),
         ),
-        patch("yt_study.cli.app.config") as mock_config,
-        patch("yt_study.cli.app.PipelineDashboard", return_value=dashboard_instance),
-        patch("yt_study.cli.app.Live", FakeLive),
+        patch("notewise.cli.app.config") as mock_config,
+        patch("notewise.cli.app.PipelineDashboard", return_value=dashboard_instance),
+        patch("notewise.cli.app.Live", FakeLive),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -1998,27 +1998,27 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
     dashboard_instance.configure_mock(recent_completions=[], recent_failures=[])
 
     with (
-        patch("yt_study.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_DEDUPE"),
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info",
+            "notewise.cli.app.get_playlist_info",
             new_callable=AsyncMock,
             return_value=("Playlist", 3),
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             return_value=["vid1", "vid1", "vid2"],
         ),
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
         patch(
-            "yt_study.cli.app.PipelineDashboard",
+            "notewise.cli.app.PipelineDashboard",
             return_value=dashboard_instance,
         ) as mock_dashboard_cls,
-        patch("yt_study.cli.app.Live"),
+        patch("notewise.cli.app.Live"),
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path
@@ -2047,11 +2047,11 @@ def test_process_private_playlist_shows_clean_error(
     """Private playlists should fail cleanly instead of falling into Fatal Error."""
     with (
         patch(
-            "yt_study.cli.app.parse_youtube_url",
+            "notewise.cli.app.parse_youtube_url",
             return_value=_make_parsed_playlist("PL_PRIVATE"),
         ),
         patch(
-            "yt_study.cli.app.extract_playlist_videos",
+            "notewise.cli.app.extract_playlist_videos",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube playlists are not supported. "
@@ -2059,9 +2059,9 @@ def test_process_private_playlist_shows_clean_error(
             ),
         ),
         patch(
-            "yt_study.cli.app.get_playlist_info", new_callable=AsyncMock
+            "notewise.cli.app.get_playlist_info", new_callable=AsyncMock
         ) as mock_info,
-        patch("yt_study.cli.app.config") as mock_config,
+        patch("notewise.cli.app.config") as mock_config,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
         mock_config.default_output_dir = tmp_path

@@ -1,7 +1,7 @@
 ---
 title: Testing
 sidebarTitle: Testing
-description: Test suite structure, conventions, and how to write good tests for yt-study.
+description: Test suite structure, conventions, and how to write good tests for notewise.
 icon: flask-conical
 ---
 
@@ -98,11 +98,11 @@ CI requires **≥ 90% coverage** on the unit test suite.
 
 ```bash
 uv run python -m pytest tests/unit \
-  --cov=src/yt_study \
+  --cov=src/notewise \
   --cov-report=term-missing
 
 uv run python -m pytest tests/unit \
-  --cov=src/yt_study \
+  --cov=src/notewise \
   --cov-report=html
 open htmlcov/index.html
 ```
@@ -127,7 +127,7 @@ open htmlcov/index.html
 ```python
 def test_fetch_transcript(mocker):
     mock_fetch = mocker.patch(
-        "yt_study.youtube.transcript.fetch_transcript",
+        "notewise.youtube.transcript.fetch_transcript",
         return_value=mock_transcript,
     )
     ...
@@ -140,7 +140,7 @@ No special decorator needed (`asyncio_mode = "auto"`):
 
 ```python
 async def test_pipeline_run(mocker):
-    mocker.patch("yt_study.pipeline._execution.fetch_transcript", ...)
+    mocker.patch("notewise.pipeline._execution.fetch_transcript", ...)
     result = await pipeline.run(["VIDEO_ID"])
     assert result.success_count == 1
 ```
@@ -157,7 +157,7 @@ Integration tests use real SQLite databases (via `tmp_path`) and the real filesy
 
 ```python
 def test_repository_lifecycle(tmp_path):
-    db_path = tmp_path / ".yt_study_cache.db"
+    db_path = tmp_path / ".notewise_cache.db"
     repo = DatabaseRepository(db_path)
     ...
 ```

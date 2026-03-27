@@ -1,5 +1,5 @@
 ---
-title: yt-study process
+title: notewise process
 sidebarTitle: process
 description: Generate study notes from a YouTube video, playlist, or batch file.
 icon: play
@@ -10,7 +10,7 @@ Generate comprehensive, structured Markdown study notes from YouTube videos or p
 ## Synopsis
 
 ```bash
-yt-study process URL [OPTIONS]
+notewise process URL [OPTIONS]
 ```
 
 ---
@@ -31,8 +31,8 @@ yt-study process URL [OPTIONS]
   LiteLLM model string. Overrides `DEFAULT_MODEL` from config for this run.
 
   ```bash
-  yt-study process "URL" --model gpt-4o
-  yt-study process "URL" -m anthropic/claude-3-5-sonnet-20241022
+  notewise process "URL" --model gpt-4o
+  notewise process "URL" -m anthropic/claude-3-5-sonnet-20241022
   ```
 </ParamField>
 
@@ -42,7 +42,7 @@ yt-study process URL [OPTIONS]
   Output directory path. Overrides `OUTPUT_DIR` from config for this run.
 
   ```bash
-  yt-study process "URL" --output ~/my-notes
+  notewise process "URL" --output ~/my-notes
   ```
 </ParamField>
 
@@ -52,8 +52,8 @@ yt-study process URL [OPTIONS]
   Preferred transcript language code. Repeat the flag to set a fallback chain. Default: `en`.
 
   ```bash
-  yt-study process "URL" --language hi       # Hindi first
-  yt-study process "URL" -l fr -l en         # French, then English
+  notewise process "URL" --language hi       # Hindi first
+  notewise process "URL" -l fr -l en         # French, then English
   ```
 </ParamField>
 
@@ -63,7 +63,7 @@ yt-study process URL [OPTIONS]
   LLM sampling temperature, range `0.0`–`1.0`. Lower = more deterministic. Higher = more creative.
 
   ```bash
-  yt-study process "URL" --temperature 0.3
+  notewise process "URL" --temperature 0.3
   ```
 </ParamField>
 
@@ -73,7 +73,7 @@ yt-study process URL [OPTIONS]
   Maximum tokens per LLM response. When not set, the model's own default is used.
 
   ```bash
-  yt-study process "URL" --max-tokens 2000
+  notewise process "URL" --max-tokens 2000
   ```
 </ParamField>
 
@@ -81,7 +81,7 @@ yt-study process URL [OPTIONS]
   Also generate a multiple-choice quiz (`<title>_quiz.md`) alongside the notes. Contains 10–15 questions with answers and explanations.
 
   ```bash
-  yt-study process "URL" --quiz
+  notewise process "URL" --quiz
   ```
 </ParamField>
 
@@ -89,8 +89,8 @@ yt-study process URL [OPTIONS]
   Export the raw transcript alongside the notes. Accepted values: `txt` (plain text) or `json` (timestamped array).
 
   ```bash
-  yt-study process "URL" --export-transcript txt
-  yt-study process "URL" --export-transcript json
+  notewise process "URL" --export-transcript txt
+  notewise process "URL" --export-transcript json
   ```
 </ParamField>
 
@@ -100,7 +100,7 @@ yt-study process URL [OPTIONS]
   Re-process videos even if the output directory already exists and the video is in the cache.
 
   ```bash
-  yt-study process "URL" --force
+  notewise process "URL" --force
   ```
 </ParamField>
 
@@ -108,7 +108,7 @@ yt-study process URL [OPTIONS]
   Disable the Rich live dashboard. Prints plain progress lines to stdout — suitable for cron jobs, CI pipelines, and log aggregators.
 
   ```bash
-  yt-study process "URL" --no-ui
+  notewise process "URL" --no-ui
   ```
 </ParamField>
 
@@ -118,7 +118,7 @@ yt-study process URL [OPTIONS]
   Path to a Netscape-format `.txt` cookies file. Required for private, age-gated, or members-only videos.
 
   ```bash
-  yt-study process "URL" --cookie-file ./youtube-cookies.txt
+  notewise process "URL" --cookie-file ./youtube-cookies.txt
   ```
 </ParamField>
 
@@ -129,24 +129,24 @@ yt-study process URL [OPTIONS]
 <Tabs>
   <Tab title="Single video">
     ```bash
-    yt-study process "https://youtube.com/watch?v=dQw4w9WgXcQ"
-    yt-study process "https://youtu.be/dQw4w9WgXcQ"
-    yt-study process "https://youtube.com/shorts/dQw4w9WgXcQ"
-    yt-study process dQw4w9WgXcQ      # bare 11-character video ID
+    notewise process "https://youtube.com/watch?v=dQw4w9WgXcQ"
+    notewise process "https://youtu.be/dQw4w9WgXcQ"
+    notewise process "https://youtube.com/shorts/dQw4w9WgXcQ"
+    notewise process dQw4w9WgXcQ      # bare 11-character video ID
     ```
   </Tab>
   <Tab title="Playlist">
     ```bash
-    yt-study process "https://youtube.com/playlist?list=PLxxxxxx"
-    yt-study process PLxxxxxx          # bare playlist ID
+    notewise process "https://youtube.com/playlist?list=PLxxxxxx"
+    notewise process PLxxxxxx          # bare playlist ID
     ```
   </Tab>
   <Tab title="Batch file">
     A plain text file with one URL per line. Blank lines and `#` comment lines are ignored.
 
     ```bash
-    yt-study process my-urls.txt
-    yt-study process ~/course/urls.txt -o ~/course/notes
+    notewise process my-urls.txt
+    notewise process ~/course/urls.txt -o ~/course/notes
     ```
   </Tab>
 </Tabs>
@@ -191,24 +191,24 @@ yt-study process URL [OPTIONS]
 
 ```bash
 # Basic
-yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+notewise process "https://youtube.com/watch?v=VIDEO_ID"
 
 # Custom model and output directory
-yt-study process "URL" --model gpt-4o --output ~/notes
+notewise process "URL" --model gpt-4o --output ~/notes
 
 # Playlist with quiz and transcript export
-yt-study process "https://youtube.com/playlist?list=PLxxxxxx" \
+notewise process "https://youtube.com/playlist?list=PLxxxxxx" \
   --quiz --export-transcript txt
 
 # Batch file — non-interactive with high concurrency
-MAX_CONCURRENT_VIDEOS=10 yt-study process urls.txt --no-ui
+MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui
 
 # Private video with cookie file
-yt-study process "URL" --cookie-file ./youtube-cookies.txt
+notewise process "URL" --cookie-file ./youtube-cookies.txt
 
 # Re-process with a different model
-yt-study process "URL" --model claude-3-5-sonnet-20241022 --force
+notewise process "URL" --model claude-3-5-sonnet-20241022 --force
 
 # Preferred language fallback chain
-yt-study process "URL" -l hi -l en
+notewise process "URL" -l hi -l en
 ```

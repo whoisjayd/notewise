@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-from yt_study.pipeline._limiter import _GLOBAL_YOUTUBE_LIMITERS, get_youtube_limiter
-from yt_study.storage.repository import DatabaseRepository
+from notewise.pipeline._limiter import _GLOBAL_YOUTUBE_LIMITERS, get_youtube_limiter
+from notewise.storage.repository import DatabaseRepository
 
 
 def test_test_harness_can_populate_shared_state(tmp_path):

@@ -2,7 +2,7 @@
 
 import pytest
 
-from yt_study.utils import is_valid_bool_setting, parse_bool_setting
+from notewise.utils import is_valid_bool_setting, parse_bool_setting
 
 
 @pytest.mark.parametrize("value", ["1", " true ", "YES", "On"])

@@ -7,8 +7,8 @@ import time
 
 import structlog
 
-import yt_study.logging as logging_module
-from yt_study.logging import configure_logging, prune_log_files, redact_sensitive_text
+import notewise.logging as logging_module
+from notewise.logging import configure_logging, prune_log_files, redact_sensitive_text
 
 
 def _reset_logging_state() -> None:

@@ -53,13 +53,13 @@ body:
     attributes:
       label: Affected Components
       description: Files, commands, or workflows potentially affected.
-      placeholder: src/yt_study/config.py, .github/workflows/release.yml
+      placeholder: src/notewise/config.py, .github/workflows/release.yml
   - type: input
     id: versions
     attributes:
       label: Affected Versions
       description: Version/tag/commit range if known.
-      placeholder: <= v0.2.2
+      placeholder: <= v1.0.0
   - type: textarea
     id: mitigation
     attributes:

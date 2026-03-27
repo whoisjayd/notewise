@@ -1,0 +1,1 @@
+"""notewise CLI package."""

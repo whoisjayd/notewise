@@ -9,10 +9,10 @@ icon: database
   The local SQLite database powers cache lookups, history, stats, and export tracking.
 </Info>
 
-yt-study stores local cache data in SQLite at:
+notewise stores local cache data in SQLite at:
 
 ```text
-~/.yt-study/.yt_study_cache.db
+~/.notewise/.notewise_cache.db
 ```
 
 ---
@@ -105,7 +105,7 @@ video 1 ──── N exportrecord
 
 - Cache reads drive `stats`, `history`, and skip-if-processed logic.
 - Clearing the cache removes database records only — generated note files on disk are **not** affected.
-- Schema migrations are managed in `src/yt_study/storage/migrations.py` (no Alembic).
+- Schema migrations are managed in `src/notewise/storage/migrations.py` (no Alembic).
 
 <Warning>
   `cache --clear` affects only database-backed records. It does not delete generated Markdown files from your output directory.

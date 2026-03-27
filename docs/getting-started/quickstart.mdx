@@ -10,9 +10,9 @@ icon: rocket
 </Info>
 
 <Steps>
-  <Step title="Install yt-study">
+  <Step title="Install notewise">
     ```bash
-    uv tool install yt-study
+    uv tool install notewise
     ```
 
     Need pip or Docker instead? See [Installation](/getting-started/installation).
@@ -32,18 +32,18 @@ icon: rocket
 
   <Step title="Run the setup wizard">
     ```bash
-    yt-study setup
+    notewise setup
     ```
 
-    The interactive wizard prompts for your provider and API key, then writes `~/.yt-study/config.env`. Run this once.
+    The interactive wizard prompts for your provider and API key, then writes `~/.notewise/config.env`. Run this once.
   </Step>
 
   <Step title="Process a video">
     ```bash
-    yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+    notewise process "https://youtube.com/watch?v=VIDEO_ID"
     ```
 
-    A live progress dashboard shows while yt-study fetches the transcript and generates notes. When finished, open `./output/` to find your Markdown study notes.
+    A live progress dashboard shows while notewise fetches the transcript and generates notes. When finished, open `./output/` to find your Markdown study notes.
   </Step>
 </Steps>
 
@@ -52,9 +52,9 @@ icon: rocket
 ## Example session
 
 ```bash
-$ yt-study process "https://youtube.com/watch?v=dQw4w9WgXcQ"
+$ notewise process "https://youtube.com/watch?v=dQw4w9WgXcQ"
 
- yt-study  v0.2.6
+ notewise  v1.0.0
 
 Processing 1 video...
 
@@ -75,26 +75,26 @@ Processing 1 video...
 <CardGroup cols={2}>
   <Card title="Process a playlist" icon="list" href="/guides/playlists-and-batch">
     ```bash
-    yt-study process "https://youtube.com/playlist?list=PLAYLIST_ID"
+    notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
     ```
   </Card>
   <Card title="Generate a quiz" icon="circle-help" href="/guides/single-video">
     ```bash
-    yt-study process "URL" --quiz
+    notewise process "URL" --quiz
     ```
   </Card>
   <Card title="Switch LLM model" icon="brain" href="/concepts/providers">
     ```bash
-    yt-study process "URL" --model gpt-4o
+    notewise process "URL" --model gpt-4o
     ```
   </Card>
   <Card title="Batch file" icon="file-text" href="/guides/playlists-and-batch">
     ```bash
-    yt-study process my-urls.txt -o ./notes
+    notewise process my-urls.txt -o ./notes
     ```
   </Card>
 </CardGroup>
 
 <Tip>
-  If a run fails, start with `yt-study doctor` → `yt-study config` → `yt-study logs --tail 80`. See [Troubleshooting](/guides/troubleshooting) for the full guide.
+  If a run fails, start with `notewise doctor` → `notewise config` → `notewise logs --tail 80`. See [Troubleshooting](/guides/troubleshooting) for the full guide.
 </Tip>

@@ -11,18 +11,18 @@ icon: settings
 
 ## Config file
 
-yt-study reads configuration from:
+notewise reads configuration from:
 
 ```text
-~/.yt-study/config.env
+~/.notewise/config.env
 ```
 
-This file is created by `yt-study setup`. It uses a simple `KEY=VALUE` format — no quotes required (they are stripped if present).
+This file is created by `notewise setup`. It uses a simple `KEY=VALUE` format — no quotes required (they are stripped if present).
 
 Override the config directory:
 
 ```bash
-export YT_STUDY_HOME=/custom/path
+export NOTEWISE_HOME=/custom/path
 ```
 
 ---
@@ -33,7 +33,7 @@ Settings are resolved in this priority order — later entries win:
 
 <Steps>
   <Step title="Code defaults">Built-in values defined in `_constants.py`.</Step>
-  <Step title="config.env">Values written by `yt-study setup` or edited manually.</Step>
+  <Step title="config.env">Values written by `notewise setup` or edited manually.</Step>
   <Step title="Environment variables">Always override the config file.</Step>
   <Step title="CLI flags">Override everything for a single run (e.g. `--model`, `--output`).</Step>
 </Steps>
@@ -84,7 +84,7 @@ TEMPERATURE=0.7             # default: 0.7 — range 0.0–1.0
 ## Example config.env
 
 ```bash
-# ~/.yt-study/config.env
+# ~/.notewise/config.env
 
 DEFAULT_MODEL=gemini/gemini-2.5-flash
 OUTPUT_DIR=~/study-notes
@@ -103,13 +103,13 @@ GEMINI_API_KEY=your_key_here
 
 | Command | What it does |
 | --- | --- |
-| `yt-study config` | Show resolved config (API keys masked) |
-| `yt-study config-path` | Print path to the active config file |
-| `yt-study edit-config` | Open `config.env` in `$EDITOR` |
-| `yt-study setup --force` | Re-run the interactive wizard |
+| `notewise config` | Show resolved config (API keys masked) |
+| `notewise config-path` | Print path to the active config file |
+| `notewise edit-config` | Open `config.env` in `$EDITOR` |
+| `notewise setup --force` | Re-run the interactive wizard |
 
 <Tip>
-  After any config change, run `yt-study config` to confirm the resolved values before your next run.
+  After any config change, run `notewise config` to confirm the resolved values before your next run.
 </Tip>
 
 ---

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-from yt_study import __main__ as main_mod
+from notewise import __main__ as main_mod
 
 
 def test_is_help_invocation() -> None:
@@ -18,10 +18,10 @@ def test_main_prints_banner_for_help(monkeypatch) -> None:
     app = MagicMock()
     banner = MagicMock()
 
-    monkeypatch.setattr(main_mod.sys, "argv", ["yt-study", "--help"])
-    monkeypatch.setattr("yt_study.cli.app._get_console", lambda: console)
-    monkeypatch.setattr("yt_study.cli.app.app", app)
-    monkeypatch.setattr("yt_study.cli._banner.print_help_banner", banner)
+    monkeypatch.setattr(main_mod.sys, "argv", ["notewise", "--help"])
+    monkeypatch.setattr("notewise.cli.app._get_console", lambda: console)
+    monkeypatch.setattr("notewise.cli.app.app", app)
+    monkeypatch.setattr("notewise.cli._banner.print_help_banner", banner)
 
     main_mod.main()
 
@@ -35,10 +35,10 @@ def test_main_skips_banner_for_non_help(monkeypatch) -> None:
     app = MagicMock()
     banner = MagicMock()
 
-    monkeypatch.setattr(main_mod.sys, "argv", ["yt-study", "version"])
-    monkeypatch.setattr("yt_study.cli.app._get_console", lambda: console)
-    monkeypatch.setattr("yt_study.cli.app.app", app)
-    monkeypatch.setattr("yt_study.cli._banner.print_help_banner", banner)
+    monkeypatch.setattr(main_mod.sys, "argv", ["notewise", "version"])
+    monkeypatch.setattr("notewise.cli.app._get_console", lambda: console)
+    monkeypatch.setattr("notewise.cli.app.app", app)
+    monkeypatch.setattr("notewise.cli._banner.print_help_banner", banner)
 
     main_mod.main()
 

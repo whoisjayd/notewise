@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from sqlalchemy import create_engine
 
-from yt_study.storage.migrations import run_migrations
+from notewise.storage.migrations import run_migrations
 
 
 def test_run_migrations_is_idempotent_and_reaches_latest_schema(tmp_path):

@@ -5,7 +5,7 @@ description: Supported LLM providers, model string format, and how provider rout
 icon: cpu
 ---
 
-yt-study routes all LLM calls through [LiteLLM](https://github.com/BerriAI/litellm), which means any model LiteLLM supports can be used with the `--model` flag or the `DEFAULT_MODEL` config key.
+notewise routes all LLM calls through [LiteLLM](https://github.com/BerriAI/litellm), which means any model LiteLLM supports can be used with the `--model` flag or the `DEFAULT_MODEL` config key.
 
 ---
 
@@ -88,7 +88,7 @@ claude-3-5-sonnet-20241022    # routes to Anthropic
 
 ## Provider routing table
 
-When you specify a model string, yt-study determines which API key is needed via `AppSettings.get_api_key_name_for_model()`:
+When you specify a model string, notewise determines which API key is needed via `AppSettings.get_api_key_name_for_model()`:
 
 1. If the string contains `/`, the prefix before the slash is the provider.
 2. Otherwise, heuristics based on model name prefixes are used (`gpt` → OpenAI, `claude` → Anthropic).
@@ -113,7 +113,7 @@ When you specify a model string, yt-study determines which API key is needed via
 
 ## Changing the default model
 
-Edit `~/.yt-study/config.env`:
+Edit `~/.notewise/config.env`:
 
 ```bash
 DEFAULT_MODEL=gpt-4o
@@ -123,19 +123,19 @@ OPENAI_API_KEY=sk-...
 Or override for a single run:
 
 ```bash
-yt-study process "URL" --model gpt-4o
+notewise process "URL" --model gpt-4o
 ```
 
 ---
 
 ## Usage tracking
 
-After each video, yt-study records token usage and estimated cost in SQLite.
+After each video, notewise records token usage and estimated cost in SQLite.
 
 ```bash
-yt-study stats                                       # all-time totals
-yt-study stats --model gemini/gemini-2.5-flash       # filter by model
-yt-study stats --since 7d                            # last 7 days
+notewise stats                                       # all-time totals
+notewise stats --model gemini/gemini-2.5-flash       # filter by model
+notewise stats --since 7d                            # last 7 days
 ```
 
 Cost estimates come from LiteLLM's `completion_cost()` and are approximate.

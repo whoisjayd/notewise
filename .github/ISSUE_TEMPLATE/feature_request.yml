@@ -14,7 +14,7 @@ body:
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true
-        - label: This request is for yt-study (not provider/API support policy).
+        - label: This request is for notewise (not provider/API support policy).
           required: true
   - type: textarea
     id: problem
@@ -37,7 +37,7 @@ body:
       label: Proposed CLI/API Usage
       description: Show examples of commands/options/output if applicable.
       placeholder: |
-        yt-study process "..." --new-flag
+        notewise process "..." --new-flag
         # Expected output...
   - type: textarea
     id: alternatives

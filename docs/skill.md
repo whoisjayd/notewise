@@ -1,7 +1,7 @@
 ---
-name: yt-study
+name: notewise
 description: CLI tool to convert YouTube videos and playlists into AI-powered Markdown study notes.
-  Use when helping users run yt-study, debug failures, configure providers, or contribute to the project.
+  Use when helping users run notewise, debug failures, configure providers, or contribute to the project.
 license: MIT
 compatibility: Python 3.10+. Works on Linux, macOS, Windows.
 metadata:
@@ -9,13 +9,13 @@ metadata:
   version: "1.0"
 ---
 
-# yt-study agent skill
+# notewise agent skill
 
-Use this guide when helping users operate or contribute to yt-study.
+Use this guide when helping users operate or contribute to notewise.
 
 ## Mission
 
-- Provide correct, command-first guidance for running yt-study from the CLI.
+- Provide correct, command-first guidance for running notewise from the CLI.
 - Use docs references for defaults and flags — not memory or assumptions.
 - Escalate to code-level references only when docs do not answer precisely.
 
@@ -28,14 +28,14 @@ Use this guide when helping users operate or contribute to yt-study.
    - Operations/diagnostics → /cli/operations
 3. Confirm model and API key mapping using /concepts/providers and /reference/configuration.
 4. For failures, run triage in order:
-   - `yt-study doctor`
-   - `yt-study config`
-   - `yt-study logs --tail 80`
+   - `notewise doctor`
+   - `notewise config`
+   - `notewise logs --tail 80`
    - /guides/troubleshooting
 5. If behavior still looks wrong, verify against implementation:
-   - `src/yt_study/cli/app.py`
-   - `src/yt_study/pipeline/_execution.py`
-   - `src/yt_study/pipeline/_artifacts.py`
+   - `src/notewise/cli/app.py`
+   - `src/notewise/pipeline/_execution.py`
+   - `src/notewise/pipeline/_artifacts.py`
 
 ## Intent-to-doc routing
 
@@ -62,8 +62,8 @@ Use this guide when helping users operate or contribute to yt-study.
 
 ## Config and precedence truths
 
-- Primary config: `~/.yt-study/config.env`
-- `YT_STUDY_HOME` changes where config/state are loaded from
+- Primary config: `~/.notewise/config.env`
+- `NOTEWISE_HOME` changes where config/state are loaded from
 - Priority: code defaults < config.env < env vars < CLI flags (per run)
 
 ## Triage playbook
@@ -71,20 +71,20 @@ Use this guide when helping users operate or contribute to yt-study.
 **User says "it failed":**
 1. Get exact command and error text.
 2. Ask: local CLI or Docker?
-3. `yt-study doctor` — detect environment/config issues.
-4. `yt-study config` — verify resolved model and keys.
-5. `yt-study logs --tail 80` — inspect runtime errors.
+3. `notewise doctor` — detect environment/config issues.
+4. `notewise config` — verify resolved model and keys.
+5. `notewise logs --tail 80` — inspect runtime errors.
 6. Map to /guides/troubleshooting and /reference/errors.
 
 **User says "wrong output location":**
-1. Check `OUTPUT_DIR` in `yt-study config`.
+1. Check `OUTPUT_DIR` in `notewise config`.
 2. Confirm whether the video was chapter-aware (> 1h with chapters).
 3. Use /reference/output-format for exact expected paths.
 
 **User says "provider/key not working":**
 1. Confirm model string format via /concepts/providers.
 2. Confirm matching API key variable via /reference/configuration.
-3. Isolate with explicit flag: `yt-study process "URL" --model gemini/gemini-2.5-flash`
+3. Isolate with explicit flag: `notewise process "URL" --model gemini/gemini-2.5-flash`
 
 ## Guardrails
 

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from rich.console import Console
 
-from yt_study.cli import _admin as admin
+from notewise.cli import _admin as admin
 
 
 def _console() -> Console:
@@ -153,7 +153,7 @@ def test_load_repository_with_existing_database(
 
     monkeypatch.setattr(admin, "get_cache_db_path", lambda: db_path)
     monkeypatch.setattr(
-        "yt_study.storage.repository.DatabaseRepository.get_instance",
+        "notewise.storage.repository.DatabaseRepository.get_instance",
         lambda path: repository if path == db_path else None,
     )
 
@@ -274,7 +274,7 @@ def test_render_runtime_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     admin.render_runtime_info(console)
 
     output = _text(console)
-    assert "yt-study Info" in output
+    assert "notewise Info" in output
     assert "gemini/gemini-2.5-flash" in output
     assert "en, hi" in output
 
@@ -418,7 +418,7 @@ def test_render_doctor_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     admin.render_doctor(console)
 
     output = _text(console)
-    assert "yt-study Doctor" in output
+    assert "notewise Doctor" in output
     assert "Ready" in output
     assert "Latest log" in output
 
@@ -475,7 +475,7 @@ def test_clear_cache_and_prune_cache(
     close_instance = MagicMock()
     monkeypatch.setattr(admin, "get_cache_db_path", lambda: db_path)
     monkeypatch.setattr(
-        "yt_study.storage.repository.DatabaseRepository.close_instance",
+        "notewise.storage.repository.DatabaseRepository.close_instance",
         close_instance,
     )
 
@@ -582,7 +582,7 @@ def test_edit_config_handles_missing_and_existing_file(
 
     output = _text(console)
     normalized_output = output.replace("\n", "").replace("\r", "")
-    assert "Run `yt-study setup` first" in output
+    assert "Run `notewise setup` first" in output
     assert "Opened" in output
     assert str(config_path) in normalized_output
     assert opened == [config_path]

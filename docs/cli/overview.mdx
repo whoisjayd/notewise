@@ -1,15 +1,15 @@
 ---
 title: CLI Overview
 sidebarTitle: Overview
-description: All yt-study commands at a glance, with typical workflows.
+description: All notewise commands at a glance, with typical workflows.
 icon: square-terminal
 ---
 
 ```bash
-yt-study [COMMAND] [OPTIONS] [ARGS]
+notewise [COMMAND] [OPTIONS] [ARGS]
 ```
 
-Running `yt-study` without any command prints a summary. Running `yt-study COMMAND --help` prints full help for that command.
+Running `notewise` without any command prints a summary. Running `notewise COMMAND --help` prints full help for that command.
 
 ---
 
@@ -20,7 +20,7 @@ Running `yt-study` without any command prints a summary. Running `yt-study COMMA
     Generate study notes from a video, playlist, or batch file.
   </Card>
   <Card title="setup" icon="wand-magic-sparkles" href="/cli/setup-and-config">
-    Run the interactive wizard to create `~/.yt-study/config.env`.
+    Run the interactive wizard to create `~/.notewise/config.env`.
   </Card>
   <Card title="config" icon="settings" href="/cli/setup-and-config">
     Display the current resolved configuration (API keys masked).
@@ -49,6 +49,9 @@ Running `yt-study` without any command prints a summary. Running `yt-study COMMA
   <Card title="logs" icon="scroll" href="/cli/operations">
     Inspect and manage session log files.
   </Card>
+  <Card title="update" icon="refresh-cw" href="/cli/operations">
+    Check for a newer release and print upgrade commands.
+  </Card>
   <Card title="version" icon="tag" href="/cli/operations">
     Print the installed version.
   </Card>
@@ -63,35 +66,36 @@ Running `yt-study` without any command prints a summary. Running `yt-study COMMA
     <Steps>
       <Step title="Initialize config">
         ```bash
-        yt-study setup
+        notewise setup
         ```
       </Step>
       <Step title="Verify config">
         ```bash
-        yt-study config
-        yt-study config-path
+        notewise config
+        notewise config-path
         ```
       </Step>
       <Step title="First run">
         ```bash
-        yt-study process "https://youtube.com/watch?v=VIDEO_ID"
+        notewise process "https://youtube.com/watch?v=VIDEO_ID"
         ```
       </Step>
     </Steps>
   </Tab>
   <Tab title="Daily operations">
     ```bash
-    yt-study stats
-    yt-study history --limit 25
-    yt-study cache --info
-    yt-study logs --tail 80
-    yt-study doctor
+    notewise stats
+    notewise history --limit 25
+    notewise cache --info
+    notewise logs --tail 80
+    notewise doctor
+    notewise update
     ```
   </Tab>
   <Tab title="CI / automation">
     ```bash
-    yt-study process urls.txt --no-ui
-    yt-study process urls.txt --no-ui 2>&1 | tee run.log
+    notewise process urls.txt --no-ui
+    notewise process urls.txt --no-ui 2>&1 | tee run.log
     ```
   </Tab>
 </Tabs>
@@ -102,8 +106,8 @@ Running `yt-study` without any command prints a summary. Running `yt-study COMMA
 
 | Behavior | Details |
 | --- | --- |
-| **Config file** | `~/.yt-study/config.env` loaded automatically. Override directory with `YT_STUDY_HOME`. |
-| **Logging** | Structured JSON log written to `~/.yt-study/logs/` for every `process` run. API keys are redacted. |
+| **Config file** | `~/.notewise/config.env` loaded automatically. Override directory with `NOTEWISE_HOME`. |
+| **Logging** | Structured JSON log written to `~/.notewise/logs/` for every `process` run. API keys are redacted. |
 | **Exit codes** | `0` on success, `1` on any failure. |
 
 ---
@@ -113,17 +117,17 @@ Running `yt-study` without any command prints a summary. Running `yt-study COMMA
 <Tabs>
   <Tab title="bash">
     ```bash
-    yt-study --install-completion bash
+    notewise --install-completion bash
     ```
   </Tab>
   <Tab title="zsh">
     ```bash
-    yt-study --install-completion zsh
+    notewise --install-completion zsh
     ```
   </Tab>
   <Tab title="fish">
     ```bash
-    yt-study --install-completion fish
+    notewise --install-completion fish
     ```
   </Tab>
 </Tabs>

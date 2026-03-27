@@ -45,8 +45,8 @@ repos:
         language: script
         stages: [commit-msg]
       - id: ty
-        name: ty (src/yt_study)
-        entry: uv run ty check src/yt_study
+        name: ty (src/notewise)
+        entry: uv run ty check src/notewise
         language: system
         pass_filenames: false
         types: [python]

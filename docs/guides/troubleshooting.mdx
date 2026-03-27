@@ -1,7 +1,7 @@
 ---
 title: Troubleshooting
 sidebarTitle: Troubleshooting
-description: Diagnose and fix common yt-study failures quickly.
+description: Diagnose and fix common notewise failures quickly.
 icon: life-ring
 ---
 
@@ -10,9 +10,9 @@ icon: life-ring
 Run these three commands first — they cover 90% of issues:
 
 ```bash
-yt-study doctor
-yt-study config
-yt-study logs --tail 80
+notewise doctor
+notewise config
+notewise logs --tail 80
 ```
 
 ---
@@ -25,8 +25,8 @@ yt-study logs --tail 80
 
     **Fix:**
     ```bash
-    yt-study config
-    yt-study setup --force
+    notewise config
+    notewise setup --force
     ```
 
     Key → model mapping:
@@ -43,9 +43,9 @@ yt-study logs --tail 80
 
     **Fix:**
     ```bash
-    yt-study info "URL"                 # see available transcript languages
-    yt-study process "URL" -l en
-    yt-study process "URL" -l hi -l en  # fallback chain
+    notewise info "URL"                 # see available transcript languages
+    notewise process "URL" -l en
+    notewise process "URL" -l hi -l en  # fallback chain
     ```
 
     If captions are disabled by the creator, use another video.
@@ -56,7 +56,7 @@ yt-study logs --tail 80
 
     **Fix:**
     ```bash
-    yt-study process "URL" --cookie-file ./youtube-cookies.txt
+    notewise process "URL" --cookie-file ./youtube-cookies.txt
     ```
 
     See [Private Videos](/guides/private-videos) for cookie export instructions.
@@ -67,7 +67,7 @@ yt-study logs --tail 80
 
     **Fix:** Lower concurrency and retry later:
     ```bash
-    # ~/.yt-study/config.env
+    # ~/.notewise/config.env
     MAX_CONCURRENT_VIDEOS=2
     YOUTUBE_REQUESTS_PER_MINUTE=5
     ```
@@ -78,18 +78,18 @@ yt-study logs --tail 80
 
     **Fix:**
     ```bash
-    yt-study process "URL" --output ./output
+    notewise process "URL" --output ./output
     ```
 
     Ensure the target directory is writable by your user.
   </Accordion>
 
   <Accordion title="Model too slow or expensive" icon="wallet">
-    **Symptoms:** High cost or long generation times in `yt-study stats`.
+    **Symptoms:** High cost or long generation times in `notewise stats`.
 
     **Fix:** Switch to a faster/cheaper model:
     ```bash
-    yt-study process "URL" --model gemini/gemini-2.5-flash
+    notewise process "URL" --model gemini/gemini-2.5-flash
     ```
   </Accordion>
 </AccordionGroup>
@@ -101,22 +101,22 @@ yt-study logs --tail 80
 <Steps>
   <Step title="Inspect the source">
     ```bash
-    yt-study info "URL"
+    notewise info "URL"
     ```
   </Step>
   <Step title="Re-run in plain output mode">
     ```bash
-    yt-study process "URL" --no-ui
+    notewise process "URL" --no-ui
     ```
   </Step>
   <Step title="Read the latest logs">
     ```bash
-    yt-study logs --tail 120
+    notewise logs --tail 120
     ```
   </Step>
   <Step title="Force a clean re-run if needed">
     ```bash
-    yt-study process "URL" --force
+    notewise process "URL" --force
     ```
   </Step>
 </Steps>
@@ -128,14 +128,14 @@ yt-study logs --tail 80
 Only clear the cache when local metadata appears stale or corrupted:
 
 ```bash
-yt-study cache --info
-yt-study cache --clear --yes
+notewise cache --info
+notewise cache --clear --yes
 ```
 
 For routine cleanup, prefer pruning:
 
 ```bash
-yt-study cache --prune 30
+notewise cache --prune 30
 ```
 
 ---

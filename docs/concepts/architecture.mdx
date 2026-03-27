@@ -1,11 +1,11 @@
 ---
 title: Architecture
 sidebarTitle: Architecture
-description: How yt-study is structured internally — layers, modules, and data flow.
+description: How notewise is structured internally — layers, modules, and data flow.
 icon: layers
 ---
 
-yt-study is a Python CLI application built with a clean layered architecture. Each layer has a single responsibility and strict import boundaries.
+notewise is a Python CLI application built with a clean layered architecture. Each layer has a single responsibility and strict import boundaries.
 
 ---
 
@@ -140,7 +140,7 @@ yt-study is a Python CLI application built with a clean layered architecture. Ea
 
 ### Configuration
 
-`config.py` exports a module-level `settings` object (a `_LazyAppSettings` facade over `AppSettings`). All modules import from `yt_study.config`. Loaded once on first access and cached.
+`config.py` exports a module-level `settings` object (a `_LazyAppSettings` facade over `AppSettings`). All modules import from `notewise.config`. Loaded once on first access and cached.
 
 ### Error handling
 
@@ -153,12 +153,12 @@ All custom exceptions are defined in `errors.py`. No other module defines projec
 ### State directory
 
 ```text
-~/.yt-study/
+~/.notewise/
 ├── config.env                         # User configuration
-├── .yt_study_cache.db                 # SQLite cache
+├── .notewise_cache.db                 # SQLite cache
 └── logs/
-    ├── yt-study-20260101-120000.log
+    ├── notewise-20260101-120000.log
     └── ...
 ```
 
-Override the location with `YT_STUDY_HOME`.
+Override the location with `NOTEWISE_HOME`.

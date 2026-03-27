@@ -7,11 +7,11 @@ from urllib.error import HTTPError
 
 import pytest
 
-from yt_study.errors import ExtractionError as ExtractorError
-from yt_study.youtube.extractor.async_client import (
+from notewise.errors import ExtractionError as ExtractorError
+from notewise.youtube.extractor.async_client import (
     AsyncYouTubeExtractorClient,
 )
-from yt_study.youtube.extractor.client import (
+from notewise.youtube.extractor.client import (
     YouTubeExtractorClient as ExtractorClient,
 )
 
@@ -82,7 +82,7 @@ class TestAuthHeaders:
         jar.set_cookie(_make_cookie("__Secure-1PAPISID", "onep"))
         jar.set_cookie(_make_cookie("__Secure-3PAPISID", "threep"))
         client._cookie_jar = jar
-        monkeypatch.setattr("yt_study.youtube.extractor._auth.time.time", lambda: 123.0)
+        monkeypatch.setattr("notewise.youtube.extractor._auth.time.time", lambda: 123.0)
 
         header = client._get_sid_authorization_header(
             origin="https://www.youtube.com",
@@ -502,7 +502,7 @@ class TestLowLevelHelpers:
         assert client._extract_delegated_session_id(ytcfg2) == "d1"
 
     def test_make_sid_authorization_includes_user_tag(self, monkeypatch):
-        monkeypatch.setattr("yt_study.youtube.extractor._auth.time.time", lambda: 9.0)
+        monkeypatch.setattr("notewise.youtube.extractor._auth.time.time", lambda: 9.0)
         header = ExtractorClient._make_sid_authorization(
             "SAPISIDHASH",
             "sid",
@@ -1083,11 +1083,11 @@ class TestDeeperExtractorBranches:
 
         monkeypatch.setattr(client, "_opener", _Opener())
         monkeypatch.setattr(
-            "yt_study.youtube.extractor._transport.time.sleep",
+            "notewise.youtube.extractor._transport.time.sleep",
             lambda _seconds: None,
         )
         monkeypatch.setattr(
-            "yt_study.youtube.extractor._transport.random.uniform",
+            "notewise.youtube.extractor._transport.random.uniform",
             lambda _low, _high: 1.0,
         )
 
@@ -1106,7 +1106,7 @@ class TestDeeperExtractorBranches:
 
         monkeypatch.setattr(client, "_opener", _Opener())
         monkeypatch.setattr(
-            "yt_study.youtube.extractor._transport.time.sleep",
+            "notewise.youtube.extractor._transport.time.sleep",
             lambda _seconds: None,
         )
 

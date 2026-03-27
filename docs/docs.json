@@ -1,7 +1,7 @@
 {
   "$schema": "https://mintlify.com/docs.json",
   "theme": "willow",
-  "name": "yt-study",
+  "name": "NoteWise",
   "description": "Convert YouTube videos and playlists into AI-powered study notes from your terminal.",
   "colors": {
     "primary": "#2563eb",
@@ -16,11 +16,11 @@
     "links": [
       {
         "label": "GitHub",
-        "href": "https://github.com/whoisjayd/yt-study"
+        "href": "https://github.com/whoisjayd/notewise"
       },
       {
         "label": "PyPI",
-        "href": "https://pypi.org/project/yt-study/"
+        "href": "https://pypi.org/project/notewise/"
       }
     ],
     "primary": {
@@ -31,7 +31,7 @@
   },
   "footer": {
     "socials": {
-      "github": "https://github.com/whoisjayd/yt-study",
+      "github": "https://github.com/whoisjayd/notewise",
       "x": "https://x.com/whynotjaydeep"
     }
   },
@@ -40,17 +40,17 @@
       "anchors": [
         {
           "anchor": "GitHub",
-          "href": "https://github.com/whoisjayd/yt-study",
+          "href": "https://github.com/whoisjayd/notewise",
           "icon": "github"
         },
         {
           "anchor": "PyPI",
-          "href": "https://pypi.org/project/yt-study/",
+          "href": "https://pypi.org/project/notewise/",
           "icon": "package"
         },
         {
           "anchor": "Issues",
-          "href": "https://github.com/whoisjayd/yt-study/issues",
+          "href": "https://github.com/whoisjayd/notewise/issues",
           "icon": "circle-dot"
         }
       ]
@@ -176,6 +176,6 @@
     ]
   },
   "search": {
-    "prompt": "Search yt-study docs..."
+    "prompt": "Search NoteWise docs..."
   }
 }

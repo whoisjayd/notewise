@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from yt_study.cli.app import looks_like_batch_file_path
+from notewise.cli.app import looks_like_batch_file_path
 
 
 def test_looks_like_batch_file_path_ignores_schemeless_urls() -> None:

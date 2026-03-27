@@ -1,7 +1,7 @@
 ---
 title: Error Reference
 sidebarTitle: Errors
-description: The yt-study custom exception hierarchy, causes, and resolution steps.
+description: The NoteWise custom exception hierarchy, causes, and resolution steps.
 icon: triangle-alert
 ---
 
@@ -9,14 +9,14 @@ icon: triangle-alert
   This reference maps each custom exception to its likely cause and the fastest recovery action.
 </Info>
 
-All custom exceptions are defined in `src/yt_study/errors.py` and rooted at `YtStudyError`.
+All custom exceptions are defined in `src/notewise/errors.py` and rooted at `NoteWiseError`.
 
 ---
 
 ## Exception hierarchy
 
 ```text
-YtStudyError
+NoteWiseError
 ├── ConfigurationError
 ├── ValidationError
 ├── UserVisibleCliError
@@ -35,14 +35,15 @@ YtStudyError
 
 ## Exception details
 
-### `YtStudyError`
+### `NoteWiseError`
 
-Base class for all yt-study exceptions. Accepts a message and optional keyword context arguments appended to `str(error)`.
+Base class for all NoteWise exceptions. Accepts a message and optional keyword context arguments appended to `str(error)`.
 
 ```python
-raise YtStudyError("something went wrong", video_id="abc123")
+raise NoteWiseError("something went wrong", video_id="abc123")
 # "something went wrong [video_id='abc123']"
 ```
+
 
 ---
 
@@ -54,8 +55,8 @@ Raised when the application configuration is invalid or required settings are mi
 
 **Resolution:**
 ```bash
-yt-study config          # see current resolved settings
-yt-study setup --force   # re-run the wizard
+notewise config          # see current resolved settings
+notewise setup --force   # re-run the wizard
 ```
 
 <Tip>
@@ -98,8 +99,8 @@ Raised when no transcript is available in any of the requested languages.
 
 **Resolution:**
 ```bash
-yt-study info "URL"                  # see available transcript languages
-yt-study process "URL" --language en
+notewise info "URL"                  # see available transcript languages
+notewise process "URL" --language en
 ```
 
 If captions are disabled by the creator, use a different video.
@@ -122,7 +123,7 @@ General YouTube extraction failure not covered by the more specific subclasses.
 
 **Resolution:**
 ```bash
-yt-study logs --tail 50   # inspect the session log for detail
+notewise logs --tail 50   # inspect the session log for detail
 ```
 
 ---
@@ -133,7 +134,7 @@ Raised when the LLM API call fails after all retries are exhausted (`LLM_NUM_RET
 
 **Resolution:**
 ```bash
-yt-study config   # verify the API key is set and correct
+notewise config   # verify the API key is set and correct
 ```
 
 Check your API key validity and quota with the provider.
@@ -144,7 +145,7 @@ Check your API key validity and quota with the provider.
 
 Raised when SQLite read/write operations fail.
 
-**Resolution:** Run `yt-study doctor` to check cache database health. If the database is corrupted, clear and rebuild it with `yt-study cache --clear --yes`.
+**Resolution:** Run `notewise doctor` to check cache database health. If the database is corrupted, clear and rebuild it with `notewise cache --clear --yes`.
 
 ---
 
@@ -158,16 +159,16 @@ Raised when SQLite read/write operations fail.
     Start with `TranscriptUnavailableError`:
 
     ```bash
-    yt-study info "URL"
-    yt-study process "URL" --language en
+    notewise info "URL"
+    notewise process "URL" --language en
     ```
   </Accordion>
   <Accordion title="LLM call failures after retries">
-    Check `LLMGenerationError`: validate API key, quota, and model access for the configured provider with `yt-study config`.
+    Check `LLMGenerationError`: validate API key, quota, and model access for the configured provider with `notewise config`.
   </Accordion>
   <Accordion title="Unexpected failure not listed here">
     ```bash
-    yt-study logs --tail 100
+    notewise logs --tail 100
     ```
     The session log includes the full exception with context.
   </Accordion>
@@ -180,5 +181,5 @@ Raised when SQLite read/write operations fail.
 The `process` command maps exceptions to user-visible failure panels. Unhandled exceptions are logged to the session log file and a truncated error panel pointing to the log is shown. The exit code is `1` when any video fails.
 
 ```bash
-yt-study logs --tail 100   # full error detail
+notewise logs --tail 100   # full error detail
 ```

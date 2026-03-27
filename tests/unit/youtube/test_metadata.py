@@ -2,25 +2,25 @@
 
 import pytest
 
-from yt_study.errors import (
+from notewise.errors import (
     ExtractionError as ExtractorError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     PlaylistError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     VideoUnavailableError as PublicAccessRequiredError,
 )
-from yt_study.errors import (
+from notewise.errors import (
     raise_if_video_unavailable as _raise_if_public_access_required,
 )
-from yt_study.youtube.metadata import (
+from notewise.youtube.metadata import (
     _check_playlist_availability as _raise_if_playlist_data_requires_public_access,
 )
-from yt_study.youtube.metadata import (
+from notewise.youtube.metadata import (
     _check_video_availability as _raise_if_video_data_requires_public_access,
 )
-from yt_study.youtube.metadata import (
+from notewise.youtube.metadata import (
     _coerce_int,
     _coerce_raw_chapters,
     _map_video_chapters,

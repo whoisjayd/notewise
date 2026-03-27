@@ -1,4 +1,4 @@
-# Contributing to yt-study
+# Contributing to notewise
 
 Thank you for taking the time to contribute! This document covers everything you need to get your environment set up, understand how the project is structured, and submit high-quality contributions.
 
@@ -29,8 +29,8 @@ This project follows the [Contributor Covenant Code of Conduct](CODE_OF_CONDUCT.
 
 There are many ways to help:
 
-- **Bug reports** — open a [bug report issue](https://github.com/whoisjayd/yt-study/issues/new?template=bug_report.yml)
-- **Feature requests** — open a [feature request issue](https://github.com/whoisjayd/yt-study/issues/new?template=feature_request.yml)
+- **Bug reports** — open a [bug report issue](https://github.com/whoisjayd/notewise/issues/new?template=bug_report.yml)
+- **Feature requests** — open a [feature request issue](https://github.com/whoisjayd/notewise/issues/new?template=feature_request.yml)
 - **Documentation fixes** — typos, unclear explanations, missing examples
 - **Code contributions** — bug fixes, new features, performance improvements
 - **Tests** — increase coverage, add edge cases
@@ -49,8 +49,8 @@ If you plan to work on something large, **open an issue first** so we can discus
 ### Clone and Install
 
 ```bash
-git clone https://github.com/whoisjayd/yt-study
-cd yt-study
+git clone https://github.com/whoisjayd/notewise
+cd notewise
 uv sync --dev
 ```
 
@@ -67,7 +67,7 @@ The hooks run automatically on `git commit` and enforce formatting and single-li
 ### Verify the Setup
 
 ```bash
-uv run yt-study version
+uv run notewise version
 ```
 
 ---
@@ -75,10 +75,10 @@ uv run yt-study version
 ## Project Structure
 
 ```
-yt-study/
-├── src/yt_study/            # Application source (src layout)
+notewise/
+├── src/notewise/            # Application source (src layout)
 │   ├── __init__.py          # Package version
-│   ├── __main__.py          # Entry point (python -m yt_study)
+│   ├── __main__.py          # Entry point (python -m notewise)
 │   ├── _constants.py        # Global constants
 │   ├── config.py            # Pydantic-settings configuration
 │   ├── errors.py            # All custom exceptions
@@ -148,7 +148,7 @@ yt-study/
 
 ### Key Design Principles
 
-- **Src layout** — all importable code lives under `src/yt_study/`
+- **Src layout** — all importable code lives under `src/notewise/`
 - **Domain objects are I/O-free** — nothing in `domain/` touches the network or disk
 - **All exceptions in one place** — define custom exceptions only in `errors.py`
 - **Lazy imports in CLI** — heavy dependencies are imported inside command functions to keep startup fast
@@ -176,16 +176,16 @@ make fix           # ruff format + ruff check --fix
 
 ```bash
 # Formatting
-uv run ruff format src/yt_study tests
+uv run ruff format src/notewise tests
 
 # Lint
-uv run ruff check src/yt_study tests
+uv run ruff check src/notewise tests
 
 # Type checking
-uv run ty check src/yt_study
+uv run ty check src/notewise
 
 # Security scanning
-uv run bandit -c pyproject.toml -r src/yt_study
+uv run bandit -c pyproject.toml -r src/notewise
 
 # Dependency hygiene
 uv run deptry .
@@ -232,7 +232,7 @@ uv run pytest tests/unit/cli/test_display.py -v
 The CI enforces **90% minimum coverage** on unit tests. Check coverage locally:
 
 ```bash
-uv run python -m pytest --cov=src/yt_study --cov-report=html
+uv run python -m pytest --cov=src/notewise --cov-report=html
 open htmlcov/index.html
 ```
 
@@ -303,20 +303,20 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 
 ## Reporting Bugs
 
-Use the [bug report template](https://github.com/whoisjayd/yt-study/issues/new?template=bug_report.yml). Please include:
+Use the [bug report template](https://github.com/whoisjayd/notewise/issues/new?template=bug_report.yml). Please include:
 
 - Your OS and Python version (`python --version`)
-- The yt-study version (`yt-study version`)
+- The notewise version (`notewise version`)
 - The command you ran (redact any API keys)
 - The full error output / log file content
 
-The current session log is shown in error messages; you can also find it with `yt-study logs --tail 50`.
+The current session log is shown in error messages; you can also find it with `notewise logs --tail 50`.
 
 ---
 
 ## Requesting Features
 
-Use the [feature request template](https://github.com/whoisjayd/yt-study/issues/new?template=feature_request.yml). Describe the problem you're trying to solve, not just the solution.
+Use the [feature request template](https://github.com/whoisjayd/notewise/issues/new?template=feature_request.yml). Describe the problem you're trying to solve, not just the solution.
 
 ---
 
