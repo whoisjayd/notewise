@@ -27,7 +27,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # Keeping this as a separate layer means dependency install is cached even
 # when application code changes.
 COPY src/ src/
-COPY pyproject.toml README.md uv.lock ./
+COPY pyproject.toml README.md uv.lock LICENSE ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --locked --no-dev --no-editable
