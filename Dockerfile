@@ -14,6 +14,7 @@ FROM ghcr.io/astral-sh/uv:latest AS uv
 # Stage 1 — builder
 # ---------------------------------------------------------------------------
 FROM python:${PYTHON_VERSION}-slim AS builder
+ARG APP_ROOT
 
 # Copy the uv binary from the official distroless image — no pip overhead
 COPY --from=uv /uv /uvx /bin/

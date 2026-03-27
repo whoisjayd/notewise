@@ -4,6 +4,16 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish from, such as v1.0.0
+        required: true
+        type: string
+
+env:
+  RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
 permissions:
   contents: read
@@ -22,6 +32,8 @@ jobs:
       contents: read
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -56,6 +68,8 @@ jobs:
             archive_ext: zip
     steps:
       - uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
       - uses: astral-sh/setup-uv@v7
         with:
           enable-cache: true
@@ -76,7 +90,7 @@ jobs:
       - name: Archive standalone binary
         shell: pwsh
         run: |
-          $releaseTag = "${{ github.ref_name }}"
+          $releaseTag = "${{ env.RELEASE_TAG }}"
           $artifactName = "${{ matrix.artifact_name }}"
           $archiveExt = "${{ matrix.archive_ext }}"
           $archName = "${{ runner.arch }}".ToLowerInvariant()
@@ -133,6 +147,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Check out release sources
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+
       - name: Download Python distribution artifacts
         uses: actions/download-artifact@v8
         with:
@@ -163,8 +182,8 @@ jobs:
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v2
-        if: startsWith(github.ref, 'refs/tags/')
         with:
+          tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true
           files: |
             dist/*.tar.gz
