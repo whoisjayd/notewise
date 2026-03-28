@@ -1,8 +1,14 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "willow",
+  "theme": "maple",
   "name": "NoteWise",
-  "description": "Convert YouTube videos and playlists into AI-powered study notes from your terminal.",
+  "description": "NoteWise is a CLI tool that converts YouTube videos and playlists into AI-powered Markdown study notes using Gemini, OpenAI, Anthropic, Groq, and more — no browser required.",
+  "logo": {
+    "light": "/logo.png",
+    "dark": "/logo.png",
+    "href": "https://notewise.click"
+  },
+  "favicon": "/favicon.ico",
   "colors": {
     "primary": "#2563eb",
     "light": "#60a5fa",
@@ -11,7 +17,46 @@
   "icons": {
     "library": "lucide"
   },
-  "favicon": "/favicon.svg",
+  "fonts": {
+    "family": "JetBrains Mono"
+  },
+  "appearance": {
+    "default": "system",
+    "strict": false
+  },
+  "background": {
+    "decoration": "gradient"
+  },
+  "seo": {
+    "indexing": "all",
+    "metatags": {
+      "og:type": "website",
+      "og:site_name": "NoteWise Docs",
+      "og:image": "https://notewise.click/og-image.png",
+      "og:image:width": "1200",
+      "og:image:height": "630",
+      "twitter:card": "summary_large_image",
+      "twitter:site": "@whynotjaydeep",
+      "twitter:creator": "@whynotjaydeep",
+      "twitter:image": "https://notewise.click/og-image.png",
+      "theme-color": "#2563eb"
+    }
+  },
+  "search": {
+    "prompt": "Search docs..."
+  },
+  "metadata": {
+    "timestamp": true
+  },
+  "styling": {
+    "eyebrows": "breadcrumbs",
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "tokyo-night"
+      }
+    }
+  },
   "navbar": {
     "links": [
       {
@@ -21,40 +66,177 @@
       {
         "label": "PyPI",
         "href": "https://pypi.org/project/notewise/"
+      },
+      {
+        "label": "Issues",
+        "href": "https://github.com/whoisjayd/notewise/issues"
       }
     ],
     "primary": {
       "type": "button",
       "label": "Get Started",
-      "href": "/getting-started/quickstart"
+      "href": "/docs/getting-started/quickstart"
     }
   },
   "footer": {
     "socials": {
       "github": "https://github.com/whoisjayd/notewise",
       "x": "https://x.com/whynotjaydeep"
+    },
+    "links": [
+      {
+        "header": "Product",
+        "items": [
+          {
+            "label": "Quick Start",
+            "href": "/docs/getting-started/quickstart"
+          },
+          {
+            "label": "Installation",
+            "href": "/docs/getting-started/installation"
+          },
+          {
+            "label": "Configuration",
+            "href": "/docs/getting-started/configuration"
+          },
+          {
+            "label": "Docker",
+            "href": "/docs/guides/docker"
+          }
+        ]
+      },
+      {
+        "header": "Reference",
+        "items": [
+          {
+            "label": "CLI Overview",
+            "href": "/cli/commands/overview"
+          },
+          {
+            "label": "process Command",
+            "href": "/cli/commands/process"
+          },
+          {
+            "label": "Config Schema",
+            "href": "/reference/schema-and-output/configuration"
+          },
+          {
+            "label": "Output Format",
+            "href": "/reference/schema-and-output/output-format"
+          },
+          {
+            "label": "Error Codes",
+            "href": "/reference/pipeline-and-errors/errors"
+          }
+        ]
+      },
+      {
+        "header": "Resources",
+        "items": [
+          {
+            "label": "GitHub",
+            "href": "https://github.com/whoisjayd/notewise"
+          },
+          {
+            "label": "PyPI Package",
+            "href": "https://pypi.org/project/notewise/"
+          },
+          {
+            "label": "Report an Issue",
+            "href": "https://github.com/whoisjayd/notewise/issues"
+          },
+          {
+            "label": "Changelog",
+            "href": "https://github.com/whoisjayd/notewise/releases"
+          }
+        ]
+      },
+      {
+        "header": "Guides",
+        "items": [
+          {
+            "label": "Single Video",
+            "href": "/docs/guides/single-video"
+          },
+          {
+            "label": "Playlists & Batch",
+            "href": "/docs/guides/playlists-and-batch"
+          },
+          {
+            "label": "Private Videos",
+            "href": "/docs/guides/private-videos"
+          },
+          {
+            "label": "Cache & Logs",
+            "href": "/docs/guides/cache-and-logs"
+          },
+          {
+            "label": "Troubleshooting",
+            "href": "/docs/guides/troubleshooting"
+          }
+        ]
+      }
+    ]
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "claude",
+      "chatgpt"
+    ],
+    "display": "header"
+  },
+  "redirects": [
+    {
+      "source": "/yt-study/:slug*",
+      "destination": "/docs/:slug*",
+      "permanent": true
+    },
+    {
+      "source": "/yt_study/:slug*",
+      "destination": "/docs/:slug*",
+      "permanent": true
+    },
+    {
+      "source": "/installation",
+      "destination": "/docs/getting-started/installation",
+      "permanent": true
+    },
+    {
+      "source": "/quickstart",
+      "destination": "/docs/getting-started/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/config",
+      "destination": "/docs/getting-started/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/cli",
+      "destination": "/cli/commands/overview",
+      "permanent": true
+    },
+    {
+      "source": "/reference",
+      "destination": "/reference/schema-and-output/configuration",
+      "permanent": true
+    }
+  ],
+  "integrations": {
+    "posthog": {
+      "apiKey": "phc_s1t8zhLtJc8PHsnbtBZJGIjZg3zGXhwsR5zNflrQZ6e",
+      "apiHost": "https://eu.i.posthog.com"
+    }
+  },
+  "errors": {
+    "404": {
+      "redirect": true,
+      "title": "Page not found",
+      "description": "The page you're looking for doesn't exist. Try [browsing the docs](/) or [searching](#) for what you need."
     }
   },
   "navigation": {
-    "global": {
-      "anchors": [
-        {
-          "anchor": "GitHub",
-          "href": "https://github.com/whoisjayd/notewise",
-          "icon": "github"
-        },
-        {
-          "anchor": "PyPI",
-          "href": "https://pypi.org/project/notewise/",
-          "icon": "package"
-        },
-        {
-          "anchor": "Issues",
-          "href": "https://github.com/whoisjayd/notewise/issues",
-          "icon": "circle-dot"
-        }
-      ]
-    },
     "tabs": [
       {
         "tab": "Docs",
@@ -64,31 +246,31 @@
             "group": "Getting Started",
             "icon": "rocket",
             "pages": [
-              "index",
-              "getting-started/installation",
-              "getting-started/quickstart",
-              "getting-started/configuration"
+              "docs/index",
+              "docs/getting-started/installation",
+              "docs/getting-started/quickstart",
+              "docs/getting-started/configuration"
             ]
           },
           {
             "group": "How It Works",
             "icon": "cpu",
             "pages": [
-              "concepts/architecture",
-              "concepts/pipeline",
-              "concepts/providers"
+              "docs/how-it-works/architecture",
+              "docs/how-it-works/pipeline",
+              "docs/how-it-works/providers"
             ]
           },
           {
             "group": "Guides",
             "icon": "compass",
             "pages": [
-              "guides/single-video",
-              "guides/playlists-and-batch",
-              "guides/private-videos",
-              "guides/docker",
-              "guides/cache-and-logs",
-              "guides/troubleshooting"
+              "docs/guides/single-video",
+              "docs/guides/playlists-and-batch",
+              "docs/guides/private-videos",
+              "docs/guides/docker",
+              "docs/guides/cache-and-logs",
+              "docs/guides/troubleshooting"
             ]
           }
         ]
@@ -101,22 +283,16 @@
             "group": "Commands",
             "icon": "square-terminal",
             "pages": [
-              "cli/overview",
-              "cli/process"
+              "cli/commands/overview",
+              "cli/commands/process"
             ]
           },
           {
-            "group": "Setup & Config",
+            "group": "Config & Operations",
             "icon": "sliders-horizontal",
             "pages": [
-              "cli/setup-and-config"
-            ]
-          },
-          {
-            "group": "Operations",
-            "icon": "activity",
-            "pages": [
-              "cli/operations"
+              "cli/config-and-operations/setup-and-config",
+              "cli/config-and-operations/operations"
             ]
           }
         ]
@@ -126,56 +302,47 @@
         "icon": "library",
         "groups": [
           {
-            "group": "Configuration",
-            "icon": "settings",
-            "pages": [
-              "reference/configuration"
-            ]
-          },
-          {
-            "group": "Output & Storage",
+            "group": "Schema & Output",
             "icon": "folder-open",
             "pages": [
-              "reference/output-format",
-              "reference/storage-schema"
+              "reference/schema-and-output/configuration",
+              "reference/schema-and-output/output-format",
+              "reference/schema-and-output/storage-schema"
             ]
           },
           {
             "group": "Pipeline & Errors",
             "icon": "triangle-alert",
             "pages": [
-              "reference/pipeline-events",
-              "reference/errors"
+              "reference/pipeline-and-errors/pipeline-events",
+              "reference/pipeline-and-errors/errors"
             ]
           }
         ]
       },
       {
         "tab": "Development",
-        "icon": "code-2",
+        "icon": "code-xml",
         "groups": [
           {
             "group": "Local Setup",
             "icon": "laptop",
             "pages": [
-              "development/setup",
-              "development/testing",
-              "development/ci-cd"
+              "development/local-setup/setup",
+              "development/local-setup/testing",
+              "development/local-setup/ci-cd"
             ]
           },
           {
             "group": "Contributing",
             "icon": "git-pull-request",
             "pages": [
-              "development/documentation",
-              "development/ai-discovery"
+              "development/contributing/documentation",
+              "development/contributing/ai-discovery"
             ]
           }
         ]
       }
     ]
-  },
-  "search": {
-    "prompt": "Search NoteWise docs..."
   }
 }

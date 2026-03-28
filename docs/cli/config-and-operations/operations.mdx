@@ -1,0 +1,131 @@
+---
+title: Operations Commands
+sidebarTitle: Operations
+icon: activity
+---
+
+<Info>
+  These commands are operational and diagnostic — they do not run note generation.
+</Info>
+
+---
+
+### Runtime inspection
+
+### `notewise info [URL]`
+
+Without a URL, prints runtime environment details. With a URL, inspects metadata without generating notes.
+
+```bash
+notewise info
+notewise info "https://youtube.com/watch?v=VIDEO_ID"
+notewise info "https://youtube.com/playlist?list=PLAYLIST_ID"
+```
+
+### `notewise doctor`
+
+Runs non-destructive health checks for config, cache database, logs, and key model requirements.
+
+```bash
+notewise doctor
+```
+
+### `notewise version`
+
+```bash
+notewise version
+```
+
+### `notewise update`
+
+Checks for the latest release and prints the best upgrade commands for your install style. It does not replace the running binary in place.
+
+```bash
+notewise update
+```
+
+---
+
+### Metrics and history
+
+### `notewise stats`
+
+```bash
+notewise stats                                       # all-time totals
+notewise stats --model gemini/gemini-2.5-flash       # filter by model
+notewise stats --since 7                             # last 7 days
+notewise stats --since 30d                           # last 30 days
+```
+
+### `notewise history`
+
+```bash
+notewise history               # last 10 processed videos
+notewise history --limit 25
+```
+
+---
+
+### Cache commands
+
+### `notewise cache`
+
+<Tabs>
+  <Tab title="Flag mode">
+    ```bash
+    notewise cache             # show database info
+    notewise cache --info
+    notewise cache --show VIDEO_ID
+    notewise cache --clear --yes
+    notewise cache --prune 30
+    ```
+  </Tab>
+  <Tab title="Subcommand mode">
+    ```bash
+    notewise cache show VIDEO_ID
+    notewise cache clear --yes
+    notewise cache prune --older-than 14
+    ```
+  </Tab>
+</Tabs>
+
+<Warning>
+  `cache --clear` deletes all local processing history, transcript cache entries, and export records from the SQLite database. Generated note files on disk are **not** affected.
+</Warning>
+
+---
+
+### Log commands
+
+### `notewise logs`
+
+```bash
+notewise logs              # list recent log files
+notewise logs --tail 80    # tail the latest log
+notewise logs --open       # open log directory in file manager
+```
+
+### `notewise logs clean`
+
+```bash
+notewise logs clean                    # remove logs older than 7 days
+notewise logs clean --older-than 30
+notewise logs clean --all              # remove all inactive logs
+```
+
+---
+
+### Command behavior notes
+
+- `cache` allows one action at a time (`--info`, `--show`, `--clear`, or `--prune`).
+- `--yes` is only valid with `cache --clear`.
+- All operations commands avoid network-heavy processing except `info URL`.
+
+<AccordionGroup>
+  <Accordion title="When should I use doctor vs info?">
+    Use `doctor` for environment and health diagnostics. Use `info URL` for metadata inspection of a specific video or playlist source.
+  </Accordion>
+  <Accordion title="Why are there two forms for cache commands?">
+    Flag mode and subcommand mode are equivalent — pick one style for scripts and team consistency.
+  </Accordion>
+</AccordionGroup>
