@@ -1,0 +1,109 @@
+---
+title: LLM Providers
+sidebarTitle: Providers
+icon: cpu
+---
+
+notewise supports a wide range of LLM providers via [LiteLLM](https://github.com/BerriAI/litellm). You can use any model LiteLLM supports by setting the `--model` flag or the `DEFAULT_MODEL` config key.
+
+---
+
+### Model string format
+
+```terminal
+provider/model-name
+```
+
+```bash
+gemini/gemini-2.5-flash
+openai/gpt-4o
+anthropic/claude-3-5-sonnet-20241022
+groq/llama3-70b-8192
+```
+
+Some models can be specified without a provider prefix when the name is unambiguous:
+
+```bash
+gpt-4o                        # routes to OpenAI
+claude-3-5-sonnet-20241022    # routes to Anthropic
+```
+
+---
+
+### Supported providers
+
+| Provider | Config Key | Default Model |
+| --- | --- | --- |
+| Google Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` |
+| OpenAI | `OPENAI_API_KEY` | `openai/gpt-4o` |
+| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-3-5-sonnet-20241022` |
+| Groq | `GROQ_API_KEY` | `groq/llama3-70b-8192` |
+| xAI | `XAI_API_KEY` | `xai/grok-4` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-large-latest` |
+| Cohere | `COHERE_API_KEY` | `cohere/command-r-plus` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat` |
+
+<Tip>
+  Gemini is the **default provider** — no billing required to start. Get your free API key at [AI Studio](https://aistudio.google.com/app/apikey).
+</Tip>
+
+---
+
+### Provider routing
+
+If the model string contains `/`, the prefix before the slash is the provider. Otherwise, heuristics based on model name prefixes are used.
+
+| Model Prefix | Provider | Required Env Var |
+| --- | --- | --- |
+| `gemini/*` | Google Gemini | `GEMINI_API_KEY` |
+| `vertex/*`, `vertex_ai/*` | Google Vertex | `GEMINI_API_KEY` |
+| `openai/*`, `gpt*`, `o1*`, `o3*`, `o4*` | OpenAI | `OPENAI_API_KEY` |
+| `anthropic/*`, `claude*` | Anthropic | `ANTHROPIC_API_KEY` |
+| `groq/*` | Groq | `GROQ_API_KEY` |
+| `xai/*`, `grok*` | xAI | `XAI_API_KEY` |
+| `mistral/*` | Mistral | `MISTRAL_API_KEY` |
+| `cohere/*`, `command*` | Cohere | `COHERE_API_KEY` |
+| `deepseek/*` | DeepSeek | `DEEPSEEK_API_KEY` |
+
+If the API key for the resolved provider is missing, the pipeline logs an error and the video fails.
+
+<Warning>
+  Unsupported gateway prefixes (`azure`, `openrouter`, `vercel_ai_gateway`) return `None` for the API key — these are not natively supported and must be configured via environment variables separately.
+</Warning>
+
+---
+
+### Quickstart: Changing the default model
+
+Edit `~/.notewise/config.env`:
+
+```bash
+DEFAULT_MODEL=gpt-4o
+OPENAI_API_KEY=sk-...
+```
+
+Or override for a single run:
+
+```bash
+notewise process "URL" --model gpt-4o
+```
+
+---
+
+### Usage tracking
+
+After each video, notewise records token usage and estimated cost in SQLite.
+
+```bash
+notewise stats                                       # all-time totals
+notewise stats --model gemini/gemini-2.5-flash       # filter by model
+notewise stats --since 7d                            # last 7 days
+```
+
+Cost estimates come from LiteLLM's `completion_cost()` and are approximate.
+
+---
+
+<Tip>
+  See also: [Configuration reference](/docs/getting-started/configuration) for all model and API key options.
+</Tip>

@@ -11,6 +11,8 @@
 <br /><br />
 
 [**Why NoteWise?**](#-why-notewise) · [**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Installation**](#-installation) · [**Configuration**](#configuration) · [**Providers**](#-supported-providers) · [**Contributing**](CONTRIBUTING.md)
+<br/>
+[**Web Docs**](https://docs.notewise.click)
 
 </div>
 

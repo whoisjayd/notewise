@@ -1,0 +1,147 @@
+---
+title: Playlists & Batch Processing
+sidebarTitle: Playlists & Batch
+icon: list
+---
+
+<Info>
+  Use this guide when processing many sources efficiently while preserving resumability and output consistency.
+</Info>
+
+---
+
+### Processing a playlist
+
+<Tabs>
+  <Tab title="Playlist URL">
+    ```bash
+    notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
+    ```
+  </Tab>
+  <Tab title="Watch + list URL">
+    ```bash
+    notewise process "https://www.youtube.com/watch?v=ID&list=PLxxxxxx"
+    ```
+  </Tab>
+  <Tab title="Bare playlist ID">
+    ```bash
+    notewise process PLxxxxxx
+    ```
+  </Tab>
+</Tabs>
+
+notewise will:
+1. Fetch the full playlist and enumerate all video IDs
+2. Process videos concurrently (up to `MAX_CONCURRENT_VIDEOS`, default 5)
+3. Write each video's notes as top-level Markdown files in the output directory
+
+---
+
+### Batch file processing
+
+Create a plain text file with one URL per line:
+
+```text
+# my-course.txt
+https://youtube.com/watch?v=VIDEO_ID_1
+https://youtube.com/watch?v=VIDEO_ID_2
+https://youtube.com/playlist?list=PLxxxxxx
+```
+
+<Note>
+  Blank lines and lines starting with `#` are ignored. Each entry can be a video URL, playlist URL, or bare ID.
+</Note>
+
+Then pass the file to `process`:
+
+```bash
+notewise process my-course.txt
+notewise process ~/course/urls.txt -o ~/course/notes
+```
+
+---
+
+### Output Structure
+
+<Tabs>
+  <Tab title="Standard Videos">
+    <Tree>
+      <Tree.Folder name="output" defaultOpen>
+        <Tree.File name="First Video Title.md" />
+        <Tree.File name="First Video Title_quiz.md" />
+        <Tree.File name="Second Video Title.md" />
+      </Tree.Folder>
+    </Tree>
+  </Tab>
+  <Tab title="Long Chapter-Aware Video">
+    <Tree>
+      <Tree.Folder name="output" defaultOpen>
+        <Tree.Folder name="Long Course Video" defaultOpen>
+          <Tree.File name="01_Intro.md" />
+          <Tree.File name="02_Deep Dive.md" />
+          <Tree.File name="Long Course Video_quiz.md" />
+        </Tree.Folder>
+      </Tree.Folder>
+    </Tree>
+  </Tab>
+</Tabs>
+
+---
+
+### Tuning concurrency
+
+```bash
+# In ~/.notewise/config.env:
+MAX_CONCURRENT_VIDEOS=10
+
+# Or per run:
+MAX_CONCURRENT_VIDEOS=2 notewise process my-course.txt
+```
+
+<Warning>
+  Higher concurrency processes faster but increases API costs per unit time and may hit YouTube rate limits. Use `YOUTUBE_REQUESTS_PER_MINUTE` to stay within limits.
+</Warning>
+
+---
+
+### Resuming an interrupted run
+
+By default, notewise skips videos already in cache with existing output targets — making re-runs safe:
+
+```bash
+notewise process my-course.txt   # run 1 — processes all
+notewise process my-course.txt   # run 2 — skips all (output exists)
+```
+
+Use `--force` to re-process everything:
+
+```bash
+notewise process my-course.txt --force
+```
+
+---
+
+### Useful batch flags
+
+```bash
+# Generate quizzes for every video
+notewise process my-course.txt --quiz
+
+# Non-interactive for cron / CI
+notewise process my-course.txt --no-ui 2>&1 | tee run.log
+
+# Use a specific model for the whole batch
+notewise process my-course.txt --model gpt-4o
+
+# High concurrency for large batches
+MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui
+```
+
+<AccordionGroup>
+  <Accordion title="What exactly gets skipped on re-run?">
+    A video is skipped when cache state indicates prior processing and expected output targets already exist on disk.
+  </Accordion>
+  <Accordion title="When should I lower concurrency?">
+    Lower `MAX_CONCURRENT_VIDEOS` when running on constrained hardware or when you are approaching provider or YouTube rate limits.
+  </Accordion>
+</AccordionGroup>

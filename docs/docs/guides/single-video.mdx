@@ -1,0 +1,76 @@
+---
+title: Process a Single Video
+sidebarTitle: Single Video
+icon: play
+---
+
+### Basic usage
+
+```bash
+notewise process "https://youtube.com/watch?v=VIDEO_ID"
+```
+
+Notes are written to `./output/<sanitized video title>.md` by default.
+
+---
+
+### Accepted URL formats
+
+```bash
+# Standard watch URL
+notewise process "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+
+# Short URL
+notewise process "https://youtu.be/dQw4w9WgXcQ"
+
+# Shorts URL
+notewise process "https://www.youtube.com/shorts/dQw4w9WgXcQ"
+
+# Embed URL
+notewise process "https://www.youtube.com/embed/dQw4w9WgXcQ"
+
+# Bare 11-character video ID
+notewise process dQw4w9WgXcQ
+```
+
+---
+
+### Common Options
+
+| Option | Flag | Description |
+| --- | --- | --- |
+| Output directory | `--output`, `-o` | Set output directory (default: `./output`) |
+| Model | `--model`, `-m` | Specify LLM model (e.g., `gpt-4o`, `groq/llama3-70b-8192`) |
+| Temperature | `--temperature`, `-t` | Set LLM temperature (0.0-1.0, default: 0.7) |
+| Quiz | `--quiz` | Generate quiz with 10-15 MCQ questions |
+| Export transcript | `--export-transcript` | Export transcript as `txt` or `json` |
+| Language | `--language`, `-l` | Set transcript language preference (can chain) |
+| Force reprocess | `--force`, `-F` | Re-process cached videos |
+| No UI | `--no-ui` | Disable Rich dashboard (for CI/cron) |
+
+---
+
+### Output Files
+
+<Tree>
+  <Tree.Folder name="output" defaultOpen>
+    <Tree.File name="Video Title.md" />
+    <Tree.File name="Video Title_quiz.md" />
+    <Tree.File name="Video Title_transcript.txt" />
+    <Tree.File name="Video Title_transcript.json" />
+  </Tree.Folder>
+</Tree>
+
+<Note>
+  Quiz and transcript files are only created when the corresponding flag is used. Chapter-aware videos (longer than 1 hour with chapter data) use a directory layout instead. See [Output Format](/docs/reference/schema-and-output/output-format).
+</Note>
+
+---
+
+### Inspect without processing
+
+```bash
+notewise info "https://youtube.com/watch?v=VIDEO_ID"
+```
+
+Fetches title, duration, chapter count, and available transcript languages — without generating any notes.

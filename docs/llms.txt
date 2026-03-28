@@ -1,78 +1,114 @@
-# notewise docs map for LLM retrieval
+# NoteWise Documentation Map for LLM Retrieval
 
-Project: notewise
-Primary entry: /index
-Description: Convert YouTube videos and playlists into AI-powered study notes from your terminal.
+Project: NoteWise
+Description: Convert YouTube videos and playlists into AI-powered Markdown study notes from your terminal.
+Primary Entry: https://notewise.click/docs
 
-## Purpose
-Fast retrieval index for assistants answering notewise usage, operations, and contribution questions.
-Prefer links here over guessing command flags, defaults, or output behavior.
+## Overview
 
-## First-stop pages by user intent
+NoteWise is a Python CLI application (Python 3.10+) that uses LLM APIs to generate study notes from YouTube content. It supports multiple providers via LiteLLM including Gemini (default), OpenAI, Anthropic, Groq, xAI, Mistral, Cohere, and DeepSeek.
 
-Single video or first run:
-- /getting-started/quickstart
-- /guides/single-video
-- /cli/process
+## First-Stop Pages by User Intent
 
-Playlists or batch jobs:
-- /guides/playlists-and-batch
-- /cli/process
-- /concepts/pipeline
+### Single Video or First Run
+- https://notewise.click/docs/getting-started/quickstart
+- https://notewise.click/docs/guides/single-video
+- https://notewise.click/docs/cli/commands/process
 
-Setup or configuration:
-- /cli/setup-and-config
-- /getting-started/configuration
-- /reference/configuration
+### Playlists or Batch Jobs
+- https://notewise.click/docs/guides/playlists-and-batch
+- https://notewise.click/docs/cli/commands/process
+- https://notewise.click/docs/how-it-works/pipeline
 
-Troubleshooting and operations:
-- /guides/troubleshooting
-- /cli/operations
-- /guides/cache-and-logs
-- /reference/errors
-- /reference/pipeline-events
+### Setup or Configuration
+- https://notewise.click/docs/cli/config-and-operations/setup-and-config
+- https://notewise.click/docs/getting-started/configuration
+- https://notewise.click/docs/how-it-works/providers
 
-Docker or CI:
-- /guides/docker
-- /development/ci-cd
+### Troubleshooting and Operations
+- https://notewise.click/docs/guides/troubleshooting
+- https://notewise.click/docs/cli/config-and-operations/operations
+- https://notewise.click/docs/guides/cache-and-logs
+- https://notewise.click/docs/reference/pipeline-and-errors/errors
+- https://notewise.click/docs/reference/pipeline-and-errors/pipeline-events
 
-## Canonical command documentation
+### Docker or CI
+- https://notewise.click/docs/guides/docker
+- https://notewise.click/docs/development/local-setup/ci-cd
 
-- /cli/overview
-- /cli/process
-- /cli/setup-and-config
-- /cli/operations
+## Canonical Command Documentation
 
-## Canonical behavior and architecture references
+- https://notewise.click/docs/cli/commands/overview - All CLI commands overview
+- https://notewise.click/docs/cli/commands/process - Main processing command
+- https://notewise.click/docs/cli/config-and-operations/setup-and-config - Setup wizard and config
+- https://notewise.click/docs/cli/config-and-operations/operations - Cache, logs, stats, history
 
-- /concepts/architecture
-- /concepts/pipeline
-- /concepts/providers
-- /reference/configuration
-- /reference/output-format
-- /reference/pipeline-events
-- /reference/storage-schema
-- /reference/errors
+## Canonical Behavior and Architecture References
 
-## Behavioral truths (avoid common mistakes)
+- https://notewise.click/docs/how-it-works/architecture - Layer overview and responsibilities
+- https://notewise.click/docs/how-it-works/pipeline - Step-by-step processing flow
+- https://notewise.click/docs/how-it-works/providers - Supported models and routing
+- https://notewise.click/docs/reference/schema-and-output/configuration - All config keys
+- https://notewise.click/docs/reference/schema-and-output/output-format - File naming and layout
+- https://notewise.click/docs/reference/pipeline-and-errors/pipeline-events - Event types
+- https://notewise.click/docs/reference/schema-and-output/storage-schema - SQLite schema
+- https://notewise.click/docs/reference/pipeline-and-errors/errors - Exception hierarchy
 
-- Standard video output: top-level in OUTPUT_DIR — <sanitized_title>.md
-- Quiz export: top-level in OUTPUT_DIR — <sanitized_title>_quiz.md
-- Transcript exports: top-level in OUTPUT_DIR — <sanitized_title>_transcript.txt or .json
-- Per-video folders: ONLY created for chapter-aware long videos (duration > 1 hour with chapter data)
-- Config file: ~/.notewise/config.env — override location with NOTEWISE_HOME
+## Behavioral Truths (Avoid Common Mistakes)
+
+### Output File Naming
+- Standard video: `<OUTPUT_DIR>/<sanitized_title>.md`
+- Quiz export: `<OUTPUT_DIR>/<sanitized_title>_quiz.md`
+- Transcript export: `<OUTPUT_DIR>/<sanitized_title>_transcript.txt` or `.json`
+- Chapter-aware (duration > 1 hour with chapters): `<OUTPUT_DIR>/<title>/01_<chapter>.md`, `02_<chapter>.md`, etc.
+
+### Configuration
+- Config file: `~/.notewise/config.env`
+- Override location: `NOTEWISE_HOME` environment variable
 - Priority: code defaults < config.env < environment variables < CLI flags
-- cache --clear removes database records only — does NOT delete generated note files
+
+### Cache Behavior
+- `cache --clear` removes database records ONLY
+- Does NOT delete generated note files on disk
+
+### YouTube
+- Private/age-gated videos require `--cookie-file`
+- Rate limit: `YOUTUBE_REQUESTS_PER_MINUTE` (default: 10)
+
+## Supported LLM Providers
+
+| Provider | Config Key | Default Model |
+| --- | --- | --- |
+| Google Gemini | GEMINI_API_KEY | gemini/gemini-2.5-flash |
+| OpenAI | OPENAI_API_KEY | openai/gpt-4o |
+| Anthropic | ANTHROPIC_API_KEY | anthropic/claude-3-5-sonnet-20241022 |
+| Groq | GROQ_API_KEY | groq/llama3-70b-8192 |
+| xAI | XAI_API_KEY | xai/grok-4 |
+| Mistral | MISTRAL_API_KEY | mistral/mistral-large-latest |
+| Cohere | COHERE_API_KEY | cohere/command-r-plus |
+| DeepSeek | DEEPSEEK_API_KEY | deepseek/deepseek-chat |
+
+## Concurrency Settings
+
+- Video-level: MAX_CONCURRENT_VIDEOS (default: 5)
+- Chapter-level: DEFAULT_MAX_CONCURRENT_CHAPTERS (default: 3)
+- YouTube requests: YOUTUBE_REQUESTS_PER_MINUTE (default: 10)
+
+## Contributor Path
+
+- https://notewise.click/docs/development/local-setup/setup - Local development setup
+- https://notewise.click/docs/development/local-setup/testing - Running tests
+- https://notewise.click/docs/development/local-setup/ci-cd - CI/CD pipeline
+- https://notewise.click/docs/development/contributing/documentation - Contributing to docs
+- https://notewise.click/docs/development/contributing/ai-discovery - AI discovery files
+
+## Implementation Reference
 
 For implementation-level confirmation:
-- src/notewise/cli/app.py
-- src/notewise/pipeline/_execution.py
-- src/notewise/pipeline/_artifacts.py
-
-## Contributor path
-
-- /development/setup
-- /development/documentation
-- /development/testing
-- /development/ci-cd
-- /development/ai-discovery
+- `src/notewise/cli/app.py` - CLI command definitions
+- `src/notewise/pipeline/core.py` - Pipeline orchestration
+- `src/notewise/pipeline/_execution.py` - Execution logic
+- `src/notewise/youtube/transcript.py` - Transcript fetching
+- `src/notewise/llm/provider.py` - LLM provider wrapper
+- `src/notewise/storage/repository.py` - SQLite operations
+- `src/notewise/config.py` - Configuration handling
