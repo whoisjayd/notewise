@@ -86,6 +86,8 @@ jobs:
             --onefile `
             --name notewise `
             --collect-all litellm `
+            --collect-all tiktoken `
+            --collect-submodules tiktoken_ext `
             --collect-data notewise.ui `
             --paths src `
             src/notewise/__main__.py
