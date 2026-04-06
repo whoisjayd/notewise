@@ -35,7 +35,7 @@ def test_check_for_updates_reports_available_release(monkeypatch) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.1.2"
+    assert status.latest_version == "1.1.3"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
 
