@@ -22,7 +22,7 @@ class _FakeResponse:
 def test_check_for_updates_reports_available_release(monkeypatch) -> None:
     payload = b"""
     {
-      "tag_name": "v1.0.1",
+            "tag_name": "v1.1.1",
       "html_url": "https://example.com/release"
     }
     """
@@ -35,7 +35,7 @@ def test_check_for_updates_reports_available_release(monkeypatch) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.0.1"
+    assert status.latest_version == "1.1.1"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
 
