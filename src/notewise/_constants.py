@@ -64,3 +64,4 @@ HTTP_BACKOFF_BASE = 1.0
 
 # ── Output ────────────────────────────────────────────────────────────────────
 MAX_FILENAME_LENGTH = 100
+LITELLM_MODELS_SNAPSHOT_FILENAME = "litellm_models_snapshot.json"

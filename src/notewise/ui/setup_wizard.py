@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -9,6 +10,7 @@ from notewise._constants import (
     CONFIG_FILENAME,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
+    LITELLM_MODELS_SNAPSHOT_FILENAME,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -146,6 +148,48 @@ def _resolve_console(console: Console | None) -> Console:
     return console if console is not None else Console()
 
 
+def _normalize_available_models(
+    provider_models: dict[str, list[str]],
+) -> dict[str, list[str]]:
+    """Normalize provider model lists and fill in curated fallbacks."""
+    normalized = {
+        provider: sorted({model for model in models if model})
+        for provider, models in provider_models.items()
+        if provider in PROVIDER_CONFIG
+    }
+
+    for provider, fallback_models in CURATED_FALLBACK_MODELS.items():
+        normalized[provider] = normalized.get(provider) or list(fallback_models)
+
+    return normalized
+
+
+def _load_bundled_model_snapshot() -> dict[str, list[str]]:
+    """Load the packaged LiteLLM model catalog when it is available."""
+    snapshot_path = Path(__file__).with_name(LITELLM_MODELS_SNAPSHOT_FILENAME)
+    if not snapshot_path.exists():
+        return {}
+
+    try:
+        with snapshot_path.open(encoding="utf-8") as snapshot_file:
+            snapshot = json.load(snapshot_file)
+    except (OSError, json.JSONDecodeError):
+        return {}
+
+    if not isinstance(snapshot, dict):
+        return {}
+
+    provider_models: dict[str, list[str]] = {}
+    for provider, models in snapshot.items():
+        if not isinstance(provider, str) or not isinstance(models, list):
+            continue
+        provider_models[provider] = [
+            model for model in models if isinstance(model, str) and model
+        ]
+
+    return _normalize_available_models(provider_models)
+
+
 def _strip_wrapped_quotes(value: str) -> str:
     """Remove one layer of matching quotes from config values."""
     if (
@@ -280,7 +324,16 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
 
 
 def get_available_models(*, console: Console | None = None) -> dict[str, list[str]]:
-    """Fetch available models from LiteLLM."""
+    """Load setup-ready models from the bundled snapshot or LiteLLM metadata."""
+    bundled_models = _load_bundled_model_snapshot()
+    if bundled_models:
+        return bundled_models
+
+    return _load_litellm_models(console=console)
+
+
+def _load_litellm_models(*, console: Console | None = None) -> dict[str, list[str]]:
+    """Fetch available models from LiteLLM when the bundled snapshot is absent."""
     active_console = _resolve_console(console)
     try:
         from litellm import model_cost, model_list
@@ -299,21 +352,14 @@ def get_available_models(*, console: Console | None = None) -> dict[str, list[st
                 provider_models[provider] = []
             provider_models[provider].append(model)
 
-        for provider, fallback_models in CURATED_FALLBACK_MODELS.items():
-            unique_models = sorted(set(provider_models.get(provider, [])))
-            provider_models[provider] = unique_models or list(fallback_models)
-
-        return provider_models
+        return _normalize_available_models(provider_models)
 
     except Exception as e:
         active_console.print(
             f"[yellow]⚠ Could not fetch models from LiteLLM: {e}[/yellow]"
         )
         active_console.print("[yellow]Using fallback model list...[/yellow]")
-        return {
-            provider: list(models)
-            for provider, models in CURATED_FALLBACK_MODELS.items()
-        }
+        return _normalize_available_models({})
 
 
 def _get_model_metadata(
@@ -576,7 +622,7 @@ def run_setup_wizard(
         Panel(
             "[bold cyan]🎓 notewise Setup Wizard[/bold cyan]\n\n"
             "Configure your LLM provider and API keys\n"
-            "[dim]Powered by LiteLLM - 400+ models supported[/dim]",
+            "[dim]Bundled LiteLLM model catalog for fast setup[/dim]",
             border_style="cyan",
             expand=False,
         )
@@ -591,7 +637,7 @@ def run_setup_wizard(
             active_console.print("[green]Using existing configuration.[/green]")
             return current_config
 
-    active_console.print("\n[cyan]Fetching available models from LiteLLM...[/cyan]")
+    active_console.print("\n[cyan]Loading available models...[/cyan]")
     available_models = get_available_models(console=active_console)
     active_console.print(
         f"[green]✓ Found {sum(len(m) for m in available_models.values())} "

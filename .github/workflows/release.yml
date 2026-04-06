@@ -85,6 +85,8 @@ jobs:
             --clean `
             --onefile `
             --name notewise `
+            --collect-all litellm `
+            --collect-data notewise.ui `
             --paths src `
             src/notewise/__main__.py
       - name: Archive standalone binary

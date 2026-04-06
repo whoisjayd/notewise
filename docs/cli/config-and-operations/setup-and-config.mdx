@@ -38,7 +38,7 @@ icon: sliders-horizontal
 
 ### `notewise setup`
 
-Run the interactive setup wizard. Prompts for your LLM provider and API key, then writes `~/.notewise/config.env`.
+Run the interactive setup wizard. It uses a bundled LiteLLM model catalog for fast startup and falls back to live metadata only when needed. Prompts for your LLM provider and API key, then writes `~/.notewise/config.env`.
 
 ```bash
 notewise setup

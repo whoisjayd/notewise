@@ -187,6 +187,25 @@ class TestConfigIO:
 class TestModelFetching:
     """Test fetching models from LiteLLM."""
 
+    def test_get_available_models_uses_bundled_snapshot(self):
+        """Bundled snapshot data should short-circuit the live LiteLLM fetch."""
+        bundled_models = {
+            provider: list(models)
+            for provider, models in CURATED_FALLBACK_MODELS.items()
+        }
+        bundled_models["gemini"] = [
+            "gemini/gemini-2.5-flash",
+            "gemini/gemini-2.5-pro",
+        ]
+
+        with patch(
+            "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+            return_value=bundled_models,
+        ):
+            models = get_available_models()
+
+        assert models == bundled_models
+
     def test_get_available_models_success(self):
         """Test successful fetch from litellm."""
         mock_models = [
@@ -197,7 +216,13 @@ class TestModelFetching:
             "unknown-provider/model",
         ]
 
-        with patch("litellm.model_list", mock_models, create=True):
+        with (
+            patch(
+                "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+                return_value={},
+            ),
+            patch("litellm.model_list", mock_models, create=True),
+        ):
             models = get_available_models()
 
             assert "openai" in models
@@ -210,27 +235,18 @@ class TestModelFetching:
     def test_get_available_models_failure(self):
         """Test fallback when litellm fails."""
         # Simulate import error or exception accessing model_list
-        with patch.dict("sys.modules", {"litellm": None}):
+        with (
+            patch(
+                "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+                return_value={},
+            ),
+            patch.dict("sys.modules", {"litellm": None}),
+        ):
             # We expect the function to catch the ImportError/ModuleNotFoundError
             # and return the fallback list.
             models = get_available_models()
 
             assert models == CURATED_FALLBACK_MODELS
-
-    def test_get_available_models_fallback_trigger(self):
-        """Trigger fallback manually by raising exception during processing."""
-        # We can patch PROVIDER_CONFIG to cause an error during iteration if we want,
-        # but let's just patch the import line.
-        with patch("builtins.__import__", side_effect=ImportError):
-            # This is too aggressive, it breaks everything.
-            pass
-
-        # Let's just check the fallback logic directly by forcing the exception block
-        # We can't easily force exception inside the function without clever mocking.
-        # Let's mock `PROVIDER_CONFIG` to include something that breaks? No.
-
-        # Let's skip complex import mocking and assume fallback works if we can't fetch.
-        pass
 
     def test_get_available_models_filters_only_deprecated_gateway_and_non_text(self):
         """Setup should keep preview models while still hiding deprecated ones."""
@@ -283,6 +299,10 @@ class TestModelFetching:
         }
 
         with (
+            patch(
+                "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+                return_value={},
+            ),
             patch("litellm.model_list", mock_models, create=True),
             patch("litellm.model_cost", mock_cost, create=True),
         ):

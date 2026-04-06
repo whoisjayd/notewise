@@ -21,7 +21,7 @@ classifiers = [
     "Topic :: Multimedia :: Video",
 ]
 dependencies = [
-    "litellm>=1.81.1",
+    "litellm==1.83.3",
     "typer>=0.21.1",
     "rich>=13.9.4",
     "aiolimiter>=1.2.1",
@@ -89,6 +89,7 @@ select = [
     "SIM", # flake8-simplify
 ]
 ignore = []
+per-file-ignores = { "src/notewise/cli/_banner.py" = ["E501"] }
 
 [tool.ruff.lint.isort]
 known-first-party = ["notewise"]
