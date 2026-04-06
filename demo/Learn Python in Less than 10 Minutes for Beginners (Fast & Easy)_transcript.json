@@ -1,0 +1,1683 @@
+{
+  "video_id": "fWjsdhR3z3c",
+  "language": "English (auto-generated)",
+  "language_code": "en",
+  "is_generated": true,
+  "segments": [
+    {
+      "text": "what is up guys in this video i'm going",
+      "start": 0.16,
+      "duration": 3.279
+    },
+    {
+      "text": "to be showing you how you can get",
+      "start": 2.24,
+      "duration": 2.4
+    },
+    {
+      "text": "started with python",
+      "start": 3.439,
+      "duration": 3.36
+    },
+    {
+      "text": "in less than 10 minutes and i'm going to",
+      "start": 4.64,
+      "duration": 4.24
+    },
+    {
+      "text": "be using python 3.8 for this",
+      "start": 6.799,
+      "duration": 5.361
+    },
+    {
+      "text": "along with pycharm as my code editor",
+      "start": 8.88,
+      "duration": 5.12
+    },
+    {
+      "text": "you can just search these on google and",
+      "start": 12.16,
+      "duration": 3.28
+    },
+    {
+      "text": "they will pop up immediately",
+      "start": 14.0,
+      "duration": 4.0
+    },
+    {
+      "text": "they are free and open source so",
+      "start": 15.44,
+      "duration": 4.32
+    },
+    {
+      "text": "definitely do check those out",
+      "start": 18.0,
+      "duration": 3.6
+    },
+    {
+      "text": "otherwise let's get started immediately",
+      "start": 19.76,
+      "duration": 3.519
+    },
+    {
+      "text": "with the first thing you should know in",
+      "start": 21.6,
+      "duration": 3.919
+    },
+    {
+      "text": "python and that is how to assign values",
+      "start": 23.279,
+      "duration": 2.561
+    },
+    {
+      "text": "to",
+      "start": 25.519,
+      "duration": 2.721
+    },
+    {
+      "text": "variables so to create a variable all",
+      "start": 25.84,
+      "duration": 3.92
+    },
+    {
+      "text": "you have to do is decide on a name such",
+      "start": 28.24,
+      "duration": 1.84
+    },
+    {
+      "text": "as",
+      "start": 29.76,
+      "duration": 2.72
+    },
+    {
+      "text": "item and then you can just assign it a",
+      "start": 30.08,
+      "duration": 3.12
+    },
+    {
+      "text": "value",
+      "start": 32.48,
+      "duration": 3.36
+    },
+    {
+      "text": "this is a string and a string is just",
+      "start": 33.2,
+      "duration": 4.24
+    },
+    {
+      "text": "any form of text",
+      "start": 35.84,
+      "duration": 3.68
+    },
+    {
+      "text": "for the program to read and you also",
+      "start": 37.44,
+      "duration": 3.119
+    },
+    {
+      "text": "need to keep in mind",
+      "start": 39.52,
+      "duration": 4.08
+    },
+    {
+      "text": "that python is a case sensitive language",
+      "start": 40.559,
+      "duration": 4.881
+    },
+    {
+      "text": "which means item with a small",
+      "start": 43.6,
+      "duration": 4.32
+    },
+    {
+      "text": "i and item with a big i are going to",
+      "start": 45.44,
+      "duration": 3.119
+    },
+    {
+      "text": "mean",
+      "start": 47.92,
+      "duration": 3.2
+    },
+    {
+      "text": "absolutely different things and also a",
+      "start": 48.559,
+      "duration": 3.52
+    },
+    {
+      "text": "naming convention",
+      "start": 51.12,
+      "duration": 4.16
+    },
+    {
+      "text": "in python is to add an underscore every",
+      "start": 52.079,
+      "duration": 4.8
+    },
+    {
+      "text": "time you have more than one word",
+      "start": 55.28,
+      "duration": 4.56
+    },
+    {
+      "text": "so if we say item name you want to add",
+      "start": 56.879,
+      "duration": 4.561
+    },
+    {
+      "text": "this underscore over here",
+      "start": 59.84,
+      "duration": 3.76
+    },
+    {
+      "text": "and we can just say orange so now we",
+      "start": 61.44,
+      "duration": 3.92
+    },
+    {
+      "text": "have a few strings assigned",
+      "start": 63.6,
+      "duration": 3.6
+    },
+    {
+      "text": "to three different variables let's go",
+      "start": 65.36,
+      "duration": 3.119
+    },
+    {
+      "text": "ahead and print",
+      "start": 67.2,
+      "duration": 3.36
+    },
+    {
+      "text": "first the difference between item and",
+      "start": 68.479,
+      "duration": 3.601
+    },
+    {
+      "text": "item just to show you",
+      "start": 70.56,
+      "duration": 3.919
+    },
+    {
+      "text": "that there is a difference so we'll go",
+      "start": 72.08,
+      "duration": 4.32
+    },
+    {
+      "text": "ahead and click on run",
+      "start": 74.479,
+      "duration": 4.081
+    },
+    {
+      "text": "and you'll notice it will say banana and",
+      "start": 76.4,
+      "duration": 3.039
+    },
+    {
+      "text": "apple",
+      "start": 78.56,
+      "duration": 2.96
+    },
+    {
+      "text": "now let's go ahead and print another",
+      "start": 79.439,
+      "duration": 3.761
+    },
+    {
+      "text": "string which this time is going to be",
+      "start": 81.52,
+      "duration": 2.239
+    },
+    {
+      "text": "hello",
+      "start": 83.2,
+      "duration": 3.76
+    },
+    {
+      "text": "and we're going to add a plus and",
+      "start": 83.759,
+      "duration": 5.121
+    },
+    {
+      "text": "the item name so as you can see we can",
+      "start": 86.96,
+      "duration": 3.76
+    },
+    {
+      "text": "actually combine text and when we print",
+      "start": 88.88,
+      "duration": 4.239
+    },
+    {
+      "text": "that it's going to say hello orange",
+      "start": 90.72,
+      "duration": 5.12
+    },
+    {
+      "text": "next we have data types so the first one",
+      "start": 93.119,
+      "duration": 4.96
+    },
+    {
+      "text": "is the integer which is just any number",
+      "start": 95.84,
+      "duration": 3.76
+    },
+    {
+      "text": "and you're going to notice it being",
+      "start": 98.079,
+      "duration": 1.921
+    },
+    {
+      "text": "written",
+      "start": 99.6,
+      "duration": 3.28
+    },
+    {
+      "text": "in blue then we have strings which as i",
+      "start": 100.0,
+      "duration": 4.799
+    },
+    {
+      "text": "showed you earlier is just any text",
+      "start": 102.88,
+      "duration": 4.239
+    },
+    {
+      "text": "inside quotation marks then we have",
+      "start": 104.799,
+      "duration": 4.32
+    },
+    {
+      "text": "booleans which is just a simple",
+      "start": 107.119,
+      "duration": 4.0
+    },
+    {
+      "text": "true or false so as you can see we can",
+      "start": 109.119,
+      "duration": 3.68
+    },
+    {
+      "text": "just type in false here",
+      "start": 111.119,
+      "duration": 4.401
+    },
+    {
+      "text": "or true here and that's all that it is",
+      "start": 112.799,
+      "duration": 4.32
+    },
+    {
+      "text": "it just says true or false",
+      "start": 115.52,
+      "duration": 3.44
+    },
+    {
+      "text": "and the final one you should know for",
+      "start": 117.119,
+      "duration": 3.121
+    },
+    {
+      "text": "getting started",
+      "start": 118.96,
+      "duration": 3.28
+    },
+    {
+      "text": "is list which all you have to do is",
+      "start": 120.24,
+      "duration": 4.159
+    },
+    {
+      "text": "create a pair of angle brackets",
+      "start": 122.24,
+      "duration": 4.08
+    },
+    {
+      "text": "and insert the values you want inside",
+      "start": 124.399,
+      "duration": 3.601
+    },
+    {
+      "text": "here and it can be a mixture between",
+      "start": 126.32,
+      "duration": 4.559
+    },
+    {
+      "text": "numbers booleans and so on but for this",
+      "start": 128.0,
+      "duration": 4.64
+    },
+    {
+      "text": "example we'll just keep it simple",
+      "start": 130.879,
+      "duration": 4.161
+    },
+    {
+      "text": "and write a few strings then if we go",
+      "start": 132.64,
+      "duration": 3.679
+    },
+    {
+      "text": "ahead and print these",
+      "start": 135.04,
+      "duration": 2.839
+    },
+    {
+      "text": "you're going to notice that we will get",
+      "start": 136.319,
+      "duration": 3.28
+    },
+    {
+      "text": "2021 text",
+      "start": 137.879,
+      "duration": 4.281
+    },
+    {
+      "text": "false and the list but let's move on to",
+      "start": 139.599,
+      "duration": 4.64
+    },
+    {
+      "text": "an example that we want to print these",
+      "start": 142.16,
+      "duration": 2.719
+    },
+    {
+      "text": "values",
+      "start": 144.239,
+      "duration": 3.36
+    },
+    {
+      "text": "combined so let's say name is mario the",
+      "start": 144.879,
+      "duration": 3.36
+    },
+    {
+      "text": "string",
+      "start": 147.599,
+      "duration": 3.441
+    },
+    {
+      "text": "number is going to equal 22. so you're",
+      "start": 148.239,
+      "duration": 4.881
+    },
+    {
+      "text": "going to notice 2021",
+      "start": 151.04,
+      "duration": 4.16
+    },
+    {
+      "text": "is a blue number and this one is green",
+      "start": 153.12,
+      "duration": 3.839
+    },
+    {
+      "text": "because this is considered text while",
+      "start": 155.2,
+      "duration": 2.8
+    },
+    {
+      "text": "this is considered",
+      "start": 156.959,
+      "duration": 3.441
+    },
+    {
+      "text": "an integer so what we need to do is",
+      "start": 158.0,
+      "duration": 4.16
+    },
+    {
+      "text": "actually convert them into the correct",
+      "start": 160.4,
+      "duration": 3.52
+    },
+    {
+      "text": "types before combining them",
+      "start": 162.16,
+      "duration": 3.359
+    },
+    {
+      "text": "so to do that we can just go ahead and",
+      "start": 163.92,
+      "duration": 3.76
+    },
+    {
+      "text": "type in print name plus",
+      "start": 165.519,
+      "duration": 4.8
+    },
+    {
+      "text": "the string value of integer so it's",
+      "start": 167.68,
+      "duration": 4.639
+    },
+    {
+      "text": "going to convert the integer to a string",
+      "start": 170.319,
+      "duration": 3.601
+    },
+    {
+      "text": "so that we can combine these two texts",
+      "start": 172.319,
+      "duration": 3.2
+    },
+    {
+      "text": "together if we remove that",
+      "start": 173.92,
+      "duration": 3.44
+    },
+    {
+      "text": "and only write integer you're going to",
+      "start": 175.519,
+      "duration": 3.681
+    },
+    {
+      "text": "notice we are going to get an exception",
+      "start": 177.36,
+      "duration": 3.519
+    },
+    {
+      "text": "that says we cannot do that",
+      "start": 179.2,
+      "duration": 3.52
+    },
+    {
+      "text": "and the same thing goes for the string",
+      "start": 180.879,
+      "duration": 3.841
+    },
+    {
+      "text": "number pretend we want to add the value",
+      "start": 182.72,
+      "duration": 3.68
+    },
+    {
+      "text": "of 10 to the string number the editor",
+      "start": 184.72,
+      "duration": 3.04
+    },
+    {
+      "text": "will be nice enough to tell you you",
+      "start": 186.4,
+      "duration": 2.64
+    },
+    {
+      "text": "shouldn't do that",
+      "start": 187.76,
+      "duration": 3.52
+    },
+    {
+      "text": "and we should just put some parentheses",
+      "start": 189.04,
+      "duration": 3.279
+    },
+    {
+      "text": "there and type in",
+      "start": 191.28,
+      "duration": 3.039
+    },
+    {
+      "text": "in ahead of that so we can convert it to",
+      "start": 192.319,
+      "duration": 4.721
+    },
+    {
+      "text": "an integer and add it easily",
+      "start": 194.319,
+      "duration": 4.801
+    },
+    {
+      "text": "next let's move on to math so we will",
+      "start": 197.04,
+      "duration": 4.16
+    },
+    {
+      "text": "create two variables one will be",
+      "start": 199.12,
+      "duration": 4.64
+    },
+    {
+      "text": "10 and one will be five and to do math",
+      "start": 201.2,
+      "duration": 3.2
+    },
+    {
+      "text": "in python",
+      "start": 203.76,
+      "duration": 2.64
+    },
+    {
+      "text": "it's very self-explanatory as you can",
+      "start": 204.4,
+      "duration": 3.919
+    },
+    {
+      "text": "see to do addition you just need to add",
+      "start": 206.4,
+      "duration": 2.8
+    },
+    {
+      "text": "a plus symbol",
+      "start": 208.319,
+      "duration": 2.961
+    },
+    {
+      "text": "for the difference you just add a minus",
+      "start": 209.2,
+      "duration": 4.08
+    },
+    {
+      "text": "symbol to multiply you add an",
+      "start": 211.28,
+      "duration": 4.879
+    },
+    {
+      "text": "asterisk to divide you add a slash and",
+      "start": 213.28,
+      "duration": 4.72
+    },
+    {
+      "text": "if you want the exponential power",
+      "start": 216.159,
+      "duration": 4.401
+    },
+    {
+      "text": "just add two asterisks and you'll notice",
+      "start": 218.0,
+      "duration": 4.0
+    },
+    {
+      "text": "that if we print all of these",
+      "start": 220.56,
+      "duration": 2.88
+    },
+    {
+      "text": "you're going to get a very quick",
+      "start": 222.0,
+      "duration": 4.4
+    },
+    {
+      "text": "calculator so of course 10 plus 5 is 15",
+      "start": 223.44,
+      "duration": 5.92
+    },
+    {
+      "text": "a minus b is going to be 5 and so on you",
+      "start": 226.4,
+      "duration": 4.72
+    },
+    {
+      "text": "will get the values that correspond",
+      "start": 229.36,
+      "duration": 4.64
+    },
+    {
+      "text": "to those operators okay next let's go",
+      "start": 231.12,
+      "duration": 3.44
+    },
+    {
+      "text": "ahead",
+      "start": 234.0,
+      "duration": 3.519
+    },
+    {
+      "text": "and create a logic statement so we're",
+      "start": 234.56,
+      "duration": 3.759
+    },
+    {
+      "text": "going to use",
+      "start": 237.519,
+      "duration": 4.241
+    },
+    {
+      "text": "these two values so is happy is false",
+      "start": 238.319,
+      "duration": 5.041
+    },
+    {
+      "text": "age is 28.",
+      "start": 241.76,
+      "duration": 3.119
+    },
+    {
+      "text": "let's pretend we want something to",
+      "start": 243.36,
+      "duration": 4.56
+    },
+    {
+      "text": "happen if the age is more than 21",
+      "start": 244.879,
+      "duration": 6.321
+    },
+    {
+      "text": "we'll say print you are old and if they",
+      "start": 247.92,
+      "duration": 4.08
+    },
+    {
+      "text": "are not old",
+      "start": 251.2,
+      "duration": 3.92
+    },
+    {
+      "text": "we can also type in l if the age",
+      "start": 252.0,
+      "duration": 6.32
+    },
+    {
+      "text": "is equal to 18 we will tell them you are",
+      "start": 255.12,
+      "duration": 4.32
+    },
+    {
+      "text": "getting old",
+      "start": 258.32,
+      "duration": 2.8
+    },
+    {
+      "text": "and if it's neither of those we can go",
+      "start": 259.44,
+      "duration": 3.039
+    },
+    {
+      "text": "ahead and say",
+      "start": 261.12,
+      "duration": 3.92
+    },
+    {
+      "text": "you are still young and the same thing",
+      "start": 262.479,
+      "duration": 3.361
+    },
+    {
+      "text": "goes with the",
+      "start": 265.04,
+      "duration": 3.36
+    },
+    {
+      "text": "is happy statement so we type in if the",
+      "start": 265.84,
+      "duration": 4.079
+    },
+    {
+      "text": "person is happy",
+      "start": 268.4,
+      "duration": 4.96
+    },
+    {
+      "text": "we can write you are happy else they are",
+      "start": 269.919,
+      "duration": 4.801
+    },
+    {
+      "text": "probably not happy",
+      "start": 273.36,
+      "duration": 4.24
+    },
+    {
+      "text": "so we will just write you are not happy",
+      "start": 274.72,
+      "duration": 4.479
+    },
+    {
+      "text": "and when we play it it's going to say",
+      "start": 277.6,
+      "duration": 3.599
+    },
+    {
+      "text": "they are not happy because is happy",
+      "start": 279.199,
+      "duration": 5.041
+    },
+    {
+      "text": "is false and if we set this to true it's",
+      "start": 281.199,
+      "duration": 4.0
+    },
+    {
+      "text": "going to change to",
+      "start": 284.24,
+      "duration": 3.76
+    },
+    {
+      "text": "you are happy so the if statement just",
+      "start": 285.199,
+      "duration": 4.641
+    },
+    {
+      "text": "takes into account whether a statement",
+      "start": 288.0,
+      "duration": 2.8
+    },
+    {
+      "text": "is true or",
+      "start": 289.84,
+      "duration": 3.04
+    },
+    {
+      "text": "false and depending on that it's going",
+      "start": 290.8,
+      "duration": 4.08
+    },
+    {
+      "text": "to give the outcome of the values",
+      "start": 292.88,
+      "duration": 3.759
+    },
+    {
+      "text": "and the if else statement is going to",
+      "start": 294.88,
+      "duration": 3.599
+    },
+    {
+      "text": "probably be your most",
+      "start": 296.639,
+      "duration": 4.4
+    },
+    {
+      "text": "used logic next let's move on to the for",
+      "start": 298.479,
+      "duration": 3.041
+    },
+    {
+      "text": "loop",
+      "start": 301.039,
+      "duration": 4.321
+    },
+    {
+      "text": "so for i in range of three which means",
+      "start": 301.52,
+      "duration": 4.64
+    },
+    {
+      "text": "it's going to",
+      "start": 305.36,
+      "duration": 3.76
+    },
+    {
+      "text": "loop over three values we want to print",
+      "start": 306.16,
+      "duration": 5.44
+    },
+    {
+      "text": "hello and we can add a comma here",
+      "start": 309.12,
+      "duration": 5.359
+    },
+    {
+      "text": "and the value of i so if we print this",
+      "start": 311.6,
+      "duration": 3.92
+    },
+    {
+      "text": "you're going to notice",
+      "start": 314.479,
+      "duration": 3.601
+    },
+    {
+      "text": "it's going to say hello0 hello1 hello2",
+      "start": 315.52,
+      "duration": 3.2
+    },
+    {
+      "text": "because",
+      "start": 318.08,
+      "duration": 3.04
+    },
+    {
+      "text": "in programming the index always starts",
+      "start": 318.72,
+      "duration": 3.52
+    },
+    {
+      "text": "at 0.",
+      "start": 321.12,
+      "duration": 2.639
+    },
+    {
+      "text": "so if you actually want that to start at",
+      "start": 322.24,
+      "duration": 3.36
+    },
+    {
+      "text": "one you're going to have to manually add",
+      "start": 323.759,
+      "duration": 2.241
+    },
+    {
+      "text": "one",
+      "start": 325.6,
+      "duration": 3.2
+    },
+    {
+      "text": "to i so now you get hello one hello to",
+      "start": 326.0,
+      "duration": 3.52
+    },
+    {
+      "text": "hello three",
+      "start": 328.8,
+      "duration": 3.2
+    },
+    {
+      "text": "and also just so you know what range is",
+      "start": 329.52,
+      "duration": 3.6
+    },
+    {
+      "text": "we can go down here",
+      "start": 332.0,
+      "duration": 3.44
+    },
+    {
+      "text": "and we can go ahead and type in print",
+      "start": 333.12,
+      "duration": 3.28
+    },
+    {
+      "text": "range",
+      "start": 335.44,
+      "duration": 3.759
+    },
+    {
+      "text": "of three so you're going to notice it's",
+      "start": 336.4,
+      "duration": 4.799
+    },
+    {
+      "text": "going to create a range object which is",
+      "start": 339.199,
+      "duration": 3.761
+    },
+    {
+      "text": "going to have the values from 0",
+      "start": 341.199,
+      "duration": 4.481
+    },
+    {
+      "text": "to 3 so this can iterate three times",
+      "start": 342.96,
+      "duration": 4.56
+    },
+    {
+      "text": "over that but you should also know",
+      "start": 345.68,
+      "duration": 4.239
+    },
+    {
+      "text": "that this works for lists so we can",
+      "start": 347.52,
+      "duration": 3.519
+    },
+    {
+      "text": "create a name list",
+      "start": 349.919,
+      "duration": 4.641
+    },
+    {
+      "text": "and we can type in for name in name list",
+      "start": 351.039,
+      "duration": 6.401
+    },
+    {
+      "text": "we can print the name next we have a",
+      "start": 354.56,
+      "duration": 4.96
+    },
+    {
+      "text": "while loop so we're just gonna type in i",
+      "start": 357.44,
+      "duration": 5.28
+    },
+    {
+      "text": "equals zero and while i is less than",
+      "start": 359.52,
+      "duration": 3.84
+    },
+    {
+      "text": "five",
+      "start": 362.72,
+      "duration": 3.599
+    },
+    {
+      "text": "we're going to increment the value of i",
+      "start": 363.36,
+      "duration": 3.52
+    },
+    {
+      "text": "by one",
+      "start": 366.319,
+      "duration": 2.481
+    },
+    {
+      "text": "each time it goes in this loop and",
+      "start": 366.88,
+      "duration": 3.92
+    },
+    {
+      "text": "finally we want to print the value of i",
+      "start": 368.8,
+      "duration": 3.44
+    },
+    {
+      "text": "so what you should get",
+      "start": 370.8,
+      "duration": 3.6
+    },
+    {
+      "text": "are five values printed out just like",
+      "start": 372.24,
+      "duration": 4.239
+    },
+    {
+      "text": "this because as soon as this statement",
+      "start": 374.4,
+      "duration": 3.2
+    },
+    {
+      "text": "becomes false",
+      "start": 376.479,
+      "duration": 3.601
+    },
+    {
+      "text": "it's going to exit out of this loop and",
+      "start": 377.6,
+      "duration": 4.48
+    },
+    {
+      "text": "just terminate the program but a reason",
+      "start": 380.08,
+      "duration": 4.16
+    },
+    {
+      "text": "to use this is because you can create an",
+      "start": 382.08,
+      "duration": 4.239
+    },
+    {
+      "text": "infinite loop such as while true and",
+      "start": 384.24,
+      "duration": 3.6
+    },
+    {
+      "text": "that's never going to be false and",
+      "start": 386.319,
+      "duration": 2.961
+    },
+    {
+      "text": "inside here we're going to type in",
+      "start": 387.84,
+      "duration": 4.24
+    },
+    {
+      "text": "user input and that's going to equal an",
+      "start": 389.28,
+      "duration": 3.44
+    },
+    {
+      "text": "input",
+      "start": 392.08,
+      "duration": 4.0
+    },
+    {
+      "text": "that says enter something and if",
+      "start": 392.72,
+      "duration": 6.56
+    },
+    {
+      "text": "the user input is equal to the string of",
+      "start": 396.08,
+      "duration": 5.6
+    },
+    {
+      "text": "zero then we're going to print we are",
+      "start": 399.28,
+      "duration": 3.12
+    },
+    {
+      "text": "done here",
+      "start": 401.68,
+      "duration": 3.92
+    },
+    {
+      "text": "and we are also going to break",
+      "start": 402.4,
+      "duration": 5.6
+    },
+    {
+      "text": "and what break does is just cancel the",
+      "start": 405.6,
+      "duration": 3.52
+    },
+    {
+      "text": "loop which means",
+      "start": 408.0,
+      "duration": 3.36
+    },
+    {
+      "text": "if we type in zero this loop is no",
+      "start": 409.12,
+      "duration": 3.44
+    },
+    {
+      "text": "longer going to be valid",
+      "start": 411.36,
+      "duration": 2.559
+    },
+    {
+      "text": "and it's going to exit out of the",
+      "start": 412.56,
+      "duration": 3.52
+    },
+    {
+      "text": "program otherwise it's going to loop",
+      "start": 413.919,
+      "duration": 4.0
+    },
+    {
+      "text": "forever and if we actually play the",
+      "start": 416.08,
+      "duration": 3.44
+    },
+    {
+      "text": "program you're going to notice that",
+      "start": 417.919,
+      "duration": 3.201
+    },
+    {
+      "text": "finally we can add some inputs so we can",
+      "start": 419.52,
+      "duration": 2.72
+    },
+    {
+      "text": "type in 10",
+      "start": 421.12,
+      "duration": 3.28
+    },
+    {
+      "text": "we can do two we can type in whatever",
+      "start": 422.24,
+      "duration": 3.12
+    },
+    {
+      "text": "that is",
+      "start": 424.4,
+      "duration": 3.12
+    },
+    {
+      "text": "but as soon as we type in zero it's",
+      "start": 425.36,
+      "duration": 4.0
+    },
+    {
+      "text": "going to exit the loop because",
+      "start": 427.52,
+      "duration": 4.48
+    },
+    {
+      "text": "it will reach this break statement and",
+      "start": 429.36,
+      "duration": 4.08
+    },
+    {
+      "text": "the program will finish",
+      "start": 432.0,
+      "duration": 4.24
+    },
+    {
+      "text": "moving on to functions to create a",
+      "start": 433.44,
+      "duration": 3.28
+    },
+    {
+      "text": "function",
+      "start": 436.24,
+      "duration": 2.16
+    },
+    {
+      "text": "all you have to do is use the def",
+      "start": 436.72,
+      "duration": 3.599
+    },
+    {
+      "text": "keyword and just name the function",
+      "start": 438.4,
+      "duration": 3.519
+    },
+    {
+      "text": "however you like of course i'm going to",
+      "start": 440.319,
+      "duration": 1.921
+    },
+    {
+      "text": "use",
+      "start": 441.919,
+      "duration": 2.4
+    },
+    {
+      "text": "the underscore naming convention and",
+      "start": 442.24,
+      "duration": 4.239
+    },
+    {
+      "text": "this function is only going to be used",
+      "start": 444.319,
+      "duration": 4.081
+    },
+    {
+      "text": "to say hello to the user so",
+      "start": 446.479,
+      "duration": 4.0
+    },
+    {
+      "text": "here we can go ahead and type in print",
+      "start": 448.4,
+      "duration": 3.76
+    },
+    {
+      "text": "hey there and we're going to insert the",
+      "start": 450.479,
+      "duration": 3.28
+    },
+    {
+      "text": "name so you might be wondering",
+      "start": 452.16,
+      "duration": 3.12
+    },
+    {
+      "text": "what are functions and what do we use",
+      "start": 453.759,
+      "duration": 3.121
+    },
+    {
+      "text": "functions for well functions are just",
+      "start": 455.28,
+      "duration": 2.8
+    },
+    {
+      "text": "used to",
+      "start": 456.88,
+      "duration": 3.12
+    },
+    {
+      "text": "reuse your code in many different",
+      "start": 458.08,
+      "duration": 3.119
+    },
+    {
+      "text": "instances because",
+      "start": 460.0,
+      "duration": 4.0
+    },
+    {
+      "text": "the main point of programming is to",
+      "start": 461.199,
+      "duration": 3.84
+    },
+    {
+      "text": "reuse your code",
+      "start": 464.0,
+      "duration": 3.52
+    },
+    {
+      "text": "as much as possible you want to maximize",
+      "start": 465.039,
+      "duration": 3.6
+    },
+    {
+      "text": "how often you can",
+      "start": 467.52,
+      "duration": 3.04
+    },
+    {
+      "text": "reuse the same line of code without",
+      "start": 468.639,
+      "duration": 3.601
+    },
+    {
+      "text": "having to rewrite it",
+      "start": 470.56,
+      "duration": 3.68
+    },
+    {
+      "text": "so for example now we created a function",
+      "start": 472.24,
+      "duration": 4.48
+    },
+    {
+      "text": "that says hello we can type in mario",
+      "start": 474.24,
+      "duration": 4.239
+    },
+    {
+      "text": "and we can also use it again and we can",
+      "start": 476.72,
+      "duration": 3.68
+    },
+    {
+      "text": "type in luigi and when we run the",
+      "start": 478.479,
+      "duration": 3.921
+    },
+    {
+      "text": "program it will say hey there mario",
+      "start": 480.4,
+      "duration": 4.16
+    },
+    {
+      "text": "and hey there luigi instead of writing",
+      "start": 482.4,
+      "duration": 3.04
+    },
+    {
+      "text": "this statement",
+      "start": 484.56,
+      "duration": 3.199
+    },
+    {
+      "text": "twice we were able to just use one",
+      "start": 485.44,
+      "duration": 4.159
+    },
+    {
+      "text": "function to do it multiple times",
+      "start": 487.759,
+      "duration": 3.681
+    },
+    {
+      "text": "and one thing we should cover also on",
+      "start": 489.599,
+      "duration": 3.521
+    },
+    {
+      "text": "functions is pretend you have",
+      "start": 491.44,
+      "duration": 3.039
+    },
+    {
+      "text": "a lot of functions you need to create",
+      "start": 493.12,
+      "duration": 3.12
+    },
+    {
+      "text": "such as get",
+      "start": 494.479,
+      "duration": 5.44
+    },
+    {
+      "text": "internet and run game something",
+      "start": 496.24,
+      "duration": 5.6
+    },
+    {
+      "text": "such as that and you don't really have",
+      "start": 499.919,
+      "duration": 3.68
+    },
+    {
+      "text": "the logic for it yet so you're going to",
+      "start": 501.84,
+      "duration": 2.799
+    },
+    {
+      "text": "notice that these",
+      "start": 503.599,
+      "duration": 3.121
+    },
+    {
+      "text": "are empty if you run the program you're",
+      "start": 504.639,
+      "duration": 3.201
+    },
+    {
+      "text": "going to get",
+      "start": 506.72,
+      "duration": 4.24
+    },
+    {
+      "text": "an error but python has created this",
+      "start": 507.84,
+      "duration": 4.879
+    },
+    {
+      "text": "keyword that is called pass",
+      "start": 510.96,
+      "duration": 3.6
+    },
+    {
+      "text": "which essentially just says there's",
+      "start": 512.719,
+      "duration": 3.841
+    },
+    {
+      "text": "nothing in here we accept that",
+      "start": 514.56,
+      "duration": 3.52
+    },
+    {
+      "text": "and your program is still going to be",
+      "start": 516.56,
+      "duration": 4.159
+    },
+    {
+      "text": "able to run regardless of having no",
+      "start": 518.08,
+      "duration": 4.399
+    },
+    {
+      "text": "content inside the function now when we",
+      "start": 520.719,
+      "duration": 3.281
+    },
+    {
+      "text": "tap on run you're going to notice there",
+      "start": 522.479,
+      "duration": 2.241
+    },
+    {
+      "text": "are going to be",
+      "start": 524.0,
+      "duration": 2.959
+    },
+    {
+      "text": "no errors because the program's going to",
+      "start": 524.72,
+      "duration": 4.239
+    },
+    {
+      "text": "understand that we provided the keyword",
+      "start": 526.959,
+      "duration": 2.641
+    },
+    {
+      "text": "pass",
+      "start": 528.959,
+      "duration": 2.401
+    },
+    {
+      "text": "which just tells it that there's nothing",
+      "start": 529.6,
+      "duration": 3.84
+    },
+    {
+      "text": "there and it accepts it but this is very",
+      "start": 531.36,
+      "duration": 4.159
+    },
+    {
+      "text": "good for creating the blueprints later",
+      "start": 533.44,
+      "duration": 3.44
+    },
+    {
+      "text": "in case you need to write everything",
+      "start": 535.519,
+      "duration": 3.041
+    },
+    {
+      "text": "your program should do but don't really",
+      "start": 536.88,
+      "duration": 3.12
+    },
+    {
+      "text": "know how to do that yet",
+      "start": 538.56,
+      "duration": 3.279
+    },
+    {
+      "text": "just insert the word pass and it will",
+      "start": 540.0,
+      "duration": 3.12
+    },
+    {
+      "text": "save you a lot of trouble",
+      "start": 541.839,
+      "duration": 3.44
+    },
+    {
+      "text": "and finally we're going to go over how",
+      "start": 543.12,
+      "duration": 3.44
+    },
+    {
+      "text": "we can use the try",
+      "start": 545.279,
+      "duration": 3.761
+    },
+    {
+      "text": "and accept block so for here we're going",
+      "start": 546.56,
+      "duration": 3.279
+    },
+    {
+      "text": "to create an",
+      "start": 549.04,
+      "duration": 3.52
+    },
+    {
+      "text": "input and it's going to say please",
+      "start": 549.839,
+      "duration": 4.161
+    },
+    {
+      "text": "provide",
+      "start": 552.56,
+      "duration": 3.36
+    },
+    {
+      "text": "a number so now we're going to go ahead",
+      "start": 554.0,
+      "duration": 3.44
+    },
+    {
+      "text": "and type in try",
+      "start": 555.92,
+      "duration": 2.96
+    },
+    {
+      "text": "and we're going to try to print the",
+      "start": 557.44,
+      "duration": 3.2
+    },
+    {
+      "text": "value plus the",
+      "start": 558.88,
+      "duration": 4.639
+    },
+    {
+      "text": "integer of the number that we get from",
+      "start": 560.64,
+      "duration": 3.52
+    },
+    {
+      "text": "the user",
+      "start": 563.519,
+      "duration": 3.041
+    },
+    {
+      "text": "and if that doesn't work we're going to",
+      "start": 564.16,
+      "duration": 3.84
+    },
+    {
+      "text": "print that",
+      "start": 566.56,
+      "duration": 4.719
+    },
+    {
+      "text": "that is not a valid number",
+      "start": 568.0,
+      "duration": 5.44
+    },
+    {
+      "text": "so the way it works is it tries to",
+      "start": 571.279,
+      "duration": 4.0
+    },
+    {
+      "text": "execute the code that's inside here",
+      "start": 573.44,
+      "duration": 3.519
+    },
+    {
+      "text": "and if anything goes wrong if an",
+      "start": 575.279,
+      "duration": 4.0
+    },
+    {
+      "text": "exception occurs it's going to go",
+      "start": 576.959,
+      "duration": 4.161
+    },
+    {
+      "text": "to the accept block and it's going to",
+      "start": 579.279,
+      "duration": 3.921
+    },
+    {
+      "text": "execute whatever is inside that",
+      "start": 581.12,
+      "duration": 4.0
+    },
+    {
+      "text": "of course if you write something that",
+      "start": 583.2,
+      "duration": 3.68
+    },
+    {
+      "text": "throws an exception inside here",
+      "start": 585.12,
+      "duration": 3.44
+    },
+    {
+      "text": "you need to try with another try and",
+      "start": 586.88,
+      "duration": 3.36
+    },
+    {
+      "text": "accept block but if we go ahead and run",
+      "start": 588.56,
+      "duration": 3.36
+    },
+    {
+      "text": "the program now we can write something",
+      "start": 590.24,
+      "duration": 2.48
+    },
+    {
+      "text": "like 10",
+      "start": 591.92,
+      "duration": 3.28
+    },
+    {
+      "text": "and it's going to add 10 to the value",
+      "start": 592.72,
+      "duration": 4.239
+    },
+    {
+      "text": "but of course what if we write something",
+      "start": 595.2,
+      "duration": 2.8
+    },
+    {
+      "text": "such as mario",
+      "start": 596.959,
+      "duration": 3.201
+    },
+    {
+      "text": "try adding mario to 10 and the program",
+      "start": 598.0,
+      "duration": 3.44
+    },
+    {
+      "text": "is not going to be happy",
+      "start": 600.16,
+      "duration": 3.919
+    },
+    {
+      "text": "because you cannot convert mario to an",
+      "start": 601.44,
+      "duration": 4.56
+    },
+    {
+      "text": "integer and then add it to 10. so it's",
+      "start": 604.079,
+      "duration": 2.721
+    },
+    {
+      "text": "going to say",
+      "start": 606.0,
+      "duration": 2.72
+    },
+    {
+      "text": "you shouldn't do that but don't worry",
+      "start": 606.8,
+      "duration": 4.24
+    },
+    {
+      "text": "because we have the exception covered",
+      "start": 608.72,
+      "duration": 4.32
+    },
+    {
+      "text": "and our program will say that is not a",
+      "start": 611.04,
+      "duration": 4.239
+    },
+    {
+      "text": "valid number and not throw an exception",
+      "start": 613.04,
+      "duration": 2.96
+    },
+    {
+      "text": "but anyway",
+      "start": 615.279,
+      "duration": 2.721
+    },
+    {
+      "text": "i really hope that helped you to get",
+      "start": 616.0,
+      "duration": 3.92
+    },
+    {
+      "text": "started with python of course there's a",
+      "start": 618.0,
+      "duration": 3.04
+    },
+    {
+      "text": "lot more to cover",
+      "start": 619.92,
+      "duration": 3.12
+    },
+    {
+      "text": "this was just meant as a very quick",
+      "start": 621.04,
+      "duration": 3.919
+    },
+    {
+      "text": "guide for helping you to get started",
+      "start": 623.04,
+      "duration": 3.919
+    },
+    {
+      "text": "and with that being said have a",
+      "start": 624.959,
+      "duration": 3.841
+    },
+    {
+      "text": "wonderful day and i'll see you guys in",
+      "start": 626.959,
+      "duration": 4.801
+    },
+    {
+      "text": "the next video",
+      "start": 628.8,
+      "duration": 2.96
+    }
+  ]
+}

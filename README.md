@@ -34,6 +34,8 @@ The idea is simple: your time watching a video is valuable. The notes that _shou
 
 The output isn't a transcript summary. It's structured, hierarchical Markdown — with headers, sub-topics, definitions, examples, and every concept explained in depth. Chapter-aware videos get per-chapter notes. Long courses produce an organized note file per session. Everything lands in your filesystem: portable, searchable, and permanently yours.
 
+## 📹
+
 ## ✨ Features
 
 |                                        |                                                                                            |
@@ -48,6 +50,16 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 | 🖥️ **Rich Live Dashboard**             | Real-time progress UI with a `--no-ui` plain-output mode for CI/cron                       |
 | 🐳 **Docker Ready**                    | Minimal two-stage Docker image for reproducible, stateless runs                            |
 | 🔒 **Private Video Support**           | Pass a Netscape-format cookie file to process age-gated or login-required videos           |
+
+## 🎬 Demo
+
+<p align="center">
+  <img src="demo/notewise.gif" alt="NoteWise CLI demo" />
+</p>
+
+<p align="center">
+  <sub>GIF loops automatically. Prefer video? See <a href="demo/notewise.mp4">demo/notewise.mp4</a>.</sub>
+</p>
 
 ## 🚀 Quick Start
 
@@ -255,13 +267,16 @@ notewise process URL [OPTIONS]
 
 ```
 output/
-├── Video Title/
-│   ├── study_notes.md           # Full study notes
-│   ├── quiz.md                  # (optional, --quiz)
-│   └── transcript.txt           # (optional, --export-transcript txt)
-└── Another Video Title/
-    └── study_notes.md
+├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).md
+├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_quiz.md
+└── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_transcript.json
 ```
+
+Real example files are included in `demo/`:
+
+- `demo/Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).md`
+- `demo/Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_quiz.md`
+- `demo/Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_transcript.json`
 
 For chapter-aware videos (>1 hour with chapters), notes are split by chapter:
 
@@ -270,7 +285,8 @@ output/
 └── Long Course Title/
     ├── Chapter 01 - Introduction.md
     ├── Chapter 02 - Core Concepts.md
-    └── ...
+    ├── Long Course Title_quiz.md          # optional, --quiz
+    └── Long Course Title_transcript.txt   # optional, --export-transcript txt
 ```
 
 ## 🐳 Docker
