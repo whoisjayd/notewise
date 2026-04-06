@@ -22,7 +22,7 @@ class _FakeResponse:
 def test_check_for_updates_reports_available_release(monkeypatch) -> None:
     payload = b"""
     {
-            "tag_name": "v1.1.2",
+            "tag_name": "v1.1.3",
       "html_url": "https://example.com/release"
     }
     """
