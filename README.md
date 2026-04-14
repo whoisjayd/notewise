@@ -34,7 +34,15 @@ The idea is simple: your time watching a video is valuable. The notes that _shou
 
 The output isn't a transcript summary. It's structured, hierarchical Markdown — with headers, sub-topics, definitions, examples, and every concept explained in depth. Chapter-aware videos get per-chapter notes. Long courses produce an organized note file per session. Everything lands in your filesystem: portable, searchable, and permanently yours.
 
-## 📹
+## 🎬 Demo
+
+<p align="center">
+  <img src="demo/notewise.gif" alt="NoteWise CLI demo" />
+</p>
+
+<p align="center">
+  <sub>Watch the full demo: <a href="demo/notewise.mp4">demo/notewise.mp4</a></sub>
+</p>
 
 ## ✨ Features
 
