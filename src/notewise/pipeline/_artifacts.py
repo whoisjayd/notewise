@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -16,6 +17,29 @@ from notewise.utils import sanitize_filename
 
 
 logger = structlog.get_logger(__name__)
+_HEADING_RE = re.compile(r"^#\s+.+$", re.MULTILINE)
+
+
+def _format_timestamp(seconds: int) -> str:
+    total = max(0, int(seconds))
+    hours, rem = divmod(total, 3600)
+    minutes, secs = divmod(rem, 60)
+    if hours:
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+    return f"{minutes:02d}:{secs:02d}"
+
+
+
+def prefix_chapter_heading_with_timestamp(
+    notes: str,
+    chapter_title: str,
+    start_seconds: int,
+) -> str:
+    """Prefix the first chapter heading with a deterministic timestamp label."""
+    timestamped_heading = f"# [{_format_timestamp(start_seconds)}] {chapter_title}"
+    if _HEADING_RE.search(notes):
+        return _HEADING_RE.sub(timestamped_heading, notes, count=1)
+    return f"{timestamped_heading}\n\n{notes.lstrip()}"
 
 
 async def generate_and_write_quiz(

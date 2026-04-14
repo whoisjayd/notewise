@@ -9,7 +9,12 @@ from typing import Any
 import structlog
 
 from notewise._constants import DEFAULT_LANGUAGES, TRANSCRIPT_MAX_RETRIES
-from notewise.domain.youtube import TranscriptSegment, VideoChapter, VideoTranscript
+from notewise.domain.youtube import (
+    ChapterTranscript,
+    TranscriptSegment,
+    VideoChapter,
+    VideoTranscript,
+)
 from notewise.errors import (
     ExtractionError,
     IPBlockError,
@@ -157,7 +162,17 @@ def split_transcript_by_chapters(
     chapters: list[VideoChapter],
 ) -> dict[str, str]:
     """Split a video transcript by chapters."""
-    chapter_transcripts: dict[str, str] = {}
+    chapter_map = split_transcript_by_chapters_with_metadata(transcript, chapters)
+    return {title: chapter.text for title, chapter in chapter_map.items()}
+
+
+
+def split_transcript_by_chapters_with_metadata(
+    transcript: VideoTranscript,
+    chapters: list[VideoChapter],
+) -> dict[str, ChapterTranscript]:
+    """Split a video transcript by chapters and preserve start timing."""
+    chapter_transcripts: dict[str, ChapterTranscript] = {}
     seen_titles: dict[str, int] = {}
 
     for chapter in chapters:
@@ -188,6 +203,10 @@ def split_transcript_by_chapters(
         unique_title = (
             chapter.title if occurrence == 1 else f"{chapter.title} ({occurrence})"
         )
-        chapter_transcripts[unique_title] = chapter_text
+        chapter_transcripts[unique_title] = ChapterTranscript(
+            title=unique_title,
+            text=chapter_text,
+            start_seconds=chapter.start_seconds,
+        )
 
     return chapter_transcripts

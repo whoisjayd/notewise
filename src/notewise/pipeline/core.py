@@ -23,7 +23,11 @@ from notewise.config import settings as config
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.llm.provider import UsageTotals, get_provider
-from notewise.pipeline._artifacts import export_transcript, generate_and_write_quiz
+from notewise.pipeline._artifacts import (
+    export_transcript,
+    generate_and_write_quiz,
+    prefix_chapter_heading_with_timestamp,
+)
 from notewise.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
@@ -39,6 +43,7 @@ from notewise.youtube.metadata import get_video_metadata  # noqa: F401
 from notewise.youtube.transcript import (
     fetch_transcript,  # noqa: F401
     split_transcript_by_chapters,  # noqa: F401
+    split_transcript_by_chapters_with_metadata,  # noqa: F401
 )
 
 
@@ -57,6 +62,8 @@ __all__ = [
     "PipelineSharedState",
     "dedupe_video_ids",
     "split_transcript_by_chapters",
+    "split_transcript_by_chapters_with_metadata",
+    "prefix_chapter_heading_with_timestamp",
     "run_pipeline",
     "sanitize_filename",
 ]
@@ -76,6 +83,7 @@ class CorePipeline:
         quiz: bool = False,
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         export_transcript: str | None = None,
+        timestamps: bool = False,
         youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
     ):
@@ -99,6 +107,7 @@ class CorePipeline:
         self.quiz = quiz
         self.use_combine_chunk = use_combine_chunk
         self.export_transcript_format = export_transcript
+        self.timestamps = timestamps
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}

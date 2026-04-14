@@ -127,12 +127,26 @@ async def process_single_video(
                     total_chapters = len(chapter_transcripts)
                     ordered_chapters = list(chapter_transcripts.items())
                     chapters_to_generate: dict[str, str] = {}
-                    chapter_targets: list[tuple[str, Path]] = []
+                    chapter_targets: list[tuple[str, Path, int]] = []
+                    chapter_start_seconds: dict[str, int] = {}
+                    seen_titles: dict[str, int] = {}
+
+                    for chapter in chapters:
+                        seen_titles[chapter.title] = seen_titles.get(chapter.title, 0) + 1
+                        occurrence = seen_titles[chapter.title]
+                        unique_title = (
+                            chapter.title
+                            if occurrence == 1
+                            else f"{chapter.title} ({occurrence})"
+                        )
+                        chapter_start_seconds[unique_title] = chapter.start_seconds
 
                     for i, (chap_title, chap_text) in enumerate(ordered_chapters, 1):
                         safe_chapter = sanitize_filename(chap_title)
                         chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
-                        chapter_targets.append((chap_title, chapter_file))
+                        chapter_targets.append(
+                            (chap_title, chapter_file, chapter_start_seconds.get(chap_title, 0))
+                        )
 
                         if not pipeline.force and chapter_file.exists():
                             logger.info(
@@ -245,10 +259,16 @@ async def process_single_video(
                                 original_generate_single
                             )
 
-                        for chapter_title, chapter_file in chapter_targets:
+                        for chapter_title, chapter_file, start_seconds in chapter_targets:
                             notes = generated_chapter_notes.get(chapter_title)
                             if notes is None:
                                 continue
+                            if pipeline.timestamps:
+                                notes = pipeline_module.prefix_chapter_heading_with_timestamp(
+                                    notes,
+                                    chapter_title,
+                                    start_seconds,
+                                )
                             chapter_file.write_text(notes, encoding="utf-8")
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)

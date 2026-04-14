@@ -23,6 +23,7 @@ from notewise.youtube.transcript import (
     _fetch_async,
     fetch_transcript,
     split_transcript_by_chapters,
+    split_transcript_by_chapters_with_metadata,
 )
 
 
@@ -286,6 +287,21 @@ class TestSplitTranscriptByChapters:
 
         assert chapter_map["Part"] == "One"
         assert chapter_map["Part (2)"] == "Two"
+
+    def test_split_transcript_by_chapters_with_metadata_preserves_start_time(self):
+        transcript = VideoTranscript(
+            video_id="vid",
+            segments=[TranscriptSegment("Intro text", 10.0, 5.0)],
+            language="English",
+            language_code="en",
+            is_generated=False,
+        )
+        chapters = [VideoChapter(title="Intro", start_seconds=0, end_seconds=60)]
+
+        chapter_map = split_transcript_by_chapters_with_metadata(transcript, chapters)
+
+        assert chapter_map["Intro"].text == "Intro text"
+        assert chapter_map["Intro"].start_seconds == 0
 
     def test_split_transcript_by_chapters_skips_empty_windows(self):
         transcript = VideoTranscript(

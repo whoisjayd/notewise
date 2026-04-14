@@ -37,6 +37,7 @@ class CliProcessContext:
     quiz: bool
     use_combine_chunk: bool
     export_transcript: str | None
+    timestamps: bool
     selected_cookie_file: str | None
     api_key_checked: bool | None = None
 
@@ -120,6 +121,7 @@ class CliProcessContext:
             quiz=self.quiz,
             use_combine_chunk=self.use_combine_chunk,
             export_transcript=self.export_transcript,
+            timestamps=self.timestamps,
             youtube_cookie_file=self.selected_cookie_file,
             shared_state=shared_state,
         )
