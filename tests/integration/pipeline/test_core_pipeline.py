@@ -23,6 +23,7 @@ from notewise.pipeline.core import (
     EventType,
     PipelineEvent,
     PipelineResult,
+    prefix_chapter_heading_with_timestamp,
     sanitize_filename,
 )
 from notewise.storage import DatabaseRepository as DatabaseManager
@@ -236,6 +237,15 @@ async def test_run_missing_api_key(pipeline):
 # ---------------------------------------------------------------------------
 # CorePipeline.run – single short video (no chapters)
 # ---------------------------------------------------------------------------
+
+
+def test_prefix_chapter_heading_with_timestamp_rewrites_first_heading():
+    notes = "# Intro\n\n## Point\n\nBody"
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("# [00:34] Intro")
+    assert "## Point" in result
 
 
 @pytest.mark.asyncio

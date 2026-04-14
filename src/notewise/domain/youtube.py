@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import NamedTuple
 
 
 @dataclass
@@ -36,6 +37,14 @@ class VideoTranscript:
     def to_text(self) -> str:
         """Convert transcript segments to continuous text."""
         return " ".join(seg.text for seg in self.segments)
+
+
+class ChapterTranscript(NamedTuple):
+    """Transcript text and timing metadata for one chapter."""
+
+    title: str
+    text: str
+    start_seconds: int
 
 
 @dataclass(frozen=True)

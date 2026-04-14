@@ -311,6 +311,16 @@ def process(
             ),
         ),
     ] = None,
+    timestamps: Annotated[
+        bool,
+        typer.Option(
+            "--timestamps",
+            help=(
+                "Prefix generated chapter headers with their chapter start time, "
+                "for example [green]# [00:34] Chapter Title[/green]."
+            ),
+        ),
+    ] = False,
     cookie_file: Annotated[
         Path | None,
         typer.Option(
@@ -374,6 +384,7 @@ def process(
             no_ui=no_ui,
             quiz=quiz,
             export_transcript=export_transcript,
+            timestamps=timestamps,
             selected_cookie_file=(
                 str(cookie_file)
                 if cookie_file is not None

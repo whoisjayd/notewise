@@ -147,6 +147,15 @@ def mock_pipeline(tmp_path):
 # ---------------------------------------------------------------------------
 
 
+def test_process_passes_timestamps_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--timestamps"])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["timestamps"] is True
+
+
 def test_process_missing_api_key_exits_with_error(monkeypatch):
     """CLI exits with code 1 and helpful message when required API key is missing."""
 
