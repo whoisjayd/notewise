@@ -17,7 +17,6 @@ from notewise.utils import sanitize_filename
 
 
 logger = structlog.get_logger(__name__)
-_HEADING_RE = re.compile(r"^#\s+.+$", re.MULTILINE)
 
 
 def _format_timestamp(seconds: int) -> str:
@@ -34,11 +33,22 @@ def prefix_chapter_heading_with_timestamp(
     chapter_title: str,
     start_seconds: int,
 ) -> str:
-    """Prefix the first chapter heading with a deterministic timestamp label."""
+    """Prefix the matching chapter heading with a deterministic timestamp label."""
+    chapter_heading_re = re.compile(
+        rf"^(?P<level>#{{1,6}})\s+{re.escape(chapter_title)}\s*$",
+        re.MULTILINE,
+    )
+    match = chapter_heading_re.search(notes)
+    if match:
+        level = match.group("level")
+        timestamped_heading = (
+            f"{level} [{_format_timestamp(start_seconds)}] {chapter_title}"
+        )
+        return chapter_heading_re.sub(timestamped_heading, notes, count=1)
+
     timestamped_heading = f"# [{_format_timestamp(start_seconds)}] {chapter_title}"
-    if _HEADING_RE.search(notes):
-        return _HEADING_RE.sub(timestamped_heading, notes, count=1)
     return f"{timestamped_heading}\n\n{notes.lstrip()}"
+
 
 
 async def generate_and_write_quiz(
