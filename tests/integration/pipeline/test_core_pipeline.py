@@ -319,13 +319,41 @@ async def test_run_missing_api_key(pipeline):
 # ---------------------------------------------------------------------------
 
 
-def test_prefix_chapter_heading_with_timestamp_rewrites_first_heading():
-    notes = "# Intro\n\n## Point\n\nBody"
+def test_prefix_chapter_heading_with_timestamp_rewrites_matching_heading():
+    notes = """# Notes
+
+## Intro
+
+Body"""
 
     result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
 
-    assert result.startswith("# [00:34] Intro")
-    assert "## Point" in result
+    assert result.startswith("# Notes")
+    assert "## [00:34] Intro" in result
+    assert "# [00:34] Intro\n\n## Intro" not in result
+
+
+def test_prefix_chapter_heading_with_timestamp_preserves_heading_level():
+    notes = """## Intro
+
+### Point
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("## [00:34] Intro")
+    assert "### Point" in result
+
+
+def test_prefix_chapter_heading_with_timestamp_prepends_when_chapter_heading_missing():
+    notes = """# Notes
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("# [00:34] Intro\n\n# Notes")
 
 
 @pytest.mark.asyncio
