@@ -279,6 +279,34 @@ class TestStudyMaterialGenerator:
         )
 
     @pytest.mark.asyncio
+    async def test_stitch_chunk_notes_handles_three_chunks(self, mock_llm_provider):
+        """Three-chunk stitching should preserve cumulative content across passes."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "## Topic One\n\nA\n\n## Topic Two\n\nB merged",
+                (
+                    "## Topic One\n\nA\n\n## Topic Two\n\nB merged\n\n"
+                    "## Topic Three\n\nC merged\n\n## Topic Four: Chunk 3\n\nD"
+                ),
+            ]
+        )
+
+        result = await generator._stitch_chunk_notes(
+            [
+                "## Topic One\n\nA",
+                "## Topic Two\n\nB",
+                "## Topic Three\n\nC\n\n## Topic Four: Chunk 3\n\nD",
+            ],
+            system_prompt="system",
+        )
+
+        assert "## Topic One" in result
+        assert "## Topic Four\n\nD" in result
+        assert "Chunk 3" not in result
+        assert generator.provider.generate.await_count == 2
+
+    @pytest.mark.asyncio
     async def test_generate_single_chapter_callbacks(self, generator):
         """Chunked chapter generation should signal part and combine callbacks."""
         two_chunks = ["chunk A", "chunk B"]
@@ -483,6 +511,51 @@ def test_split_head_for_stitching_limits_boundary_to_early_sections():
     assert "## Topic Two" in suffix
 
 
+def test_split_tail_for_stitching_keeps_fenced_code_block_intact():
+    """Tail splitting should not start in the middle of a fenced code block."""
+    document = (
+        "## Intro\n\nOverview\n\n```python\n# inside fence\nprint('hi')\n```\n\n"
+        "## Next Topic\n\nBody"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 35):
+        _prefix, tail = _split_tail_for_stitching(document)
+
+    assert tail.count("```") == 2
+    assert "# inside fence" in tail
+    assert "## Next Topic" in tail
+
+
+def test_split_head_for_stitching_keeps_fenced_code_block_intact():
+    """Head splitting should include a full fenced code block before splitting."""
+    document = (
+        "## Intro\n\nOverview\n\n```python\n# inside fence\nprint('hi')\n```\n\n"
+        "## Next Topic\n\nBody"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 35):
+        head, suffix = _split_head_for_stitching(document)
+
+    assert head.count("```") == 2
+    assert "# inside fence" in head
+    assert suffix.startswith("## Next Topic")
+
+
+def test_split_tail_for_stitching_applies_char_cap_even_with_headings():
+    """Tail splitting should keep boundary windows bounded even with many headings."""
+    document = (
+        "## Topic One\n\nA\n\n## Topic Two\n\nB\n\n"
+        "## Topic Three\n\nC\n\n## Topic Four\n\nD"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 25):
+        prefix, tail = _split_tail_for_stitching(document)
+
+    assert "## Topic One" in prefix
+    assert "## Topic One" not in tail
+    assert tail.startswith("## Topic Three") or tail.startswith("## Topic Four")
+
+
 def test_normalize_stitched_document_removes_part_suffix_from_first_heading():
     """Stitched output should not keep chunk-local part labels in the first heading."""
     document = "## Python Programming Fundamentals: Part 1\n\nBody text"
@@ -499,3 +572,20 @@ def test_normalize_stitched_document_preserves_non_part_headings():
     normalized = _normalize_stitched_document(document)
 
     assert normalized == document
+
+
+def test_normalize_stitched_document_cleans_all_matching_headings():
+    """Normalization should strip chunk-local labels from every heading."""
+    document = (
+        "## Python Basics: Part 1\n\nIntro\n\n"
+        "### Variables - Chunk 2\n\nDetails\n\n"
+        "## Part 1 Exercises\n\nPractice"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "## Python Basics\n\nIntro\n\n"
+        "### Variables\n\nDetails\n\n"
+        "## Part 1 Exercises\n\nPractice"
+    )

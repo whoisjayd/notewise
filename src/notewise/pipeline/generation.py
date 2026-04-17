@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import bisect
 import re
 from collections.abc import Callable
 
@@ -41,8 +42,10 @@ CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
 _MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^#{1,6}\s+")
+_MARKDOWN_FENCE_PATTERN = re.compile(r"^\s*(```+|~~~+)")
 _PART_HEADING_SUFFIX_PATTERN = re.compile(
-    r"^(#{1,6}\s+.+?)(?:\s*[:\-]\s*Part\s+\d+|\s*\(Part\s+\d+\))\s*$",
+    r"^(#{1,6}\s+.+?)(?:\s*[:\-]\s*(?:Part|Chunk)\s+\d+"
+    r"|\s*\((?:Part|Chunk)\s+\d+\))\s*$",
     re.IGNORECASE,
 )
 
@@ -52,27 +55,86 @@ def _join_markdown_fragments(*parts: str) -> str:
     return "\n\n".join(part.strip() for part in parts if part and part.strip())
 
 
+def _collect_markdown_boundaries(document: str) -> tuple[list[int], list[int]]:
+    """Collect heading positions and line-safe split boundaries outside fences."""
+    heading_positions: list[int] = []
+    safe_boundaries = [0]
+    offset = 0
+    in_fence = False
+    fence_marker: str | None = None
+
+    for line in document.splitlines(keepends=True):
+        if not in_fence and _MARKDOWN_HEADING_PATTERN.match(line):
+            heading_positions.append(offset)
+
+        fence_match = _MARKDOWN_FENCE_PATTERN.match(line)
+        if fence_match:
+            marker = fence_match.group(1)[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker == fence_marker:
+                in_fence = False
+                fence_marker = None
+
+        offset += len(line)
+        if not in_fence:
+            safe_boundaries.append(offset)
+
+    if safe_boundaries[-1] != len(document):
+        safe_boundaries.append(len(document))
+
+    return heading_positions, safe_boundaries
+
+
+def _select_safe_boundary_before(
+    preferred_offset: int,
+    safe_boundaries: list[int],
+) -> int:
+    """Select the nearest safe boundary at or before the preferred offset."""
+    index = bisect.bisect_right(safe_boundaries, preferred_offset) - 1
+    return safe_boundaries[max(index, 0)]
+
+
+def _select_safe_boundary_after(
+    preferred_offset: int,
+    safe_boundaries: list[int],
+    document_length: int,
+) -> int:
+    """Select the nearest safe boundary at or after the preferred offset."""
+    index = bisect.bisect_left(safe_boundaries, preferred_offset)
+    if index < len(safe_boundaries):
+        return safe_boundaries[index]
+    return document_length
+
+
 def _split_tail_for_stitching(document: str) -> tuple[str, str]:
     """Split a document into prefix + tail fragment for boundary stitching."""
-    heading_positions = [
-        match.start() for match in _MARKDOWN_HEADING_PATTERN.finditer(document)
-    ]
+    heading_positions, safe_boundaries = _collect_markdown_boundaries(document)
+    char_limited_start = max(0, len(document) - DEFAULT_STITCH_CHAR_BOUNDARY)
     if len(heading_positions) > DEFAULT_STITCH_SECTION_BOUNDARY_COUNT:
-        start = heading_positions[-DEFAULT_STITCH_SECTION_BOUNDARY_COUNT]
+        preferred_start = max(
+            heading_positions[-DEFAULT_STITCH_SECTION_BOUNDARY_COUNT],
+            char_limited_start,
+        )
     else:
-        start = max(0, len(document) - DEFAULT_STITCH_CHAR_BOUNDARY)
+        preferred_start = char_limited_start
+    start = _select_safe_boundary_before(preferred_start, safe_boundaries)
     return document[:start].rstrip(), document[start:].lstrip()
 
 
 def _split_head_for_stitching(document: str) -> tuple[str, str]:
     """Split a document into head fragment + suffix for boundary stitching."""
-    heading_positions = [
-        match.start() for match in _MARKDOWN_HEADING_PATTERN.finditer(document)
-    ]
+    heading_positions, safe_boundaries = _collect_markdown_boundaries(document)
+    char_limited_end = min(len(document), DEFAULT_STITCH_CHAR_BOUNDARY)
     if len(heading_positions) > DEFAULT_STITCH_SECTION_BOUNDARY_COUNT:
-        end = heading_positions[DEFAULT_STITCH_SECTION_BOUNDARY_COUNT]
+        preferred_end = min(
+            heading_positions[DEFAULT_STITCH_SECTION_BOUNDARY_COUNT],
+            char_limited_end,
+        )
     else:
-        end = min(len(document), DEFAULT_STITCH_CHAR_BOUNDARY)
+        preferred_end = char_limited_end
+    end = _select_safe_boundary_after(preferred_end, safe_boundaries, len(document))
     return document[:end].rstrip(), document[end:].lstrip()
 
 
@@ -84,7 +146,6 @@ def _normalize_stitched_document(document: str) -> str:
             continue
         normalized_line = _PART_HEADING_SUFFIX_PATTERN.sub(r"\1", line).rstrip()
         lines[index] = normalized_line
-        break
     return "\n".join(lines)
 
 
