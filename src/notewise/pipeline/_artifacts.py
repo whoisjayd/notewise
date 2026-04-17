@@ -29,7 +29,6 @@ def _format_timestamp(seconds: int) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
-
 def prefix_chapter_heading_with_timestamp(
     notes: str,
     chapter_title: str,
