@@ -166,7 +166,6 @@ def split_transcript_by_chapters(
     return {title: chapter.text for title, chapter in chapter_map.items()}
 
 
-
 def split_transcript_by_chapters_with_metadata(
     transcript: VideoTranscript,
     chapters: list[VideoChapter],

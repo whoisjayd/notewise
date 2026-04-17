@@ -93,6 +93,16 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--timestamps" type="boolean" default="false">
+  Prefix chapter note headings with deterministic chapter start times for long chapter-aware videos, for example `# [00:34] Intro`.
+
+  This only affects chapter-based output. Standard single-file notes are unchanged.
+
+  ```bash
+  notewise process "URL" --timestamps
+  ```
+</ParamField>
+
 <ParamField query="--force" type="boolean" default="false">
   **Alias:** `-F`
 
@@ -177,6 +187,11 @@ notewise process URL [OPTIONS]
         </Tree.Folder>
       </Tree.Folder>
     </Tree>
+
+    <Note>
+      Add `--timestamps` if you want chapter files to start with headings like
+      `# [00:34] Introduction`.
+    </Note>
   </Tab>
 </Tabs>
 
@@ -212,6 +227,9 @@ notewise process "URL" --cookie-file ./youtube-cookies.txt
 
 # Re-process with a different model
 notewise process "URL" --model claude-3-5-sonnet-20241022 --force
+
+# Long chapter-aware video with timestamped headings
+notewise process "URL" --timestamps
 
 # Preferred language fallback chain
 notewise process "URL" -l hi -l en

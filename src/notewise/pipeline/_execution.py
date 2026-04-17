@@ -101,8 +101,11 @@ async def process_single_video(
 
             with usage_context as raw_usage_totals:
                 if use_chapters:
-                    chapter_transcripts = pipeline_module.split_transcript_by_chapters(
-                        transcript_obj, chapters
+                    chapter_transcripts = (
+                        pipeline_module.split_transcript_by_chapters_with_metadata(
+                            transcript_obj,
+                            chapters,
+                        )
                     )
 
                     if not chapter_transcripts:
@@ -127,24 +130,16 @@ async def process_single_video(
                     ordered_chapters = list(chapter_transcripts.items())
                     chapters_to_generate: dict[str, str] = {}
                     chapter_targets: list[tuple[str, Path, int]] = []
-                    chapter_start_seconds: dict[str, int] = {}
-                    seen_titles: dict[str, int] = {}
 
-                    for chapter in chapters:
-                        seen_titles[chapter.title] = seen_titles.get(chapter.title, 0) + 1
-                        occurrence = seen_titles[chapter.title]
-                        unique_title = (
-                            chapter.title
-                            if occurrence == 1
-                            else f"{chapter.title} ({occurrence})"
-                        )
-                        chapter_start_seconds[unique_title] = chapter.start_seconds
-
-                    for i, (chap_title, chap_text) in enumerate(ordered_chapters, 1):
+                    for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
                         safe_chapter = sanitize_filename(chap_title)
                         chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
                         chapter_targets.append(
-                            (chap_title, chapter_file, chapter_start_seconds.get(chap_title, 0))
+                            (
+                                chap_title,
+                                chapter_file,
+                                chapter_data.start_seconds,
+                            )
                         )
 
                         if not pipeline.force and chapter_file.exists():
@@ -154,7 +149,7 @@ async def process_single_video(
                             )
                             continue
 
-                        chapters_to_generate[chap_title] = chap_text
+                        chapters_to_generate[chap_title] = chapter_data.text
 
                     if chapters_to_generate:
                         chapter_indices = {
@@ -253,12 +248,17 @@ async def process_single_video(
                                 original_generate_single
                             )
 
-                        for chapter_title, chapter_file, start_seconds in chapter_targets:
+                        for (
+                            chapter_title,
+                            chapter_file,
+                            start_seconds,
+                        ) in chapter_targets:
                             notes = generated_chapter_notes.get(chapter_title)
                             if notes is None:
                                 continue
                             if pipeline.timestamps:
-                                notes = pipeline_module.prefix_chapter_heading_with_timestamp(
+                                pm = pipeline_module
+                                notes = pm.prefix_chapter_heading_with_timestamp(
                                     notes,
                                     chapter_title,
                                     start_seconds,
