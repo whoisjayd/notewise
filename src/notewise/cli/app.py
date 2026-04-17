@@ -9,7 +9,7 @@ from urllib.parse import urlparse
 
 import typer
 
-from notewise._constants import CONFIG_FILENAME
+from notewise._constants import CONFIG_FILENAME, DEFAULT_USE_COMBINE_CHUNK
 
 
 if TYPE_CHECKING:
@@ -300,6 +300,16 @@ def process(
             help="Also generate a multiple-choice quiz file alongside the study notes.",
         ),
     ] = False,
+    use_combine_chunk: Annotated[
+        bool,
+        typer.Option(
+            "--use-combine-chunk",
+            help=(
+                "Use the deprecated legacy chunk-combine flow instead of the default "
+                "boundary stitching flow. This may lose detail on very long videos."
+            ),
+        ),
+    ] = DEFAULT_USE_COMBINE_CHUNK,
     export_transcript: Annotated[
         str | None,
         typer.Option(
@@ -373,6 +383,7 @@ def process(
             force=force,
             no_ui=no_ui,
             quiz=quiz,
+            use_combine_chunk=use_combine_chunk,
             export_transcript=export_transcript,
             selected_cookie_file=(
                 str(cookie_file)

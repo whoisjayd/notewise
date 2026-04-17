@@ -1295,10 +1295,10 @@ def test_process_ui_shows_detailed_pipeline_states(
     rendered_chapter_statuses = "\n".join(chapter_statuses)
     assert "Transcript Ready" in rendered_statuses
     assert "Chunk 1/3" in rendered_statuses
-    assert "Combining 3 note parts" in rendered_statuses
+    assert "Finalizing 3 note parts" in rendered_statuses
     assert "Ch 2/5" in rendered_statuses
     assert "Ch 2/5, Part 1/2" in rendered_chapter_statuses
-    assert "Ch 2/5, Combining 2 parts" in rendered_chapter_statuses
+    assert "Ch 2/5, Finalizing 2 parts" in rendered_chapter_statuses
     assert "Quiz" in rendered_statuses
     assert "Quiz Part 1/2" in rendered_statuses
     assert "Combining 2 quiz parts" in rendered_statuses
@@ -1659,6 +1659,19 @@ def test_process_quiz_flag_passed_to_pipeline(
     assert result.exit_code == 0
     call_kwargs = mock_cls.call_args.kwargs
     assert call_kwargs.get("quiz") is True
+
+
+def test_process_use_combine_chunk_flag_passed_to_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """--use-combine-chunk is forwarded to CorePipeline."""
+    mock_cls, _pipeline_instance = mock_pipeline
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--use-combine-chunk"])
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs.get("use_combine_chunk") is True
 
 
 @pytest.mark.parametrize(

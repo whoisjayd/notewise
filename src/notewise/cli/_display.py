@@ -45,6 +45,12 @@ HEADLESS_LABELS: dict[EventType, str] = {
     EventType.VIDEO_SKIPPED: "Skipped (already processed)",
 }
 
+
+def _phase_label(event: PipelineEvent, default: str) -> str:
+    """Return the user-facing phase label for finalize-style events."""
+    return event.phase_label or default
+
+
 UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
     EventType.METADATA_START: lambda title, _: f"[yellow]{title}… (Metadata)[/yellow]",
     EventType.METADATA_FETCHED: lambda title, _: f"[cyan]{title}… (Fetched)[/cyan]",
@@ -61,7 +67,8 @@ UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
         f"[cyan]* {title}… (Chunk {event.chunk_number}/{event.total_chunks})[/cyan]"
     ),
     EventType.GENERATION_COMBINING: lambda title, event: (
-        f"[cyan]* {title}… (Combining {event.total_chunks} note parts)[/cyan]"
+        f"[cyan]* {title}… ({_phase_label(event, 'Finalizing')} "
+        f"{event.total_chunks} note parts)[/cyan]"
     ),
     EventType.CHAPTER_GENERATING: lambda title, event: (
         f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters})[/cyan]"
@@ -72,7 +79,7 @@ UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
     ),
     EventType.CHAPTER_COMBINING: lambda title, event: (
         f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters},"
-        f" Combining {event.total_chunks} parts)[/cyan]"
+        f" {_phase_label(event, 'Finalizing')} {event.total_chunks} parts)[/cyan]"
     ),
     EventType.QUIZ_GENERATING: lambda title, _: f"[magenta]* {title}… (Quiz)[/magenta]",
     EventType.QUIZ_CHUNK_GENERATING: lambda title, event: (
@@ -122,6 +129,10 @@ def emit_headless_event(context: CliProcessContext, event: PipelineEvent) -> Non
     ):
         return
     label = HEADLESS_LABELS.get(event.event_type, event.event_type.value)
+    if event.event_type == EventType.GENERATION_COMBINING:
+        label = f"{_phase_label(event, 'Finalizing')} notes"
+    elif event.event_type == EventType.CHAPTER_COMBINING:
+        label = f"{_phase_label(event, 'Finalizing')} chapter"
     title = event.title or event.video_id
     extra = ""
     if (

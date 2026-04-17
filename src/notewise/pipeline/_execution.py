@@ -197,6 +197,11 @@ async def process_single_video(
                                     chapter_number=chapter_number,
                                     total_chapters=total_chapters,
                                     total_chunks=total_parts,
+                                    phase_label=(
+                                        "Combining"
+                                        if pipeline.generator.use_combine_chunk
+                                        else "Stitching"
+                                    ),
                                 )
                                 if on_combine:
                                     on_combine(total_parts)
@@ -262,6 +267,11 @@ async def process_single_video(
                             video_id,
                             title=title,
                             total_chunks=total_parts,
+                            phase_label=(
+                                "Combining"
+                                if pipeline.generator.use_combine_chunk
+                                else "Stitching"
+                            ),
                         )
 
                     notes = await pipeline.generator.generate_study_notes(
