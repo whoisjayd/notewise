@@ -1,15 +1,22 @@
-"""Study material generator with chunking and combining logic."""
+"""Study material generator with chunking and stitching logic."""
 
 from __future__ import annotations
 
 import asyncio
+import bisect
 import re
 from collections.abc import Callable
 
 import structlog
 from litellm import token_counter
 
-from notewise._constants import DEFAULT_MAX_CONCURRENT_CHAPTERS, DEFAULT_TEMPERATURE
+from notewise._constants import (
+    DEFAULT_MAX_CONCURRENT_CHAPTERS,
+    DEFAULT_STITCH_CHAR_BOUNDARY,
+    DEFAULT_STITCH_SECTION_BOUNDARY_COUNT,
+    DEFAULT_TEMPERATURE,
+    DEFAULT_USE_COMBINE_CHUNK,
+)
 from notewise.config import settings as config
 from notewise.llm.prompts.chapter_notes import (
     get_chapter_prompt,
@@ -24,6 +31,7 @@ from notewise.llm.prompts.study_notes import (
     get_chunk_prompt,
     get_combine_prompt,
     get_single_pass_prompt,
+    get_stitch_prompt,
 )
 from notewise.llm.provider import LLMProvider
 
@@ -33,6 +41,160 @@ CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
+_MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^#{1,6}\s+")
+_MARKDOWN_HEADING_LINE_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
+_MARKDOWN_FENCE_PATTERN = re.compile(r"^\s*(```+|~~~+)")
+_PART_HEADING_SUFFIX_PATTERN = re.compile(
+    r"^(#{1,6}\s+.+?)(?:\s*[:\-]\s*(?:Part|Chunk)\s+\d+"
+    r"|\s*\((?:Part|Chunk)\s+\d+\))\s*$",
+    re.IGNORECASE,
+)
+_CHAPTER_HEADING_PREFIX_PATTERN = re.compile(
+    r"^chapter(?:\s+\d+)?\s*:\s*", re.IGNORECASE
+)
+
+
+def _join_markdown_fragments(*parts: str) -> str:
+    """Join Markdown fragments without introducing excessive blank lines."""
+    return "\n\n".join(part.strip() for part in parts if part and part.strip())
+
+
+def _collect_markdown_boundaries(document: str) -> tuple[list[int], list[int]]:
+    """Collect heading positions and line-safe split boundaries outside fences."""
+    heading_positions: list[int] = []
+    safe_boundaries = [0]
+    offset = 0
+    in_fence = False
+    fence_marker: str | None = None
+
+    for line in document.splitlines(keepends=True):
+        if not in_fence and _MARKDOWN_HEADING_PATTERN.match(line):
+            heading_positions.append(offset)
+
+        fence_match = _MARKDOWN_FENCE_PATTERN.match(line)
+        if fence_match:
+            marker = fence_match.group(1)[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker == fence_marker:
+                in_fence = False
+                fence_marker = None
+
+        offset += len(line)
+        if not in_fence:
+            safe_boundaries.append(offset)
+
+    if safe_boundaries[-1] != len(document):
+        safe_boundaries.append(len(document))
+
+    return heading_positions, safe_boundaries
+
+
+def _select_safe_boundary_before(
+    preferred_offset: int,
+    safe_boundaries: list[int],
+) -> int:
+    """Select the nearest safe boundary at or before the preferred offset."""
+    index = bisect.bisect_right(safe_boundaries, preferred_offset) - 1
+    return safe_boundaries[max(index, 0)]
+
+
+def _select_safe_boundary_after(
+    preferred_offset: int,
+    safe_boundaries: list[int],
+    document_length: int,
+) -> int:
+    """Select the nearest safe boundary at or after the preferred offset."""
+    index = bisect.bisect_left(safe_boundaries, preferred_offset)
+    if index < len(safe_boundaries):
+        return safe_boundaries[index]
+    return document_length
+
+
+def _split_tail_for_stitching(document: str) -> tuple[str, str]:
+    """Split a document into prefix + tail fragment for boundary stitching."""
+    heading_positions, safe_boundaries = _collect_markdown_boundaries(document)
+    char_limited_start = max(0, len(document) - DEFAULT_STITCH_CHAR_BOUNDARY)
+    if len(heading_positions) > DEFAULT_STITCH_SECTION_BOUNDARY_COUNT:
+        preferred_start = max(
+            heading_positions[-DEFAULT_STITCH_SECTION_BOUNDARY_COUNT],
+            char_limited_start,
+        )
+    else:
+        preferred_start = char_limited_start
+    start = _select_safe_boundary_before(preferred_start, safe_boundaries)
+    return document[:start].rstrip(), document[start:].lstrip()
+
+
+def _split_head_for_stitching(document: str) -> tuple[str, str]:
+    """Split a document into head fragment + suffix for boundary stitching."""
+    heading_positions, safe_boundaries = _collect_markdown_boundaries(document)
+    char_limited_end = min(len(document), DEFAULT_STITCH_CHAR_BOUNDARY)
+    if len(heading_positions) > DEFAULT_STITCH_SECTION_BOUNDARY_COUNT:
+        preferred_end = min(
+            heading_positions[DEFAULT_STITCH_SECTION_BOUNDARY_COUNT],
+            char_limited_end,
+        )
+    else:
+        preferred_end = char_limited_end
+    end = _select_safe_boundary_after(preferred_end, safe_boundaries, len(document))
+    return document[:end].rstrip(), document[end:].lstrip()
+
+
+def _normalize_stitched_document(document: str) -> str:
+    """Clean chunk-local framing from a stitched Markdown document."""
+    lines = document.splitlines()
+    normalized_lines: list[str] = []
+    first_h1_key: str | None = None
+    in_fence = False
+    fence_marker: str | None = None
+
+    for line in lines:
+        fence_match = _MARKDOWN_FENCE_PATTERN.match(line)
+        if fence_match:
+            marker = fence_match.group(1)[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker == fence_marker:
+                in_fence = False
+                fence_marker = None
+            normalized_lines.append(line)
+            continue
+
+        if in_fence:
+            normalized_lines.append(line)
+            continue
+
+        cleaned_line = _PART_HEADING_SUFFIX_PATTERN.sub(r"\1", line).rstrip()
+        heading_match = _MARKDOWN_HEADING_LINE_PATTERN.match(cleaned_line)
+        if not heading_match:
+            normalized_lines.append(cleaned_line)
+            continue
+
+        hashes, heading_text = heading_match.groups()
+        heading_key = _canonicalize_root_heading(heading_text)
+        if hashes == "#":
+            if first_h1_key is None:
+                first_h1_key = heading_key
+            elif heading_key == first_h1_key:
+                continue
+            else:
+                cleaned_line = f"## {heading_text}"
+
+        normalized_lines.append(cleaned_line)
+
+    normalized_document = "\n".join(normalized_lines)
+    return re.sub(r"\n{3,}", "\n\n", normalized_document).strip()
+
+
+def _canonicalize_root_heading(heading_text: str) -> str:
+    """Normalize root headings so restarts of the same chapter can be detected."""
+    canonical = heading_text.strip()
+    canonical = _CHAPTER_HEADING_PREFIX_PATTERN.sub("", canonical)
+    canonical = re.sub(r"\s+", " ", canonical)
+    return canonical.casefold()
 
 
 class StudyMaterialGenerator:
@@ -47,6 +209,7 @@ class StudyMaterialGenerator:
         provider: LLMProvider,
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int | None = None,
+        use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     ):
         """
         Initialize generator.
@@ -55,10 +218,80 @@ class StudyMaterialGenerator:
             provider: LLM provider instance.
             temperature: LLM response temperature.
             max_tokens: Maximum tokens for LLM responses.
+            use_combine_chunk: Whether to use the deprecated legacy combine flow.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.use_combine_chunk = use_combine_chunk
+
+    async def _combine_chunk_notes(
+        self,
+        chunk_notes: list[str],
+        *,
+        system_prompt: str,
+    ) -> str:
+        """Run the deprecated legacy combine-all-chunks flow."""
+        return await self.provider.generate(
+            system_prompt=system_prompt,
+            user_prompt=get_combine_prompt(chunk_notes),
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
+
+    async def _stitch_chunk_notes(
+        self,
+        chunk_notes: list[str],
+        *,
+        system_prompt: str,
+    ) -> str:
+        """Stitch adjacent chunk outputs into one continuous Markdown document."""
+        stitched_document = chunk_notes[0]
+
+        for next_chunk_notes in chunk_notes[1:]:
+            prefix, previous_tail = _split_tail_for_stitching(stitched_document)
+            next_head, suffix = _split_head_for_stitching(next_chunk_notes)
+            stitched_boundary = await self.provider.generate(
+                system_prompt=system_prompt,
+                user_prompt=get_stitch_prompt(previous_tail, next_head),
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+            stitched_document = _join_markdown_fragments(
+                prefix,
+                stitched_boundary,
+                suffix,
+            )
+
+        return _normalize_stitched_document(stitched_document)
+
+    async def _finalize_chunk_notes(
+        self,
+        chunk_notes: list[str],
+        *,
+        system_prompt: str,
+        on_combine: Callable[[int], None] | None = None,
+    ) -> str:
+        """Finalize chunk notes with default stitching or legacy combine."""
+        if len(chunk_notes) == 1:
+            return chunk_notes[0]
+
+        if on_combine:
+            on_combine(len(chunk_notes))
+
+        if self.use_combine_chunk:
+            logger.warning(
+                "Using deprecated legacy combine-chunk flow instead of stitching."
+            )
+            return await self._combine_chunk_notes(
+                chunk_notes,
+                system_prompt=system_prompt,
+            )
+
+        return await self._stitch_chunk_notes(
+            chunk_notes,
+            system_prompt=system_prompt,
+        )
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
@@ -215,14 +448,14 @@ class StudyMaterialGenerator:
             )
             chunk_notes.append(note)
 
-        logger.info(f"{video_title}: Combining {len(chunk_notes)} chunks...")
-        if on_combine:
-            on_combine(len(chunk_notes))
-        final_notes = await self.provider.generate(
+        logger.info(
+            f"{video_title}: Finalizing {len(chunk_notes)} chunks via "
+            f"{'legacy combine' if self.use_combine_chunk else 'stitching'}..."
+        )
+        final_notes = await self._finalize_chunk_notes(
+            chunk_notes,
             system_prompt=SYSTEM_PROMPT,
-            user_prompt=get_combine_prompt(chunk_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            on_combine=on_combine,
         )
         logger.info(f"Completed notes for {video_title}")
         return final_notes
@@ -283,17 +516,13 @@ class StudyMaterialGenerator:
             chunk_notes.append(note)
 
         logger.info(
-            f"Chapter '{chapter_title[:40]}': combining {len(chunk_notes)} parts..."
+            f"Chapter '{chapter_title[:40]}': finalizing {len(chunk_notes)} parts "
+            f"via {'legacy combine' if self.use_combine_chunk else 'stitching'}..."
         )
-        if len(chunk_notes) == 1:
-            return chunk_notes[0]
-        if on_combine:
-            on_combine(len(chunk_notes))
-        return await self.provider.generate(
+        return await self._finalize_chunk_notes(
+            chunk_notes,
             system_prompt=CHAPTER_SYSTEM_PROMPT,
-            user_prompt=get_combine_prompt(chunk_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            on_combine=on_combine,
         )
 
     async def generate_chapter_notes_concurrent(

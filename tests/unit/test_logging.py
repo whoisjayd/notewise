@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import os
 import time
+from types import SimpleNamespace
 
 import structlog
 
 import notewise.logging as logging_module
-from notewise.logging import configure_logging, prune_log_files, redact_sensitive_text
+from notewise.logging import (
+    configure_logging,
+    make_log_safe_text,
+    prune_log_files,
+    redact_sensitive_text,
+)
 
 
 def _reset_logging_state() -> None:
@@ -32,6 +38,24 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
     assert google_key not in redacted
     assert bearer not in redacted
     assert "[REDACTED]" in redacted
+
+
+def test_make_log_safe_text_escapes_unencodable_terminal_characters(monkeypatch):
+    """Log text should remain printable even on cp1252-style terminals."""
+    monkeypatch.setattr(
+        logging_module.sys,
+        "stderr",
+        SimpleNamespace(encoding="cp1252"),
+    )
+    monkeypatch.setattr(
+        logging_module.sys,
+        "stdout",
+        SimpleNamespace(encoding="cp1252"),
+    )
+
+    safe_text = make_log_safe_text("provider failed → retry later")
+
+    assert safe_text == "provider failed \\u2192 retry later"
 
 
 def test_configure_logging_writes_plain_redacted_tracebacks(tmp_path):
