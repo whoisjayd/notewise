@@ -28,23 +28,44 @@ def _format_timestamp(seconds: int) -> str:
     return f"{minutes:02d}:{secs:02d}"
 
 
+def _normalize_heading_for_timestamp_match(text: str) -> str:
+    text = re.sub(r"^\[(?:\d{2}:)?\d{2}:\d{2}\]\s+", "", text.strip())
+    text = re.sub(r"\s+", " ", text)
+    return text.casefold()
+
+
+def _heading_matches_chapter_title(heading_text: str, chapter_title: str) -> bool:
+    normalized_heading = _normalize_heading_for_timestamp_match(heading_text)
+    normalized_title = _normalize_heading_for_timestamp_match(chapter_title)
+    if normalized_heading == normalized_title:
+        return True
+    for separator in (":", " - ", " — ", " – "):
+        if normalized_heading.startswith(f"{normalized_title}{separator}"):
+            return True
+    return False
+
+
 def prefix_chapter_heading_with_timestamp(
     notes: str,
     chapter_title: str,
     start_seconds: int,
 ) -> str:
     """Prefix the matching chapter heading with a deterministic timestamp label."""
-    chapter_heading_re = re.compile(
-        rf"^(?P<level>#{{1,6}})\s+{re.escape(chapter_title)}\s*$",
-        re.MULTILINE,
-    )
-    match = chapter_heading_re.search(notes)
-    if match:
-        level = match.group("level")
-        timestamped_heading = (
-            f"{level} [{_format_timestamp(start_seconds)}] {chapter_title}"
+    heading_re = re.compile(r"^(?P<level>#{1,6})\s+(?P<text>.+?)\s*$", re.MULTILINE)
+    for match in heading_re.finditer(notes):
+        heading_text = match.group("text")
+        if not _heading_matches_chapter_title(heading_text, chapter_title):
+            continue
+        cleaned_heading_text = re.sub(
+            r"^\[(?:\d{2}:)?\d{2}:\d{2}\]\s+",
+            "",
+            heading_text.strip(),
         )
-        return chapter_heading_re.sub(timestamped_heading, notes, count=1)
+        timestamped_heading = (
+            f"{match.group('level')} [{_format_timestamp(start_seconds)}] "
+            f"{cleaned_heading_text}"
+        )
+        return f"{notes[:match.start()]}{timestamped_heading}{notes[match.end():]}"
 
     timestamped_heading = f"# [{_format_timestamp(start_seconds)}] {chapter_title}"
     return f"{timestamped_heading}\n\n{notes.lstrip()}"
