@@ -37,6 +37,8 @@ class CliProcessContext:
     quiz: bool
     export_transcript: str | None
     selected_cookie_file: str | None
+    use_timestamps: bool
+    throttle: float
     api_key_checked: bool | None = None
 
     def print_failure_panel(
@@ -120,4 +122,6 @@ class CliProcessContext:
             export_transcript=self.export_transcript,
             youtube_cookie_file=self.selected_cookie_file,
             shared_state=shared_state,
+            use_timestamps=self.use_timestamps,
+            throttle=self.throttle,
         )
