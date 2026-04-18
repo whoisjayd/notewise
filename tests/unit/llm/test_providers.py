@@ -1,6 +1,7 @@
 """Tests for LLM provider integration."""
 
 import logging
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -304,6 +305,16 @@ class TestLLMProvider:
         summary = _summarize_error(Exception("x" * 600))
         assert summary.endswith("...")
         assert len(summary) == 502
+
+    def test_summarize_error_escapes_unencodable_terminal_characters(self):
+        """Error summaries should stay printable on non-UTF terminals."""
+        with (
+            patch("notewise.logging.sys.stderr", SimpleNamespace(encoding="cp1252")),
+            patch("notewise.logging.sys.stdout", SimpleNamespace(encoding="cp1252")),
+        ):
+            summary = _summarize_error(Exception("retry later → unavailable"))
+
+        assert summary == "retry later \\u2192 unavailable"
 
     def test_configure_litellm_runtime_handles_missing_verbose_logger(self):
         """LiteLLM runtime setup should tolerate missing verbose logger objects."""

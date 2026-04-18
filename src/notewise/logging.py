@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import sys
 import threading
 from collections.abc import Mapping, MutableMapping
 from datetime import datetime, timedelta
@@ -84,6 +85,12 @@ def redact_sensitive_text(text: str) -> str:
     for pattern in _SENSITIVE_TEXT_PATTERNS:
         sanitized = pattern.sub(_REDACTED, sanitized)
     return sanitized
+
+
+def make_log_safe_text(text: str) -> str:
+    """Return text that won't crash when emitted on non-UTF terminals."""
+    encoding = sys.stderr.encoding or sys.stdout.encoding or "utf-8"
+    return text.encode(encoding, errors="backslashreplace").decode(encoding)
 
 
 def redact_sensitive_data(value: Any) -> Any:

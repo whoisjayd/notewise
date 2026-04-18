@@ -35,6 +35,16 @@ def test_print_banner_renders_dev_version(monkeypatch) -> None:
     assert "vdev" in output
 
 
+def test_print_rule_falls_back_to_ascii_for_non_utf_console(monkeypatch) -> None:
+    """Legacy encodings should use an ASCII rule before Rich writes output."""
+    console = Console(record=True, width=120)
+    monkeypatch.setattr(_banner, "_supports_unicode_output", lambda _console: False)
+
+    _banner._print_rule(console, style="none")
+
+    assert "-" * 88 in console.export_text()
+
+
 def test_print_help_banner_delegates_to_main_banner(monkeypatch) -> None:
     """Help output should reuse the primary banner renderer."""
     console = Console(record=True, width=120)

@@ -17,7 +17,7 @@ from typing import Any
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
-from notewise._constants import DEFAULT_MODEL
+from notewise._constants import DEFAULT_MODEL, DEFAULT_USE_COMBINE_CHUNK
 from notewise.config import get_cache_db_path
 from notewise.config import settings as config
 from notewise.domain.events import EventType, PipelineEvent
@@ -74,6 +74,7 @@ class CorePipeline:
         max_tokens: int | None = None,
         force: bool = False,
         quiz: bool = False,
+        use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         export_transcript: str | None = None,
         youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
@@ -92,9 +93,11 @@ class CorePipeline:
             self.provider,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            use_combine_chunk=use_combine_chunk,
         )
         self.force = force
         self.quiz = quiz
+        self.use_combine_chunk = use_combine_chunk
         self.export_transcript_format = export_transcript
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
@@ -314,10 +317,12 @@ async def run_pipeline(
     video_ids: list[str],
     output_dir: Path | None = None,
     model: str = DEFAULT_MODEL,
+    use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
     pipeline = CorePipeline(
         model=model,
         output_dir=output_dir,
+        use_combine_chunk=use_combine_chunk,
     )
     return await pipeline.run(video_ids, on_event=on_event)

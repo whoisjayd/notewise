@@ -6,7 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from notewise.config import settings as config
-from notewise.pipeline.generation import StudyMaterialGenerator
+from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
+from notewise.pipeline.generation import (
+    StudyMaterialGenerator,
+    _normalize_stitched_document,
+    _split_head_for_stitching,
+    _split_tail_for_stitching,
+)
 
 
 class TestStudyMaterialGenerator:
@@ -156,6 +162,60 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_generate_study_notes_multiple_uses_stitch_prompt_by_default(
+        self, mock_llm_provider
+    ):
+        """Chunked study notes should stitch adjacent outputs by default."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "# Section One\n\nChunk one detail",
+                "# Section One\n\nChunk two detail",
+                "# Stitched\n\nMerged detail",
+            ]
+        )
+
+        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
+            result = await generator.generate_study_notes("Long text")
+
+        assert result == "# Stitched\n\nMerged detail"
+        final_prompt = generator.provider.generate.await_args_list[-1].kwargs[
+            "user_prompt"
+        ]
+        assert final_prompt == get_stitch_prompt(
+            "# Section One\n\nChunk one detail",
+            "# Section One\n\nChunk two detail",
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_multiple_uses_legacy_combine_when_enabled(
+        self, mock_llm_provider
+    ):
+        """Legacy combine mode should bypass stitching when explicitly enabled."""
+        generator = StudyMaterialGenerator(mock_llm_provider, use_combine_chunk=True)
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "# Section One\n\nChunk one detail",
+                "# Section One\n\nChunk two detail",
+                "# Combined\n\nMerged detail",
+            ]
+        )
+
+        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
+            result = await generator.generate_study_notes("Long text")
+
+        assert result == "# Combined\n\nMerged detail"
+        final_prompt = generator.provider.generate.await_args_list[-1].kwargs[
+            "user_prompt"
+        ]
+        assert final_prompt == get_combine_prompt(
+            [
+                "# Section One\n\nChunk one detail",
+                "# Section One\n\nChunk two detail",
+            ]
+        )
+
+    @pytest.mark.asyncio
     async def test_generate_study_notes_on_combine_callback(self, generator):
         """Chunked note generation should signal when combine begins."""
         chunks = ["Part 1", "Part 2"]
@@ -188,6 +248,63 @@ class TestStudyMaterialGenerator:
             await generator.generate_single_chapter_notes("Ch1", "very long text")
         # 2 chunk calls + 1 combine call = 3
         assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_uses_stitch_prompt_by_default(
+        self, mock_llm_provider
+    ):
+        """Chunked chapter notes should stitch adjacent outputs by default."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "### Topic\n\nChunk one detail",
+                "### Topic\n\nChunk two detail",
+                "### Topic\n\nMerged detail",
+            ]
+        )
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
+            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+        ):
+            result = await generator.generate_single_chapter_notes("Ch1", "very long")
+
+        assert result == "### Topic\n\nMerged detail"
+        final_prompt = generator.provider.generate.await_args_list[-1].kwargs[
+            "user_prompt"
+        ]
+        assert final_prompt == get_stitch_prompt(
+            "### Topic\n\nChunk one detail",
+            "### Topic\n\nChunk two detail",
+        )
+
+    @pytest.mark.asyncio
+    async def test_stitch_chunk_notes_handles_three_chunks(self, mock_llm_provider):
+        """Three-chunk stitching should preserve cumulative content across passes."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "## Topic One\n\nA\n\n## Topic Two\n\nB merged",
+                (
+                    "## Topic One\n\nA\n\n## Topic Two\n\nB merged\n\n"
+                    "## Topic Three\n\nC merged\n\n## Topic Four: Chunk 3\n\nD"
+                ),
+            ]
+        )
+
+        result = await generator._stitch_chunk_notes(
+            [
+                "## Topic One\n\nA",
+                "## Topic Two\n\nB",
+                "## Topic Three\n\nC\n\n## Topic Four: Chunk 3\n\nD",
+            ],
+            system_prompt="system",
+        )
+
+        assert "## Topic One" in result
+        assert "## Topic Four\n\nD" in result
+        assert "Chunk 3" not in result
+        assert generator.provider.generate.await_count == 2
 
     @pytest.mark.asyncio
     async def test_generate_single_chapter_callbacks(self, generator):
@@ -364,3 +481,144 @@ class TestStudyMaterialGenerator:
         # 1 chunk call only — combine is skipped
         assert generator.provider.generate.call_count == 1
         assert result == "# Generated Notes\n\nTest content."
+
+
+def test_split_tail_for_stitching_limits_boundary_to_recent_sections():
+    """Tail splitting should keep older sections outside the stitched boundary."""
+    document = (
+        "# Intro\n\nA\n\n## Topic One\n\nB\n\n## Topic Two\n\nC\n\n## Topic Three\n\nD"
+    )
+
+    prefix, tail = _split_tail_for_stitching(document)
+
+    assert "# Intro" in prefix
+    assert "## Topic One" not in tail
+    assert "## Topic Two" in tail
+    assert "## Topic Three" in tail
+
+
+def test_split_head_for_stitching_limits_boundary_to_early_sections():
+    """Head splitting should keep later sections outside the stitched boundary."""
+    document = (
+        "# Intro\n\nA\n\n## Topic One\n\nB\n\n## Topic Two\n\nC\n\n## Topic Three\n\nD"
+    )
+
+    head, suffix = _split_head_for_stitching(document)
+
+    assert "# Intro" in head
+    assert "## Topic One" in head
+    assert "## Topic Two" not in head
+    assert "## Topic Two" in suffix
+
+
+def test_split_tail_for_stitching_keeps_fenced_code_block_intact():
+    """Tail splitting should not start in the middle of a fenced code block."""
+    document = (
+        "## Intro\n\nOverview\n\n```python\n# inside fence\nprint('hi')\n```\n\n"
+        "## Next Topic\n\nBody"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 35):
+        _prefix, tail = _split_tail_for_stitching(document)
+
+    assert tail.count("```") == 2
+    assert "# inside fence" in tail
+    assert "## Next Topic" in tail
+
+
+def test_split_head_for_stitching_keeps_fenced_code_block_intact():
+    """Head splitting should include a full fenced code block before splitting."""
+    document = (
+        "## Intro\n\nOverview\n\n```python\n# inside fence\nprint('hi')\n```\n\n"
+        "## Next Topic\n\nBody"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 35):
+        head, suffix = _split_head_for_stitching(document)
+
+    assert head.count("```") == 2
+    assert "# inside fence" in head
+    assert suffix.startswith("## Next Topic")
+
+
+def test_split_tail_for_stitching_applies_char_cap_even_with_headings():
+    """Tail splitting should keep boundary windows bounded even with many headings."""
+    document = (
+        "## Topic One\n\nA\n\n## Topic Two\n\nB\n\n"
+        "## Topic Three\n\nC\n\n## Topic Four\n\nD"
+    )
+
+    with patch("notewise.pipeline.generation.DEFAULT_STITCH_CHAR_BOUNDARY", 25):
+        prefix, tail = _split_tail_for_stitching(document)
+
+    assert "## Topic One" in prefix
+    assert "## Topic One" not in tail
+    assert tail.startswith("## Topic Three") or tail.startswith("## Topic Four")
+
+
+def test_normalize_stitched_document_removes_part_suffix_from_first_heading():
+    """Stitched output should not keep chunk-local part labels in the first heading."""
+    document = "## Python Programming Fundamentals: Part 1\n\nBody text"
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == "## Python Programming Fundamentals\n\nBody text"
+
+
+def test_normalize_stitched_document_preserves_non_part_headings():
+    """Normalization should leave unrelated headings untouched."""
+    document = "## Part 1 Exercises\n\nBody text"
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == document
+
+
+def test_normalize_stitched_document_cleans_all_matching_headings():
+    """Normalization should strip chunk-local labels from every heading."""
+    document = (
+        "## Python Basics: Part 1\n\nIntro\n\n"
+        "### Variables - Chunk 2\n\nDetails\n\n"
+        "## Part 1 Exercises\n\nPractice"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "## Python Basics\n\nIntro\n\n"
+        "### Variables\n\nDetails\n\n"
+        "## Part 1 Exercises\n\nPractice"
+    )
+
+
+def test_normalize_stitched_document_removes_restarted_duplicate_chapter_h1s():
+    """Repeated chapter-level H1 restarts should be removed from stitched output."""
+    document = (
+        "# Chapter: Your First Python Program\n\nIntro\n\n"
+        "## Setup\n\nInstall Python\n\n"
+        "# Your First Python Program\n\n"
+        "## Running Code\n\nUse the IDE run action"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "# Chapter: Your First Python Program\n\nIntro\n\n"
+        "## Setup\n\nInstall Python\n\n"
+        "## Running Code\n\nUse the IDE run action"
+    )
+
+
+def test_normalize_stitched_document_demotes_distinct_followup_h1s():
+    """Distinct follow-up H1s should become H2s under the preserved root title."""
+    document = (
+        "# Chapter: If Statements in Python\n\nIntro\n\n"
+        "# Control Flow: Advanced Conditional Logic\n\nMore detail"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "# Chapter: If Statements in Python\n\nIntro\n\n"
+        "## Control Flow: Advanced Conditional Logic\n\nMore detail"
+    )

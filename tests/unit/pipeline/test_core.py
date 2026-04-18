@@ -109,6 +109,21 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
     assert pipeline._reserved_output_targets is shared_state.reserved_output_targets
 
 
+def test_pipeline_configures_generator_for_legacy_chunk_combine(
+    temp_output_dir, mock_llm_provider
+):
+    """CorePipeline should pass the legacy combine flag into the generator."""
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            use_combine_chunk=True,
+        )
+
+    assert pipeline.use_combine_chunk is True
+    assert pipeline.generator.use_combine_chunk is True
+
+
 @pytest.mark.asyncio
 async def test_get_cached_video_returns_none_on_sqlalchemy_error(
     temp_output_dir,
@@ -163,6 +178,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
             ["vid1"],
             output_dir=temp_output_dir,
             model="demo-model",
+            use_combine_chunk=True,
             on_event=None,
         )
 
@@ -170,6 +186,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
     mock_pipeline_cls.assert_called_once_with(
         model="demo-model",
         output_dir=temp_output_dir,
+        use_combine_chunk=True,
     )
     pipeline_instance.run.assert_awaited_once_with(["vid1"], on_event=None)
 
