@@ -325,6 +325,27 @@ def process(
             resolve_path=True,
         ),
     ] = None,
+    timestamps: Annotated[
+        bool,
+        typer.Option(
+            "--timestamps",
+            help=(
+                "Include [MM:SS] timestamps in generated markdown headers. "
+                "Uses timestamps from transcript segments to label section headers."
+            ),
+        ),
+    ] = False,
+    throttle: Annotated[
+        float,
+        typer.Option(
+            "--throttle",
+            help=(
+                "Number of seconds to wait between LLM generation calls. "
+                "Useful for avoiding rate limits on free-tier or low-quota accounts. "
+                "Example: --throttle 2 adds a 2-second delay after each generation call."
+            ),
+        ),
+    ] = 0.0,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -379,6 +400,8 @@ def process(
                 if cookie_file is not None
                 else settings.youtube_cookie_file
             ),
+            use_timestamps=timestamps,
+            throttle=throttle,
         )
 
         had_failures = asyncio.run(
