@@ -346,6 +346,30 @@ Body"""
     assert "### Point" in result
 
 
+def test_prefix_chapter_heading_with_timestamp_preserves_suffix_text():
+    notes = """# Introduction: Foundations of Python Programming
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Introduction", 0)
+
+    assert result.startswith(
+        "# [00:00] Introduction: Foundations of Python Programming"
+    )
+    assert result.count("# ") == 1
+
+
+def test_prefix_chapter_heading_with_timestamp_rewrites_existing_timestamped_heading():
+    notes = """## [00:10] Intro — Key Ideas
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("## [00:34] Intro — Key Ideas")
+    assert "[00:10]" not in result
+
+
 def test_prefix_chapter_heading_with_timestamp_prepends_when_chapter_heading_missing():
     notes = """# Notes
 
