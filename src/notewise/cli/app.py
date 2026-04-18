@@ -325,6 +325,16 @@ def process(
             resolve_path=True,
         ),
     ] = None,
+    timestamps: Annotated[
+        bool,
+        typer.Option(
+            "--timestamps",
+            help=(
+                "Include [MM:SS] timestamps in generated markdown headers. "
+                "Uses timestamps from transcript segments to label section headers."
+            ),
+        ),
+    ] = False,
 ) -> None:
     """
     Generate comprehensive study notes from YouTube videos or playlists.
@@ -379,6 +389,7 @@ def process(
                 if cookie_file is not None
                 else settings.youtube_cookie_file
             ),
+            use_timestamps=timestamps,
         )
 
         had_failures = asyncio.run(
