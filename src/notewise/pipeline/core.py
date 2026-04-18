@@ -77,6 +77,7 @@ class CorePipeline:
         export_transcript: str | None = None,
         youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
+        use_timestamps: bool = False,
     ):
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -97,6 +98,7 @@ class CorePipeline:
         self.quiz = quiz
         self.export_transcript_format = export_transcript
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
+        self.use_timestamps = use_timestamps
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}
         self._metrics_lock = asyncio.Lock()
