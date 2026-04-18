@@ -37,6 +37,16 @@ class VideoTranscript:
         """Convert transcript segments to continuous text."""
         return " ".join(seg.text for seg in self.segments)
 
+    def to_text_with_timestamps(self) -> str:
+        """Convert transcript segments to text with [MM:SS] timestamps."""
+        parts = []
+        for seg in self.segments:
+            minutes = int(seg.start // 60)
+            seconds = int(seg.start % 60)
+            timestamp = f"[{minutes:02d}:{seconds:02d}]"
+            parts.append(f"{timestamp} {seg.text}")
+        return " ".join(parts)
+
 
 @dataclass(frozen=True)
 class VideoMetadata:
