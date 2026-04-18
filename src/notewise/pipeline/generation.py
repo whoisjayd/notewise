@@ -42,11 +42,15 @@ CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
 _MARKDOWN_HEADING_PATTERN = re.compile(r"(?m)^#{1,6}\s+")
+_MARKDOWN_HEADING_LINE_PATTERN = re.compile(r"^(#{1,6})\s+(.+?)\s*$")
 _MARKDOWN_FENCE_PATTERN = re.compile(r"^\s*(```+|~~~+)")
 _PART_HEADING_SUFFIX_PATTERN = re.compile(
     r"^(#{1,6}\s+.+?)(?:\s*[:\-]\s*(?:Part|Chunk)\s+\d+"
     r"|\s*\((?:Part|Chunk)\s+\d+\))\s*$",
     re.IGNORECASE,
+)
+_CHAPTER_HEADING_PREFIX_PATTERN = re.compile(
+    r"^chapter(?:\s+\d+)?\s*:\s*", re.IGNORECASE
 )
 
 
@@ -141,12 +145,56 @@ def _split_head_for_stitching(document: str) -> tuple[str, str]:
 def _normalize_stitched_document(document: str) -> str:
     """Clean chunk-local framing from a stitched Markdown document."""
     lines = document.splitlines()
-    for index, line in enumerate(lines):
-        if not line.lstrip().startswith("#"):
+    normalized_lines: list[str] = []
+    first_h1_key: str | None = None
+    in_fence = False
+    fence_marker: str | None = None
+
+    for line in lines:
+        fence_match = _MARKDOWN_FENCE_PATTERN.match(line)
+        if fence_match:
+            marker = fence_match.group(1)[0]
+            if not in_fence:
+                in_fence = True
+                fence_marker = marker
+            elif marker == fence_marker:
+                in_fence = False
+                fence_marker = None
+            normalized_lines.append(line)
             continue
-        normalized_line = _PART_HEADING_SUFFIX_PATTERN.sub(r"\1", line).rstrip()
-        lines[index] = normalized_line
-    return "\n".join(lines)
+
+        if in_fence:
+            normalized_lines.append(line)
+            continue
+
+        cleaned_line = _PART_HEADING_SUFFIX_PATTERN.sub(r"\1", line).rstrip()
+        heading_match = _MARKDOWN_HEADING_LINE_PATTERN.match(cleaned_line)
+        if not heading_match:
+            normalized_lines.append(cleaned_line)
+            continue
+
+        hashes, heading_text = heading_match.groups()
+        heading_key = _canonicalize_root_heading(heading_text)
+        if hashes == "#":
+            if first_h1_key is None:
+                first_h1_key = heading_key
+            elif heading_key == first_h1_key:
+                continue
+            else:
+                cleaned_line = f"## {heading_text}"
+
+        normalized_lines.append(cleaned_line)
+
+    normalized_document = "\n".join(normalized_lines)
+    return re.sub(r"\n{3,}", "\n\n", normalized_document).strip()
+
+
+def _canonicalize_root_heading(heading_text: str) -> str:
+    """Normalize root headings so restarts of the same chapter can be detected."""
+    canonical = heading_text.strip()
+    canonical = _CHAPTER_HEADING_PREFIX_PATTERN.sub("", canonical)
+    canonical = re.sub(r"\s+", " ", canonical)
+    return canonical.casefold()
 
 
 class StudyMaterialGenerator:

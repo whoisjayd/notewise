@@ -589,3 +589,36 @@ def test_normalize_stitched_document_cleans_all_matching_headings():
         "### Variables\n\nDetails\n\n"
         "## Part 1 Exercises\n\nPractice"
     )
+
+
+def test_normalize_stitched_document_removes_restarted_duplicate_chapter_h1s():
+    """Repeated chapter-level H1 restarts should be removed from stitched output."""
+    document = (
+        "# Chapter: Your First Python Program\n\nIntro\n\n"
+        "## Setup\n\nInstall Python\n\n"
+        "# Your First Python Program\n\n"
+        "## Running Code\n\nUse the IDE run action"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "# Chapter: Your First Python Program\n\nIntro\n\n"
+        "## Setup\n\nInstall Python\n\n"
+        "## Running Code\n\nUse the IDE run action"
+    )
+
+
+def test_normalize_stitched_document_demotes_distinct_followup_h1s():
+    """Distinct follow-up H1s should become H2s under the preserved root title."""
+    document = (
+        "# Chapter: If Statements in Python\n\nIntro\n\n"
+        "# Control Flow: Advanced Conditional Logic\n\nMore detail"
+    )
+
+    normalized = _normalize_stitched_document(document)
+
+    assert normalized == (
+        "# Chapter: If Statements in Python\n\nIntro\n\n"
+        "## Control Flow: Advanced Conditional Logic\n\nMore detail"
+    )

@@ -19,6 +19,7 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
+from notewise.logging import make_log_safe_text
 from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
 
@@ -352,21 +353,24 @@ async def process_single_video(
 
         except IPBlockError as error:
             error_msg = format_user_error(error)
-            logger.error(f"IP Block for {video_id}: {error}")
+            logger.error(make_log_safe_text(f"IP Block for {video_id}: {error}"))
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
 
         except VideoUnavailableError as error:
             error_msg = str(error)
-            logger.error(f"Cannot process {video_id}: {error}")
+            logger.error(make_log_safe_text(f"Cannot process {video_id}: {error}"))
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
 
         except Exception as error:
             error_msg = format_user_error(error)
-            logger.error(f"Failed to process {video_id}: {error}", exc_info=True)
+            logger.error(
+                make_log_safe_text(f"Failed to process {video_id}: {error}"),
+                exc_info=True,
+            )
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False

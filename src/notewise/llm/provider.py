@@ -15,7 +15,7 @@ from litellm import acompletion, completion_cost
 from notewise._constants import DEFAULT_MODEL, DEFAULT_TEMPERATURE, LLM_NUM_RETRIES
 from notewise.config import settings as config
 from notewise.errors import LLMGenerationError as _LLMGenerationError
-from notewise.logging import redact_sensitive_text
+from notewise.logging import make_log_safe_text, redact_sensitive_text
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -43,6 +43,7 @@ _configure_litellm_runtime()
 def _summarize_error(error: Exception) -> str:
     """Collapse exception text into one redacted, log-friendly summary line."""
     summary = redact_sensitive_text(" ".join(str(error).split()))
+    summary = make_log_safe_text(summary)
     if len(summary) > _ERROR_SUMMARY_LIMIT:
         return f"{summary[: _ERROR_SUMMARY_LIMIT - 1]}..."
     return summary
