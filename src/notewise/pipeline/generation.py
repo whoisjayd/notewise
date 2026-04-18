@@ -47,6 +47,7 @@ class StudyMaterialGenerator:
         provider: LLMProvider,
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int | None = None,
+        throttle: float = 0.0,
     ):
         """
         Initialize generator.
@@ -55,10 +56,12 @@ class StudyMaterialGenerator:
             provider: LLM provider instance.
             temperature: LLM response temperature.
             max_tokens: Maximum tokens for LLM responses.
+            throttle: Seconds to wait between LLM generation calls (rate-limit mitigation).
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.throttle = throttle
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
@@ -214,6 +217,8 @@ class StudyMaterialGenerator:
                 max_tokens=self.max_tokens,
             )
             chunk_notes.append(note)
+            if self.throttle > 0:
+                await asyncio.sleep(self.throttle)
 
         logger.info(f"{video_title}: Combining {len(chunk_notes)} chunks...")
         if on_combine:
@@ -224,6 +229,8 @@ class StudyMaterialGenerator:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        if self.throttle > 0:
+            await asyncio.sleep(self.throttle)
         logger.info(f"Completed notes for {video_title}")
         return final_notes
 
@@ -281,6 +288,8 @@ class StudyMaterialGenerator:
                 max_tokens=self.max_tokens,
             )
             chunk_notes.append(note)
+            if self.throttle > 0:
+                await asyncio.sleep(self.throttle)
 
         logger.info(
             f"Chapter '{chapter_title[:40]}': combining {len(chunk_notes)} parts..."
@@ -289,12 +298,15 @@ class StudyMaterialGenerator:
             return chunk_notes[0]
         if on_combine:
             on_combine(len(chunk_notes))
-        return await self.provider.generate(
+        combined = await self.provider.generate(
             system_prompt=CHAPTER_SYSTEM_PROMPT,
             user_prompt=get_combine_prompt(chunk_notes),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        if self.throttle > 0:
+            await asyncio.sleep(self.throttle)
+        return combined
 
     async def generate_chapter_notes_concurrent(
         self,
@@ -304,6 +316,7 @@ class StudyMaterialGenerator:
         semaphore: asyncio.Semaphore | None = None,
         video_title: str = "Video",
         on_chapter_start: Callable[[int, int], None] | None = None,
+        throttle: float = 0.0,
     ) -> dict[str, str]:
         """Generate notes for all chapters concurrently, bounded by a semaphore.
 
@@ -312,6 +325,7 @@ class StudyMaterialGenerator:
             max_concurrent: Maximum simultaneous LLM calls (default 3).
             video_title: Video title for logging.
             on_chapter_start: Optional callback(chapter_num, total_chapters).
+            throttle: Seconds to wait between chapter generation calls.
 
         Returns:
             Mapping of chapter title to generated notes, in input order.
@@ -332,6 +346,8 @@ class StudyMaterialGenerator:
                     total_chapters=total,
                 )
                 notes = await self.generate_single_chapter_notes(ch_title, ch_text)
+                if throttle > 0:
+                    await asyncio.sleep(throttle)
                 return ch_title, notes
 
         tasks = [
@@ -389,6 +405,8 @@ class StudyMaterialGenerator:
                 max_tokens=self.max_tokens,
             )
             partial_quizzes.append(partial)
+            if self.throttle > 0:
+                await asyncio.sleep(self.throttle)
 
         if len(partial_quizzes) == 1:
             return partial_quizzes[0]
@@ -396,9 +414,12 @@ class StudyMaterialGenerator:
         logger.info(f"Quiz: combining {len(partial_quizzes)} partial quizzes.")
         if on_combine:
             on_combine(len(partial_quizzes))
-        return await self.provider.generate(
+        combined = await self.provider.generate(
             system_prompt=QUIZ_SYSTEM_PROMPT,
             user_prompt=get_quiz_combine_prompt(partial_quizzes),
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
+        if self.throttle > 0:
+            await asyncio.sleep(self.throttle)
+        return combined
