@@ -34,6 +34,7 @@ class CliProcessContext:
     selected_max_tokens: int | None
     force: bool
     no_ui: bool
+    stitch: bool
     quiz: bool
     export_transcript: str | None
     selected_cookie_file: str | None
@@ -116,6 +117,7 @@ class CliProcessContext:
             temperature=self.selected_temperature,
             max_tokens=self.selected_max_tokens,
             force=self.force,
+            stitch=self.stitch,
             quiz=self.quiz,
             export_transcript=self.export_transcript,
             youtube_cookie_file=self.selected_cookie_file,

@@ -211,15 +211,14 @@ def process(
             ),
             show_default=False,
         ),
-        
     ],
     stitch: Annotated[
-    bool,
-    typer.Option(
-        "--stitch",
-        help="Enable stitching of chunked outputs before final result.",
-    ),
-] = False,
+        bool,
+        typer.Option(
+            "--stitch",
+            help="{experimental}Enable stitching of chunked outputs before final result.",
+        ),
+    ] = False,
     model: Annotated[
         str | None,
         typer.Option(
@@ -359,8 +358,6 @@ def process(
 
         configure_logging()
         settings = _get_config()
-        if stitch:
-            console.print("[yellow]Stitching enabled (WIP)[/yellow]")
 
         runner = CliProcessRunner(
             console=console,
@@ -382,6 +379,7 @@ def process(
             ),
             force=force,
             no_ui=no_ui,
+            stitch=stitch,
             quiz=quiz,
             export_transcript=export_transcript,
             selected_cookie_file=(
