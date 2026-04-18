@@ -80,7 +80,10 @@ async def process_single_video(
                 on_request=pipeline._acquire_youtube_request_slot,
                 cookie_file=pipeline.youtube_cookie_file,
             )
-            transcript_text = transcript_obj.to_text()
+            if pipeline.use_timestamps:
+                transcript_text = transcript_obj.to_text_with_timestamps()
+            else:
+                transcript_text = transcript_obj.to_text()
             transcript_seconds = time.perf_counter() - transcript_start
 
             emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
@@ -233,6 +236,7 @@ async def process_single_video(
                                 semaphore=pipeline._chapter_semaphore,
                                 video_title=title,
                                 on_chapter_start=_on_chapter_start,
+                                throttle=pipeline.throttle,
                             )
                         finally:
                             pipeline.generator.generate_single_chapter_notes = (
