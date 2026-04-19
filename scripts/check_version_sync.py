@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -49,7 +50,23 @@ def get_versions() -> dict[str, str]:
     }
 
 
+def _normalize_release_tag(tag: str) -> str:
+    return tag[1:] if tag.startswith("v") else tag
+
+
+def _parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Validate package version metadata alignment.",
+    )
+    parser.add_argument(
+        "--release-tag",
+        help="Optional release tag to validate against the package version.",
+    )
+    return parser.parse_args()
+
+
 def main() -> int:
+    args = _parse_args()
     versions = get_versions()
     distinct_versions = set(versions.values())
 
@@ -60,6 +77,18 @@ def main() -> int:
         return 1
 
     version = next(iter(distinct_versions))
+
+    if args.release_tag is not None:
+        normalized_tag = _normalize_release_tag(args.release_tag)
+        if normalized_tag != version:
+            print(
+                "Release tag does not match package version:",
+                file=sys.stderr,
+            )
+            print(f"- release tag: {args.release_tag}", file=sys.stderr)
+            print(f"- package version: {version}", file=sys.stderr)
+            return 1
+
     print(f"Version metadata is aligned: {version}")
     return 0
 

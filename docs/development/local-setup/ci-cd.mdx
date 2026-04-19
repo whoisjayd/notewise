@@ -18,27 +18,28 @@ All workflows live in `.github/workflows/`.
 
     | Job | Description |
     | --- | --- |
+    | `changes` | Classifies the diff once and decides which heavier jobs actually need to run |
+    | `docs-only` | Fast success path for docs-only changes on `main` |
+    | `workflow-hygiene` | Runs `actionlint` only when workflow files changed |
     | `format-check` | `ruff format --check` |
     | `lint-check` | `ruff check` |
     | `type-check` | `ty check` |
+    | `deps-check` | `deptry src` |
+    | `security` | `bandit -c pyproject.toml -r src/notewise --severity-level high` |
     | `version-sync` | Validates package version consistency across `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` |
     | `startup-smoke` | `notewise version` — ensures the package imports cleanly |
     | `unit-tests` | `pytest` with `--cov-fail-under=90`; uploads coverage to Codecov |
     | `package-build` | `uv build` to catch packaging / metadata regressions before release |
-    | `hook-parity` | Runs the same `pre-commit` and `pre-push` checks contributors use locally |
+    | `hook-parity` | Runs full hook parity only when hook or workflow files changed |
     | `matrix-tests` | `pytest` on Ubuntu / Windows / macOS × Python 3.10 / 3.11 / 3.12 |
   </Accordion>
 
   <Accordion title="pr-gate.yml — PR validation">
-    Runs on every pull request to `dev`, and can also be dispatched manually by maintainers when needed. It enforces the PR-quality subset used for day-to-day contributions: format, lint, type-checking, version-metadata sync, unit tests, package builds, and local-hook parity. All jobs must pass before merge.
+    Runs on every pull request to `dev`, and can also be dispatched manually by maintainers when needed. It classifies changed files first, then runs only the relevant jobs: workflow hygiene for workflow edits, quality/tests/build jobs for code or packaging edits, hook parity for hook-related changes, and a fast success path for docs-only PRs.
   </Accordion>
 
   <Accordion title="branch-policy.yml — base branch enforcement">
     Closes pull requests that target `main` unless they are maintainer-managed `dev -> main` release PRs. This keeps all normal contribution flow on `dev`.
-  </Accordion>
-
-  <Accordion title="workflow-hygiene.yml — GitHub Actions linting">
-    Runs `actionlint` on workflow changes so broken GitHub Actions syntax and invalid workflow constructs are caught before they hit `main`.
   </Accordion>
 
   <Accordion title="pr-title.yml — PR title enforcement">
@@ -66,7 +67,7 @@ All workflows live in `.github/workflows/`.
   </Accordion>
 
   <Accordion title="release.yml — PyPI release">
-    Triggered when a tag matching `v*` is pushed. Builds the wheel and sdist, then publishes to PyPI using the `PYPI_API_TOKEN` secret configured in the `pypi` environment.
+    Triggered when a tag matching `v*` is pushed. It performs a lightweight release sanity check (including tag/version alignment), then builds the wheel and sdist and publishes to PyPI using the `PYPI_API_TOKEN` secret configured in the `pypi` environment. It no longer re-runs the entire main CI suite during release.
   </Accordion>
 
   <Accordion title="Supporting workflows">
@@ -92,9 +93,21 @@ All workflows live in `.github/workflows/`.
 Every PR must pass all of these before merge:
 
 <Steps>
+  <Step title="Change classification">
+    CI detects whether the PR is docs-only, workflow-related, hook-related, packaging-related, or code-related before starting expensive jobs.
+  </Step>
+  <Step title="Workflow hygiene (when needed)">
+    Workflow edits run `actionlint`.
+  </Step>
   <Step title="ruff format --check">No unformatted code.</Step>
   <Step title="ruff check">No lint errors.</Step>
   <Step title="ty check">No type errors.</Step>
+  <Step title="deptry">
+    No missing or unused declared dependencies.
+  </Step>
+  <Step title="bandit">
+    No high-severity security findings in application code.
+  </Step>
   <Step title="Version sync check">
     `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` must agree on the package version.
   </Step>
@@ -108,7 +121,7 @@ Every PR must pass all of these before merge:
     Source and wheel distributions must build successfully.
   </Step>
   <Step title="Hook parity">
-    CI re-runs the same `pre-commit` and `pre-push` checks contributors are expected to install locally.
+    CI re-runs the same `pre-commit` and `pre-push` checks contributors are expected to install locally, but only when hook or workflow files changed.
   </Step>
   <Step title="Matrix tests">
     All supported OS / Python version combinations.
@@ -132,7 +145,7 @@ Every PR must pass all of these before merge:
     ```
   </Step>
   <Step title="Automated publish">
-    `release.yml` builds and publishes to PyPI. `ghcr.yml` builds and pushes a new Docker image. Both run automatically.
+    `release.yml` and `ghcr.yml` both run a lightweight release sanity check, then publish their respective artifacts. They do not re-run the full main validation suite.
   </Step>
 </Steps>
 

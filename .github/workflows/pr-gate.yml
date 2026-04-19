@@ -8,14 +8,153 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Change Classification
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      docs_only: ${{ steps.classify.outputs.docs_only }}
+      workflow_changed: ${{ steps.classify.outputs.workflow_changed }}
+      python_changed: ${{ steps.classify.outputs.python_changed }}
+      packaging_changed: ${{ steps.classify.outputs.packaging_changed }}
+      version_changed: ${{ steps.classify.outputs.version_changed }}
+      hook_changed: ${{ steps.classify.outputs.hook_changed }}
+      run_quality: ${{ steps.classify.outputs.run_quality }}
+      run_tests: ${{ steps.classify.outputs.run_tests }}
+      run_package_build: ${{ steps.classify.outputs.run_package_build }}
+      run_hook_parity: ${{ steps.classify.outputs.run_hook_parity }}
+      run_workflow_hygiene: ${{ steps.classify.outputs.run_workflow_hygiene }}
+      run_version_sync: ${{ steps.classify.outputs.run_version_sync }}
+    steps:
+      - name: Detect changed paths
+        id: filter
+        if: github.event_name == 'pull_request'
+        uses: dorny/paths-filter@fbd0ab8f3e69293af611ebaee6363fc25e6d187d # v4.0.1
+        with:
+          filters: |
+            docs_changed:
+              - 'README.md'
+              - 'CONTRIBUTING.md'
+              - 'SECURITY.md'
+              - 'docs/**'
+              - '**/*.md'
+              - '**/*.mdx'
+            workflow_changed:
+              - '.github/workflows/**'
+              - '.github/actions/**'
+            python_changed:
+              - 'src/**/*.py'
+              - 'tests/**/*.py'
+              - 'scripts/**/*.py'
+            packaging_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'src/notewise/__init__.py'
+              - 'scripts/check_version_sync.py'
+            version_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'src/notewise/__init__.py'
+              - 'scripts/check_version_sync.py'
+            hook_changed:
+              - '.pre-commit-config.yaml'
+              - 'scripts/hooks/**'
+              - 'Makefile'
+
+      - name: Classify validation scope
+        id: classify
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            docs_changed="${{ steps.filter.outputs.docs_changed }}"
+            workflow_changed="${{ steps.filter.outputs.workflow_changed }}"
+            python_changed="${{ steps.filter.outputs.python_changed }}"
+            packaging_changed="${{ steps.filter.outputs.packaging_changed }}"
+            version_changed="${{ steps.filter.outputs.version_changed }}"
+            hook_changed="${{ steps.filter.outputs.hook_changed }}"
+          else
+            docs_changed=true
+            workflow_changed=true
+            python_changed=true
+            packaging_changed=true
+            version_changed=true
+            hook_changed=true
+          fi
+
+          docs_only=false
+          if [ "$docs_changed" = true ] && [ "$workflow_changed" != true ] && [ "$python_changed" != true ] && [ "$packaging_changed" != true ] && [ "$version_changed" != true ] && [ "$hook_changed" != true ]; then
+            docs_only=true
+          fi
+
+          run_quality=false
+          run_tests=false
+          run_package_build=false
+          run_hook_parity=false
+          run_workflow_hygiene=false
+          run_version_sync=false
+
+          if [ "$python_changed" = true ] || [ "$packaging_changed" = true ]; then
+            run_quality=true
+            run_tests=true
+            run_package_build=true
+          fi
+
+          if [ "$hook_changed" = true ] || [ "$workflow_changed" = true ]; then
+            run_hook_parity=true
+          fi
+
+          if [ "$workflow_changed" = true ]; then
+            run_workflow_hygiene=true
+          fi
+
+          if [ "$version_changed" = true ] || [ "$packaging_changed" = true ]; then
+            run_version_sync=true
+          fi
+
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "workflow_changed=$workflow_changed" >> "$GITHUB_OUTPUT"
+          echo "python_changed=$python_changed" >> "$GITHUB_OUTPUT"
+          echo "packaging_changed=$packaging_changed" >> "$GITHUB_OUTPUT"
+          echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
+          echo "hook_changed=$hook_changed" >> "$GITHUB_OUTPUT"
+          echo "run_quality=$run_quality" >> "$GITHUB_OUTPUT"
+          echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
+          echo "run_package_build=$run_package_build" >> "$GITHUB_OUTPUT"
+          echo "run_hook_parity=$run_hook_parity" >> "$GITHUB_OUTPUT"
+          echo "run_workflow_hygiene=$run_workflow_hygiene" >> "$GITHUB_OUTPUT"
+          echo "run_version_sync=$run_version_sync" >> "$GITHUB_OUTPUT"
+
+  docs-only:
+    name: Docs Only Fast Path
+    needs: changes
+    if: needs.changes.outputs.docs_only == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Report docs-only optimization
+        run: echo "Docs-only PR detected. Heavy validation jobs were skipped by design."
+
+  workflow-hygiene:
+    name: Workflow Hygiene
+    needs: changes
+    if: needs.changes.outputs.run_workflow_hygiene == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
+
   version-sync:
     name: Version Sync
+    needs: changes
+    if: needs.changes.outputs.run_version_sync == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -32,6 +171,8 @@ jobs:
 
   format-check:
     name: Format Check
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -48,6 +189,8 @@ jobs:
 
   lint-check:
     name: Lint Check
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -64,6 +207,8 @@ jobs:
 
   type-check:
     name: Type Check
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -78,8 +223,46 @@ jobs:
       - name: Run ty
         run: uv run ty check src/notewise
 
+  deps-check:
+    name: Dependency Check
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Check dependencies with deptry
+        run: uv run deptry src
+
+  security:
+    name: Security Check
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Run Bandit
+        run: uv run bandit -c pyproject.toml -r src/notewise --severity-level high
+
   tests:
     name: Unit Tests
+    needs: changes
+    if: needs.changes.outputs.run_tests == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -96,6 +279,8 @@ jobs:
 
   hook-parity:
     name: Hook Parity
+    needs: changes
+    if: needs.changes.outputs.run_hook_parity == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -114,6 +299,8 @@ jobs:
 
   package-build:
     name: Package Build
+    needs: changes
+    if: needs.changes.outputs.run_package_build == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

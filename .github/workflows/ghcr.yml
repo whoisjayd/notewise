@@ -15,10 +15,32 @@ env:
   REGISTRY: ghcr.io
   IMAGE_REPOSITORY: ${{ github.repository_owner }}/notewise
   RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.release_tag || github.ref_name }}
+  RELEASE_REF: ${{ github.event_name == 'workflow_dispatch' && format('refs/tags/{0}', inputs.release_tag) || github.ref }}
 
 jobs:
+  release-sanity:
+    name: Release Sanity
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Verify package metadata and release tag
+        run: uv run python scripts/check_version_sync.py --release-tag "${{ env.RELEASE_TAG }}"
+
   build-and-push:
     name: Build and push Docker image
+    needs: release-sanity
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -28,6 +50,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
+        with:
+          ref: ${{ env.RELEASE_REF }}
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
