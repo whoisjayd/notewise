@@ -1,6 +1,6 @@
 [project]
 name = "notewise"
-version = "1.1.2"
+version = "1.2.1"
 description = "Convert YouTube videos into AI-powered study notes with chapter support"
 readme = "README.md"
 requires-python = ">=3.10"
