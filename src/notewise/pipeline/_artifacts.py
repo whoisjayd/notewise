@@ -65,11 +65,10 @@ def prefix_chapter_heading_with_timestamp(
             f"{match.group('level')} [{_format_timestamp(start_seconds)}] "
             f"{cleaned_heading_text}"
         )
-        return f"{notes[:match.start()]}{timestamped_heading}{notes[match.end():]}"
+        return f"{notes[: match.start()]}{timestamped_heading}{notes[match.end() :]}"
 
     timestamped_heading = f"# [{_format_timestamp(start_seconds)}] {chapter_title}"
     return f"{timestamped_heading}\n\n{notes.lstrip()}"
-
 
 
 async def generate_and_write_quiz(
