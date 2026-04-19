@@ -35,10 +35,6 @@ tests/
 
 .github/
 
-# Wiki submodule
-
-wiki/
-
 # Documentation (README.md is kept — pyproject.toml references it)
 
 ARCHITECTURE.md

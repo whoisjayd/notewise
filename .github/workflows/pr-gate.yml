@@ -1,9 +1,10 @@
 name: PR Gate
 
 on:
+  workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [main]
+    branches: [dev]
 
 permissions:
   contents: read
@@ -13,6 +14,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  version-sync:
+    name: Version Sync
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Verify package version metadata stays aligned
+        run: uv run python scripts/check_version_sync.py
+
   format-check:
     name: Format Check
     runs-on: ubuntu-latest
@@ -76,3 +93,37 @@ jobs:
         run: uv sync --all-extras --dev --frozen
       - name: Run tests
         run: uv run python -m pytest -q -n auto --dist=loadfile
+
+  hook-parity:
+    name: Hook Parity
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Run pre-commit hook parity checks
+        run: uv run pre-commit run --all-files
+      - name: Run pre-push hook parity checks
+        run: uv run pre-commit run --hook-stage pre-push --all-files
+
+  package-build:
+    name: Package Build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Build source and wheel distributions
+        run: uv build

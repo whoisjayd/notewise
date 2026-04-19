@@ -1,0 +1,100 @@
+name: PR /autofix Command
+
+on:
+  issue_comment:
+    types: [created]
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  prepare:
+    name: Validate /autofix request
+    if: >-
+      github.event.issue.pull_request &&
+      startsWith(github.event.comment.body, '/autofix')
+    runs-on: ubuntu-latest
+    outputs:
+      should_run: ${{ steps.validate.outputs.should_run }}
+      pr_number: ${{ steps.validate.outputs.pr_number }}
+      head_ref: ${{ steps.validate.outputs.head_ref }}
+      same_repo: ${{ steps.validate.outputs.same_repo }}
+    steps:
+      - name: Validate /autofix permission and PR branch
+        id: validate
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = context.payload.issue.number;
+            const commenter = context.payload.comment.user.login;
+
+            const permission = await github.rest.repos.getCollaboratorPermissionLevel({
+              owner,
+              repo,
+              username: commenter,
+            });
+
+            const allowed = new Set(['admin', 'maintain', 'write']);
+            if (!allowed.has(permission.data.permission)) {
+              core.setOutput('should_run', 'false');
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'Only maintainers with write access can use `/autofix`.',
+              });
+              return;
+            }
+
+            const pr = await github.rest.pulls.get({
+              owner,
+              repo,
+              pull_number: issueNumber,
+            });
+
+            const isPrAuthor = commenter === pr.data.user.login;
+            const hasRepoWrite = new Set(['admin', 'maintain', 'write']).has(permission.data.permission);
+            const sameRepo = pr.data.head.repo.full_name === `${owner}/${repo}`;
+
+            if (!sameRepo) {
+              core.setOutput('should_run', 'false');
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: '`/autofix` only supports PR branches in this repository. Use the manual maintainer autofix workflow or push fixes directly for fork-based PRs.',
+              });
+              return;
+            }
+
+            if (!hasRepoWrite && !isPrAuthor) {
+              core.setOutput('should_run', 'false');
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: issueNumber,
+                body: 'Only maintainers or the PR author can use `/autofix` on same-repo branches.',
+              });
+              return;
+            }
+
+            core.setOutput('should_run', 'true');
+            core.setOutput('pr_number', String(issueNumber));
+            core.setOutput('head_ref', pr.data.head.ref);
+            core.setOutput('same_repo', 'true');
+
+  autofix:
+    name: Run safe PR autofix
+    needs: prepare
+    if: needs.prepare.outputs.should_run == 'true'
+    uses: ./.github/workflows/reusable-safe-autofix.yml
+    permissions:
+      contents: write
+      issues: write
+    with:
+      branch: ${{ needs.prepare.outputs.head_ref }}
+      pr_number: ${{ needs.prepare.outputs.pr_number }}

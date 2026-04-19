@@ -2,7 +2,7 @@
 "area:cli":
   - changed-files:
       - any-glob-to-any-file:
-          - src/notewise/cli.py
+          - src/notewise/cli/**
           - src/notewise/ui/**
 
 "area:core":
@@ -15,7 +15,7 @@
   - changed-files:
       - any-glob-to-any-file:
           - src/notewise/llm/**
-          - src/notewise/prompts/**
+          - src/notewise/llm/prompts/**
 
 "area:youtube":
   - changed-files:
@@ -26,8 +26,10 @@
   - changed-files:
       - any-glob-to-any-file:
           - docs/**
-          - wiki/**
-          - "*.md"
+          - README.md
+          - CONTRIBUTING.md
+          - SECURITY.md
+          - CODE_OF_CONDUCT.md
 
 "area:tests":
   - changed-files:
@@ -44,8 +46,10 @@
   - changed-files:
       - any-glob-to-any-file:
           - docs/**
-          - wiki/**
-          - "*.md"
+          - README.md
+          - CONTRIBUTING.md
+          - SECURITY.md
+          - CODE_OF_CONDUCT.md
 
 "dependencies":
   - changed-files:

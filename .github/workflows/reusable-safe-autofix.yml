@@ -1,0 +1,86 @@
+name: Reusable Safe Autofix
+
+on:
+  workflow_call:
+    inputs:
+      branch:
+        description: Branch to autofix
+        required: true
+        type: string
+      pr_number:
+        description: Optional PR number to comment on after autofix
+        required: false
+        default: ""
+        type: string
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  autofix:
+    name: Apply safe autofixes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.branch }}
+
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+
+      - name: Apply safe file autofixes
+        run: |
+          uv run pre-commit run end-of-file-fixer --all-files || true
+          uv run pre-commit run trailing-whitespace --all-files || true
+          uv run pre-commit run mixed-line-ending --all-files || true
+          uv run ruff format src/notewise tests
+          uv run ruff check src/notewise tests --fix --unsafe-fixes
+
+      - name: Detect autofix changes
+        id: changes
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo "has_changes=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_changes=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Commit and push autofixes
+        if: steps.changes.outputs.has_changes == 'true'
+        uses: stefanzweifel/git-auto-commit-action@v6
+        with:
+          branch: ${{ inputs.branch }}
+          commit_message: "style(repo): apply safe autofix"
+
+      - name: Comment with autofix result
+        if: inputs.pr_number != ''
+        uses: actions/github-script@v9
+        env:
+          HAS_CHANGES: ${{ steps.changes.outputs.has_changes }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          TARGET_BRANCH: ${{ inputs.branch }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const issueNumber = Number(process.env.PR_NUMBER);
+            const hasChanges = process.env.HAS_CHANGES === 'true';
+            const targetBranch = process.env.TARGET_BRANCH;
+            const body = hasChanges
+              ? `Applied safe autofixes to \`${targetBranch}\` and pushed an update.`
+              : `Ran \`/autofix\` for \`${targetBranch}\`, but no safe autofix changes were needed.`;
+
+            await github.rest.issues.createComment({
+              owner,
+              repo,
+              issue_number: issueNumber,
+              body,
+            });

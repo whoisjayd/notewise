@@ -28,7 +28,7 @@ body:
     attributes:
       label: Affected Location
       description: Which page/file needs update?
-      placeholder: README.md, wiki/Usage.md, CONTRIBUTING.md
+      placeholder: README.md, docs/development/local-setup/ci-cd.mdx, CONTRIBUTING.md
     validations:
       required: true
   - type: textarea

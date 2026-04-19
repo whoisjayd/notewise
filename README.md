@@ -6,7 +6,7 @@
 
 <br />
 
-<img src="https://img.shields.io/badge/version-1.0.0-4f86f7?style=flat-square" alt="version" /> <img src="https://img.shields.io/badge/status-stable-22c55e?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/notewise?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
+<img src="https://img.shields.io/pypi/v/notewise?style=flat-square&label=version" alt="version" /> <img src="https://img.shields.io/badge/status-stable-22c55e?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/notewise?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
 
 <br /><br />
 
@@ -58,16 +58,6 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 | 🖥️ **Rich Live Dashboard**             | Real-time progress UI with a `--no-ui` plain-output mode for CI/cron                       |
 | 🐳 **Docker Ready**                    | Minimal two-stage Docker image for reproducible, stateless runs                            |
 | 🔒 **Private Video Support**           | Pass a Netscape-format cookie file to process age-gated or login-required videos           |
-
-## 🎬 Demo
-
-<p align="center">
-  <img src="demo/notewise.gif" alt="NoteWise CLI demo" />
-</p>
-
-<p align="center">
-  <sub>GIF loops automatically. Prefer video? See <a href="demo/notewise.mp4">demo/notewise.mp4</a>.</sub>
-</p>
 
 ## 🚀 Quick Start
 
@@ -342,7 +332,12 @@ If you use notewise in a project or build on top of it, you are required to incl
 
 ## 🤝 Contributing
 
-Contributions are welcome! Please read [CONTRIBUTING.md](CONTRIBUTING.md) to get started.
+Contributions are welcome, but please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
+
+> [!IMPORTANT]
+> - All normal contribution PRs must target `dev`.
+> - Only maintainer-managed release PRs should target `main`.
+> - PRs that do not follow the contributing guide, skip validation, or use the wrong base branch may be closed.
 
 Found a bug? [Open an issue](https://github.com/whoisjayd/notewise/issues/new/choose).
 Have a security concern? See [SECURITY.md](SECURITY.md).

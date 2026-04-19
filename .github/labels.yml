@@ -38,6 +38,26 @@
   color: "000000"
   description: Pull requests that update GitHub Actions code
 
+- name: size:XS
+  color: "BFD4F2"
+  description: Very small pull request
+
+- name: size:S
+  color: "A8DADC"
+  description: Small pull request
+
+- name: size:M
+  color: "FCE38A"
+  description: Medium pull request
+
+- name: size:L
+  color: "F4A261"
+  description: Large pull request
+
+- name: size:XL
+  color: "E76F51"
+  description: Very large pull request
+
 - name: area:cli
   color: "1D76DB"
   description: CLI or terminal UX area
@@ -56,7 +76,7 @@
 
 - name: area:docs
   color: "0052CC"
-  description: Documentation and wiki
+  description: Documentation, contributor guides, and docs-site content
 
 - name: area:tests
   color: "BFDADC"

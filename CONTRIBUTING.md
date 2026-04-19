@@ -2,6 +2,12 @@
 
 Thank you for taking the time to contribute! This document covers everything you need to get your environment set up, understand how the project is structured, and submit high-quality contributions.
 
+> [!IMPORTANT]
+> Read and follow this guide before opening a pull request.
+> - **All feature, fix, docs, and maintenance PRs must target `dev`.**
+> - **Only maintainer-managed release PRs should target `main`.**
+> - PRs that ignore this workflow, skip required validation, or do not follow these contribution rules may be closed without review.
+
 ---
 
 ## Table of Contents
@@ -56,13 +62,13 @@ uv sync --dev
 
 This installs all runtime and development dependencies into an isolated virtual environment.
 
-### Install Pre-commit Hooks
+### Install Git Hooks
 
 ```bash
-uv run pre-commit install
+make hooks-install
 ```
 
-The hooks run automatically on `git commit` and enforce formatting and single-line commit messages.
+This installs the repository's `pre-commit`, `pre-push`, and `commit-msg` hooks. They run automatically during normal Git operations and enforce formatting, validation, dependency hygiene, fast tests, commit conventions, and the single-line commit-message rule.
 
 ### Verify the Setup
 
@@ -272,8 +278,10 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 
 ## Pull Request Process
 
-1. **Fork** the repository and create a branch from `main`:
+1. **Fork** the repository and create your branch from `dev`:
    ```bash
+   git checkout dev
+   git pull origin dev
    git checkout -b feat/my-feature
    ```
 
@@ -284,13 +292,27 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
    make ci
    ```
 
-4. **Push and open a PR** against `main`. Fill in the PR template completely.
+   For exact hook parity, you can also run:
 
-5. **CI must pass** — the `pr-gate.yml` workflow runs format, lint, type-check, and the full test matrix.
+   ```bash
+   make hooks-run
+   ```
+
+4. **Push and open a PR** against `dev`. Fill in the PR template completely.
+
+5. **CI must pass** — the `pr-gate.yml` workflow runs format, lint, type-check, version-sync validation, and unit tests for PRs targeting `dev`.
 
 6. **One review approval** is required before merge.
 
 7. **Squash merge** is preferred for a clean history.
+
+8. **Do not open routine contribution PRs against `main`.** Maintainers use `dev -> main` PRs for release promotion.
+
+### Enforcement
+
+- PRs targeting the wrong base branch may be automatically closed.
+- PRs that skip tests, ignore the PR template, or do not follow this guide may be closed without review.
+- Do not bypass hooks with `--no-verify` unless a maintainer explicitly asks you to do so.
 
 ### PR Checklist
 
@@ -298,6 +320,8 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 - [ ] `make ci` passes locally
 - [ ] Documentation updated if the public interface changed
 - [ ] Commit message follows the single-line convention
+- [ ] The PR targets `dev` (unless this is a maintainer-managed release PR)
+- [ ] I installed the repository hooks with `make hooks-install`
 
 ---
 

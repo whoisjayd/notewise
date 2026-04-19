@@ -16,7 +16,9 @@ jobs:
         with:
           days-before-stale: 180
           days-before-close: 28
-          stale-issue-message: "This issue is stale because it has been open for 180 days with no activity."
-          stale-pr-message: "This PR is stale because it has been open for 180 days with no activity."
+          stale-issue-message: "This issue is stale because it has been open for 180 days with no activity. If it is still relevant, leave a comment with updated context and we will keep it open."
+          stale-pr-message: "This PR is stale because it has been open for 180 days with no activity. If work is still active, leave a comment or push an update and it will stay open."
           stale-issue-label: stale
           stale-pr-label: stale
+          exempt-issue-labels: "type:security,good-first-issue,help-wanted"
+          exempt-pr-labels: "type:security"

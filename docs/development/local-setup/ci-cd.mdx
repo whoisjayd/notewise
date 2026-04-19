@@ -21,13 +21,44 @@ All workflows live in `.github/workflows/`.
     | `format-check` | `ruff format --check` |
     | `lint-check` | `ruff check` |
     | `type-check` | `ty check` |
+    | `version-sync` | Validates package version consistency across `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` |
     | `startup-smoke` | `notewise version` — ensures the package imports cleanly |
     | `unit-tests` | `pytest` with `--cov-fail-under=90`; uploads coverage to Codecov |
+    | `package-build` | `uv build` to catch packaging / metadata regressions before release |
+    | `hook-parity` | Runs the same `pre-commit` and `pre-push` checks contributors use locally |
     | `matrix-tests` | `pytest` on Ubuntu / Windows / macOS × Python 3.10 / 3.11 / 3.12 |
   </Accordion>
 
   <Accordion title="pr-gate.yml — PR validation">
-    Runs on every pull request to `main`. Calls `ci-main.yml` as a reusable workflow. All jobs must pass before merge.
+    Runs on every pull request to `dev`, and can also be dispatched manually by maintainers when needed. It enforces the PR-quality subset used for day-to-day contributions: format, lint, type-checking, version-metadata sync, unit tests, package builds, and local-hook parity. All jobs must pass before merge.
+  </Accordion>
+
+  <Accordion title="branch-policy.yml — base branch enforcement">
+    Closes pull requests that target `main` unless they are maintainer-managed `dev -> main` release PRs. This keeps all normal contribution flow on `dev`.
+  </Accordion>
+
+  <Accordion title="workflow-hygiene.yml — GitHub Actions linting">
+    Runs `actionlint` on workflow changes so broken GitHub Actions syntax and invalid workflow constructs are caught before they hit `main`.
+  </Accordion>
+
+  <Accordion title="pr-title.yml — PR title enforcement">
+    Validates that PR titles follow a conventional format. This helps maintainers use squash merges without manually rewriting every title.
+  </Accordion>
+
+  <Accordion title="pr-size.yml — review sizing">
+    Applies `size:XS` through `size:XL` labels based on PR diff size so maintainers and reviewers can triage review effort faster.
+  </Accordion>
+
+  <Accordion title="maintainer-autofix.yml — manual safe branch autofix">
+    Maintainers can manually run a trusted safe-autofix workflow against a repository branch. It reuses the shared autofix flow, applies safe file fixes, and pushes a commit back to the selected branch only when changes are needed.
+  </Accordion>
+
+  <Accordion title="pr-autofix-command.yml — /autofix comment trigger">
+    Maintainers can comment `/autofix` on a PR to run the same shared safe-autofix flow against the PR branch. For safety, it only runs on same-repo branches. Maintainers can trigger it broadly, and contributors can trigger it on their own same-repo PRs.
+  </Accordion>
+
+  <Accordion title="reusable-safe-autofix.yml — shared autofix implementation">
+    Centralizes the safe autofix steps used by both the manual branch workflow and the `/autofix` PR command so the behavior stays consistent over time.
   </Accordion>
 
   <Accordion title="ghcr.yml — Docker image">
@@ -35,7 +66,7 @@ All workflows live in `.github/workflows/`.
   </Accordion>
 
   <Accordion title="release.yml — PyPI release">
-    Triggered when a tag matching `v*` is pushed. Builds the wheel and sdist, then publishes to PyPI using **Trusted Publishing** (no API key stored in secrets).
+    Triggered when a tag matching `v*` is pushed. Builds the wheel and sdist, then publishes to PyPI using the `PYPI_API_TOKEN` secret configured in the `pypi` environment.
   </Accordion>
 
   <Accordion title="Supporting workflows">
@@ -43,9 +74,14 @@ All workflows live in `.github/workflows/`.
     | --- | --- |
     | `issue-form-labels.yml` | Auto-labels issues based on form template |
     | `labeler.yml` | Auto-labels PRs based on changed files |
+    | `pr-size.yml` | Applies PR size labels for review triage |
     | `labelsyncer.yml` | Keeps GitHub label definitions in sync |
     | `stale.yml` | Marks and closes stale issues/PRs |
-    | `dependabot.yml` | Automated dependency updates |
+    | `pr-title.yml` | Enforces conventional PR titles |
+    | `maintainer-autofix.yml` | Lets maintainers manually run the shared safe-autofix flow on a branch |
+    | `pr-autofix-command.yml` | Lets maintainers and same-repo PR authors trigger safe PR autofixes with `/autofix` |
+    | `reusable-safe-autofix.yml` | Shared implementation used by both autofix entrypoints |
+    | `dependabot.yml` | Automated GitHub Actions, Python, and Docker dependency updates targeting `dev` |
   </Accordion>
 </AccordionGroup>
 
@@ -59,11 +95,20 @@ Every PR must pass all of these before merge:
   <Step title="ruff format --check">No unformatted code.</Step>
   <Step title="ruff check">No lint errors.</Step>
   <Step title="ty check">No type errors.</Step>
+  <Step title="Version sync check">
+    `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` must agree on the package version.
+  </Step>
   <Step title="Startup smoke">
     `notewise version` — package imports without error.
   </Step>
   <Step title="pytest --cov-fail-under=90">
     Coverage ≥ 90% on the unit test suite.
+  </Step>
+  <Step title="uv build">
+    Source and wheel distributions must build successfully.
+  </Step>
+  <Step title="Hook parity">
+    CI re-runs the same `pre-commit` and `pre-push` checks contributors are expected to install locally.
   </Step>
   <Step title="Matrix tests">
     All supported OS / Python version combinations.
@@ -76,10 +121,10 @@ Every PR must pass all of these before merge:
 
 <Steps>
   <Step title="Bump the version">
-    Update `__version__` in `src/notewise/__init__.py` and `version` in `pyproject.toml`.
+    Update `__version__` in `src/notewise/__init__.py`, `version` in `pyproject.toml`, and keep `uv.lock` in sync.
   </Step>
-  <Step title="Merge to main">
-    Open a PR with the version bump and merge after CI passes.
+  <Step title="Promote dev to main">
+    Merge `dev` into `main` after validation passes. Normal feature and fix PRs should not target `main` directly.
   </Step>
   <Step title="Tag the release">
     ```bash

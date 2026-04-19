@@ -1,0 +1,23 @@
+name: Safe Branch Autofix
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to autofix and push back to (manual maintainer run)
+        required: true
+        default: dev
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  autofix:
+    name: Run safe branch autofix
+    uses: ./.github/workflows/reusable-safe-autofix.yml
+    permissions:
+      contents: write
+      issues: write
+    with:
+      branch: ${{ inputs.branch }}

@@ -11,10 +11,12 @@ We will review the issue and respond as soon as possible.
 
 ## Supported Versions
 
+Security fixes are provided for the latest maintained release line.
+
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
-| < 0.1.0 | :x:                |
+| 1.2.x   | :white_check_mark: |
+| < 1.2.0 | :x:                |
 
 ## Security Best Practices
 

@@ -75,15 +75,15 @@ HTMLCOV_DIR := htmlcov
 # ==============================================================================
 # Target Groups
 # ==============================================================================
-QUALITY_CHECK_TARGETS := format-check lint-check type-check deps-check security
-QUALITY_FIX_TARGETS := format lint type-check deps-check security
+QUALITY_CHECK_TARGETS := format-check lint-check type-check version-check deps-check security
+QUALITY_FIX_TARGETS := format lint type-check version-check deps-check security
 CLEAN_TARGETS := clean-cache clean-build clean-test
 
 # ==============================================================================
 # Phony Targets
 # ==============================================================================
 .PHONY: help sync install install-dev dev-setup \
-	format format-check lint lint-check type-check deps-check security \
+	format format-check lint lint-check type-check version-check deps-check security \
 	check verify fix audit quality pre-commit \
 	hooks-install hooks-run \
 	test test-unit test-integration test-fast test-cov test-watch test-failed test-verbose \
@@ -112,6 +112,7 @@ help: ## Show all developer tasks
 	@echo "  lint          Run ruff with auto-fix"
 	@echo "  lint-check    Run ruff without auto-fix"
 	@echo "  type-check    Run ty type checker"
+	@echo "  version-check Verify pyproject/__init__/uv.lock versions match"
 	@echo "  deps-check    Detect unused/missing dependencies"
 	@echo "  security      Run bandit security scan"
 	@echo "  fix           Auto-fix formatting and lint issues"
@@ -193,6 +194,9 @@ lint-check: ## Run ruff without auto-fix
 # ==============================================================================
 type-check: ## Run static type checks
 	$(TY) check $(PKG_DIR)
+
+version-check: ## Verify package version metadata is aligned
+	$(UV_RUN) python scripts/check_version_sync.py
 
 deps-check: ## Detect unused/missing dependencies
 	$(DEPTRY) $(SRC_DIR)

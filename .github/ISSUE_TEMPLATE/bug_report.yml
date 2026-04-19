@@ -14,7 +14,7 @@ body:
       options:
         - label: I searched existing issues and did not find a duplicate.
           required: true
-        - label: I read the README and wiki docs first.
+        - label: I read the README and relevant docs first.
           required: true
         - label: I removed sensitive information (API keys, personal data) from logs.
           required: true
@@ -48,7 +48,7 @@ body:
     attributes:
       label: Version
       description: Output of `notewise version`
-      placeholder: notewise version 1.0.0
+      placeholder: notewise version 1.2.1
     validations:
       required: true
   - type: input
@@ -72,7 +72,7 @@ body:
     attributes:
       label: Model Used
       description: Model configured or passed with `-m`
-      placeholder: gemini/gemini-2.0-flash
+      placeholder: gemini/gemini-2.5-flash
   - type: dropdown
     id: area
     attributes:
