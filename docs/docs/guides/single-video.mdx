@@ -47,6 +47,7 @@ notewise process dQw4w9WgXcQ
 | Language | `--language`, `-l` | Set transcript language preference (can chain) |
 | Force reprocess | `--force`, `-F` | Re-process cached videos |
 | No UI | `--no-ui` | Disable Rich dashboard (for CI/cron) |
+| Chapter timestamps | `--timestamps` | Prefix long-video chapter headings with chapter start times |
 
 ---
 
@@ -62,7 +63,7 @@ notewise process dQw4w9WgXcQ
 </Tree>
 
 <Note>
-  Quiz and transcript files are only created when the corresponding flag is used. Chapter-aware videos (longer than 1 hour with chapter data) use a directory layout instead. See [Output Format](/docs/reference/schema-and-output/output-format).
+  Quiz and transcript files are only created when the corresponding flag is used. Chapter-aware videos (longer than 1 hour with chapter data) use a directory layout instead. Add `--timestamps` if you want each chapter note to begin with a heading like `# [12:45] Core Concepts`. See [Output Format](/docs/reference/schema-and-output/output-format).
 </Note>
 
 ---

@@ -84,12 +84,31 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--use-combine-chunk" type="boolean" default="false">
+  Use the deprecated legacy chunk-combine flow instead of the default boundary-stitching flow.
+  The default stitcher preserves more detail for long videos by reconciling chunk boundaries locally rather than sending all chunk outputs back through one final combine prompt.
+
+  ```bash
+  notewise process "URL" --use-combine-chunk
+  ```
+</ParamField>
+
 <ParamField query="--export-transcript" type="string">
   Export the raw transcript alongside the notes. Accepted values: `txt` (plain text) or `json` (timestamped array).
 
   ```bash
   notewise process "URL" --export-transcript txt
   notewise process "URL" --export-transcript json
+  ```
+</ParamField>
+
+<ParamField query="--timestamps" type="boolean" default="false">
+  Prefix chapter note headings with deterministic chapter start times for long chapter-aware videos, for example `# [00:34] Intro`.
+
+  This only affects chapter-based output. Standard single-file notes are unchanged.
+
+  ```bash
+  notewise process "URL" --timestamps
   ```
 </ParamField>
 
@@ -154,6 +173,9 @@ notewise process URL [OPTIONS]
 
 ### Output Structure
 
+By default, long transcripts are finalized with chunk **stitching** so adjacent chunk outputs read like one continuous document while preserving detail.
+`--use-combine-chunk` keeps the older deprecated combine-all-chunks behavior for compatibility.
+
 <Tabs>
   <Tab title="Standard Video">
     <Tree>
@@ -177,6 +199,11 @@ notewise process URL [OPTIONS]
         </Tree.Folder>
       </Tree.Folder>
     </Tree>
+
+    <Note>
+      Add `--timestamps` if you want chapter files to start with headings like
+      `# [00:34] Introduction`.
+    </Note>
   </Tab>
 </Tabs>
 
@@ -204,6 +231,9 @@ notewise process "URL" --model gpt-4o --output ~/notes
 notewise process "https://youtube.com/playlist?list=PLxxxxxx" \
   --quiz --export-transcript txt
 
+# Deprecated legacy combine mode
+notewise process "URL" --use-combine-chunk
+
 # Batch file — non-interactive with high concurrency
 MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui
 
@@ -212,6 +242,9 @@ notewise process "URL" --cookie-file ./youtube-cookies.txt
 
 # Re-process with a different model
 notewise process "URL" --model claude-3-5-sonnet-20241022 --force
+
+# Long chapter-aware video with timestamped headings
+notewise process "URL" --timestamps
 
 # Preferred language fallback chain
 notewise process "URL" -l hi -l en

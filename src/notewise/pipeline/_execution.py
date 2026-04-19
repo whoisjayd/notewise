@@ -19,6 +19,7 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
+from notewise.logging import make_log_safe_text
 from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
 
@@ -101,8 +102,11 @@ async def process_single_video(
 
             with usage_context as raw_usage_totals:
                 if use_chapters:
-                    chapter_transcripts = pipeline_module.split_transcript_by_chapters(
-                        transcript_obj, chapters
+                    chapter_transcripts = (
+                        pipeline_module.split_transcript_by_chapters_with_metadata(
+                            transcript_obj,
+                            chapters,
+                        )
                     )
 
                     if not chapter_transcripts:
@@ -126,12 +130,18 @@ async def process_single_video(
                     total_chapters = len(chapter_transcripts)
                     ordered_chapters = list(chapter_transcripts.items())
                     chapters_to_generate: dict[str, str] = {}
-                    chapter_targets: list[tuple[str, Path]] = []
+                    chapter_targets: list[tuple[str, Path, int]] = []
 
-                    for i, (chap_title, chap_text) in enumerate(ordered_chapters, 1):
+                    for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
                         safe_chapter = sanitize_filename(chap_title)
                         chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
-                        chapter_targets.append((chap_title, chapter_file))
+                        chapter_targets.append(
+                            (
+                                chap_title,
+                                chapter_file,
+                                chapter_data.start_seconds,
+                            )
+                        )
 
                         if not pipeline.force and chapter_file.exists():
                             logger.info(
@@ -140,7 +150,7 @@ async def process_single_video(
                             )
                             continue
 
-                        chapters_to_generate[chap_title] = chap_text
+                        chapters_to_generate[chap_title] = chapter_data.text
 
                     if chapters_to_generate:
                         chapter_indices = {
@@ -197,6 +207,11 @@ async def process_single_video(
                                     chapter_number=chapter_number,
                                     total_chapters=total_chapters,
                                     total_chunks=total_parts,
+                                    phase_label=(
+                                        "Combining"
+                                        if pipeline.generator.use_combine_chunk
+                                        else "Stitching"
+                                    ),
                                 )
                                 if on_combine:
                                     on_combine(total_parts)
@@ -239,10 +254,21 @@ async def process_single_video(
                                 original_generate_single
                             )
 
-                        for chapter_title, chapter_file in chapter_targets:
+                        for (
+                            chapter_title,
+                            chapter_file,
+                            start_seconds,
+                        ) in chapter_targets:
                             notes = generated_chapter_notes.get(chapter_title)
                             if notes is None:
                                 continue
+                            if pipeline.timestamps:
+                                pm = pipeline_module
+                                notes = pm.prefix_chapter_heading_with_timestamp(
+                                    notes,
+                                    chapter_title,
+                                    start_seconds,
+                                )
                             chapter_file.write_text(notes, encoding="utf-8")
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)
@@ -262,6 +288,11 @@ async def process_single_video(
                             video_id,
                             title=title,
                             total_chunks=total_parts,
+                            phase_label=(
+                                "Combining"
+                                if pipeline.generator.use_combine_chunk
+                                else "Stitching"
+                            ),
                         )
 
                     notes = await pipeline.generator.generate_study_notes(
@@ -342,21 +373,24 @@ async def process_single_video(
 
         except IPBlockError as error:
             error_msg = format_user_error(error)
-            logger.error(f"IP Block for {video_id}: {error}")
+            logger.error(make_log_safe_text(f"IP Block for {video_id}: {error}"))
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
 
         except VideoUnavailableError as error:
             error_msg = str(error)
-            logger.error(f"Cannot process {video_id}: {error}")
+            logger.error(make_log_safe_text(f"Cannot process {video_id}: {error}"))
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
 
         except Exception as error:
             error_msg = format_user_error(error)
-            logger.error(f"Failed to process {video_id}: {error}", exc_info=True)
+            logger.error(
+                make_log_safe_text(f"Failed to process {video_id}: {error}"),
+                exc_info=True,
+            )
             pipeline.errors[video_id] = error_msg
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False

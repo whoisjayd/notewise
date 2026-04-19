@@ -8,6 +8,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from notewise.config import get_cache_db_path
+from notewise.domain.youtube import ChapterTranscript
 from notewise.errors import (
     ExtractionError as ExtractorError,
 )
@@ -23,6 +24,7 @@ from notewise.pipeline.core import (
     EventType,
     PipelineEvent,
     PipelineResult,
+    prefix_chapter_heading_with_timestamp,
     sanitize_filename,
 )
 from notewise.storage import DatabaseRepository as DatabaseManager
@@ -216,9 +218,88 @@ async def test_run_empty_video_ids(pipeline):
     result = await pipeline.run([])
 
     assert isinstance(result, PipelineResult)
-    assert result.total_count == 0
     assert result.success_count == 0
     assert result.failure_count == 0
+    assert result.total_count == 0
+
+
+@pytest.mark.asyncio
+async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles(
+    pipeline,
+    temp_output_dir,
+):
+    transcript = VideoTranscript(
+        video_id="vid-dup",
+        segments=[
+            TranscriptSegment(text="middle segment", start=120.0, duration=10.0),
+            TranscriptSegment(text="later segment", start=360.0, duration=10.0),
+        ],
+        language="English",
+        language_code="en",
+        is_generated=False,
+    )
+    chapters = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=60),
+        VideoChapter(title="Intro", start_seconds=100, end_seconds=200),
+        VideoChapter(title="Intro", start_seconds=300, end_seconds=420),
+    ]
+
+    pipeline.timestamps = True
+    pipeline.force = True
+    pipeline.quiz = False
+    pipeline.export_transcript_format = None
+    pipeline._get_cached_video = AsyncMock(return_value=None)
+    pipeline._acquire_youtube_request_slot = AsyncMock()
+    pipeline._reserve_output_target = AsyncMock(
+        return_value=temp_output_dir / "Duplicate Titles Video"
+    )
+    pipeline._release_output_target = AsyncMock()
+    pipeline._record_metrics = AsyncMock()
+    pipeline._persist_video_cache = AsyncMock()
+    pipeline._export_transcript = MagicMock()
+    pipeline.generator.generate_single_chapter_notes = AsyncMock(
+        side_effect=(
+            lambda chapter_title, chapter_text, **_kwargs: (
+                f"# {chapter_title}\n\n{chapter_text}"
+            )
+        )
+    )
+    pipeline.generator.generate_chapter_notes_concurrent = (
+        _mock_generate_chapter_notes_concurrent(pipeline.generator)
+    )
+
+    with (
+        patch(
+            "notewise.pipeline._execution.pipeline_module.get_video_metadata",
+            AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-dup",
+                    title="Duplicate Titles Video",
+                    duration=7200,
+                    chapters=chapters,
+                )
+            ),
+        ),
+        patch(
+            "notewise.pipeline._execution.pipeline_module.fetch_transcript",
+            AsyncMock(return_value=transcript),
+        ),
+    ):
+        ok = await pipeline._process_single_video("vid-dup")
+
+    assert ok is True
+    output_dir = temp_output_dir / "Duplicate Titles Video"
+    second_chapter = output_dir / "01_Intro.md"
+    assert second_chapter.exists()
+    second_notes = second_chapter.read_text(encoding="utf-8")
+    assert second_notes.startswith("# [01:40] Intro")
+    assert "middle segment" in second_notes
+
+    third_chapter = output_dir / "02_Intro (2).md"
+    assert third_chapter.exists()
+    third_notes = third_chapter.read_text(encoding="utf-8")
+    assert third_notes.startswith("# [05:00] Intro")
+    assert "later segment" in third_notes
 
 
 @pytest.mark.asyncio
@@ -236,6 +317,67 @@ async def test_run_missing_api_key(pipeline):
 # ---------------------------------------------------------------------------
 # CorePipeline.run – single short video (no chapters)
 # ---------------------------------------------------------------------------
+
+
+def test_prefix_chapter_heading_with_timestamp_rewrites_matching_heading():
+    notes = """# Notes
+
+## Intro
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("# Notes")
+    assert "## [00:34] Intro" in result
+    assert "# [00:34] Intro\n\n## Intro" not in result
+
+
+def test_prefix_chapter_heading_with_timestamp_preserves_heading_level():
+    notes = """## Intro
+
+### Point
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("## [00:34] Intro")
+    assert "### Point" in result
+
+
+def test_prefix_chapter_heading_with_timestamp_preserves_suffix_text():
+    notes = """# Introduction: Foundations of Python Programming
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Introduction", 0)
+
+    assert result.startswith(
+        "# [00:00] Introduction: Foundations of Python Programming"
+    )
+    assert result.count("# ") == 1
+
+
+def test_prefix_chapter_heading_with_timestamp_rewrites_existing_timestamped_heading():
+    notes = """## [00:10] Intro — Key Ideas
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("## [00:34] Intro — Key Ideas")
+    assert "[00:10]" not in result
+
+
+def test_prefix_chapter_heading_with_timestamp_prepends_when_chapter_heading_missing():
+    notes = """# Notes
+
+Body"""
+
+    result = prefix_chapter_heading_with_timestamp(notes, "Intro", 34)
+
+    assert result.startswith("# [00:34] Intro\n\n# Notes")
 
 
 @pytest.mark.asyncio
@@ -758,7 +900,7 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
         ) as mock_split,
         patch(
             "notewise.pipeline.core.CorePipeline._check_api_key",
@@ -770,8 +912,16 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
 
         # Mock chapter-split transcripts
         chapter_transcripts = {
-            "Intro": "intro transcript text",
-            "Deep Dive": "deep dive transcript text",
+            "Intro": ChapterTranscript(
+                title="Intro",
+                text="intro transcript text",
+                start_seconds=0,
+            ),
+            "Deep Dive": ChapterTranscript(
+                title="Deep Dive",
+                text="deep dive transcript text",
+                start_seconds=600,
+            ),
         }
         mock_split.return_value = chapter_transcripts
 
@@ -822,7 +972,9 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
         patch(
             "notewise.pipeline.core.fetch_transcript", new_callable=AsyncMock
         ) as mock_fetch,
-        patch("notewise.pipeline.core.split_transcript_by_chapters") as mock_split,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata"
+        ) as mock_split,
         patch(
             "notewise.pipeline.core.CorePipeline._check_api_key",
             return_value=True,
@@ -831,9 +983,21 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
         mock_fetch.return_value = _make_transcript()
 
         chapter_transcripts = {
-            "Chapter 1": "text1",
-            "Chapter 2": "text2",
-            "Chapter 3": "text3",
+            "Chapter 1": ChapterTranscript(
+                title="Chapter 1",
+                text="text1",
+                start_seconds=0,
+            ),
+            "Chapter 2": ChapterTranscript(
+                title="Chapter 2",
+                text="text2",
+                start_seconds=300,
+            ),
+            "Chapter 3": ChapterTranscript(
+                title="Chapter 3",
+                text="text3",
+                start_seconds=600,
+            ),
         }
         mock_split.return_value = chapter_transcripts
 
@@ -898,8 +1062,15 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
-            return_value={"Chapter 1": "text1", "Chapter 2": "text2"},
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Chapter 1": ChapterTranscript(
+                    title="Chapter 1", text="text1", start_seconds=0
+                ),
+                "Chapter 2": ChapterTranscript(
+                    title="Chapter 2", text="text2", start_seconds=300
+                ),
+            },
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
@@ -962,8 +1133,12 @@ async def test_run_failed_chapter_generation_still_emits_chapter_complete(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
-            return_value={"Chapter 1": "text1"},
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Chapter 1": ChapterTranscript(
+                    title="Chapter 1", text="text1", start_seconds=0
+                )
+            },
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
@@ -1003,7 +1178,10 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
             ),
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
-        patch("notewise.pipeline.core.split_transcript_by_chapters", return_value={}),
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={},
+        ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
         mock_transcript = _make_transcript(text="fallback transcript")
@@ -1040,8 +1218,15 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
-            return_value={"Intro": "intro text", "Part 2": "body text"},
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro", text="intro text", start_seconds=0
+                ),
+                "Part 2": ChapterTranscript(
+                    title="Part 2", text="body text", start_seconds=120
+                ),
+            },
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
@@ -1095,8 +1280,15 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
-            return_value={"Intro": "intro text", "Part 2": "body text"},
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro", text="intro text", start_seconds=0
+                ),
+                "Part 2": ChapterTranscript(
+                    title="Part 2", text="body text", start_seconds=120
+                ),
+            },
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
@@ -1567,10 +1759,22 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters",
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
             side_effect=[
-                {"Intro": "first chapter"},
-                {"Intro": "second chapter"},
+                {
+                    "Intro": ChapterTranscript(
+                        title="Intro",
+                        text="first chapter",
+                        start_seconds=0,
+                    )
+                },
+                {
+                    "Intro": ChapterTranscript(
+                        title="Intro",
+                        text="second chapter",
+                        start_seconds=0,
+                    )
+                },
             ],
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),

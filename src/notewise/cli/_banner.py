@@ -35,6 +35,7 @@ _LINE_COLORS = [
 _RULE_STYLE_TOP = "color(45)"
 _RULE_STYLE_BOT = "color(25)"
 _RULE_CHAR = "─"
+_ASCII_RULE_CHAR = "-"
 _RULE_WIDTH = 88
 _ANIM_DELAY = 0.045  # seconds between each banner line
 
@@ -56,12 +57,16 @@ def _tagline(version: str) -> Text:
     return t
 
 
+def _supports_unicode_output(console: Console) -> bool:
+    """Return whether the target console is safe for decorative Unicode output."""
+    encoding = (console.encoding or "").lower()
+    return bool(encoding) and "utf" in encoding and not console.is_dumb_terminal
+
+
 def _print_rule(console: Console, *, style: str) -> None:
     """Unicode box-drawing rule; falls back to dashes on legacy terminals."""
-    try:
-        console.print(_RULE_CHAR * _RULE_WIDTH, style=style, highlight=False)
-    except UnicodeEncodeError:
-        console.print("-" * _RULE_WIDTH, style=style, highlight=False)
+    rule_char = _RULE_CHAR if _supports_unicode_output(console) else _ASCII_RULE_CHAR
+    console.print(rule_char * _RULE_WIDTH, style=style, highlight=False)
 
 
 def _print_banner_lines(console: Console, *, animate: bool = True) -> None:

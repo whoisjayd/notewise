@@ -158,6 +158,61 @@ def test_emit_headless_event_ignores_completion_only_events() -> None:
     context.console.print.assert_not_called()
 
 
+def test_emit_headless_event_formats_stitching_progress() -> None:
+    """Headless output should reflect stitching wording for note finalization."""
+    context = MagicMock(spec=CliProcessContext)
+    context.console = MagicMock()
+
+    emit_headless_event(
+        context,
+        PipelineEvent(
+            event_type=EventType.GENERATION_COMBINING,
+            video_id="vid1",
+            title="Video",
+            total_chunks=3,
+            phase_label="Stitching",
+        ),
+    )
+
+    context.console.print.assert_called_once_with(
+        "Stitching notes: Video [3 parts]",
+        markup=False,
+    )
+
+
+def test_build_ui_event_handler_uses_stitching_status_for_generation_finalization() -> (
+    None
+):
+    """Dashboard worker text should use the event phase label for note finalization."""
+    dashboard = MagicMock()
+    slot_manager = _WorkerSlotManager(1)
+    on_event = build_ui_event_handler(dashboard, slot_manager)
+
+    on_event(
+        PipelineEvent(
+            event_type=EventType.METADATA_START,
+            video_id="vid1",
+            title="Video",
+        )
+    )
+    dashboard.update_worker.reset_mock()
+
+    on_event(
+        PipelineEvent(
+            event_type=EventType.GENERATION_COMBINING,
+            video_id="vid1",
+            title="Video",
+            total_chunks=3,
+            phase_label="Stitching",
+        )
+    )
+
+    dashboard.update_worker.assert_called_once_with(
+        0,
+        "[cyan]* Video… (Stitching 3 note parts)[/cyan]",
+    )
+
+
 def test_update_dashboard_chapter_slot_handles_start_update_complete() -> None:
     """Chapter slots should start, update, and release against the dashboard."""
     dashboard = MagicMock()

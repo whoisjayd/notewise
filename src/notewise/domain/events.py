@@ -44,5 +44,6 @@ class PipelineEvent:
     total_chapters: int | None = None
     chunk_number: int | None = None
     total_chunks: int | None = None
+    phase_label: str | None = None
     error: str | None = None
     output_path: Path | None = None
