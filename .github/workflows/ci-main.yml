@@ -13,7 +13,7 @@ permissions:
   pull-requests: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: full-validation-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,17 +25,18 @@ jobs:
       pull-requests: read
     outputs:
       docs_only: ${{ steps.classify.outputs.docs_only }}
+      app_changed: ${{ steps.classify.outputs.app_changed }}
       workflow_changed: ${{ steps.classify.outputs.workflow_changed }}
-      python_changed: ${{ steps.classify.outputs.python_changed }}
       packaging_changed: ${{ steps.classify.outputs.packaging_changed }}
-      version_changed: ${{ steps.classify.outputs.version_changed }}
+      tooling_changed: ${{ steps.classify.outputs.tooling_changed }}
       hook_changed: ${{ steps.classify.outputs.hook_changed }}
       run_quality: ${{ steps.classify.outputs.run_quality }}
       run_tests: ${{ steps.classify.outputs.run_tests }}
       run_package_build: ${{ steps.classify.outputs.run_package_build }}
       run_hook_parity: ${{ steps.classify.outputs.run_hook_parity }}
-      run_workflow_hygiene: ${{ steps.classify.outputs.run_workflow_hygiene }}
       run_version_sync: ${{ steps.classify.outputs.run_version_sync }}
+      run_workflow_hygiene: ${{ steps.classify.outputs.run_workflow_hygiene }}
+      run_matrix: ${{ steps.classify.outputs.run_matrix }}
     steps:
       - uses: actions/checkout@v6
         if: github.event_name == 'push'
@@ -58,24 +59,21 @@ jobs:
             workflow_changed:
               - '.github/workflows/**'
               - '.github/actions/**'
-            python_changed:
+            app_changed:
               - 'src/**/*.py'
               - 'tests/**/*.py'
-              - 'scripts/**/*.py'
             packaging_changed:
               - 'pyproject.toml'
               - 'uv.lock'
               - 'src/notewise/__init__.py'
-              - 'scripts/check_version_sync.py'
-            version_changed:
-              - 'pyproject.toml'
-              - 'uv.lock'
-              - 'src/notewise/__init__.py'
-              - 'scripts/check_version_sync.py'
+              - 'scripts/install.sh'
+              - 'scripts/install.ps1'
+            tooling_changed:
+              - 'Makefile'
+              - 'scripts/**/*.py'
             hook_changed:
               - '.pre-commit-config.yaml'
               - 'scripts/hooks/**'
-              - 'Makefile'
 
       - name: Classify validation scope
         id: classify
@@ -84,21 +82,21 @@ jobs:
           if [ "${{ github.event_name }}" = "push" ]; then
             docs_changed="${{ steps.filter.outputs.docs_changed }}"
             workflow_changed="${{ steps.filter.outputs.workflow_changed }}"
-            python_changed="${{ steps.filter.outputs.python_changed }}"
+            app_changed="${{ steps.filter.outputs.app_changed }}"
             packaging_changed="${{ steps.filter.outputs.packaging_changed }}"
-            version_changed="${{ steps.filter.outputs.version_changed }}"
+            tooling_changed="${{ steps.filter.outputs.tooling_changed }}"
             hook_changed="${{ steps.filter.outputs.hook_changed }}"
           else
             docs_changed=true
             workflow_changed=true
-            python_changed=true
+            app_changed=true
             packaging_changed=true
-            version_changed=true
+            tooling_changed=true
             hook_changed=true
           fi
 
           docs_only=false
-          if [ "$docs_changed" = true ] && [ "$workflow_changed" != true ] && [ "$python_changed" != true ] && [ "$packaging_changed" != true ] && [ "$version_changed" != true ] && [ "$hook_changed" != true ]; then
+          if [ "$docs_changed" = true ] && [ "$workflow_changed" != true ] && [ "$app_changed" != true ] && [ "$packaging_changed" != true ] && [ "$tooling_changed" != true ] && [ "$hook_changed" != true ]; then
             docs_only=true
           fi
 
@@ -108,14 +106,16 @@ jobs:
           run_hook_parity=false
           run_workflow_hygiene=false
           run_version_sync=false
+          run_matrix=false
 
-          if [ "$python_changed" = true ] || [ "$packaging_changed" = true ]; then
+          if [ "$app_changed" = true ] || [ "$packaging_changed" = true ]; then
             run_quality=true
             run_tests=true
             run_package_build=true
+            run_matrix=true
           fi
 
-          if [ "$hook_changed" = true ] || [ "$workflow_changed" = true ]; then
+          if [ "$tooling_changed" = true ] || [ "$hook_changed" = true ]; then
             run_hook_parity=true
           fi
 
@@ -123,22 +123,25 @@ jobs:
             run_workflow_hygiene=true
           fi
 
-          if [ "$version_changed" = true ] || [ "$packaging_changed" = true ]; then
+          if [ "$packaging_changed" = true ] || [ "$tooling_changed" = true ]; then
             run_version_sync=true
           fi
 
-          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
-          echo "workflow_changed=$workflow_changed" >> "$GITHUB_OUTPUT"
-          echo "python_changed=$python_changed" >> "$GITHUB_OUTPUT"
-          echo "packaging_changed=$packaging_changed" >> "$GITHUB_OUTPUT"
-          echo "version_changed=$version_changed" >> "$GITHUB_OUTPUT"
-          echo "hook_changed=$hook_changed" >> "$GITHUB_OUTPUT"
-          echo "run_quality=$run_quality" >> "$GITHUB_OUTPUT"
-          echo "run_tests=$run_tests" >> "$GITHUB_OUTPUT"
-          echo "run_package_build=$run_package_build" >> "$GITHUB_OUTPUT"
-          echo "run_hook_parity=$run_hook_parity" >> "$GITHUB_OUTPUT"
-          echo "run_workflow_hygiene=$run_workflow_hygiene" >> "$GITHUB_OUTPUT"
-          echo "run_version_sync=$run_version_sync" >> "$GITHUB_OUTPUT"
+          {
+            echo "docs_only=$docs_only"
+            echo "app_changed=$app_changed"
+            echo "workflow_changed=$workflow_changed"
+            echo "packaging_changed=$packaging_changed"
+            echo "tooling_changed=$tooling_changed"
+            echo "hook_changed=$hook_changed"
+            echo "run_quality=$run_quality"
+            echo "run_tests=$run_tests"
+            echo "run_package_build=$run_package_build"
+            echo "run_hook_parity=$run_hook_parity"
+            echo "run_workflow_hygiene=$run_workflow_hygiene"
+            echo "run_version_sync=$run_version_sync"
+            echo "run_matrix=$run_matrix"
+          } >> "$GITHUB_OUTPUT"
 
   docs-only:
     name: Docs Only Fast Path
@@ -158,6 +161,34 @@ jobs:
       - uses: actions/checkout@v6
       - uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8 # v2.1.2
 
+  quality:
+    name: Quality Checks
+    needs: changes
+    if: needs.changes.outputs.run_quality == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: "3.12"
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Enforce formatting
+        run: uv run ruff format --check src/notewise tests
+      - name: Run linter
+        run: uv run ruff check src/notewise tests
+      - name: Run ty
+        run: uv run ty check src/notewise
+      - name: Check dependencies with deptry
+        run: uv run deptry src
+      - name: Run Bandit
+        run: uv run bandit -c pyproject.toml -r src/notewise --severity-level high
+      - name: Ensure version command starts successfully
+        run: uv run notewise version
+
   version-sync:
     name: Version Sync
     needs: changes
@@ -175,114 +206,6 @@ jobs:
         run: uv sync --all-extras --dev --frozen
       - name: Verify package version metadata stays aligned
         run: uv run python scripts/check_version_sync.py
-
-  format-check:
-    name: Format Check
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Enforce formatting
-        run: uv run ruff format --check src/notewise tests
-
-  lint-check:
-    name: Lint Check
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Run linter
-        run: uv run ruff check src/notewise tests
-
-  type-check:
-    name: Type Check
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Run ty
-        run: uv run ty check src/notewise
-
-  startup-smoke:
-    name: Startup Smoke
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Ensure version command starts successfully
-        run: uv run notewise version
-
-  deps-check:
-    name: Dependency Check
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Check dependencies with deptry
-        run: uv run deptry src
-
-  security:
-    name: Security Check
-    needs: changes
-    if: needs.changes.outputs.run_quality == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Run Bandit
-        run: uv run bandit -c pyproject.toml -r src/notewise --severity-level high
 
   unit-tests:
     name: Unit Tests (3.12, coverage)
@@ -350,7 +273,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name != 'push' ||
-      needs.changes.outputs.run_tests == 'true'
+      needs.changes.outputs.run_matrix == 'true'
     runs-on: ${{ matrix.os }}
     timeout-minutes: 20
     strategy:
@@ -374,3 +297,44 @@ jobs:
         run: uv sync --all-extras --dev --frozen
       - name: Run tests
         run: uv run python -m pytest -q -n auto --dist=loadfile
+
+  ci-required:
+    name: Full Validation Required
+    needs:
+      - changes
+      - docs-only
+      - workflow-hygiene
+      - quality
+      - version-sync
+      - unit-tests
+      - package-build
+      - hook-parity
+      - matrix-tests
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Evaluate downstream results
+        env:
+          NEEDS_JSON: ${{ toJson(needs) }}
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import sys
+
+          needs = json.loads(os.environ["NEEDS_JSON"])
+          failed = {
+              name: meta["result"]
+              for name, meta in needs.items()
+              if meta["result"] in {"failure", "cancelled"}
+          }
+
+          if failed:
+              print("Full validation jobs failed:", file=sys.stderr)
+              for name, result in failed.items():
+                  print(f"- {name}: {result}", file=sys.stderr)
+              raise SystemExit(1)
+
+          print("Full validation passed with expected skips and successes.")
+          PY

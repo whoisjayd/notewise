@@ -190,15 +190,17 @@ jobs:
         run: |
           set -euo pipefail
           : > SHA256SUMS.txt
-          (
-            cd dist
-            sha256sum *
-          ) >> SHA256SUMS.txt
-          (
-            cd release-assets
-            sha256sum *
-          ) >> SHA256SUMS.txt
-          sha256sum scripts/install.sh scripts/install.ps1 >> SHA256SUMS.txt
+          {
+            (
+              cd dist
+              sha256sum -- ./*
+            )
+            (
+              cd release-assets
+              sha256sum -- ./*
+            )
+            sha256sum -- scripts/install.sh scripts/install.ps1
+          } >> SHA256SUMS.txt
 
       - name: Create GitHub release
         uses: softprops/action-gh-release@v3

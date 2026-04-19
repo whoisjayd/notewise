@@ -21,21 +21,17 @@ All workflows live in `.github/workflows/`.
     | `changes` | Classifies the diff once and decides which heavier jobs actually need to run |
     | `docs-only` | Fast success path for docs-only changes on `main` |
     | `workflow-hygiene` | Runs `actionlint` only when workflow files changed |
-    | `format-check` | `ruff format --check` |
-    | `lint-check` | `ruff check` |
-    | `type-check` | `ty check` |
-    | `deps-check` | `deptry src` |
-    | `security` | `bandit -c pyproject.toml -r src/notewise --severity-level high` |
+    | `quality` | Combined format, lint, type, dependency, security, and startup checks in one job |
     | `version-sync` | Validates package version consistency across `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` |
-    | `startup-smoke` | `notewise version` — ensures the package imports cleanly |
     | `unit-tests` | `pytest` with `--cov-fail-under=90`; uploads coverage to Codecov |
     | `package-build` | `uv build` to catch packaging / metadata regressions before release |
-    | `hook-parity` | Runs full hook parity only when hook or workflow files changed |
-    | `matrix-tests` | `pytest` on Ubuntu / Windows / macOS × Python 3.10 / 3.11 / 3.12 |
+    | `hook-parity` | Runs full hook parity only when hook/tooling files changed |
+    | `matrix-tests` | `pytest` on Ubuntu / Windows / macOS × Python 3.10 / 3.11 / 3.12 only when app or packaging changes warrant it |
+    | `ci-required` | Stable final gate that passes only when the expected jobs succeeded or were intentionally skipped |
   </Accordion>
 
   <Accordion title="pr-gate.yml — PR validation">
-    Runs on every pull request to `dev`, and can also be dispatched manually by maintainers when needed. It classifies changed files first, then runs only the relevant jobs: workflow hygiene for workflow edits, quality/tests/build jobs for code or packaging edits, hook parity for hook-related changes, and a fast success path for docs-only PRs.
+    Runs on every pull request to `dev`, and can also be dispatched manually by maintainers when needed. It classifies changes into docs, app code, packaging, workflow, tooling, and hooks, then runs only the relevant validation jobs. A stable `PR Gate Required` job gives branch protection one consistent required check.
   </Accordion>
 
   <Accordion title="branch-policy.yml — base branch enforcement">
@@ -43,7 +39,7 @@ All workflows live in `.github/workflows/`.
   </Accordion>
 
   <Accordion title="pr-title.yml — PR title enforcement">
-    Validates that PR titles follow a conventional format. This helps maintainers use squash merges without manually rewriting every title.
+    Validates that PR titles follow a conventional format. This helps maintainers use squash merges without manually rewriting every title, while still allowing practical bot-generated titles such as `build(deps): ...`.
   </Accordion>
 
   <Accordion title="pr-size.yml — review sizing">
@@ -94,25 +90,16 @@ Every PR must pass all of these before merge:
 
 <Steps>
   <Step title="Change classification">
-    CI detects whether the PR is docs-only, workflow-related, hook-related, packaging-related, or code-related before starting expensive jobs.
+    CI detects whether the PR is docs-only, workflow-related, hook-related, tooling-related, packaging-related, or app-code-related before starting expensive jobs.
   </Step>
   <Step title="Workflow hygiene (when needed)">
     Workflow edits run `actionlint`.
   </Step>
-  <Step title="ruff format --check">No unformatted code.</Step>
-  <Step title="ruff check">No lint errors.</Step>
-  <Step title="ty check">No type errors.</Step>
-  <Step title="deptry">
-    No missing or unused declared dependencies.
-  </Step>
-  <Step title="bandit">
-    No high-severity security findings in application code.
+  <Step title="Quality checks">
+    Formatting, linting, type checking, dependency hygiene, security scanning, and startup smoke checks run together for app/package-impacting changes.
   </Step>
   <Step title="Version sync check">
     `pyproject.toml`, `src/notewise/__init__.py`, and `uv.lock` must agree on the package version.
-  </Step>
-  <Step title="Startup smoke">
-    `notewise version` — package imports without error.
   </Step>
   <Step title="pytest --cov-fail-under=90">
     Coverage ≥ 90% on the unit test suite.
@@ -121,10 +108,13 @@ Every PR must pass all of these before merge:
     Source and wheel distributions must build successfully.
   </Step>
   <Step title="Hook parity">
-    CI re-runs the same `pre-commit` and `pre-push` checks contributors are expected to install locally, but only when hook or workflow files changed.
+    CI re-runs the same `pre-commit` and `pre-push` checks contributors are expected to install locally, but only when hook or tooling files changed.
   </Step>
   <Step title="Matrix tests">
-    All supported OS / Python version combinations.
+    All supported OS / Python version combinations run only when app or packaging changes justify the extra cost.
+  </Step>
+  <Step title="Stable required gate">
+    A final required job evaluates the expected downstream jobs and passes only when failures are absent and skips were intentional.
   </Step>
 </Steps>
 
@@ -156,6 +146,6 @@ Every PR must pass all of these before merge:
 ```bash
 make ci         # full CI pipeline
 
-make quality    # format-check + lint + type-check + security + deps
+make quality    # format-check + lint-check + type-check + version-check + deps-check + security
 make test       # full test suite with coverage
 ```
