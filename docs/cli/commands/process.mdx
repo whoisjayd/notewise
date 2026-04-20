@@ -45,6 +45,21 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--format" type="string" default="md">
+  Notes output format. Accepted values: `md`, `html`, `pdf`, `docx`.
+
+  `md` keeps the current Markdown-first behavior. `html`, `pdf`, and `docx` render the generated Markdown through the document renderer module with tighter spacing, improved typography, and cleaner DOCX styling.
+
+  You can pass one value or a comma-separated list.
+
+  ```bash
+  notewise process "URL" --format html
+  notewise process "URL" --format pdf
+  notewise process "URL" --format docx
+  notewise process "URL" --format md,html,pdf
+  ```
+</ParamField>
+
 <ParamField query="--language" type="string">
   **Alias:** `-l` · **Repeatable**
 
@@ -181,6 +196,9 @@ By default, long transcripts are finalized with chunk **stitching** so adjacent 
     <Tree>
       <Tree.Folder name="output" defaultOpen>
         <Tree.File name="Video Title.md" />
+        <Tree.File name="Video Title.html" />
+        <Tree.File name="Video Title.pdf" />
+        <Tree.File name="Video Title.docx" />
         <Tree.File name="Video Title_quiz.md" />
         <Tree.File name="Video Title_transcript.txt" />
         <Tree.File name="Video Title_transcript.json" />
@@ -197,12 +215,14 @@ By default, long transcripts are finalized with chunk **stitching** so adjacent 
           <Tree.File name="02_Core Concepts.md" />
           <Tree.File name="03_Advanced Topics.md" />
         </Tree.Folder>
+        <Tree.File name="Long Course Title.html" />
+        <Tree.File name="Long Course Title.pdf" />
+        <Tree.File name="Long Course Title.docx" />
       </Tree.Folder>
     </Tree>
 
     <Note>
-      Add `--timestamps` if you want chapter files to start with headings like
-      `# [00:34] Introduction`.
+      With `--format md`, long videos keep per-chapter Markdown files. With `--format html`, `pdf`, or `docx`, NoteWise bundles the generated chapter notes into one rendered document. If you request multiple formats like `md,html`, you get both the chapter folder and the bundled rendered file.
     </Note>
   </Tab>
 </Tabs>
