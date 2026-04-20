@@ -6,6 +6,9 @@ icon: file-text
 
 All output is written to the configured `OUTPUT_DIR` (default `./output`).
 
+The main notes artifact now supports `md`, `html`, `pdf`, and `docx` via `--format`.
+You can request one format or a comma-separated set such as `--format md,html,pdf`.
+
 ---
 
 ### Directory Structure
@@ -15,6 +18,9 @@ All output is written to the configured `OUTPUT_DIR` (default `./output`).
     <Tree>
       <Tree.Folder name="output" defaultOpen>
         <Tree.File name="Video Title.md" />
+        <Tree.File name="Video Title.html" />
+        <Tree.File name="Video Title.pdf" />
+        <Tree.File name="Video Title.docx" />
         <Tree.File name="Video Title_quiz.md" />
         <Tree.File name="Video Title_transcript.txt" />
         <Tree.File name="Video Title_transcript.json" />
@@ -40,8 +46,16 @@ All output is written to the configured `OUTPUT_DIR` (default `./output`).
           <Tree.File name="Long Course Title_quiz.md" />
           <Tree.File name="Long Course Title_transcript.txt" />
         </Tree.Folder>
+        <Tree.File name="Long Course Title.html" />
+        <Tree.File name="Long Course Title.pdf" />
+        <Tree.File name="Long Course Title.docx" />
+        <Tree.File name="Long Course Title_quiz.md" />
       </Tree.Folder>
     </Tree>
+
+    <Note>
+      `--format md` keeps the existing per-chapter folder layout. `--format html`, `pdf`, and `docx` bundle the generated chapter notes into a single rendered document in the output root. Mixed requests like `md,html` generate both layouts.
+    </Note>
   </Tab>
   <Tab title="Batch / Playlist">
     <Tree>
@@ -59,9 +73,9 @@ All output is written to the configured `OUTPUT_DIR` (default `./output`).
 
 ---
 
-### Main notes file (`<title>.md`)
+### Main notes file (`<title>.<format>`)
 
-The study notes are generated in clean Markdown with a hierarchical structure:
+The study notes are generated in clean Markdown first, then written directly as `.md` or rendered to `.html`, `.pdf`, or `.docx` with a shared document theme for tighter spacing and more readable typography:
 
 ```markdown
 # Video Title
