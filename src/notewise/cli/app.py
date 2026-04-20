@@ -9,7 +9,12 @@ from urllib.parse import urlparse
 
 import typer
 
-from notewise._constants import CONFIG_FILENAME, DEFAULT_USE_COMBINE_CHUNK
+from notewise._constants import (
+    CONFIG_FILENAME,
+    DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_USE_COMBINE_CHUNK,
+    SUPPORTED_NOTES_OUTPUT_FORMATS,
+)
 
 
 if TYPE_CHECKING:
@@ -235,6 +240,17 @@ def process(
             resolve_path=True,
         ),
     ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help=(
+                "Notes output format. Pass one value or a comma-separated list, "
+                "for example [green]md,html[/green]. Supported values: "
+                f"[green]{', '.join(SUPPORTED_NOTES_OUTPUT_FORMATS)}[/green]."
+            ),
+        ),
+    ] = DEFAULT_NOTES_OUTPUT_FORMAT,
     language: Annotated[
         list[str] | None,
         typer.Option(
@@ -367,10 +383,16 @@ def process(
     try:
         _load_process_dependencies()
         from notewise.cli._runtime import CliProcessRunner
+        from notewise.errors import ValidationError
         from notewise.logging import configure_logging, get_session_log_path
+        from notewise.pipeline._documents import normalize_output_formats
 
         configure_logging()
         settings = _get_config()
+        try:
+            selected_output_formats = normalize_output_formats(output_format)
+        except ValidationError as error:
+            raise typer.BadParameter(str(error), param_hint="--format") from error
 
         runner = CliProcessRunner(
             console=console,
@@ -383,6 +405,7 @@ def process(
             live_cls=Live,
             selected_model=model or settings.default_model,
             selected_output=output or settings.default_output_dir,
+            selected_output_formats=selected_output_formats,
             selected_languages=language or settings.default_languages,
             selected_temperature=(
                 temperature if temperature is not None else settings.temperature
