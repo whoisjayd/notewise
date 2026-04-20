@@ -7,6 +7,7 @@ import pytest
 from notewise.errors import ValidationError
 from notewise.pipeline._documents import (
     _markdown_to_html,
+    _normalize_pdf_markdown,
     _normalize_rendered_html,
     build_chapter_bundle,
     get_output_extension,
@@ -54,7 +55,31 @@ def test_normalize_rendered_html_promotes_code_blocks() -> None:
     html = _normalize_rendered_html("<pre><code>print('hi')</code></pre>")
 
     assert '<pre class="code-block">' in html
-    assert "<code>" not in html
+    assert "<code>print('hi')</code>" in html
+
+
+def test_markdown_to_html_normalizes_indented_list_items() -> None:
+    html = _markdown_to_html(
+        "## Section\n"
+        "Paragraph introducing the list:\n"
+        "  * nested item one\n"
+        "  * nested item two"
+    )
+
+    assert "<ul>" in html
+    assert "nested item one" in html
+
+
+def test_normalize_pdf_markdown_replaces_smart_punctuation() -> None:
+    normalized = _normalize_pdf_markdown('"quote" - dash - ellipsis...')
+
+    assert normalized == '"quote" - dash - ellipsis...'
+
+
+def test_normalize_pdf_markdown_downgrades_unicode_punctuation() -> None:
+    normalized = _normalize_pdf_markdown("“quote” — dash …")
+
+    assert normalized == '"quote" - dash ...'
 
 
 def test_build_chapter_bundle_wraps_notes_under_video_title() -> None:

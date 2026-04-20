@@ -308,8 +308,10 @@ async def process_single_video(
                                     start_seconds,
                                 )
 
-                            if chapter_file is None:
+                            if rendered_output_targets:
                                 bundled_chapter_notes.append(notes)
+
+                            if chapter_file is None:
                                 continue
 
                             chapter_file.write_text(notes, encoding="utf-8")

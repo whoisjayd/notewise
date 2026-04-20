@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+import unicodedata
 from collections.abc import Callable
 from html import escape
 from io import BytesIO
@@ -12,7 +13,6 @@ from notewise._constants import (
     CHAPTER_BUNDLE_SEPARATOR,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_RENDERED_HTML_STYLES,
-    DEFAULT_RENDERED_PDF_STYLES,
     DOCX_BODY_FONT_NAME,
     DOCX_BODY_FONT_SIZE_PT,
     DOCX_BODY_SPACE_AFTER_PT,
@@ -36,6 +36,18 @@ DocumentRenderer = Callable[[str, str, Path], None]
 _LIST_ITEM_RE = re.compile(r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)")
 _CODE_BLOCK_RE = re.compile(
     r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>", re.DOTALL
+)
+_PDF_CHARACTER_TRANSLATIONS = str.maketrans(
+    {
+        "\u2018": "'",
+        "\u2019": "'",
+        "\u201c": '"',
+        "\u201d": '"',
+        "\u2013": "-",
+        "\u2014": "-",
+        "\u2026": "...",
+        "\u00a0": " ",
+    }
 )
 
 
@@ -112,7 +124,7 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
     previous_line = ""
 
     for line in markdown_text.splitlines():
-        stripped = line.strip()
+        line.strip()
         is_list_item = bool(_LIST_ITEM_RE.match(line))
         previous_is_list_item = bool(_LIST_ITEM_RE.match(previous_line))
         previous_is_content = bool(previous_line.strip())
@@ -123,7 +135,6 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
             and not previous_is_list_item
             and previous_is_content
             and not previous_is_heading
-            and line == stripped
             and normalized_lines
             and normalized_lines[-1] != ""
         ):
@@ -148,9 +159,18 @@ def _markdown_to_html(markdown_text: str) -> str:
 def _normalize_rendered_html(body_html: str) -> str:
     def _replace_code_block(match: re.Match[str]) -> str:
         code_html = match.group("code")
-        return f'<pre class="code-block">{code_html}</pre>'
+        return f'<pre class="code-block"><code>{code_html}</code></pre>'
 
     return _CODE_BLOCK_RE.sub(_replace_code_block, body_html)
+
+
+def _normalize_pdf_markdown(markdown_text: str) -> str:
+    translated = markdown_text.translate(_PDF_CHARACTER_TRANSLATIONS)
+    return (
+        unicodedata.normalize("NFKD", translated)
+        .encode("latin-1", "ignore")
+        .decode("latin-1")
+    )
 
 
 def _build_html_document(
@@ -189,17 +209,19 @@ def _write_html(markdown_text: str, title: str, output_path: Path) -> None:
 
 
 def _write_pdf(markdown_text: str, title: str, output_path: Path) -> None:
-    from xhtml2pdf import pisa
+    from fpdf import FPDF
 
-    html_document = _build_html_document(
-        title,
-        _markdown_to_html(markdown_text),
-        DEFAULT_RENDERED_PDF_STYLES,
+    pdf = FPDF()
+    pdf.set_title(title)
+    pdf.set_author("notewise")
+    pdf.set_auto_page_break(auto=True, margin=16)
+    pdf.set_margins(16, 16, 16)
+    pdf.add_page()
+    pdf.write_html(
+        _markdown_to_html(_normalize_pdf_markdown(markdown_text)),
+        font_family="Times",
     )
-    with output_path.open("wb") as output_file:
-        result = pisa.CreatePDF(html_document, dest=output_file, encoding="utf-8")
-    if result.err:
-        raise ValidationError("Could not render PDF output for this document.")
+    pdf.output(str(output_path))
 
 
 def _write_docx(markdown_text: str, title: str, output_path: Path) -> None:
@@ -233,7 +255,7 @@ def _write_docx(markdown_text: str, title: str, output_path: Path) -> None:
         style.paragraph_format.space_before = Pt(DOCX_HEADING_SPACE_BEFORE_PT)
         style.paragraph_format.space_after = Pt(DOCX_HEADING_SPACE_AFTER_PT)
 
-    for paragraph in document.paragraphs:
+    def _apply_paragraph_style(paragraph) -> None:
         if paragraph.text.strip():
             paragraph.paragraph_format.space_before = Pt(0)
             paragraph.paragraph_format.space_after = Pt(DOCX_BODY_SPACE_AFTER_PT)
@@ -241,6 +263,15 @@ def _write_docx(markdown_text: str, title: str, output_path: Path) -> None:
         else:
             paragraph.paragraph_format.space_before = Pt(0)
             paragraph.paragraph_format.space_after = Pt(0)
+
+    for paragraph in document.paragraphs:
+        _apply_paragraph_style(paragraph)
+
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                for paragraph in cell.paragraphs:
+                    _apply_paragraph_style(paragraph)
 
     styled_buffer = BytesIO()
     document.save(styled_buffer)
