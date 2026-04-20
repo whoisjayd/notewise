@@ -29,6 +29,7 @@ class CliProcessContext:
     live_cls: Any
     selected_model: str
     selected_output: Path
+    selected_output_formats: list[str]
     selected_languages: list[str]
     selected_temperature: float
     selected_max_tokens: int | None
@@ -114,6 +115,7 @@ class CliProcessContext:
         return self.core_pipeline_cls(
             model=self.selected_model,
             output_dir=output_dir,
+            output_formats=self.selected_output_formats,
             languages=self.selected_languages,
             temperature=self.selected_temperature,
             max_tokens=self.selected_max_tokens,

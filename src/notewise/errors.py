@@ -171,6 +171,9 @@ def raise_if_video_unavailable(
 
 def format_user_error(error: Exception) -> str:
     """Return a plain-English failure message suitable for end-user display."""
+    if isinstance(error, ValidationError):
+        return str(error).split(" [")[0]
+
     if isinstance(error, VideoUnavailableError):
         return str(error).split(" [")[0]
 

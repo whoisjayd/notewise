@@ -178,6 +178,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
             ["vid1"],
             output_dir=temp_output_dir,
             model="demo-model",
+            output_format="html",
             use_combine_chunk=True,
             on_event=None,
         )
@@ -186,6 +187,7 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
     mock_pipeline_cls.assert_called_once_with(
         model="demo-model",
         output_dir=temp_output_dir,
+        output_format="html",
         use_combine_chunk=True,
     )
     pipeline_instance.run.assert_awaited_once_with(["vid1"], on_event=None)
