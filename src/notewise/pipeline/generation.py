@@ -229,10 +229,12 @@ class StudyMaterialGenerator:
         self.throttle_seconds = max(0.0, float(throttle_seconds))
         self.use_combine_chunk = use_combine_chunk
         self._throttle_lock = asyncio.Lock()
+        # Track the last request start so throttling spaces out bursts while still
+        # allowing in-flight provider calls to overlap after their starts.
         self._last_generation_started_at: float | None = None
 
     async def _generate_text(self, *, system_prompt: str, user_prompt: str) -> str:
-        """Generate text and optionally pace repeated requests across the run."""
+        """Generate text and optionally pace repeated request starts."""
         if self.throttle_seconds <= 0:
             return await self.provider.generate(
                 system_prompt=system_prompt,
