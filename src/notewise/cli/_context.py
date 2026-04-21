@@ -33,6 +33,7 @@ class CliProcessContext:
     selected_languages: list[str]
     selected_temperature: float
     selected_max_tokens: int | None
+    selected_throttle_seconds: float
     force: bool
     no_ui: bool
     quiz: bool
@@ -119,6 +120,7 @@ class CliProcessContext:
             languages=self.selected_languages,
             temperature=self.selected_temperature,
             max_tokens=self.selected_max_tokens,
+            throttle_seconds=self.selected_throttle_seconds,
             force=self.force,
             quiz=self.quiz,
             use_combine_chunk=self.use_combine_chunk,

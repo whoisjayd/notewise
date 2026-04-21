@@ -162,6 +162,41 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_generate_study_notes_throttle_waits_between_repeated_calls(
+        self, mock_llm_provider
+    ):
+        """Throttle should pause between repeated chunk generation requests."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=2.0)
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
+            patch(
+                "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+        ):
+            await generator.generate_study_notes("Long text")
+
+        assert mock_sleep.await_count == 2
+        assert all(
+            call.args[0] == pytest.approx(2.0, abs=0.01)
+            for call in mock_sleep.await_args_list
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_throttle_skips_initial_delay(
+        self, mock_llm_provider
+    ):
+        """Throttle should not add a startup pause before the first LLM request."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=1.5)
+
+        with patch(
+            "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+        ) as mock_sleep:
+            await generator.generate_study_notes("Full text")
+
+        mock_sleep.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple_uses_stitch_prompt_by_default(
         self, mock_llm_provider
     ):
@@ -427,6 +462,34 @@ class TestStudyMaterialGenerator:
         )
 
         assert state["peak"] <= 2
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_concurrent_throttle_serializes_requests(
+        self, mock_llm_provider
+    ):
+        """Throttle should also pace chapter requests started concurrently."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=2.0)
+
+        with (
+            patch("notewise.pipeline.generation.token_counter", return_value=50),
+            patch(
+                "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+        ):
+            await generator.generate_chapter_notes_concurrent(
+                {
+                    "Chapter 1": "text1",
+                    "Chapter 2": "text2",
+                    "Chapter 3": "text3",
+                },
+                max_concurrent=3,
+            )
+
+        assert mock_sleep.await_count == 2
+        assert all(
+            call.args[0] == pytest.approx(2.0, abs=0.01)
+            for call in mock_sleep.await_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_generate_quiz_calls_provider_once(self, generator):
