@@ -12,6 +12,7 @@ import typer
 from notewise._constants import (
     CONFIG_FILENAME,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
@@ -287,6 +288,17 @@ def process(
             min=1,
         ),
     ] = None,
+    throttle: Annotated[
+        float,
+        typer.Option(
+            "--throttle",
+            help=(
+                "Delay repeated LLM generation calls by this many seconds. "
+                "Useful for pacing chunked or chapter-based runs on low-quota plans."
+            ),
+            min=0.0,
+        ),
+    ] = DEFAULT_THROTTLE_SECONDS,
     force: Annotated[
         bool,
         typer.Option(
@@ -413,6 +425,7 @@ def process(
             selected_max_tokens=(
                 max_tokens if max_tokens is not None else settings.max_tokens
             ),
+            selected_throttle_seconds=throttle,
             force=force,
             no_ui=no_ui,
             quiz=quiz,

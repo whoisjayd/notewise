@@ -91,6 +91,17 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--throttle" type="float" default="0.0">
+  Insert a delay between repeated LLM generation calls. Useful when chunked, chapter-based, or quiz generation would otherwise burst too quickly for free-tier or low-quota provider plans.
+
+  `0` disables pacing. The first generation call starts immediately; the delay only applies between later calls.
+
+  ```bash
+  notewise process "URL" --throttle 2
+  notewise process "URL" --throttle 5
+  ```
+</ParamField>
+
 <ParamField query="--quiz" type="boolean" default="false">
   Also generate a multiple-choice quiz (`<title>_quiz.md`) alongside the notes. Contains 10–15 questions with answers and explanations.
 
@@ -190,6 +201,7 @@ notewise process URL [OPTIONS]
 
 By default, long transcripts are finalized with chunk **stitching** so adjacent chunk outputs read like one continuous document while preserving detail.
 `--use-combine-chunk` keeps the older deprecated combine-all-chunks behavior for compatibility.
+`--throttle` paces repeated LLM calls across chunk generation, chapter generation, stitching/combining, and quiz generation.
 
 <Tabs>
   <Tab title="Standard Video">
@@ -253,6 +265,9 @@ notewise process "https://youtube.com/playlist?list=PLxxxxxx" \
 
 # Deprecated legacy combine mode
 notewise process "URL" --use-combine-chunk
+
+# Pace chunked generation for rate-limited plans
+notewise process "URL" --throttle 2
 
 # Batch file — non-interactive with high concurrency
 MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui

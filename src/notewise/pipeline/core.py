@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from notewise._constants import (
     DEFAULT_MODEL,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
 )
 from notewise.config import get_cache_db_path
@@ -99,6 +100,7 @@ class CorePipeline:
         languages: list[str] | None = None,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         force: bool = False,
         quiz: bool = False,
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
@@ -126,8 +128,10 @@ class CorePipeline:
             self.provider,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            throttle_seconds=throttle_seconds,
             use_combine_chunk=use_combine_chunk,
         )
+        self.throttle_seconds = max(0.0, float(throttle_seconds))
         self.force = force
         self.quiz = quiz
         self.use_combine_chunk = use_combine_chunk
@@ -353,6 +357,7 @@ async def run_pipeline(
     model: str = DEFAULT_MODEL,
     output_format: str = DEFAULT_NOTES_OUTPUT_FORMAT,
     output_formats: list[str] | None = None,
+    throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
     use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
@@ -360,6 +365,7 @@ async def run_pipeline(
         "model": model,
         "output_dir": output_dir,
         "output_format": output_format,
+        "throttle_seconds": throttle_seconds,
         "use_combine_chunk": use_combine_chunk,
     }
     if output_formats is not None:
