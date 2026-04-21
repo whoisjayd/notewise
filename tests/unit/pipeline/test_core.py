@@ -124,6 +124,49 @@ def test_pipeline_configures_generator_for_legacy_chunk_combine(
     assert pipeline.generator.use_combine_chunk is True
 
 
+def test_pipeline_passes_throttle_seconds_into_generator(
+    temp_output_dir, mock_llm_provider
+):
+    """CorePipeline should pass the CLI throttle value into the generator."""
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            throttle_seconds=2.5,
+        )
+
+    assert pipeline.throttle_seconds == 2.5
+    assert pipeline.generator.throttle_seconds == 2.5
+
+
+def test_pipeline_passes_target_language_into_generator(
+    temp_output_dir, mock_llm_provider
+):
+    """CorePipeline should pass the requested output language into the generator."""
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            target_language="French",
+        )
+
+    assert pipeline.target_language == "French"
+    assert pipeline.generator.target_language == "French"
+
+
+def test_pipeline_normalizes_blank_target_language(temp_output_dir, mock_llm_provider):
+    """CorePipeline should normalize blank target languages to the default."""
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            target_language="   ",
+        )
+
+    assert pipeline.target_language == "English"
+    assert pipeline.generator.target_language == "English"
+
+
 @pytest.mark.asyncio
 async def test_get_cached_video_returns_none_on_sqlalchemy_error(
     temp_output_dir,
@@ -178,6 +221,9 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
             ["vid1"],
             output_dir=temp_output_dir,
             model="demo-model",
+            output_format="html",
+            target_language="Spanish",
+            throttle_seconds=3.0,
             use_combine_chunk=True,
             on_event=None,
         )
@@ -186,6 +232,9 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
     mock_pipeline_cls.assert_called_once_with(
         model="demo-model",
         output_dir=temp_output_dir,
+        output_format="html",
+        target_language="Spanish",
+        throttle_seconds=3.0,
         use_combine_chunk=True,
     )
     pipeline_instance.run.assert_awaited_once_with(["vid1"], on_event=None)

@@ -52,6 +52,7 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 | 🤖 **Multi-Provider LLM Support**      | Works with Gemini, OpenAI, Anthropic, Groq, Mistral, Cohere, DeepSeek, and xAI via LiteLLM |
 | 🗂️ **Chapter-Aware Notes**             | Automatically detects video chapters and generates separate, structured notes per chapter  |
 | ❓ **Quiz Generation**                 | Optionally produce a ready-to-use multiple-choice quiz alongside each study guide          |
+| 📄 **Multiple Output Formats**        | Write study notes as `.md`, `.html`, `.pdf`, or `.docx` with cleaner typography and layout |
 | 📝 **Transcript Export**               | Export raw transcripts as plain `.txt` or timestamped `.json`                              |
 | ⚡ **Concurrent Processing**           | Configurable concurrency — process multiple videos and chapters simultaneously             |
 | 💾 **Local SQLite Cache**              | Transcripts and run stats are cached; skip already-processed videos automatically          |
@@ -95,6 +96,12 @@ This creates `~/.notewise/config.env`. The default model is **Gemini 2.5 Flash**
 # Single video
 notewise process "https://youtube.com/watch?v=VIDEO_ID"
 
+# Render a PDF study guide
+notewise process "https://youtube.com/watch?v=VIDEO_ID" --format pdf
+
+# Write multiple outputs in one run
+notewise process "https://youtube.com/watch?v=VIDEO_ID" --format md,html,pdf,docx
+
 # Full playlist
 notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
 
@@ -102,7 +109,7 @@ notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
 notewise process my-course-urls.txt -o ./course-notes
 ```
 
-Notes are written as Markdown files in `./output/` (or your configured directory).
+Notes are written to `./output/` (or your configured directory) as Markdown by default. Pass `--format` with one value or a comma-separated list like `md,html,pdf` to generate additional rendered outputs.
 
 ## 📦 Installation
 
@@ -251,6 +258,7 @@ notewise process URL [OPTIONS]
 
   -m, --model TEXT           LLM model (overrides config)
   -o, --output PATH          Output directory (overrides config)
+      --format TEXT          Notes output format(s): md, html, pdf, or docx
   -l, --language TEXT        Preferred transcript language (repeatable)
   -t, --temperature FLOAT    LLM temperature 0.0–1.0
   -k, --max-tokens INT       Max tokens per LLM response
@@ -266,6 +274,9 @@ notewise process URL [OPTIONS]
 ```
 output/
 ├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).md
+├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).html
+├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).pdf
+├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy).docx
 ├── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_quiz.md
 └── Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_transcript.json
 ```

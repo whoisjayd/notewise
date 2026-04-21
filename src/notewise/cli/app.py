@@ -9,7 +9,14 @@ from urllib.parse import urlparse
 
 import typer
 
-from notewise._constants import CONFIG_FILENAME, DEFAULT_USE_COMBINE_CHUNK
+from notewise._constants import (
+    CONFIG_FILENAME,
+    DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_TARGET_LANGUAGE,
+    DEFAULT_THROTTLE_SECONDS,
+    DEFAULT_USE_COMBINE_CHUNK,
+    SUPPORTED_NOTES_OUTPUT_FORMATS,
+)
 
 
 if TYPE_CHECKING:
@@ -235,6 +242,17 @@ def process(
             resolve_path=True,
         ),
     ] = None,
+    output_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            help=(
+                "Notes output format. Pass one value or a comma-separated list, "
+                "for example [green]md,html[/green]. Supported values: "
+                f"[green]{', '.join(SUPPORTED_NOTES_OUTPUT_FORMATS)}[/green]."
+            ),
+        ),
+    ] = DEFAULT_NOTES_OUTPUT_FORMAT,
     language: Annotated[
         list[str] | None,
         typer.Option(
@@ -246,6 +264,17 @@ def process(
             ),
         ),
     ] = None,
+    target_language: Annotated[
+        str,
+        typer.Option(
+            "--target-language",
+            help=(
+                "Language for generated notes and translated headings "
+                "(for example [green]English[/green], [green]Hindi[/green], "
+                "or [green]pt-BR[/green])."
+            ),
+        ),
+    ] = DEFAULT_TARGET_LANGUAGE,
     temperature: Annotated[
         float | None,
         typer.Option(
@@ -271,6 +300,17 @@ def process(
             min=1,
         ),
     ] = None,
+    throttle: Annotated[
+        float,
+        typer.Option(
+            "--throttle",
+            help=(
+                "Delay repeated LLM generation calls by this many seconds. "
+                "Useful for pacing chunked or chapter-based runs on low-quota plans."
+            ),
+            min=0.0,
+        ),
+    ] = DEFAULT_THROTTLE_SECONDS,
     force: Annotated[
         bool,
         typer.Option(
@@ -367,10 +407,16 @@ def process(
     try:
         _load_process_dependencies()
         from notewise.cli._runtime import CliProcessRunner
+        from notewise.errors import ValidationError
         from notewise.logging import configure_logging, get_session_log_path
+        from notewise.pipeline._documents import normalize_output_formats
 
         configure_logging()
         settings = _get_config()
+        try:
+            selected_output_formats = normalize_output_formats(output_format)
+        except ValidationError as error:
+            raise typer.BadParameter(str(error), param_hint="--format") from error
 
         runner = CliProcessRunner(
             console=console,
@@ -383,13 +429,16 @@ def process(
             live_cls=Live,
             selected_model=model or settings.default_model,
             selected_output=output or settings.default_output_dir,
+            selected_output_formats=selected_output_formats,
             selected_languages=language or settings.default_languages,
+            selected_target_language=target_language,
             selected_temperature=(
                 temperature if temperature is not None else settings.temperature
             ),
             selected_max_tokens=(
                 max_tokens if max_tokens is not None else settings.max_tokens
             ),
+            selected_throttle_seconds=throttle,
             force=force,
             no_ui=no_ui,
             quiz=quiz,

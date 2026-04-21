@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
 from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
 from notewise.pipeline.generation import (
@@ -151,6 +152,63 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 1
 
     @pytest.mark.asyncio
+    async def test_generate_study_notes_single_uses_target_language_prompts(
+        self, mock_llm_provider
+    ):
+        """Single-pass notes should enforce the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Hindi")
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            "Always write the entire output in Hindi." in call_kwargs["system_prompt"]
+        )
+        assert "Write everything in Hindi." in call_kwargs["user_prompt"]
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_uses_default_target_language(
+        self, mock_llm_provider
+    ):
+        """Default generator target language should flow into prompts."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            f"Always write the entire output in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["system_prompt"]
+        )
+        assert (
+            f"Write everything in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["user_prompt"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_blank_target_language_falls_back_to_default(
+        self, mock_llm_provider
+    ):
+        """Blank generator target language should fall back to the default."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="  ")
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        assert generator.target_language == DEFAULT_TARGET_LANGUAGE
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            f"Always write the entire output in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["system_prompt"]
+        )
+        assert (
+            f"Write everything in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["user_prompt"]
+        )
+
+    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple(self, generator):
         """Test generating and combining multiple chunks."""
         chunks = ["Part 1", "Part 2"]
@@ -160,6 +218,41 @@ class TestStudyMaterialGenerator:
             assert notes == "# Generated Notes\n\nTest content."
             # 2 chunks + 1 combine = 3 calls
             assert generator.provider.generate.call_count == 3
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_throttle_waits_between_repeated_calls(
+        self, mock_llm_provider
+    ):
+        """Throttle should pause between repeated chunk generation requests."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=2.0)
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
+            patch(
+                "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+        ):
+            await generator.generate_study_notes("Long text")
+
+        assert mock_sleep.await_count == 2
+        assert all(
+            call.args[0] == pytest.approx(2.0, abs=0.01)
+            for call in mock_sleep.await_args_list
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_throttle_skips_initial_delay(
+        self, mock_llm_provider
+    ):
+        """Throttle should not add a startup pause before the first LLM request."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=1.5)
+
+        with patch(
+            "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+        ) as mock_sleep:
+            await generator.generate_study_notes("Full text")
+
+        mock_sleep.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_generate_study_notes_multiple_uses_stitch_prompt_by_default(
@@ -185,6 +278,33 @@ class TestStudyMaterialGenerator:
         assert final_prompt == get_stitch_prompt(
             "# Section One\n\nChunk one detail",
             "# Section One\n\nChunk two detail",
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_multiple_passes_target_language_to_stitch(
+        self, mock_llm_provider
+    ):
+        """Chunk stitching should preserve the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Spanish")
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "# Section One\n\nChunk one detail",
+                "# Section One\n\nChunk two detail",
+                "# Stitched\n\nMerged detail",
+            ]
+        )
+
+        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
+            await generator.generate_study_notes("Long text")
+
+        final_call = generator.provider.generate.await_args_list[-1].kwargs
+        assert (
+            "Always write the entire output in Spanish." in final_call["system_prompt"]
+        )
+        assert final_call["user_prompt"] == get_stitch_prompt(
+            "# Section One\n\nChunk one detail",
+            "# Section One\n\nChunk two detail",
+            target_language="Spanish",
         )
 
     @pytest.mark.asyncio
@@ -277,6 +397,22 @@ class TestStudyMaterialGenerator:
             "### Topic\n\nChunk one detail",
             "### Topic\n\nChunk two detail",
         )
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_uses_target_language_prompts(
+        self, mock_llm_provider
+    ):
+        """Chapter generation should honor the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="German")
+
+        with patch("notewise.pipeline.generation.token_counter", return_value=50):
+            await generator.generate_single_chapter_notes("Intro", "short text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            "Always write the entire output in German." in call_kwargs["system_prompt"]
+        )
+        assert "Write everything in German." in call_kwargs["user_prompt"]
 
     @pytest.mark.asyncio
     async def test_stitch_chunk_notes_handles_three_chunks(self, mock_llm_provider):
@@ -427,6 +563,34 @@ class TestStudyMaterialGenerator:
         )
 
         assert state["peak"] <= 2
+
+    @pytest.mark.asyncio
+    async def test_generate_chapter_notes_concurrent_throttle_serializes_requests(
+        self, mock_llm_provider
+    ):
+        """Throttle should also pace chapter requests started concurrently."""
+        generator = StudyMaterialGenerator(mock_llm_provider, throttle_seconds=2.0)
+
+        with (
+            patch("notewise.pipeline.generation.token_counter", return_value=50),
+            patch(
+                "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
+            ) as mock_sleep,
+        ):
+            await generator.generate_chapter_notes_concurrent(
+                {
+                    "Chapter 1": "text1",
+                    "Chapter 2": "text2",
+                    "Chapter 3": "text3",
+                },
+                max_concurrent=3,
+            )
+
+        assert mock_sleep.await_count == 2
+        assert all(
+            call.args[0] == pytest.approx(2.0, abs=0.01)
+            for call in mock_sleep.await_args_list
+        )
 
     @pytest.mark.asyncio
     async def test_generate_quiz_calls_provider_once(self, generator):

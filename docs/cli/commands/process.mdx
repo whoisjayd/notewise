@@ -45,6 +45,21 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--format" type="string" default="md">
+  Notes output format. Accepted values: `md`, `html`, `pdf`, `docx`.
+
+  `md` keeps the current Markdown-first behavior. `html`, `pdf`, and `docx` render the generated Markdown through the document renderer module with tighter spacing, improved typography, and cleaner DOCX styling.
+
+  You can pass one value or a comma-separated list.
+
+  ```bash
+  notewise process "URL" --format html
+  notewise process "URL" --format pdf
+  notewise process "URL" --format docx
+  notewise process "URL" --format md,html,pdf
+  ```
+</ParamField>
+
 <ParamField query="--language" type="string">
   **Alias:** `-l` · **Repeatable**
 
@@ -53,6 +68,15 @@ notewise process URL [OPTIONS]
   ```bash
   notewise process "URL" --language hi       # Hindi first
   notewise process "URL" -l fr -l en         # French, then English
+  ```
+</ParamField>
+
+<ParamField query="--target-language" type="string" default="English">
+  Language for the generated notes themselves. This controls the LLM output language, including headings and structural labels, and is independent from transcript fetch preferences.
+
+  ```bash
+  notewise process "URL" --target-language Hindi
+  notewise process "URL" --language en --target-language Spanish
   ```
 </ParamField>
 
@@ -73,6 +97,17 @@ notewise process URL [OPTIONS]
 
   ```bash
   notewise process "URL" --max-tokens 2000
+  ```
+</ParamField>
+
+<ParamField query="--throttle" type="float" default="0.0">
+  Insert a delay between repeated LLM generation calls. Useful when chunked, chapter-based, or quiz generation would otherwise burst too quickly for free-tier or low-quota provider plans.
+
+  `0` disables pacing. The first generation call starts immediately; the delay only applies between later calls.
+
+  ```bash
+  notewise process "URL" --throttle 2
+  notewise process "URL" --throttle 5
   ```
 </ParamField>
 
@@ -175,12 +210,16 @@ notewise process URL [OPTIONS]
 
 By default, long transcripts are finalized with chunk **stitching** so adjacent chunk outputs read like one continuous document while preserving detail.
 `--use-combine-chunk` keeps the older deprecated combine-all-chunks behavior for compatibility.
+`--throttle` paces repeated LLM calls across chunk generation, chapter generation, stitching/combining, and quiz generation.
 
 <Tabs>
   <Tab title="Standard Video">
     <Tree>
       <Tree.Folder name="output" defaultOpen>
         <Tree.File name="Video Title.md" />
+        <Tree.File name="Video Title.html" />
+        <Tree.File name="Video Title.pdf" />
+        <Tree.File name="Video Title.docx" />
         <Tree.File name="Video Title_quiz.md" />
         <Tree.File name="Video Title_transcript.txt" />
         <Tree.File name="Video Title_transcript.json" />
@@ -197,12 +236,14 @@ By default, long transcripts are finalized with chunk **stitching** so adjacent 
           <Tree.File name="02_Core Concepts.md" />
           <Tree.File name="03_Advanced Topics.md" />
         </Tree.Folder>
+        <Tree.File name="Long Course Title.html" />
+        <Tree.File name="Long Course Title.pdf" />
+        <Tree.File name="Long Course Title.docx" />
       </Tree.Folder>
     </Tree>
 
     <Note>
-      Add `--timestamps` if you want chapter files to start with headings like
-      `# [00:34] Introduction`.
+      With `--format md`, long videos keep per-chapter Markdown files. With `--format html`, `pdf`, or `docx`, NoteWise bundles the generated chapter notes into one rendered document. If you request multiple formats like `md,html`, you get both the chapter folder and the bundled rendered file.
     </Note>
   </Tab>
 </Tabs>
@@ -233,6 +274,9 @@ notewise process "https://youtube.com/playlist?list=PLxxxxxx" \
 
 # Deprecated legacy combine mode
 notewise process "URL" --use-combine-chunk
+
+# Pace chunked generation for rate-limited plans
+notewise process "URL" --throttle 2
 
 # Batch file — non-interactive with high concurrency
 MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui

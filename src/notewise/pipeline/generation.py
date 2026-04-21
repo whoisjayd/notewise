@@ -14,7 +14,9 @@ from notewise._constants import (
     DEFAULT_MAX_CONCURRENT_CHAPTERS,
     DEFAULT_STITCH_CHAR_BOUNDARY,
     DEFAULT_STITCH_SECTION_BOUNDARY_COUNT,
+    DEFAULT_TARGET_LANGUAGE,
     DEFAULT_TEMPERATURE,
+    DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
 )
 from notewise.config import settings as config
@@ -27,17 +29,14 @@ from notewise.llm.prompts.quiz import (
     get_quiz_prompt,
 )
 from notewise.llm.prompts.study_notes import (
-    SYSTEM_PROMPT,
     get_chunk_prompt,
     get_combine_prompt,
     get_single_pass_prompt,
     get_stitch_prompt,
+    get_system_prompt,
 )
 from notewise.llm.provider import LLMProvider
 
-
-# Re-use system prompt for chapter generation
-CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -209,7 +208,9 @@ class StudyMaterialGenerator:
         provider: LLMProvider,
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int | None = None,
+        throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
+        target_language: str = DEFAULT_TARGET_LANGUAGE,
     ):
         """
         Initialize generator.
@@ -218,12 +219,47 @@ class StudyMaterialGenerator:
             provider: LLM provider instance.
             temperature: LLM response temperature.
             max_tokens: Maximum tokens for LLM responses.
+            throttle_seconds: Delay between repeated LLM generation requests.
             use_combine_chunk: Whether to use the deprecated legacy combine flow.
+            target_language: Language to use for generated study notes.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
+        self.throttle_seconds = max(0.0, float(throttle_seconds))
         self.use_combine_chunk = use_combine_chunk
+        self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
+        self._throttle_lock = asyncio.Lock()
+        # Track the last request start so throttling spaces out bursts while still
+        # allowing in-flight provider calls to overlap after their starts.
+        self._last_generation_started_at: float | None = None
+
+    async def _generate_text(self, *, system_prompt: str, user_prompt: str) -> str:
+        """Generate text and optionally pace repeated request starts."""
+        if self.throttle_seconds <= 0:
+            return await self.provider.generate(
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                temperature=self.temperature,
+                max_tokens=self.max_tokens,
+            )
+
+        loop = asyncio.get_running_loop()
+        async with self._throttle_lock:
+            if self._last_generation_started_at is not None:
+                remaining = self.throttle_seconds - (
+                    loop.time() - self._last_generation_started_at
+                )
+                if remaining > 0:
+                    await asyncio.sleep(remaining)
+            self._last_generation_started_at = loop.time()
+
+        return await self.provider.generate(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
+        )
 
     async def _combine_chunk_notes(
         self,
@@ -232,11 +268,12 @@ class StudyMaterialGenerator:
         system_prompt: str,
     ) -> str:
         """Run the deprecated legacy combine-all-chunks flow."""
-        return await self.provider.generate(
+        return await self._generate_text(
             system_prompt=system_prompt,
-            user_prompt=get_combine_prompt(chunk_notes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
+            user_prompt=get_combine_prompt(
+                chunk_notes,
+                target_language=self.target_language,
+            ),
         )
 
     async def _stitch_chunk_notes(
@@ -251,11 +288,13 @@ class StudyMaterialGenerator:
         for next_chunk_notes in chunk_notes[1:]:
             prefix, previous_tail = _split_tail_for_stitching(stitched_document)
             next_head, suffix = _split_head_for_stitching(next_chunk_notes)
-            stitched_boundary = await self.provider.generate(
+            stitched_boundary = await self._generate_text(
                 system_prompt=system_prompt,
-                user_prompt=get_stitch_prompt(previous_tail, next_head),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+                user_prompt=get_stitch_prompt(
+                    previous_tail,
+                    next_head,
+                    target_language=self.target_language,
+                ),
             )
             stitched_document = _join_markdown_fragments(
                 prefix,
@@ -424,11 +463,12 @@ class StudyMaterialGenerator:
 
         if len(chunks) == 1:
             logger.info(f"{video_title}: Generating notes...")
-            notes = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_single_pass_prompt(transcript),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            notes = await self._generate_text(
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_single_pass_prompt(
+                    transcript,
+                    target_language=self.target_language,
+                ),
             )
             logger.info(f"Generated notes for {video_title}")
             return notes
@@ -440,11 +480,12 @@ class StudyMaterialGenerator:
             if on_chunk:
                 on_chunk(i, len(chunks))
             logger.info(f"{video_title}: Chunk {i}/{len(chunks)}")
-            note = await self.provider.generate(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_chunk_prompt(chunk),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            note = await self._generate_text(
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chunk_prompt(
+                    chunk,
+                    target_language=self.target_language,
+                ),
             )
             chunk_notes.append(note)
 
@@ -454,7 +495,7 @@ class StudyMaterialGenerator:
         )
         final_notes = await self._finalize_chunk_notes(
             chunk_notes,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=get_system_prompt(self.target_language),
             on_combine=on_combine,
         )
         logger.info(f"Completed notes for {video_title}")
@@ -486,11 +527,13 @@ class StudyMaterialGenerator:
 
         # Fast path: chapter fits in one context window call
         if token_count <= config.chunk_size:
-            return await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            return await self._generate_text(
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chapter_prompt(
+                    chapter_title,
+                    chapter_text,
+                    target_language=self.target_language,
+                ),
             )
 
         # Chunked path: chapter is too long for a single call
@@ -507,11 +550,13 @@ class StudyMaterialGenerator:
             )
             if on_chunk:
                 on_chunk(i, len(chunks))
-            note = await self.provider.generate(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chunk),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
+            note = await self._generate_text(
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chapter_prompt(
+                    chapter_title,
+                    chunk,
+                    target_language=self.target_language,
+                ),
             )
             chunk_notes.append(note)
 
@@ -521,7 +566,7 @@ class StudyMaterialGenerator:
         )
         return await self._finalize_chunk_notes(
             chunk_notes,
-            system_prompt=CHAPTER_SYSTEM_PROMPT,
+            system_prompt=get_system_prompt(self.target_language),
             on_combine=on_combine,
         )
 
@@ -593,11 +638,9 @@ class StudyMaterialGenerator:
 
         # Fast path: transcript fits in a single context window.
         if token_count <= config.chunk_size:
-            return await self.provider.generate(
+            return await self._generate_text(
                 system_prompt=QUIZ_SYSTEM_PROMPT,
                 user_prompt=get_quiz_prompt(transcript),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
             )
 
         # Chunked path: generate a partial quiz per chunk then combine.
@@ -611,11 +654,9 @@ class StudyMaterialGenerator:
             logger.info(f"Quiz: generating part {i}/{len(chunks)}")
             if on_chunk:
                 on_chunk(i, len(chunks))
-            partial = await self.provider.generate(
+            partial = await self._generate_text(
                 system_prompt=QUIZ_SYSTEM_PROMPT,
                 user_prompt=get_quiz_prompt(chunk),
-                temperature=self.temperature,
-                max_tokens=self.max_tokens,
             )
             partial_quizzes.append(partial)
 
@@ -625,9 +666,7 @@ class StudyMaterialGenerator:
         logger.info(f"Quiz: combining {len(partial_quizzes)} partial quizzes.")
         if on_combine:
             on_combine(len(partial_quizzes))
-        return await self.provider.generate(
+        return await self._generate_text(
             system_prompt=QUIZ_SYSTEM_PROMPT,
             user_prompt=get_quiz_combine_prompt(partial_quizzes),
-            temperature=self.temperature,
-            max_tokens=self.max_tokens,
         )

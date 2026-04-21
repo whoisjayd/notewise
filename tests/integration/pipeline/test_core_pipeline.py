@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import zipfile
 from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -1319,11 +1320,19 @@ _COMMON_PATCHES = dict(
 
 
 def _make_pipeline(
-    tmp_path, mock_llm_provider, force: bool = False, quiz: bool = False
+    tmp_path,
+    mock_llm_provider,
+    force: bool = False,
+    quiz: bool = False,
+    output_format: str = "md",
 ):
     with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         p = CorePipeline(
-            model="mock-model", output_dir=tmp_path, force=force, quiz=quiz
+            model="mock-model",
+            output_dir=tmp_path,
+            force=force,
+            quiz=quiz,
+            output_format=output_format,
         )
         p.generator = MagicMock()
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
@@ -1509,6 +1518,209 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     )
     p.generator.generate_quiz.assert_awaited_once()
     assert p.generator.generate_quiz.await_args.args == ("full transcript",)
+
+
+@pytest.mark.asyncio
+async def test_non_markdown_output_html_creates_html_file(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, output_format="html")
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="full transcript")
+
+        result = await p.run(["vid-html"])
+
+    assert result.success_count == 1
+    html_file = temp_output_dir / "Study Subject.html"
+    assert html_file.exists()
+    html = html_file.read_text(encoding="utf-8")
+    assert "<!DOCTYPE html>" in html
+    assert "<h1>Notes</h1>" in html
+
+
+@pytest.mark.asyncio
+async def test_non_markdown_output_pdf_creates_pdf_file(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, output_format="pdf")
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="full transcript")
+
+        result = await p.run(["vid-pdf"])
+
+    assert result.success_count == 1
+    pdf_file = temp_output_dir / "Study Subject.pdf"
+    assert pdf_file.exists()
+    assert pdf_file.read_bytes().startswith(b"%PDF")
+
+
+@pytest.mark.asyncio
+async def test_non_markdown_output_docx_creates_docx_file(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, output_format="docx")
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="full transcript")
+
+        result = await p.run(["vid-docx"])
+
+    assert result.success_count == 1
+    docx_file = temp_output_dir / "Study Subject.docx"
+    assert docx_file.exists()
+    with zipfile.ZipFile(docx_file) as archive:
+        document_xml = archive.read("word/document.xml").decode("utf-8")
+    assert "Notes" in document_xml
+    assert "background:" not in document_xml
+
+
+@pytest.mark.asyncio
+async def test_multiple_output_formats_create_multiple_files(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        output_format="md,html,pdf,docx",
+    )
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Study Subject",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="full transcript")
+
+        result = await p.run(["vid-multi"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Study Subject.md").exists()
+    assert (temp_output_dir / "Study Subject.html").exists()
+    assert (temp_output_dir / "Study Subject.pdf").exists()
+    assert (temp_output_dir / "Study Subject.docx").exists()
+
+
+@pytest.mark.asyncio
+async def test_non_markdown_chapter_output_bundles_into_single_document(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        quiz=True,
+        output_format="html",
+    )
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=600),
+        VideoChapter(title="Deep Dive", start_seconds=600, end_seconds=None),
+    ]
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="dQw4w9WgXcQ",
+                    title="Long Video",
+                    duration=7200,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+        ) as mock_split,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(text="full transcript")
+        mock_split.return_value = {
+            "Intro": ChapterTranscript(
+                title="Intro",
+                text="intro transcript text",
+                start_seconds=0,
+            ),
+            "Deep Dive": ChapterTranscript(
+                title="Deep Dive",
+                text="deep dive transcript text",
+                start_seconds=600,
+            ),
+        }
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            side_effect=(
+                lambda chapter_title, chapter_text, **_kwargs: (
+                    f"# {chapter_title}\n\n{chapter_text}"
+                )
+            )
+        )
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
+        )
+
+        result = await p.run(["vid-bundled-html"])
+
+    assert result.success_count == 1
+    bundled_file = temp_output_dir / "Long Video.html"
+    assert bundled_file.exists()
+    assert not (temp_output_dir / "Long Video").exists()
+    assert (temp_output_dir / "Long Video_quiz.md").exists()
+    bundled_html = bundled_file.read_text(encoding="utf-8")
+    assert "Intro" in bundled_html
+    assert "Deep Dive" in bundled_html
 
 
 @pytest.mark.asyncio

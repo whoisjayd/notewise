@@ -17,7 +17,13 @@ from typing import Any
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
-from notewise._constants import DEFAULT_MODEL, DEFAULT_USE_COMBINE_CHUNK
+from notewise._constants import (
+    DEFAULT_MODEL,
+    DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_TARGET_LANGUAGE,
+    DEFAULT_THROTTLE_SECONDS,
+    DEFAULT_USE_COMBINE_CHUNK,
+)
 from notewise.config import get_cache_db_path
 from notewise.config import settings as config
 from notewise.domain.events import EventType, PipelineEvent
@@ -27,6 +33,14 @@ from notewise.pipeline._artifacts import (
     export_transcript,
     generate_and_write_quiz,
     prefix_chapter_heading_with_timestamp,
+)
+from notewise.pipeline._documents import (
+    build_chapter_bundle,
+    get_output_extension,
+    normalize_output_format,
+    normalize_output_formats,
+    render_notes_document,
+    render_notes_documents,
 )
 from notewise.pipeline._helpers import (
     coerce_usage_float,
@@ -61,9 +75,15 @@ __all__ = [
     "get_video_metadata",
     "PipelineSharedState",
     "dedupe_video_ids",
+    "build_chapter_bundle",
+    "get_output_extension",
     "split_transcript_by_chapters",
     "split_transcript_by_chapters_with_metadata",
+    "normalize_output_format",
+    "normalize_output_formats",
     "prefix_chapter_heading_with_timestamp",
+    "render_notes_document",
+    "render_notes_documents",
     "run_pipeline",
     "sanitize_filename",
 ]
@@ -76,9 +96,13 @@ class CorePipeline:
         self,
         model: str = DEFAULT_MODEL,
         output_dir: Path | None = None,
+        output_format: str = DEFAULT_NOTES_OUTPUT_FORMAT,
+        output_formats: list[str] | None = None,
         languages: list[str] | None = None,
+        target_language: str = DEFAULT_TARGET_LANGUAGE,
         temperature: float | None = None,
         max_tokens: int | None = None,
+        throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         force: bool = False,
         quiz: bool = False,
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
@@ -89,7 +113,13 @@ class CorePipeline:
     ):
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
+        requested_formats = (
+            output_formats if output_formats is not None else output_format
+        )
+        self.output_formats = normalize_output_formats(requested_formats)
+        self.output_format = self.output_formats[0]
         self.languages = languages or config.default_languages
+        self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
         self.temperature = (
             temperature if temperature is not None else config.temperature
         )
@@ -101,8 +131,11 @@ class CorePipeline:
             self.provider,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
+            throttle_seconds=throttle_seconds,
             use_combine_chunk=use_combine_chunk,
+            target_language=self.target_language,
         )
+        self.throttle_seconds = self.generator.throttle_seconds
         self.force = force
         self.quiz = quiz
         self.use_combine_chunk = use_combine_chunk
@@ -326,12 +359,22 @@ async def run_pipeline(
     video_ids: list[str],
     output_dir: Path | None = None,
     model: str = DEFAULT_MODEL,
+    output_format: str = DEFAULT_NOTES_OUTPUT_FORMAT,
+    output_formats: list[str] | None = None,
+    target_language: str = DEFAULT_TARGET_LANGUAGE,
+    throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
     use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
-    pipeline = CorePipeline(
-        model=model,
-        output_dir=output_dir,
-        use_combine_chunk=use_combine_chunk,
-    )
+    pipeline_kwargs: dict[str, Any] = {
+        "model": model,
+        "output_dir": output_dir,
+        "output_format": output_format,
+        "target_language": target_language,
+        "throttle_seconds": throttle_seconds,
+        "use_combine_chunk": use_combine_chunk,
+    }
+    if output_formats is not None:
+        pipeline_kwargs["output_formats"] = output_formats
+    pipeline = CorePipeline(**pipeline_kwargs)
     return await pipeline.run(video_ids, on_event=on_event)

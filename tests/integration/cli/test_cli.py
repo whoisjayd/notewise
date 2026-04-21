@@ -156,6 +156,24 @@ def test_process_passes_timestamps_flag(mock_config_exists, mock_pipeline):  # n
     assert mock_cls.call_args.kwargs["timestamps"] is True
 
 
+def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--format", "pdf"])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["output_formats"] == ["pdf"]
+
+
+def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--format", "md,html,pdf"])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["output_formats"] == ["md", "html", "pdf"]
+
+
 def test_process_missing_api_key_exits_with_error(monkeypatch):
     """CLI exits with code 1 and helpful message when required API key is missing."""
 
@@ -1681,6 +1699,19 @@ def test_process_use_combine_chunk_flag_passed_to_pipeline(
     assert result.exit_code == 0
     call_kwargs = mock_cls.call_args.kwargs
     assert call_kwargs.get("use_combine_chunk") is True
+
+
+def test_process_throttle_flag_passed_to_pipeline(
+    mock_config_exists,  # noqa: ARG001
+    mock_pipeline,
+):
+    """--throttle is forwarded to CorePipeline as throttle_seconds."""
+    mock_cls, _pipeline_instance = mock_pipeline
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--throttle", "2.5"])
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs.get("throttle_seconds") == 2.5
 
 
 @pytest.mark.parametrize(
