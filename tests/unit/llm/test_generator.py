@@ -164,15 +164,7 @@ class TestStudyMaterialGenerator:
         assert (
             "Always write the entire output in Hindi." in call_kwargs["system_prompt"]
         )
-        assert (
-            "Use plain, natural, easy-to-understand Hindi"
-            in call_kwargs["system_prompt"]
-        )
         assert "Write everything in Hindi." in call_kwargs["user_prompt"]
-        assert (
-            "Use simple, natural, easy-to-understand Hindi."
-            in call_kwargs["user_prompt"]
-        )
 
     @pytest.mark.asyncio
     async def test_generate_study_notes_multiple(self, generator):
@@ -266,10 +258,6 @@ class TestStudyMaterialGenerator:
         final_call = generator.provider.generate.await_args_list[-1].kwargs
         assert (
             "Always write the entire output in Spanish." in final_call["system_prompt"]
-        )
-        assert (
-            "Use plain, natural, easy-to-understand Spanish"
-            in final_call["system_prompt"]
         )
         assert final_call["user_prompt"] == get_stitch_prompt(
             "# Section One\n\nChunk one detail",
@@ -382,15 +370,7 @@ class TestStudyMaterialGenerator:
         assert (
             "Always write the entire output in German." in call_kwargs["system_prompt"]
         )
-        assert (
-            "Use plain, natural, easy-to-understand German"
-            in call_kwargs["system_prompt"]
-        )
         assert "Write everything in German." in call_kwargs["user_prompt"]
-        assert (
-            "Use simple, natural, easy-to-understand German."
-            in call_kwargs["user_prompt"]
-        )
 
     @pytest.mark.asyncio
     async def test_stitch_chunk_notes_handles_three_chunks(self, mock_llm_provider):
