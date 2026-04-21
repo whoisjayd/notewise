@@ -14,6 +14,7 @@ from notewise._constants import (
     DEFAULT_MAX_CONCURRENT_CHAPTERS,
     DEFAULT_STITCH_CHAR_BOUNDARY,
     DEFAULT_STITCH_SECTION_BOUNDARY_COUNT,
+    DEFAULT_TARGET_LANGUAGE,
     DEFAULT_TEMPERATURE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
@@ -28,17 +29,14 @@ from notewise.llm.prompts.quiz import (
     get_quiz_prompt,
 )
 from notewise.llm.prompts.study_notes import (
-    SYSTEM_PROMPT,
     get_chunk_prompt,
     get_combine_prompt,
     get_single_pass_prompt,
     get_stitch_prompt,
+    get_system_prompt,
 )
 from notewise.llm.provider import LLMProvider
 
-
-# Re-use system prompt for chapter generation
-CHAPTER_SYSTEM_PROMPT = SYSTEM_PROMPT
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _SENTENCE_SPLIT_PATTERN = re.compile(r"(?<=[.!?])\s+")
@@ -212,6 +210,7 @@ class StudyMaterialGenerator:
         max_tokens: int | None = None,
         throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
+        target_language: str = DEFAULT_TARGET_LANGUAGE,
     ):
         """
         Initialize generator.
@@ -222,12 +221,14 @@ class StudyMaterialGenerator:
             max_tokens: Maximum tokens for LLM responses.
             throttle_seconds: Delay between repeated LLM generation requests.
             use_combine_chunk: Whether to use the deprecated legacy combine flow.
+            target_language: Language to use for generated study notes.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.throttle_seconds = max(0.0, float(throttle_seconds))
         self.use_combine_chunk = use_combine_chunk
+        self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
         self._throttle_lock = asyncio.Lock()
         # Track the last request start so throttling spaces out bursts while still
         # allowing in-flight provider calls to overlap after their starts.
@@ -269,7 +270,10 @@ class StudyMaterialGenerator:
         """Run the deprecated legacy combine-all-chunks flow."""
         return await self._generate_text(
             system_prompt=system_prompt,
-            user_prompt=get_combine_prompt(chunk_notes),
+            user_prompt=get_combine_prompt(
+                chunk_notes,
+                target_language=self.target_language,
+            ),
         )
 
     async def _stitch_chunk_notes(
@@ -286,7 +290,11 @@ class StudyMaterialGenerator:
             next_head, suffix = _split_head_for_stitching(next_chunk_notes)
             stitched_boundary = await self._generate_text(
                 system_prompt=system_prompt,
-                user_prompt=get_stitch_prompt(previous_tail, next_head),
+                user_prompt=get_stitch_prompt(
+                    previous_tail,
+                    next_head,
+                    target_language=self.target_language,
+                ),
             )
             stitched_document = _join_markdown_fragments(
                 prefix,
@@ -456,8 +464,11 @@ class StudyMaterialGenerator:
         if len(chunks) == 1:
             logger.info(f"{video_title}: Generating notes...")
             notes = await self._generate_text(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_single_pass_prompt(transcript),
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_single_pass_prompt(
+                    transcript,
+                    target_language=self.target_language,
+                ),
             )
             logger.info(f"Generated notes for {video_title}")
             return notes
@@ -470,8 +481,11 @@ class StudyMaterialGenerator:
                 on_chunk(i, len(chunks))
             logger.info(f"{video_title}: Chunk {i}/{len(chunks)}")
             note = await self._generate_text(
-                system_prompt=SYSTEM_PROMPT,
-                user_prompt=get_chunk_prompt(chunk),
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chunk_prompt(
+                    chunk,
+                    target_language=self.target_language,
+                ),
             )
             chunk_notes.append(note)
 
@@ -481,7 +495,7 @@ class StudyMaterialGenerator:
         )
         final_notes = await self._finalize_chunk_notes(
             chunk_notes,
-            system_prompt=SYSTEM_PROMPT,
+            system_prompt=get_system_prompt(self.target_language),
             on_combine=on_combine,
         )
         logger.info(f"Completed notes for {video_title}")
@@ -514,8 +528,12 @@ class StudyMaterialGenerator:
         # Fast path: chapter fits in one context window call
         if token_count <= config.chunk_size:
             return await self._generate_text(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chapter_text),
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chapter_prompt(
+                    chapter_title,
+                    chapter_text,
+                    target_language=self.target_language,
+                ),
             )
 
         # Chunked path: chapter is too long for a single call
@@ -533,8 +551,12 @@ class StudyMaterialGenerator:
             if on_chunk:
                 on_chunk(i, len(chunks))
             note = await self._generate_text(
-                system_prompt=CHAPTER_SYSTEM_PROMPT,
-                user_prompt=get_chapter_prompt(chapter_title, chunk),
+                system_prompt=get_system_prompt(self.target_language),
+                user_prompt=get_chapter_prompt(
+                    chapter_title,
+                    chunk,
+                    target_language=self.target_language,
+                ),
             )
             chunk_notes.append(note)
 
@@ -544,7 +566,7 @@ class StudyMaterialGenerator:
         )
         return await self._finalize_chunk_notes(
             chunk_notes,
-            system_prompt=CHAPTER_SYSTEM_PROMPT,
+            system_prompt=get_system_prompt(self.target_language),
             on_combine=on_combine,
         )
 

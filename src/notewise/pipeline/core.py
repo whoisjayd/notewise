@@ -20,6 +20,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from notewise._constants import (
     DEFAULT_MODEL,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
 )
@@ -98,6 +99,7 @@ class CorePipeline:
         output_format: str = DEFAULT_NOTES_OUTPUT_FORMAT,
         output_formats: list[str] | None = None,
         languages: list[str] | None = None,
+        target_language: str = DEFAULT_TARGET_LANGUAGE,
         temperature: float | None = None,
         max_tokens: int | None = None,
         throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
@@ -117,6 +119,7 @@ class CorePipeline:
         self.output_formats = normalize_output_formats(requested_formats)
         self.output_format = self.output_formats[0]
         self.languages = languages or config.default_languages
+        self.target_language = target_language
         self.temperature = (
             temperature if temperature is not None else config.temperature
         )
@@ -130,6 +133,7 @@ class CorePipeline:
             max_tokens=self.max_tokens,
             throttle_seconds=throttle_seconds,
             use_combine_chunk=use_combine_chunk,
+            target_language=self.target_language,
         )
         self.throttle_seconds = self.generator.throttle_seconds
         self.force = force

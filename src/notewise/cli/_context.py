@@ -9,7 +9,7 @@ from typing import Any
 
 from rich.console import Console
 
-from notewise._constants import CONFIG_FILENAME
+from notewise._constants import CONFIG_FILENAME, DEFAULT_TARGET_LANGUAGE
 from notewise.cli._formatters import print_failure_panel, print_single_failure
 from notewise.config import get_state_dir
 from notewise.pipeline.core import PipelineSharedState
@@ -41,6 +41,7 @@ class CliProcessContext:
     export_transcript: str | None
     timestamps: bool
     selected_cookie_file: str | None
+    selected_target_language: str = DEFAULT_TARGET_LANGUAGE
     api_key_checked: bool | None = None
 
     def print_failure_panel(
@@ -118,6 +119,7 @@ class CliProcessContext:
             output_dir=output_dir,
             output_formats=self.selected_output_formats,
             languages=self.selected_languages,
+            target_language=self.selected_target_language,
             temperature=self.selected_temperature,
             max_tokens=self.selected_max_tokens,
             throttle_seconds=self.selected_throttle_seconds,

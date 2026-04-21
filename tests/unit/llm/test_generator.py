@@ -151,6 +151,30 @@ class TestStudyMaterialGenerator:
             assert generator.provider.generate.call_count == 1
 
     @pytest.mark.asyncio
+    async def test_generate_study_notes_single_uses_target_language_prompts(
+        self, mock_llm_provider
+    ):
+        """Single-pass notes should enforce the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Hindi")
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            "Always write the entire output in Hindi." in call_kwargs["system_prompt"]
+        )
+        assert (
+            "Use plain, natural, easy-to-understand Hindi"
+            in call_kwargs["system_prompt"]
+        )
+        assert "Write everything in Hindi." in call_kwargs["user_prompt"]
+        assert (
+            "Use simple, natural, easy-to-understand Hindi."
+            in call_kwargs["user_prompt"]
+        )
+
+    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple(self, generator):
         """Test generating and combining multiple chunks."""
         chunks = ["Part 1", "Part 2"]
@@ -220,6 +244,37 @@ class TestStudyMaterialGenerator:
         assert final_prompt == get_stitch_prompt(
             "# Section One\n\nChunk one detail",
             "# Section One\n\nChunk two detail",
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_multiple_passes_target_language_to_stitch(
+        self, mock_llm_provider
+    ):
+        """Chunk stitching should preserve the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Spanish")
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "# Section One\n\nChunk one detail",
+                "# Section One\n\nChunk two detail",
+                "# Stitched\n\nMerged detail",
+            ]
+        )
+
+        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
+            await generator.generate_study_notes("Long text")
+
+        final_call = generator.provider.generate.await_args_list[-1].kwargs
+        assert (
+            "Always write the entire output in Spanish." in final_call["system_prompt"]
+        )
+        assert (
+            "Use plain, natural, easy-to-understand Spanish"
+            in final_call["system_prompt"]
+        )
+        assert final_call["user_prompt"] == get_stitch_prompt(
+            "# Section One\n\nChunk one detail",
+            "# Section One\n\nChunk two detail",
+            target_language="Spanish",
         )
 
     @pytest.mark.asyncio
@@ -311,6 +366,30 @@ class TestStudyMaterialGenerator:
         assert final_prompt == get_stitch_prompt(
             "### Topic\n\nChunk one detail",
             "### Topic\n\nChunk two detail",
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_single_chapter_uses_target_language_prompts(
+        self, mock_llm_provider
+    ):
+        """Chapter generation should honor the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="German")
+
+        with patch("notewise.pipeline.generation.token_counter", return_value=50):
+            await generator.generate_single_chapter_notes("Intro", "short text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            "Always write the entire output in German." in call_kwargs["system_prompt"]
+        )
+        assert (
+            "Use plain, natural, easy-to-understand German"
+            in call_kwargs["system_prompt"]
+        )
+        assert "Write everything in German." in call_kwargs["user_prompt"]
+        assert (
+            "Use simple, natural, easy-to-understand German."
+            in call_kwargs["user_prompt"]
         )
 
     @pytest.mark.asyncio
