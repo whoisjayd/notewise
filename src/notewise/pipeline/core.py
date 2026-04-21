@@ -119,7 +119,7 @@ class CorePipeline:
         self.output_formats = normalize_output_formats(requested_formats)
         self.output_format = self.output_formats[0]
         self.languages = languages or config.default_languages
-        self.target_language = target_language
+        self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
         self.temperature = (
             temperature if temperature is not None else config.temperature
         )
@@ -361,6 +361,7 @@ async def run_pipeline(
     model: str = DEFAULT_MODEL,
     output_format: str = DEFAULT_NOTES_OUTPUT_FORMAT,
     output_formats: list[str] | None = None,
+    target_language: str = DEFAULT_TARGET_LANGUAGE,
     throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
     use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
@@ -369,6 +370,7 @@ async def run_pipeline(
         "model": model,
         "output_dir": output_dir,
         "output_format": output_format,
+        "target_language": target_language,
         "throttle_seconds": throttle_seconds,
         "use_combine_chunk": use_combine_chunk,
     }
