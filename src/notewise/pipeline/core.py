@@ -131,7 +131,7 @@ class CorePipeline:
             throttle_seconds=throttle_seconds,
             use_combine_chunk=use_combine_chunk,
         )
-        self.throttle_seconds = max(0.0, float(throttle_seconds))
+        self.throttle_seconds = self.generator.throttle_seconds
         self.force = force
         self.quiz = quiz
         self.use_combine_chunk = use_combine_chunk
