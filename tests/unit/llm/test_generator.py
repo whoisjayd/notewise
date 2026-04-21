@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
 from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
 from notewise.pipeline.generation import (
@@ -165,6 +166,47 @@ class TestStudyMaterialGenerator:
             "Always write the entire output in Hindi." in call_kwargs["system_prompt"]
         )
         assert "Write everything in Hindi." in call_kwargs["user_prompt"]
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_uses_default_target_language(
+        self, mock_llm_provider
+    ):
+        """Default generator target language should flow into prompts."""
+        generator = StudyMaterialGenerator(mock_llm_provider)
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            f"Always write the entire output in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["system_prompt"]
+        )
+        assert (
+            f"Write everything in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["user_prompt"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_study_notes_blank_target_language_falls_back_to_default(
+        self, mock_llm_provider
+    ):
+        """Blank generator target language should fall back to the default."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="  ")
+
+        with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
+            await generator.generate_study_notes("Full text")
+
+        assert generator.target_language == DEFAULT_TARGET_LANGUAGE
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert (
+            f"Always write the entire output in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["system_prompt"]
+        )
+        assert (
+            f"Write everything in {DEFAULT_TARGET_LANGUAGE}."
+            in call_kwargs["user_prompt"]
+        )
 
     @pytest.mark.asyncio
     async def test_generate_study_notes_multiple(self, generator):
