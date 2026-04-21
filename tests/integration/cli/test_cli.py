@@ -1538,6 +1538,68 @@ def test_process_batch_file_no_ui_emits_headless_progress(tmp_path):
     assert "Done: Video One" in result.output
 
 
+def test_process_no_ui_shows_pdf_fallback_reason(tmp_path):
+    """Headless mode should surface PDF fallback reasons on generation completion."""
+
+    async def _run_with_events(video_ids, on_event=None):  # noqa: ANN001
+        if on_event is not None:
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.GENERATION_COMPLETE,
+                    video_id=video_ids[0],
+                    title="Video One",
+                    error=(
+                        "PDF output currently supports Latin-script text only. "
+                        "Use Markdown, HTML, or DOCX for Hindi output."
+                    ),
+                )
+            )
+            on_event(
+                PipelineEvent(
+                    event_type=EventType.VIDEO_SUCCESS,
+                    video_id=video_ids[0],
+                    title="Video One",
+                )
+            )
+        return PipelineResult(
+            success_count=1,
+            failure_count=0,
+            total_count=1,
+            video_ids=video_ids,
+            errors={},
+            metrics=PipelineMetrics(),
+        )
+
+    pipeline_instance = MagicMock()
+    pipeline_instance.run = AsyncMock(side_effect=_run_with_events)
+
+    with (
+        patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
+        patch(
+            "notewise.cli.app.parse_youtube_url",
+            return_value=_make_parsed_video(),
+        ),
+        patch("notewise.cli.app.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 2
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_api_key_name_for_model.return_value = None
+
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--no-ui"])
+
+    assert result.exit_code == 0
+    assert "Generation complete: Video One:" in result.output
+    assert "PDF output currently supports Latin-script text" in result.output
+    assert "Use Markdown, HTML, or DOCX for Hindi output." in result.output
+    assert "Done: Video One" in result.output
+
+
 def test_process_env_only_config_does_not_launch_setup(monkeypatch, tmp_path):
     """Environment-provided credentials should satisfy setup without a config file."""
     monkeypatch.setenv("OPENAI_API_KEY", "env-key")

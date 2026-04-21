@@ -48,6 +48,7 @@ DEFAULT_MODEL = "gemini/gemini-2.5-flash"
 DEFAULT_OUTPUT_DIR = "./output"
 DEFAULT_LANGUAGES = ["en"]
 DEFAULT_TARGET_LANGUAGE = "English"
+DEFAULT_RENDERED_HTML_LANG = "en"
 DEFAULT_TEMPERATURE = 0.7
 DEFAULT_MAX_CONCURRENT_VIDEOS = 5
 DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE = 10
@@ -79,6 +80,37 @@ NOTES_OUTPUT_EXTENSIONS = {
     "pdf": ".pdf",
     "docx": ".docx",
 }
+HTML_LANGUAGE_ALIASES = {
+    "arabic": "ar",
+    "bengali": "bn",
+    "english": "en",
+    "french": "fr",
+    "german": "de",
+    "gujarati": "gu",
+    "hindi": "hi",
+    "italian": "it",
+    "japanese": "ja",
+    "kannada": "kn",
+    "korean": "ko",
+    "malayalam": "ml",
+    "marathi": "mr",
+    "polish": "pl",
+    "portuguese": "pt",
+    "portuguese (brazil)": "pt-BR",
+    "portuguese-brazil": "pt-BR",
+    "pt-br": "pt-BR",
+    "punjabi": "pa",
+    "russian": "ru",
+    "spanish": "es",
+    "tamil": "ta",
+    "telugu": "te",
+    "turkish": "tr",
+    "urdu": "ur",
+}
+PDF_UNSUPPORTED_UNICODE_ERROR = (
+    "PDF output currently supports Latin-script text only. "
+    "Use Markdown, HTML, or DOCX for {target_language} output."
+)
 MARKDOWN_RENDER_EXTENSIONS = ("extra", "sane_lists")
 CHAPTER_BUNDLE_SEPARATOR = "\n\n---\n\n"
 DOCX_BODY_FONT_NAME = "Aptos"

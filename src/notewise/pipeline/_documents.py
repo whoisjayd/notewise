@@ -12,7 +12,9 @@ from pathlib import Path
 from notewise._constants import (
     CHAPTER_BUNDLE_SEPARATOR,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_RENDERED_HTML_LANG,
     DEFAULT_RENDERED_HTML_STYLES,
+    DEFAULT_TARGET_LANGUAGE,
     DOCX_BODY_FONT_NAME,
     DOCX_BODY_FONT_SIZE_PT,
     DOCX_BODY_SPACE_AFTER_PT,
@@ -24,19 +26,22 @@ from notewise._constants import (
     DOCX_HEADING_TWO_FONT_SIZE_PT,
     DOCX_SECTION_MARGIN_INCHES,
     DOCX_TITLE_FONT_SIZE_PT,
+    HTML_LANGUAGE_ALIASES,
     MARKDOWN_RENDER_EXTENSIONS,
     NOTES_OUTPUT_EXTENSIONS,
     OUTPUT_FORMAT_SEPARATOR,
+    PDF_UNSUPPORTED_UNICODE_ERROR,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 from notewise.errors import ValidationError
 
 
-DocumentRenderer = Callable[[str, str, Path], None]
+DocumentRenderer = Callable[[str, str, Path, str | None], None]
 _LIST_ITEM_RE = re.compile(r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)")
 _CODE_BLOCK_RE = re.compile(
     r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>", re.DOTALL
 )
+_LANGUAGE_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
 _PDF_CHARACTER_TRANSLATIONS = str.maketrans(
     {
         "\u2018": "'",
@@ -99,24 +104,43 @@ def render_notes_document(
     title: str,
     output_path: Path,
     output_format: str | None,
+    target_language: str | None = None,
 ) -> Path:
     """Render a Markdown study document to the requested file format."""
     normalized_format = normalize_output_format(output_format)
     renderer = _DOCUMENT_RENDERERS[normalized_format]
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    renderer(markdown_text, title, output_path)
-    return output_path
+    try:
+        renderer(markdown_text, title, output_path, target_language)
+        return output_path
+    except ValidationError as error:
+        if normalized_format != "pdf" or not str(error).startswith(
+            "PDF output currently supports Latin-script text only."
+        ):
+            raise
+
+        fallback_path = output_path.with_suffix(NOTES_OUTPUT_EXTENSIONS["md"])
+        _write_markdown(markdown_text, title, fallback_path, target_language)
+        return fallback_path
 
 
 def render_notes_documents(
     markdown_text: str,
     title: str,
     output_targets: dict[str, Path],
+    target_language: str | None = None,
 ) -> dict[str, Path]:
     """Render a Markdown study document to multiple target formats."""
+    rendered_targets: dict[str, Path] = {}
     for output_format, output_path in output_targets.items():
-        render_notes_document(markdown_text, title, output_path, output_format)
-    return dict(output_targets)
+        rendered_targets[output_format] = render_notes_document(
+            markdown_text,
+            title,
+            output_path,
+            output_format,
+            target_language=target_language,
+        )
+    return rendered_targets
 
 
 def _normalize_markdown_blocks(markdown_text: str) -> str:
@@ -124,7 +148,6 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
     previous_line = ""
 
     for line in markdown_text.splitlines():
-        line.strip()
         is_list_item = bool(_LIST_ITEM_RE.match(line))
         previous_is_list_item = bool(_LIST_ITEM_RE.match(previous_line))
         previous_is_content = bool(previous_line.strip())
@@ -164,12 +187,33 @@ def _normalize_rendered_html(body_html: str) -> str:
     return _CODE_BLOCK_RE.sub(_replace_code_block, body_html)
 
 
-def _normalize_pdf_markdown(markdown_text: str) -> str:
+def _normalize_pdf_markdown(
+    markdown_text: str,
+    target_language: str | None = None,
+) -> str:
     translated = markdown_text.translate(_PDF_CHARACTER_TRANSLATIONS)
-    return (
-        unicodedata.normalize("NFKD", translated)
-        .encode("latin-1", "ignore")
-        .decode("latin-1")
+    normalized = unicodedata.normalize("NFKC", translated)
+    try:
+        normalized.encode("latin-1")
+    except UnicodeEncodeError as error:
+        language_label = (target_language or DEFAULT_TARGET_LANGUAGE).strip()
+        raise ValidationError(
+            PDF_UNSUPPORTED_UNICODE_ERROR.format(target_language=language_label)
+        ) from error
+    return normalized
+
+
+def _resolve_html_lang(target_language: str | None) -> str:
+    candidate = (target_language or DEFAULT_TARGET_LANGUAGE).strip()
+    if not candidate:
+        return DEFAULT_RENDERED_HTML_LANG
+
+    if _LANGUAGE_CODE_RE.match(candidate):
+        return candidate.replace("_", "-")
+
+    return HTML_LANGUAGE_ALIASES.get(
+        candidate.casefold(),
+        DEFAULT_RENDERED_HTML_LANG,
     )
 
 
@@ -177,11 +221,12 @@ def _build_html_document(
     title: str,
     body_html: str,
     styles: str = DEFAULT_RENDERED_HTML_STYLES,
+    lang: str = DEFAULT_RENDERED_HTML_LANG,
 ) -> str:
     escaped_title = escape(title)
     return (
         "<!DOCTYPE html>\n"
-        '<html lang="en">\n'
+        f'<html lang="{escape(lang)}">\n'
         "<head>\n"
         '  <meta charset="utf-8" />\n'
         '  <meta name="viewport" content="width=device-width, initial-scale=1" />\n'
@@ -199,16 +244,35 @@ def _build_html_document(
     )
 
 
-def _write_markdown(markdown_text: str, _title: str, output_path: Path) -> None:
+def _write_markdown(
+    markdown_text: str,
+    _title: str,
+    output_path: Path,
+    _target_language: str | None = None,
+) -> None:
     output_path.write_text(markdown_text, encoding="utf-8")
 
 
-def _write_html(markdown_text: str, title: str, output_path: Path) -> None:
-    html_document = _build_html_document(title, _markdown_to_html(markdown_text))
+def _write_html(
+    markdown_text: str,
+    title: str,
+    output_path: Path,
+    target_language: str | None = None,
+) -> None:
+    html_document = _build_html_document(
+        title,
+        _markdown_to_html(markdown_text),
+        lang=_resolve_html_lang(target_language),
+    )
     output_path.write_text(html_document, encoding="utf-8")
 
 
-def _write_pdf(markdown_text: str, title: str, output_path: Path) -> None:
+def _write_pdf(
+    markdown_text: str,
+    title: str,
+    output_path: Path,
+    target_language: str | None = None,
+) -> None:
     from fpdf import FPDF
 
     pdf = FPDF()
@@ -218,13 +282,20 @@ def _write_pdf(markdown_text: str, title: str, output_path: Path) -> None:
     pdf.set_margins(16, 16, 16)
     pdf.add_page()
     pdf.write_html(
-        _markdown_to_html(_normalize_pdf_markdown(markdown_text)),
+        _markdown_to_html(
+            _normalize_pdf_markdown(markdown_text, target_language=target_language)
+        ),
         font_family="Times",
     )
     pdf.output(str(output_path))
 
 
-def _write_docx(markdown_text: str, title: str, output_path: Path) -> None:
+def _write_docx(
+    markdown_text: str,
+    title: str,
+    output_path: Path,
+    _target_language: str | None = None,
+) -> None:
     from docx import Document
     from docx.shared import Inches, Pt
     from html2docx import html2docx

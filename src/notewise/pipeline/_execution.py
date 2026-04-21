@@ -11,6 +11,7 @@ from typing import Any, cast
 
 import structlog
 
+from notewise._constants import PDF_UNSUPPORTED_UNICODE_ERROR
 from notewise.config import settings as config
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
@@ -93,6 +94,7 @@ async def process_single_video(
             bundled_output_formats: list[str] = []
             output_target: Path | None = None
             rendered_output_targets: dict[str, Path] = {}
+            render_warning: str | None = None
             transcript_output_dir = pipeline.output_dir
 
             generation_start = time.perf_counter()
@@ -321,11 +323,20 @@ async def process_single_video(
                                 title,
                                 bundled_chapter_notes,
                             )
-                            pipeline_module.render_notes_documents(
-                                bundled_notes,
-                                title,
-                                rendered_output_targets,
+                            rendered_output_targets = (
+                                pipeline_module.render_notes_documents(
+                                    bundled_notes,
+                                    title,
+                                    rendered_output_targets,
+                                    target_language=pipeline.target_language,
+                                )
                             )
+                            if rendered_output_targets.get("pdf") is not None and (
+                                rendered_output_targets["pdf"].suffix.lower() == ".md"
+                            ):
+                                render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
+                                    target_language=pipeline.target_language
+                                )
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)
 
@@ -373,11 +384,18 @@ async def process_single_video(
                         reserved_targets.append(current_output_target)
                         rendered_output_targets[output_format] = current_output_target
 
-                    pipeline_module.render_notes_documents(
+                    rendered_output_targets = pipeline_module.render_notes_documents(
                         notes,
                         title,
                         rendered_output_targets,
+                        target_language=pipeline.target_language,
                     )
+                    if rendered_output_targets.get("pdf") is not None and (
+                        rendered_output_targets["pdf"].suffix.lower() == ".md"
+                    ):
+                        render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
+                            target_language=pipeline.target_language
+                        )
                     output_target = rendered_output_targets[pipeline.output_format]
                     transcript_output_dir = output_target.parent
 
@@ -438,6 +456,7 @@ async def process_single_video(
                 EventType.GENERATION_COMPLETE,
                 video_id,
                 title=title,
+                error=render_warning,
                 output_path=output_target,
             )
             emit(EventType.VIDEO_SUCCESS, video_id, title=title)

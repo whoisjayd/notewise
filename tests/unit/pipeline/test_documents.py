@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from notewise.errors import ValidationError
 from notewise.pipeline._documents import (
+    _build_html_document,
     _markdown_to_html,
     _normalize_pdf_markdown,
     _normalize_rendered_html,
@@ -13,6 +16,7 @@ from notewise.pipeline._documents import (
     get_output_extension,
     normalize_output_format,
     normalize_output_formats,
+    render_notes_document,
 )
 
 
@@ -80,6 +84,52 @@ def test_normalize_pdf_markdown_downgrades_unicode_punctuation() -> None:
     normalized = _normalize_pdf_markdown("“quote” — dash …")
 
     assert normalized == '"quote" - dash ...'
+
+
+def test_normalize_pdf_markdown_rejects_non_latin_scripts() -> None:
+    with pytest.raises(ValidationError, match="PDF output currently supports"):
+        _normalize_pdf_markdown("हिंदी नोट्स", target_language="Hindi")
+
+
+def test_build_html_document_sets_language_attribute() -> None:
+    html = _build_html_document("Title", "<p>Body</p>", lang="hi")
+
+    assert '<html lang="hi">' in html
+
+
+def test_render_html_document_uses_target_language_lang_attribute(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "notes.html"
+
+    render_notes_document(
+        "# शीर्षक\n\nविवरण",
+        "Hindi Notes",
+        output_path,
+        "html",
+        target_language="Hindi",
+    )
+
+    html = output_path.read_text(encoding="utf-8")
+    assert '<html lang="hi">' in html
+
+
+def test_render_pdf_document_falls_back_to_markdown_for_non_latin_text(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "notes.pdf"
+
+    rendered_path = render_notes_document(
+        "# शीर्षक\n\nविवरण",
+        "Hindi Notes",
+        output_path,
+        "pdf",
+        target_language="Hindi",
+    )
+
+    assert rendered_path == output_path.with_suffix(".md")
+    assert rendered_path.exists()
+    assert rendered_path.read_text(encoding="utf-8").startswith("# शीर्षक")
 
 
 def test_build_chapter_bundle_wraps_notes_under_video_title() -> None:

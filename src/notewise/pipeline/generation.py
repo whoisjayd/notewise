@@ -24,9 +24,9 @@ from notewise.llm.prompts.chapter_notes import (
     get_chapter_prompt,
 )
 from notewise.llm.prompts.quiz import (
-    QUIZ_SYSTEM_PROMPT,
     get_quiz_combine_prompt,
     get_quiz_prompt,
+    get_quiz_system_prompt,
 )
 from notewise.llm.prompts.study_notes import (
     get_chunk_prompt,
@@ -639,8 +639,11 @@ class StudyMaterialGenerator:
         # Fast path: transcript fits in a single context window.
         if token_count <= config.chunk_size:
             return await self._generate_text(
-                system_prompt=QUIZ_SYSTEM_PROMPT,
-                user_prompt=get_quiz_prompt(transcript),
+                system_prompt=get_quiz_system_prompt(self.target_language),
+                user_prompt=get_quiz_prompt(
+                    transcript,
+                    target_language=self.target_language,
+                ),
             )
 
         # Chunked path: generate a partial quiz per chunk then combine.
@@ -655,8 +658,11 @@ class StudyMaterialGenerator:
             if on_chunk:
                 on_chunk(i, len(chunks))
             partial = await self._generate_text(
-                system_prompt=QUIZ_SYSTEM_PROMPT,
-                user_prompt=get_quiz_prompt(chunk),
+                system_prompt=get_quiz_system_prompt(self.target_language),
+                user_prompt=get_quiz_prompt(
+                    chunk,
+                    target_language=self.target_language,
+                ),
             )
             partial_quizzes.append(partial)
 
@@ -667,6 +673,9 @@ class StudyMaterialGenerator:
         if on_combine:
             on_combine(len(partial_quizzes))
         return await self._generate_text(
-            system_prompt=QUIZ_SYSTEM_PROMPT,
-            user_prompt=get_quiz_combine_prompt(partial_quizzes),
+            system_prompt=get_quiz_system_prompt(self.target_language),
+            user_prompt=get_quiz_combine_prompt(
+                partial_quizzes,
+                target_language=self.target_language,
+            ),
         )

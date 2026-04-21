@@ -7,6 +7,7 @@ import pytest
 
 from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
+from notewise.llm.prompts.quiz import get_quiz_combine_prompt, get_quiz_prompt
 from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
 from notewise.pipeline.generation import (
     StudyMaterialGenerator,
@@ -600,6 +601,20 @@ class TestStudyMaterialGenerator:
         assert result == "# Generated Notes\n\nTest content."
 
     @pytest.mark.asyncio
+    async def test_generate_quiz_uses_target_language_prompts(self, mock_llm_provider):
+        """Quiz generation should honor the requested output language."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Hindi")
+
+        await generator.generate_quiz("full transcript text")
+
+        call_kwargs = generator.provider.generate.await_args.kwargs
+        assert "Always write the entire quiz in Hindi." in call_kwargs["system_prompt"]
+        assert call_kwargs["user_prompt"] == get_quiz_prompt(
+            "full transcript text",
+            target_language="Hindi",
+        )
+
+    @pytest.mark.asyncio
     async def test_generate_quiz_chunked_large_transcript(self, generator):
         """generate_quiz() chunks a large transcript and combines partial quizzes."""
         chunks = ["chunk A", "chunk B"]
@@ -612,6 +627,33 @@ class TestStudyMaterialGenerator:
         # 2 chunk calls + 1 combine call = 3
         assert generator.provider.generate.call_count == 3
         assert result == "# Generated Notes\n\nTest content."
+
+    @pytest.mark.asyncio
+    async def test_generate_quiz_chunked_uses_target_language_in_combine_prompt(
+        self, mock_llm_provider
+    ):
+        """Chunked quiz generation should preserve target language in combine."""
+        generator = StudyMaterialGenerator(mock_llm_provider, target_language="Spanish")
+        generator.provider.generate = AsyncMock(
+            side_effect=[
+                "## Section\n\nQ1",
+                "## Section\n\nQ2",
+                "## Quiz\n\nCombined",
+            ]
+        )
+
+        with (
+            patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
+            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+        ):
+            await generator.generate_quiz("very long transcript")
+
+        final_call = generator.provider.generate.await_args_list[-1].kwargs
+        assert "Always write the entire quiz in Spanish." in final_call["system_prompt"]
+        assert final_call["user_prompt"] == get_quiz_combine_prompt(
+            ["## Section\n\nQ1", "## Section\n\nQ2"],
+            target_language="Spanish",
+        )
 
     @pytest.mark.asyncio
     async def test_generate_quiz_callbacks_for_chunked_quiz(self, generator):
