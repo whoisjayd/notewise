@@ -71,6 +71,15 @@ notewise process URL [OPTIONS]
   ```
 </ParamField>
 
+<ParamField query="--target-language" type="string" default="English">
+  Language for the generated notes themselves. This controls the LLM output language, including headings and structural labels, and is independent from transcript fetch preferences.
+
+  ```bash
+  notewise process "URL" --target-language Hindi
+  notewise process "URL" --language en --target-language Spanish
+  ```
+</ParamField>
+
 <ParamField query="--temperature" type="float" default="0.7">
   **Alias:** `-t`
 

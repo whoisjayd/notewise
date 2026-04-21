@@ -12,6 +12,7 @@ import typer
 from notewise._constants import (
     CONFIG_FILENAME,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
@@ -263,6 +264,17 @@ def process(
             ),
         ),
     ] = None,
+    target_language: Annotated[
+        str,
+        typer.Option(
+            "--target-language",
+            help=(
+                "Language for generated notes and translated headings "
+                "(for example [green]English[/green], [green]Hindi[/green], "
+                "or [green]pt-BR[/green])."
+            ),
+        ),
+    ] = DEFAULT_TARGET_LANGUAGE,
     temperature: Annotated[
         float | None,
         typer.Option(
@@ -419,6 +431,7 @@ def process(
             selected_output=output or settings.default_output_dir,
             selected_output_formats=selected_output_formats,
             selected_languages=language or settings.default_languages,
+            selected_target_language=target_language,
             selected_temperature=(
                 temperature if temperature is not None else settings.temperature
             ),

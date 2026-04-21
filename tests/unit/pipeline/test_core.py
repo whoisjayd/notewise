@@ -139,6 +139,21 @@ def test_pipeline_passes_throttle_seconds_into_generator(
     assert pipeline.generator.throttle_seconds == 2.5
 
 
+def test_pipeline_passes_target_language_into_generator(
+    temp_output_dir, mock_llm_provider
+):
+    """CorePipeline should pass the requested output language into the generator."""
+    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
+        pipeline = CorePipeline(
+            model="mock-model",
+            output_dir=temp_output_dir,
+            target_language="French",
+        )
+
+    assert pipeline.target_language == "French"
+    assert pipeline.generator.target_language == "French"
+
+
 @pytest.mark.asyncio
 async def test_get_cached_video_returns_none_on_sqlalchemy_error(
     temp_output_dir,
