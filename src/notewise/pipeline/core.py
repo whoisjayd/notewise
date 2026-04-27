@@ -292,7 +292,7 @@ class CorePipeline:
 
         metadata_path = target / OUTPUT_METADATA_FILENAME
         if not metadata_path.exists():
-            return True
+            return False
 
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))

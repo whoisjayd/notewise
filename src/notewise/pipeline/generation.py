@@ -578,7 +578,7 @@ class StudyMaterialGenerator:
         semaphore: asyncio.Semaphore | None = None,
         video_title: str = "Video",
         on_chapter_start: Callable[[int, int], None] | None = None,
-        generate_single: Callable[..., Awaitable[str]] | None = None,
+        generate_single: Callable[[str, str], Awaitable[str]] | None = None,
     ) -> dict[str, str]:
         """Generate notes for all chapters concurrently, bounded by a semaphore.
 

@@ -63,3 +63,24 @@ def test_quiz_prompts_request_standalone_learning_artifacts():
         assert "should not need to open the" in rendered.lower()
         assert "Do not mention the transcript" in rendered
         assert "as stated in the transcript" in rendered
+
+
+def test_representative_study_prompt_full_render_is_stable():
+    """Representative prompt renders should stay byte-for-byte stable."""
+    assert study_notes.get_chunk_prompt("Alpha transcript") == (
+        study_notes.CHUNK_GENERATION_PROMPT.format(
+            transcript_chunk="Alpha transcript",
+            target_language="English",
+        )
+    )
+
+
+def test_representative_chapter_prompt_full_render_is_stable():
+    """Chapter prompt renders should stay byte-for-byte stable."""
+    assert chapter_notes.get_chapter_prompt("Intro", "Beta transcript") == (
+        chapter_notes.CHAPTER_GENERATION_PROMPT.format(
+            chapter_title="Intro",
+            transcript_chunk="Beta transcript",
+            target_language="English",
+        )
+    )

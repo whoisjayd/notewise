@@ -2,7 +2,7 @@
 
 import logging
 import warnings
-from collections.abc import Generator
+from collections.abc import AsyncIterable, Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
@@ -38,15 +38,17 @@ _USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
 _ERROR_SUMMARY_LIMIT = 500
 
 
-def _configure_litellm_runtime() -> None:
+def suppress_litellm_noise() -> None:
     """Keep LiteLLM retry/info chatter out of the user-facing terminal."""
     runtime = cast(Any, litellm)
     runtime.set_verbose = False
     runtime.suppress_debug_info = True
     verbose_logger = getattr(runtime, "verbose_logger", None)
     if verbose_logger is not None:
-        verbose_logger.setLevel(logging.ERROR)
-        verbose_logger.propagate = False
+        verbose_logger.setLevel(logging.WARNING)
+        verbose_logger.propagate = True
+        for handler in list(verbose_logger.handlers):
+            verbose_logger.removeHandler(handler)
     warnings.filterwarnings(
         "ignore",
         message=PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
@@ -55,7 +57,9 @@ def _configure_litellm_runtime() -> None:
     )
 
 
-_configure_litellm_runtime()
+def _configure_litellm_runtime() -> None:
+    """Backward-compatible wrapper for LiteLLM runtime noise suppression."""
+    suppress_litellm_noise()
 
 
 def _summarize_error(error: Exception) -> str:
@@ -296,7 +300,10 @@ class LLMProvider:
             return await self._collect_responses_stream(stream)
         return await aresponses(**kwargs)
 
-    async def _collect_responses_stream(self, stream: Any) -> dict[str, Any]:
+    async def _collect_responses_stream(
+        self,
+        stream: AsyncIterable[Any],
+    ) -> dict[str, Any]:
         """Collect text and usage from LiteLLM Responses API stream events."""
         delta_parts: list[str] = []
         done_parts: list[str] = []
@@ -378,12 +385,51 @@ class LLMProvider:
 
     def _extract_cost(self, response: Any) -> float:
         """Extract estimated USD cost for a completion response via LiteLLM."""
-        try:
-            # Uses LiteLLM's model price map for provider-accurate cost estimation.
-            cost = completion_cost(completion_response=response)
-            return max(0.0, float(cost or 0.0))
-        except Exception:
-            return 0.0
+        usage = self._extract_usage(response)
+        usage_payload = {
+            "prompt_tokens": usage[0],
+            "completion_tokens": usage[1],
+            "total_tokens": usage[2],
+        }
+        call_type = "aresponses" if self._uses_responses_api() else "acompletion"
+        for model in self._cost_model_candidates():
+            try:
+                # Use a sanitized usage-only payload so provider-prefixed OAuth
+                # model names do not trigger LiteLLM auth helpers during costing.
+                cost = completion_cost(
+                    completion_response={"usage": usage_payload},
+                    model=model,
+                    call_type=call_type,
+                )
+                cost_value = max(0.0, float(cost or 0.0))
+            except Exception:
+                continue
+            if cost_value > 0:
+                return cost_value
+        return 0.0
+
+    def _cost_model_candidates(self) -> tuple[str, ...]:
+        """Return LiteLLM model names to try for cost lookup."""
+        model = self.model.strip()
+        model_lower = model.lower()
+        provider, separator, _ = model_lower.partition("/")
+        candidates: list[str] = []
+        if separator and provider in RESPONSES_API_PROVIDER_PREFIXES:
+            candidates.append(self._strip_model_provider_prefix(model))
+        else:
+            candidates.append(model)
+            if separator:
+                candidates.append(model.partition("/")[2])
+                nested_provider = model.partition("/")[2]
+                if "/" in nested_provider:
+                    candidates.append(nested_provider.partition("/")[2])
+        return tuple(dict.fromkeys(candidate for candidate in candidates if candidate))
+
+    @staticmethod
+    def _strip_model_provider_prefix(model: str) -> str:
+        """Remove the outer LiteLLM provider prefix from a model string."""
+        _, separator, remainder = model.partition("/")
+        return remainder if separator and remainder else model
 
     def _clean_content(self, content: str) -> str:
         """

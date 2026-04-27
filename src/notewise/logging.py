@@ -24,17 +24,10 @@ from notewise._constants import (
     PROVIDER_SECRET_ENV_KEYS,
     SESSION_LOG_PREFIX,
     STATE_DIR_NAME,
+    THIRD_PARTY_DIAGNOSTIC_LOGGERS,
 )
 
 
-_NOISY_LOGGERS = (
-    "LiteLLM",
-    "litellm",
-    "openai",
-    "openai._base_client",
-    "httpx",
-    "httpcore",
-)
 _SESSION_LOG_PATH: Path | None = None
 _LOGGING_LOCK = threading.Lock()
 _LOGGING_CONFIGURED = False
@@ -186,6 +179,7 @@ def configure_logging(
     *,
     state_dir: Path | None = None,
     env: str | None = None,
+    verbose: bool = False,
 ) -> Path | None:
     """Configure structlog and stdlib logging for NoteWise.
 
@@ -205,12 +199,18 @@ def configure_logging(
         if _LOGGING_CONFIGURED:
             return _SESSION_LOG_PATH
 
-        # Suppress noisy third-party loggers early
+        # Keep terminal quiet via NullHandler while preserving file diagnostics.
         os.environ.setdefault("LITELLM_LOG", "ERROR")
-        for name in _NOISY_LOGGERS:
-            noisy_logger = logging.getLogger(name)
-            noisy_logger.setLevel(logging.WARNING)
-            noisy_logger.propagate = False
+        diagnostic_level = logging.DEBUG if verbose else logging.WARNING
+        for name in THIRD_PARTY_DIAGNOSTIC_LOGGERS:
+            diagnostic_logger = logging.getLogger(name)
+            diagnostic_logger.setLevel(diagnostic_level)
+            diagnostic_logger.propagate = True
+            # Some provider libraries attach their own StreamHandler to stderr.
+            # Remove local handlers so records flow only through NoteWise's root
+            # file handler, where redaction is applied and the Rich UI stays clean.
+            for handler in list(diagnostic_logger.handlers):
+                diagnostic_logger.removeHandler(handler)
 
         # Shared processors applied to every log record
         shared_processors: list[structlog.types.Processor] = [

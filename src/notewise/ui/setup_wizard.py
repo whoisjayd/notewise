@@ -4,9 +4,11 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from notewise._constants import (
+    AUTH_TYPE_API_KEY,
+    AUTH_TYPE_OAUTH_DEVICE,
     CONFIG_FILENAME,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
@@ -14,6 +16,7 @@ from notewise._constants import (
     LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS,
     LITELLM_TEXT_MODEL_EXCLUDED_MARKERS,
     OAUTH_SETUP_RUN_PROMPT,
+    PROVIDER_CONFIG,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -25,8 +28,14 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+class RunOAuthLoginProto(Protocol):
+    """Callable signature for the lazily imported OAuth login helper."""
+
+    def __call__(self, provider: str, *, console: Console | None = None) -> bool: ...
+
+
 LEGACY_CONFIG_KEYS = set(APP_LEGACY_CONFIG_KEYS)
-run_oauth_login: Any = None
+run_oauth_login: RunOAuthLoginProto | None = None
 
 
 def _load_oauth_dependencies() -> None:
@@ -38,120 +47,6 @@ def _load_oauth_dependencies() -> None:
 
         run_oauth_login = _run_oauth_login
 
-
-# API key configuration for different providers
-PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
-    "gemini": {
-        "name": "Google Gemini",
-        "auth_type": "api_key",
-        "env_var": "GEMINI_API_KEY",
-        "api_url": "https://aistudio.google.com/app/apikey",
-        "keywords": ["gemini", "vertex"],
-        "litellm_providers": ["gemini"],
-    },
-    "openai": {
-        "name": "OpenAI (ChatGPT)",
-        "auth_type": "api_key",
-        "env_var": "OPENAI_API_KEY",
-        "api_url": "https://platform.openai.com/api-keys",
-        "keywords": ["gpt", "openai", "o1", "o3", "o4"],
-        "litellm_providers": ["openai"],
-    },
-    "anthropic": {
-        "name": "Anthropic (Claude)",
-        "auth_type": "api_key",
-        "env_var": "ANTHROPIC_API_KEY",
-        "api_url": "https://console.anthropic.com/settings/keys",
-        "keywords": ["claude", "anthropic"],
-        "litellm_providers": ["anthropic"],
-    },
-    "groq": {
-        "name": "Groq",
-        "auth_type": "api_key",
-        "env_var": "GROQ_API_KEY",
-        "api_url": "https://console.groq.com/keys",
-        "keywords": ["groq"],
-        "litellm_providers": ["groq"],
-    },
-    "xai": {
-        "name": "xAI (Grok)",
-        "auth_type": "api_key",
-        "env_var": "XAI_API_KEY",
-        "api_url": "https://console.x.ai/",
-        "keywords": ["grok", "xai"],
-        "litellm_providers": ["xai"],
-    },
-    "mistral": {
-        "name": "Mistral AI",
-        "auth_type": "api_key",
-        "env_var": "MISTRAL_API_KEY",
-        "api_url": "https://console.mistral.ai/api-keys/",
-        "keywords": ["mistral"],
-        "litellm_providers": ["mistral"],
-    },
-    "cohere": {
-        "name": "Cohere",
-        "auth_type": "api_key",
-        "env_var": "COHERE_API_KEY",
-        "api_url": "https://dashboard.cohere.com/api-keys",
-        "keywords": ["cohere", "command"],
-        "litellm_providers": ["cohere_chat", "cohere"],
-    },
-    "deepseek": {
-        "name": "DeepSeek",
-        "auth_type": "api_key",
-        "env_var": "DEEPSEEK_API_KEY",
-        "api_url": "https://platform.deepseek.com/api_keys",
-        "keywords": ["deepseek"],
-        "litellm_providers": ["deepseek"],
-    },
-    "openrouter": {
-        "name": "OpenRouter",
-        "auth_type": "api_key",
-        "env_var": "OPENROUTER_API_KEY",
-        "api_url": "https://openrouter.ai/settings/keys",
-        "keywords": ["openrouter"],
-        "litellm_providers": ["openrouter"],
-    },
-    "together_ai": {
-        "name": "Together AI",
-        "auth_type": "api_key",
-        "env_var": "TOGETHERAI_API_KEY",
-        "api_url": "https://api.together.ai/settings/api-keys",
-        "keywords": ["together"],
-        "litellm_providers": ["together_ai"],
-    },
-    "fireworks_ai": {
-        "name": "Fireworks AI",
-        "auth_type": "api_key",
-        "env_var": "FIREWORKS_AI_API_KEY",
-        "api_url": "https://fireworks.ai/account/api-keys",
-        "keywords": ["fireworks"],
-        "litellm_providers": ["fireworks_ai"],
-    },
-    "perplexity": {
-        "name": "Perplexity",
-        "auth_type": "api_key",
-        "env_var": "PERPLEXITYAI_API_KEY",
-        "api_url": "https://www.perplexity.ai/settings/api",
-        "keywords": ["perplexity", "sonar"],
-        "litellm_providers": ["perplexity"],
-    },
-    "github_copilot": {
-        "name": "GitHub Copilot",
-        "auth_type": "oauth_device",
-        "api_url": "https://docs.github.com/en/copilot",
-        "keywords": ["github_copilot", "copilot", "codex"],
-        "litellm_providers": ["github_copilot"],
-    },
-    "chatgpt": {
-        "name": "ChatGPT Subscription",
-        "auth_type": "oauth_device",
-        "api_url": "https://chatgpt.com/",
-        "keywords": ["chatgpt", "codex"],
-        "litellm_providers": ["chatgpt"],
-    },
-}
 
 CURATED_FALLBACK_MODELS: dict[str, list[str]] = {
     "gemini": [
@@ -778,13 +673,15 @@ def run_setup_wizard(
     provider_info = PROVIDER_CONFIG[provider_key]
     env_var = provider_info.get("env_var")
     api_key = None
-    if provider_info.get("auth_type", "api_key") == "api_key" and isinstance(
+    if provider_info.get(
+        "auth_type", AUTH_TYPE_API_KEY
+    ) == AUTH_TYPE_API_KEY and isinstance(
         env_var,
         str,
     ):
         existing_key = current_config.get(env_var)
         api_key = get_api_key(provider_key, existing_key, console=active_console)
-    elif provider_info.get("auth_type") == "oauth_device":
+    elif provider_info.get("auth_type") == AUTH_TYPE_OAUTH_DEVICE:
         active_console.print(
             f"\n[bold yellow]OAuth Device Flow:[/bold yellow] {provider_info['name']}"
         )
@@ -795,7 +692,8 @@ def run_setup_wizard(
         )
         if Confirm.ask(OAUTH_SETUP_RUN_PROMPT, default=True):
             _load_oauth_dependencies()
-            run_oauth_login(provider_key, console=active_console)
+            if run_oauth_login is not None:
+                run_oauth_login(provider_key, console=active_console)
 
     active_console.print("\n[bold cyan]Output Directory:[/bold cyan]")
     default_output = str(Path.cwd() / Path(DEFAULT_OUTPUT_DIR))

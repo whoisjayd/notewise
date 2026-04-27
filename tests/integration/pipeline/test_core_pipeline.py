@@ -1192,6 +1192,12 @@ async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
     assert result.success_count == 2
     assert result.failure_count == 0
     assert result.errors == {}
+    assert (temp_output_dir / "Video vid-a" / "01_Introduction & Recap.md").read_text(
+        encoding="utf-8"
+    ) == "# Introduction & Recap\n\nalpha"
+    assert (temp_output_dir / "Video vid-b" / "01_System Design Setup.md").read_text(
+        encoding="utf-8"
+    ) == "# System Design Setup\n\nbeta"
 
 
 @pytest.mark.asyncio
@@ -2101,12 +2107,69 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
 
 
 @pytest.mark.asyncio
-async def test_chapter_run_reuses_existing_partial_title_folder(
+async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
     temp_output_dir, mock_llm_provider
 ):
-    """Interrupted chapter reruns should resume the title folder, not duplicate it."""
+    """Metadata-less same-title folders should not be clobbered by chapter runs."""
     existing_dir = temp_output_dir / "Resume Long"
     existing_dir.mkdir()
+    (existing_dir / "01_Intro.md").write_text("old notes", encoding="utf-8")
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="resume-id",
+                    title="Resume Long",
+                    duration=7200,
+                    chapters=[
+                        VideoChapter(title="Intro", start_seconds=0, end_seconds=None)
+                    ],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="fresh chapter",
+                    start_seconds=0,
+                )
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(
+            video_id="resume-id", text="fresh transcript"
+        )
+
+        result = await p.run(["resume-id"])
+
+    assert result.success_count == 1
+    assert (existing_dir / "01_Intro.md").read_text(encoding="utf-8") == "old notes"
+    suffix_dir = temp_output_dir / "Resume Long (resume-id)"
+    assert (suffix_dir / "01_Intro.md").read_text(encoding="utf-8") == (
+        "# Chapter Notes"
+    )
+    assert (suffix_dir / ".notewise-output.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_chapter_run_reuses_existing_matching_metadata_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Chapter folders are reusable only when ownership metadata matches."""
+    existing_dir = temp_output_dir / "Resume Long"
+    existing_dir.mkdir()
+    (existing_dir / ".notewise-output.json").write_text(
+        json.dumps({"video_id": "resume-id"}),
+        encoding="utf-8",
+    )
 
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
 

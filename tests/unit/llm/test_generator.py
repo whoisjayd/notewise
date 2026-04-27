@@ -230,6 +230,10 @@ class TestStudyMaterialGenerator:
         with (
             patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
             patch(
+                "notewise.pipeline.generation.asyncio.get_running_loop",
+                return_value=MagicMock(time=MagicMock(return_value=0.0)),
+            ),
+            patch(
                 "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
             ) as mock_sleep,
         ):
@@ -574,6 +578,10 @@ class TestStudyMaterialGenerator:
 
         with (
             patch("notewise.pipeline.generation.token_counter", return_value=50),
+            patch(
+                "notewise.pipeline.generation.asyncio.get_running_loop",
+                return_value=MagicMock(time=MagicMock(return_value=0.0)),
+            ),
             patch(
                 "notewise.pipeline.generation.asyncio.sleep", new=AsyncMock()
             ) as mock_sleep,
