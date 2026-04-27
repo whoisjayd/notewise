@@ -127,7 +127,9 @@ notewise/
 │   │   └── migrations.py    # Schema migrations
 │   ├── ui/                  # Rich terminal UI
 │   │   ├── dashboard.py     # PipelineDashboard (live progress)
-│   │   └── setup_wizard.py  # Interactive setup wizard
+│   │   ├── oauth_flow.py    # OAuth/device-flow login helpers
+│   │   ├── setup_wizard.py  # Interactive setup wizard
+│   │   └── litellm_models_snapshot.json # Bundled text-model catalog
 │   └── youtube/             # YouTube extraction
 │       ├── parser.py        # URL & ID parsing
 │       ├── transcript.py    # Transcript fetching
@@ -142,6 +144,7 @@ notewise/
 │   ├── e2e/                 # End-to-end smoke tests
 │   └── conftest.py          # Shared fixtures
 ├── scripts/
+│   ├── extract_litellm_model_snapshot.py # Refresh LiteLLM setup catalog
 │   └── hooks/               # Git hook scripts
 ├── .github/
 │   ├── workflows/           # CI/CD workflows
@@ -159,6 +162,7 @@ notewise/
 - **All exceptions in one place** — define custom exceptions only in `errors.py`
 - **Lazy imports in CLI** — heavy dependencies are imported inside command functions to keep startup fast
 - **Configuration via Pydantic Settings** — `AppSettings` in `config.py`; all defaults are in `_constants.py`
+- **Provider docs stay in sync** — model/provider changes must update README, CLI docs, configuration reference, `.env.example`, and provider tests together
 
 ---
 
@@ -205,6 +209,16 @@ uv run deptry .
 - Isort: first-party imports in a separate section
 - No unused arguments (ARG rule) — prefix intentionally unused params with `_`
 
+### Provider and OAuth Changes
+
+When changing LiteLLM provider support, OAuth behavior, model examples, or config preflight logic:
+
+- Put new constants, env-var names, provider aliases, and numeric defaults in `src/notewise/_constants.py`.
+- Keep OAuth token defaults under `NOTEWISE_HOME`/`~/.notewise` unless the user explicitly sets `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR`.
+- Do not log raw prompts, provider payloads, API keys, OAuth tokens, or AWS credentials. Add/update redaction tests when touching logging.
+- Refresh `src/notewise/ui/litellm_models_snapshot.json` with `uv run python scripts/extract_litellm_model_snapshot.py` when setup model availability changes. The snapshot should include text-generation models only.
+- Update docs in the same PR: `README.md`, `.env.example`, `docs/docs/how-it-works/providers.mdx`, `docs/docs/getting-started/configuration.mdx`, and `docs/reference/schema-and-output/configuration.mdx`.
+
 ---
 
 ## Testing
@@ -245,6 +259,7 @@ open htmlcov/index.html
 ### Writing Tests
 
 - **Unit tests must not make network calls.** Use `pytest-mock` (`mocker.patch`) to patch YouTube extraction and LLM calls.
+- **OAuth and provider tests must mock LiteLLM calls.** Do not require live ChatGPT, Copilot, or API-key credentials in unit/integration tests.
 - **Fixtures** shared across the test suite live in `tests/conftest.py`.
 - **Async tests** use `pytest-asyncio` — mark coroutines with `async def test_...` (the `asyncio_mode = "auto"` setting in `pyproject.toml` handles the rest).
 - Test files, classes, and functions must follow the naming convention: `test_*.py`, `Test*`, `test_*`.
@@ -319,6 +334,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 - [ ] Tests added or updated for the change
 - [ ] `make ci` passes locally
 - [ ] Documentation updated if the public interface changed
+- [ ] Provider/model examples are snapshot-valid if provider docs changed
 - [ ] Commit message follows the single-line convention
 - [ ] The PR targets `dev` (unless this is a maintainer-managed release PR)
 - [ ] I installed the repository hooks with `make hooks-install`

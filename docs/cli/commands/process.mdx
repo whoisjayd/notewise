@@ -30,8 +30,8 @@ notewise process URL [OPTIONS]
   LiteLLM model string. Overrides `DEFAULT_MODEL` from config for this run.
 
   ```bash
-  notewise process "URL" --model gpt-4o
-  notewise process "URL" -m anthropic/claude-3-5-sonnet-20241022
+  notewise process "URL" --model gpt-5.5
+  notewise process "URL" -m claude-sonnet-4-5-20250929
   ```
 </ParamField>
 
@@ -266,7 +266,7 @@ By default, long transcripts are finalized with chunk **stitching** so adjacent 
 notewise process "https://youtube.com/watch?v=VIDEO_ID"
 
 # Custom model and output directory
-notewise process "URL" --model gpt-4o --output ~/notes
+notewise process "URL" --model gpt-5.5 --output ~/notes
 
 # Playlist with quiz and transcript export
 notewise process "https://youtube.com/playlist?list=PLxxxxxx" \
@@ -285,7 +285,7 @@ MAX_CONCURRENT_VIDEOS=10 notewise process urls.txt --no-ui
 notewise process "URL" --cookie-file ./youtube-cookies.txt
 
 # Re-process with a different model
-notewise process "URL" --model claude-3-5-sonnet-20241022 --force
+notewise process "URL" --model claude-sonnet-4-5-20250929 --force
 
 # Long chapter-aware video with timestamped headings
 notewise process "URL" --timestamps

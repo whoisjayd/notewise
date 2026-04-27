@@ -54,9 +54,29 @@ GEMINI_API_KEY=your_key_here
 Switching providers:
 
 ```bash
-DEFAULT_MODEL=gpt-4o
+DEFAULT_MODEL=gpt-5.5
 OPENAI_API_KEY=sk-...
 ```
+
+Gateway and hosted providers use their LiteLLM prefix and matching key:
+
+```bash
+DEFAULT_MODEL=openrouter/openai/gpt-5
+OPENROUTER_API_KEY=sk-or-...
+```
+
+OAuth/device-flow providers such as ChatGPT subscription and GitHub Copilot do not use a static API key. Log in once from an interactive terminal, then select a `chatgpt/*` or `github_copilot/*` model:
+
+```bash
+notewise auth login chatgpt
+notewise auth login github_copilot
+
+DEFAULT_MODEL=chatgpt/gpt-5.2
+# or
+DEFAULT_MODEL=github_copilot/gpt-5-mini
+```
+
+Tokens default to `~/.notewise/oauth/chatgpt` and `~/.notewise/oauth/github_copilot` so they stay inside the notewise state directory unless you override the paths.
 
 See [LLM Providers](/docs/how-it-works/providers) for all supported models and key names.
 
@@ -94,6 +114,9 @@ TEMPERATURE=0.7
 GEMINI_API_KEY=your_key_here
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
+# OPENROUTER_API_KEY=sk-or-...
+# CHATGPT_TOKEN_DIR=~/.notewise/oauth/chatgpt
+# GITHUB_COPILOT_TOKEN_DIR=~/.notewise/oauth/github_copilot
 ```
 
 ---
@@ -105,6 +128,7 @@ GEMINI_API_KEY=your_key_here
 | `notewise config` | Show resolved config (API keys masked) |
 | `notewise config-path` | Print path to the active config file |
 | `notewise edit-config` | Open `config.env` in `$EDITOR` |
+| `notewise auth login <provider>` | Run OAuth/device-flow login for ChatGPT or GitHub Copilot |
 | `notewise setup --force` | Re-run the interactive wizard |
 
 <Tip>

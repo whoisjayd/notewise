@@ -33,14 +33,14 @@ graph TD
 
 | Exception | Cause | Resolution |
 | --- | --- | --- |
-| **ConfigurationError** | API key for selected model not set | Run `notewise config` or `notewise setup --force` |
+| **ConfigurationError** | Required auth/config for selected model not set | Run `notewise config`, `notewise setup --force`, or `notewise auth login <provider>` for OAuth models |
 | **ValidationError** | Malformed URL or invalid option | Check URL format and try again |
 | **VideoUnavailableError** | Video is private, age-restricted, or removed | Use `--cookie-file` or verify video is public |
 | **TranscriptUnavailableError** | No transcript available in requested language | Run `notewise info "URL"` to check available languages |
 | **PlaylistError** | Playlist unavailable or invalid ID | Verify playlist is public and ID is correct |
 | **IPBlockError** | YouTube blocked the request | Reduce `YOUTUBE_REQUESTS_PER_MINUTE` and retry |
 | **ExtractionError** | General YouTube extraction failure | Run `notewise logs --tail 50` for details |
-| **LLMGenerationError** | LLM API call failed after retries | Verify API key and quota with `notewise config` |
+| **LLMGenerationError** | LLM API call failed after retries | Verify provider auth, model access, and quota with `notewise config` |
 | **PersistenceError** | SQLite read/write failure | Run `notewise doctor`, or clear cache with `notewise cache --clear --yes` |
 
 ---
@@ -83,12 +83,14 @@ notewise logs --tail 100   # full error detail
   <Accordion title="ConfigurationError">
     Raised when the application configuration is invalid or required settings are missing.
 
-    **Cause:** The API key for the selected model is not set.
+    **Cause:** Required auth/config for the selected model is not set.
 
     **Resolution:**
     ```bash
     notewise config          # see current resolved settings
     notewise setup --force   # re-run the wizard
+    notewise auth login chatgpt
+    notewise auth login github_copilot
     ```
   </Accordion>
 
@@ -150,7 +152,7 @@ notewise logs --tail 100   # full error detail
     ```bash
     notewise config   # verify the API key is set and correct
     ```
-    Check your API key validity and quota with the provider.
+    Check your API key validity, OAuth login state, model access, and quota with the provider.
   </Accordion>
 
   <Accordion title="PersistenceError">
@@ -177,7 +179,7 @@ notewise logs --tail 100   # full error detail
     ```
   </Card>
   <Card title="LLM call failures">
-    Check `LLMGenerationError`: validate API key, quota, and model access for the configured provider with `notewise config`.
+    Check `LLMGenerationError`: validate API key or OAuth login state, quota, and model access for the configured provider with `notewise config`.
   </Card>
   <Card title="Unexpected failure">
     ```bash
