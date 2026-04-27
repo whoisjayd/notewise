@@ -19,10 +19,22 @@ from typing import Any
 
 import structlog
 
-from notewise._constants import LOGS_DIR_NAME, SESSION_LOG_PREFIX, STATE_DIR_NAME
+from notewise._constants import (
+    LOGS_DIR_NAME,
+    PROVIDER_SECRET_ENV_KEYS,
+    SESSION_LOG_PREFIX,
+    STATE_DIR_NAME,
+)
 
 
-_NOISY_LOGGERS = ("LiteLLM", "litellm", "httpx", "httpcore")
+_NOISY_LOGGERS = (
+    "LiteLLM",
+    "litellm",
+    "openai",
+    "openai._base_client",
+    "httpx",
+    "httpcore",
+)
 _SESSION_LOG_PATH: Path | None = None
 _LOGGING_LOCK = threading.Lock()
 _LOGGING_CONFIGURED = False
@@ -48,10 +60,12 @@ _SENSITIVE_KEY_NAMES = frozenset(
         "cookies",
         "youtubecookiefile",
     }
+    | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
-    r"(?i)(?P<key>\b(?:gemini|openai|anthropic|groq|xai|mistral|cohere|deepseek)?"
-    r"_?api[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|token|"
+    r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
+    r"session_token|access_token|refresh_token)|"
+    r"authorization|token|"
     r"secret|password|cookie(?:s)?|youtube_cookie_file\b)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,\]}]+)"
@@ -194,8 +208,9 @@ def configure_logging(
         # Suppress noisy third-party loggers early
         os.environ.setdefault("LITELLM_LOG", "ERROR")
         for name in _NOISY_LOGGERS:
-            logging.getLogger(name).setLevel(logging.ERROR)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
+            noisy_logger = logging.getLogger(name)
+            noisy_logger.setLevel(logging.WARNING)
+            noisy_logger.propagate = False
 
         # Shared processors applied to every log record
         shared_processors: list[structlog.types.Processor] = [
