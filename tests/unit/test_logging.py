@@ -30,13 +30,19 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
     """Raw API keys and bearer tokens should never survive log redaction."""
     google_key = "AIza" + "A" * 32
     bearer = "Bearer abcdefghijklmnopqrstuvwxyz123456"
+    openrouter_key = "or_" + "B" * 32
+    aws_secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCY" + "C" * 12
 
     redacted = redact_sensitive_text(
-        f"gemini_api_key={google_key} authorization: {bearer}"
+        f"gemini_api_key={google_key} authorization: {bearer} "
+        f"OPENROUTER_API_KEY={openrouter_key} "
+        f"AWS_SECRET_ACCESS_KEY={aws_secret}"
     )
 
     assert google_key not in redacted
     assert bearer not in redacted
+    assert openrouter_key not in redacted
+    assert aws_secret not in redacted
     assert "[REDACTED]" in redacted
 
 
@@ -101,6 +107,18 @@ def test_configure_logging_is_idempotent(tmp_path):
     assert second == first
     assert logging_module.get_session_log_path() == first
     assert len(list((tmp_path / "logs").glob("*.log"))) == 1
+
+
+def test_configure_logging_suppresses_verbose_provider_payload_logs(tmp_path):
+    """Third-party clients should not dump prompts or request payloads to logs."""
+    _reset_logging_state()
+    configure_logging(state_dir=tmp_path)
+
+    for logger_name in ("openai", "openai._base_client", "LiteLLM", "litellm"):
+        logger = logging_module.logging.getLogger(logger_name)
+        assert logger.getEffectiveLevel() >= logging_module.logging.WARNING
+
+    assert logging_module.logging.getLogger("openai._base_client").propagate is False
 
 
 def test_prune_log_files_removes_only_old_inactive_logs(tmp_path):

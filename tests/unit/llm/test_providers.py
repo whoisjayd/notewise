@@ -17,6 +17,22 @@ from notewise.llm.provider import (
 )
 
 
+class AsyncChunks:
+    """Minimal async iterator for mocked LiteLLM streams."""
+
+    def __init__(self, chunks):
+        self._chunks = iter(chunks)
+
+    def __aiter__(self):
+        return self
+
+    async def __anext__(self):
+        try:
+            return next(self._chunks)
+        except StopIteration as exc:
+            raise StopAsyncIteration from exc
+
+
 class TestLLMProvider:
     """Test LLMProvider class."""
 
@@ -205,6 +221,29 @@ class TestLLMProvider:
         assert mock_log_error.call_args.kwargs["error_type"] == "Exception"
         assert secret not in mock_log_error.call_args.kwargs["error"]
         assert "[REDACTED]" in mock_log_error.call_args.kwargs["error"]
+        assert mock_log_error.call_args.kwargs["exc_info"] is False
+
+    @pytest.mark.asyncio
+    async def test_generate_failure_does_not_log_provider_payload_tracebacks(self):
+        """Provider payload errors should stay summary-only in logs."""
+        prompt_text = "SECRET_PROMPT_TEXT"
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+            patch("notewise.llm.provider.logger.error") as mock_log_error,
+        ):
+            mock_acompletion.side_effect = Exception(
+                f"request payload contained {prompt_text}"
+            )
+
+            provider = LLMProvider("gpt-4o")
+
+            with pytest.raises(LLMGenerationError):
+                await provider.generate("sys", "user")
+
+        assert mock_log_error.call_args.kwargs["exc_info"] is False
+        assert prompt_text not in mock_log_error.call_args.kwargs["error"]
+        assert "suppressed" in mock_log_error.call_args.kwargs["error"]
 
     @pytest.mark.asyncio
     async def test_generate_reraises_existing_llm_generation_error(self):
@@ -253,6 +292,150 @@ class TestLLMProvider:
             await provider.generate("sys", "user", max_tokens=1)
 
         assert mock_acompletion.call_args.kwargs["max_tokens"] == 1
+
+    @pytest.mark.asyncio
+    async def test_generate_normalizes_gpt5_temperature_for_chat_completions(self):
+        """GPT-5 chat-completion models should use LiteLLM's supported temperature."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("github_copilot/gpt-5-mini")
+            await provider.generate("sys", "user", temperature=0.7)
+
+        assert mock_acompletion.call_args.kwargs["temperature"] == 1.0
+
+    @pytest.mark.asyncio
+    async def test_generate_uses_responses_api_for_oauth_codex_models(self):
+        """Codex models on OAuth providers should use LiteLLM Responses API."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.aresponses") as mock_aresponses,
+        ):
+            mock_aresponses.return_value = SimpleNamespace(
+                output_text="Responses content",
+                usage={"input_tokens": 3, "output_tokens": 5, "total_tokens": 8},
+            )
+
+            provider = LLMProvider("github_copilot/gpt-5-codex")
+            with provider.collect_usage() as usage:
+                result = await provider.generate(
+                    "sys",
+                    "user",
+                    temperature=0.2,
+                    max_tokens=128,
+                )
+
+        assert result == "Responses content"
+        mock_acompletion.assert_not_called()
+        mock_aresponses.assert_called_once_with(
+            model="github_copilot/gpt-5-codex",
+            instructions="sys",
+            input=[{"role": "user", "content": "user"}],
+            temperature=1.0,
+            num_retries=3,
+            max_output_tokens=128,
+        )
+        assert usage == UsageTotals(
+            prompt_tokens=3,
+            completion_tokens=5,
+            total_tokens=8,
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_uses_responses_api_for_all_chatgpt_models(self):
+        """ChatGPT subscription models should avoid LiteLLM chat bridge parsing."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.aresponses") as mock_aresponses,
+        ):
+            mock_aresponses.return_value = AsyncChunks(
+                [
+                    SimpleNamespace(delta="ChatGPT "),
+                    SimpleNamespace(delta="text"),
+                    SimpleNamespace(
+                        response=SimpleNamespace(
+                            usage={
+                                "input_tokens": 2,
+                                "output_tokens": 3,
+                                "total_tokens": 5,
+                            },
+                        ),
+                    ),
+                ]
+            )
+
+            provider = LLMProvider("chatgpt/gpt-5.2")
+            with provider.collect_usage() as usage:
+                result = await provider.generate("sys", "user")
+
+        assert result == "ChatGPT text"
+        mock_acompletion.assert_not_called()
+        mock_aresponses.assert_called_once_with(
+            model="chatgpt/gpt-5.2",
+            instructions="sys",
+            input=[{"role": "user", "content": "user"}],
+            temperature=1.0,
+            num_retries=3,
+            stream=True,
+        )
+        assert usage == UsageTotals(
+            prompt_tokens=2,
+            completion_tokens=3,
+            total_tokens=5,
+        )
+
+    @pytest.mark.asyncio
+    async def test_generate_collects_dict_shaped_responses_stream_events(self):
+        """Responses streams may yield dict-shaped chunks from LiteLLM."""
+        with patch("notewise.llm.provider.aresponses") as mock_aresponses:
+            mock_aresponses.return_value = AsyncChunks(
+                [
+                    {"delta": "Dict "},
+                    {"delta": "stream"},
+                    {
+                        "response": {
+                            "usage": {
+                                "input_tokens": 4,
+                                "output_tokens": 6,
+                                "total_tokens": 10,
+                            },
+                        },
+                    },
+                ]
+            )
+
+            provider = LLMProvider("chatgpt/gpt-5.2")
+            with provider.collect_usage() as usage:
+                result = await provider.generate("sys", "user")
+
+        assert result == "Dict stream"
+        assert usage == UsageTotals(
+            prompt_tokens=4,
+            completion_tokens=6,
+            total_tokens=10,
+        )
+
+    def test_normalize_responses_content_handles_structured_output(self):
+        """Responses payloads without output_text should still flatten text blocks."""
+        provider = LLMProvider("chatgpt/gpt-5-codex")
+        response = {
+            "output": [
+                {
+                    "type": "message",
+                    "content": [
+                        {"type": "output_text", "text": "First"},
+                        {"type": "text", "text": "Second"},
+                    ],
+                }
+            ]
+        }
+
+        assert provider._normalize_responses_content(response) == "First\nSecond"
 
     def test_get_provider_factory(self):
         """Test factory function."""
@@ -315,6 +498,27 @@ class TestLLMProvider:
             summary = _summarize_error(Exception("retry later → unavailable"))
 
         assert summary == "retry later \\u2192 unavailable"
+
+    def test_clean_content_normalizes_over_indented_markdown_fences(self):
+        """Indented fence markers should not swallow following prose in previews."""
+        provider = LLMProvider("gpt-4o")
+        content = """Example:
+
+```python
+    import dis
+    ```
+- Next bullet
+"""
+
+        assert (
+            provider._clean_content(content)
+            == """Example:
+
+```python
+    import dis
+```
+- Next bullet"""
+        )
 
     def test_configure_litellm_runtime_handles_missing_verbose_logger(self):
         """LiteLLM runtime setup should tolerate missing verbose logger objects."""
