@@ -16,16 +16,19 @@ provider/model-name
 
 ```bash
 gemini/gemini-2.5-flash
-openai/gpt-4o
-anthropic/claude-3-5-sonnet-20241022
-groq/llama3-70b-8192
+gpt-5.5
+claude-sonnet-4-5-20250929
+groq/llama-3.3-70b-versatile
+openrouter/openai/gpt-5
+github_copilot/gpt-5-mini
+chatgpt/gpt-5.2
 ```
 
 Some models can be specified without a provider prefix when the name is unambiguous:
 
 ```bash
-gpt-4o                        # routes to OpenAI
-claude-3-5-sonnet-20241022    # routes to Anthropic
+gpt-5.5                         # routes to OpenAI
+claude-sonnet-4-5-20250929      # routes to Anthropic
 ```
 
 ---
@@ -35,13 +38,22 @@ claude-3-5-sonnet-20241022    # routes to Anthropic
 | Provider | Config Key | Default Model |
 | --- | --- | --- |
 | Google Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` |
-| OpenAI | `OPENAI_API_KEY` | `openai/gpt-4o` |
-| Anthropic | `ANTHROPIC_API_KEY` | `anthropic/claude-3-5-sonnet-20241022` |
-| Groq | `GROQ_API_KEY` | `groq/llama3-70b-8192` |
-| xAI | `XAI_API_KEY` | `xai/grok-4` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.5` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
+| Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` |
+| xAI | `XAI_API_KEY` | `xai/grok-4-1-fast-non-reasoning-latest` |
 | Mistral | `MISTRAL_API_KEY` | `mistral/mistral-large-latest` |
-| Cohere | `COHERE_API_KEY` | `cohere/command-r-plus` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-chat` |
+| Cohere | `COHERE_API_KEY` | `command-r-plus-08-2024` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-v3.2` |
+| OpenRouter | `OPENROUTER_API_KEY` | `openrouter/openai/gpt-5` |
+| Azure OpenAI / Azure AI | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` | `azure/gpt-5` |
+| Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` | `vercel_ai_gateway/<model>` |
+| Together AI | `TOGETHERAI_API_KEY` | `together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo` |
+| Fireworks AI | `FIREWORKS_AI_API_KEY` | `fireworks_ai/accounts/fireworks/models/llama-v3p1-8b-instruct` |
+| Perplexity | `PERPLEXITYAI_API_KEY` | `perplexity/sonar` |
+| GitHub Copilot | OAuth device flow | `github_copilot/gpt-5-mini` |
+| ChatGPT Subscription | OAuth device flow | `chatgpt/gpt-5.2` |
+| Amazon Bedrock | AWS credential chain | `bedrock/<model-id>` |
 
 <Tip>
   Gemini is the **default provider** — no billing required to start. Get your free API key at [AI Studio](https://aistudio.google.com/app/apikey).
@@ -64,12 +76,55 @@ If the model string contains `/`, the prefix before the slash is the provider. O
 | `mistral/*` | Mistral | `MISTRAL_API_KEY` |
 | `cohere/*`, `command*` | Cohere | `COHERE_API_KEY` |
 | `deepseek/*` | DeepSeek | `DEEPSEEK_API_KEY` |
+| `openrouter/*` | OpenRouter | `OPENROUTER_API_KEY` |
+| `azure/*`, `azure_ai/*`, `azure_text/*` | Azure | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` |
+| `vercel_ai_gateway/*` | Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` |
+| `together_ai/*`, `together/*` | Together AI | `TOGETHERAI_API_KEY` |
+| `fireworks_ai/*` | Fireworks AI | `FIREWORKS_AI_API_KEY` |
+| `perplexity/*` | Perplexity | `PERPLEXITYAI_API_KEY` |
+| `huggingface/*`, `replicate/*`, `cerebras/*`, `deepinfra/*`, `sambanova/*`, `cloudflare/*` | Major hosted providers | Matching provider API key |
+| `chatgpt/*`, `github_copilot/*` | OAuth providers | Device flow; no static API key |
+| `bedrock/*`, `bedrock_converse/*`, `amazon_nova/*` | AWS providers | AWS SDK credential chain |
 
-If the API key for the resolved provider is missing, the pipeline logs an error and the video fails.
+If the resolved provider needs a static API key and that key is missing, the CLI shows the missing config name before any video processing starts. OAuth and ambient-credential providers skip static API-key checks and rely on their provider-specific login or SDK credential chain.
+
+<Tip>
+  ChatGPT subscription models use LiteLLM's Responses API. GitHub Copilot Codex models also use Responses API; regular Copilot chat models such as `github_copilot/gpt-5-mini` use Chat Completions.
+</Tip>
 
 <Warning>
-  Unsupported gateway prefixes (`azure`, `openrouter`, `vercel_ai_gateway`) return `None` for the API key — these are not natively supported and must be configured via environment variables separately.
+  OAuth providers need an interactive login before non-interactive runs. Use `notewise auth login chatgpt` or `notewise auth login github_copilot`; LiteLLM prints a device code or browser URL, then notewise defaults token storage to `~/.notewise/oauth/chatgpt` or `~/.notewise/oauth/github_copilot` for reuse.
 </Warning>
+
+---
+
+### OAuth providers
+
+ChatGPT subscription and GitHub Copilot are not configured with API keys in `config.env`.
+
+```bash
+notewise auth login chatgpt
+notewise auth login github_copilot
+notewise auth login codex  # choose ChatGPT or GitHub Copilot backing
+```
+
+After login, use the provider model normally:
+
+```bash
+notewise process "URL" --model chatgpt/gpt-5.2
+notewise process "URL" --model github_copilot/gpt-5-mini
+```
+
+Token storage defaults:
+
+| Provider | Default token directory | Override |
+| --- | --- | --- |
+| ChatGPT Subscription | `~/.notewise/oauth/chatgpt` | `CHATGPT_TOKEN_DIR` |
+| GitHub Copilot | `~/.notewise/oauth/github_copilot` | `GITHUB_COPILOT_TOKEN_DIR` |
+
+<Note>
+  The setup wizard uses the bundled LiteLLM text-model snapshot and filters out unsupported non-text models. If a model disappears or a provider rejects access, regenerate the snapshot and update provider examples together.
+</Note>
 
 ---
 
@@ -78,14 +133,14 @@ If the API key for the resolved provider is missing, the pipeline logs an error 
 Edit `~/.notewise/config.env`:
 
 ```bash
-DEFAULT_MODEL=gpt-4o
+DEFAULT_MODEL=gpt-5.5
 OPENAI_API_KEY=sk-...
 ```
 
 Or override for a single run:
 
 ```bash
-notewise process "URL" --model gpt-4o
+notewise process "URL" --model gpt-5.5
 ```
 
 ---
