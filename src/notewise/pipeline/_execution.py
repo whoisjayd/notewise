@@ -273,24 +273,17 @@ async def process_single_video(
                                     total_chapters=total_chapters,
                                 )
 
-                        pipeline.generator.generate_single_chapter_notes = (
-                            _generate_single_chapter_notes_with_events
+                        generate_chapter_notes = (
+                            pipeline.generator.generate_chapter_notes_concurrent
                         )
-                        try:
-                            generate_chapter_notes = (
-                                pipeline.generator.generate_chapter_notes_concurrent
-                            )
-                            generated_chapter_notes = await generate_chapter_notes(
-                                chapters_to_generate,
-                                max_concurrent=config.max_concurrent_chapters,
-                                semaphore=pipeline._chapter_semaphore,
-                                video_title=title,
-                                on_chapter_start=_on_chapter_start,
-                            )
-                        finally:
-                            pipeline.generator.generate_single_chapter_notes = (
-                                original_generate_single
-                            )
+                        generated_chapter_notes = await generate_chapter_notes(
+                            chapters_to_generate,
+                            max_concurrent=config.max_concurrent_chapters,
+                            semaphore=pipeline._chapter_semaphore,
+                            video_title=title,
+                            on_chapter_start=_on_chapter_start,
+                            generate_single=_generate_single_chapter_notes_with_events,
+                        )
 
                         bundled_chapter_notes: list[str] = []
 
