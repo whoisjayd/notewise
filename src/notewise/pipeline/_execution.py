@@ -147,6 +147,7 @@ async def process_single_video(
                         )
                         reserved_targets.append(output_target)
                         output_target.mkdir(parents=True, exist_ok=True)
+                        pipeline._write_output_target_metadata(output_target, video_id)
                         transcript_output_dir = output_target
 
                     for output_format in bundled_output_formats:
