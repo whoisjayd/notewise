@@ -10,6 +10,11 @@ LOGS_DIR_NAME = "logs"
 CONFIG_FILENAME = "config.env"
 SESSION_LOG_PREFIX = "notewise"
 CHECKSUM_FILENAME = "SHA256SUMS.txt"
+OUTPUT_METADATA_FILENAME = ".notewise-output.json"
+OUTPUT_METADATA_VIDEO_ID_KEY = "video_id"
+PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN = (
+    r"(?s)^Pydantic serializer warnings:.*ResponseAPIUsage"
+)
 GITHUB_REPOSITORY_OWNER = "whoisjayd"
 GITHUB_REPOSITORY_NAME = "notewise"
 LATEST_RELEASE_API_URL = (
