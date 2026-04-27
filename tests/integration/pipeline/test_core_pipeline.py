@@ -2100,6 +2100,56 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
     assert (second_dir / "Shared Long (vid2)_quiz.md").exists()
 
 
+@pytest.mark.asyncio
+async def test_chapter_run_reuses_existing_partial_title_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Interrupted chapter reruns should resume the title folder, not duplicate it."""
+    existing_dir = temp_output_dir / "Resume Long"
+    existing_dir.mkdir()
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="resume-id",
+                    title="Resume Long",
+                    duration=7200,
+                    chapters=[
+                        VideoChapter(title="Intro", start_seconds=0, end_seconds=None)
+                    ],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="fresh chapter",
+                    start_seconds=0,
+                )
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(
+            video_id="resume-id", text="fresh transcript"
+        )
+
+        result = await p.run(["resume-id"])
+
+    assert result.success_count == 1
+    assert (existing_dir / "01_Intro.md").read_text(encoding="utf-8") == (
+        "# Chapter Notes"
+    )
+    assert not (temp_output_dir / "Resume Long (resume-id)").exists()
+
+
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     temp_output_dir, mock_llm_provider
 ):

@@ -1,6 +1,7 @@
 """LLM provider configuration using LiteLLM."""
 
 import logging
+import warnings
 from collections.abc import Generator
 from contextlib import contextmanager
 from contextvars import ContextVar
@@ -19,6 +20,7 @@ from notewise._constants import (
     LLM_ERROR_PAYLOAD_MARKERS,
     LLM_NUM_RETRIES,
     LLM_PAYLOAD_ERROR_SUMMARY,
+    PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
     RESPONSES_API_ALL_MODEL_PROVIDER_PREFIXES,
     RESPONSES_API_MODEL_MARKERS,
     RESPONSES_API_PROVIDER_PREFIXES,
@@ -45,6 +47,12 @@ def _configure_litellm_runtime() -> None:
     if verbose_logger is not None:
         verbose_logger.setLevel(logging.ERROR)
         verbose_logger.propagate = False
+    warnings.filterwarnings(
+        "ignore",
+        message=PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
+        category=UserWarning,
+        module=r"pydantic\..*",
+    )
 
 
 _configure_litellm_runtime()

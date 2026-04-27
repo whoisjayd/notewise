@@ -1,6 +1,7 @@
 """Tests for LLM provider integration."""
 
 import logging
+import warnings
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -530,6 +531,23 @@ class TestLLMProvider:
 
         assert runtime.set_verbose is False
         assert runtime.suppress_debug_info is True
+
+    def test_configure_litellm_runtime_suppresses_response_usage_warning(self):
+        """LiteLLM's Responses usage serializer warning should stay off the TTY."""
+        _configure_litellm_runtime()
+
+        with warnings.catch_warnings(record=True) as caught:
+            warnings.warn_explicit(
+                "Pydantic serializer warnings:\n"
+                "  PydanticSerializationUnexpectedValue(Expected `ResponseAPIUsage` "
+                "- serialized value may not be as expected)",
+                UserWarning,
+                filename="pydantic/main.py",
+                lineno=464,
+                module="pydantic.main",
+            )
+
+        assert caught == []
 
     def test_configure_litellm_runtime_sets_verbose_logger_level(self):
         """Verbose LiteLLM loggers should be forced to error-only mode."""
