@@ -170,6 +170,33 @@ class TestConfigIO:
         """Displayed config values should normalize r\"...\" path literals."""
         assert _strip_wrapped_quotes('r"D:\\tmp\\out"') == "D:\\tmp\\out"
 
+    def test_setup_wizard_can_run_oauth_login_for_oauth_provider(self):
+        """OAuth providers should offer the same login flow during setup."""
+        console = MagicMock()
+        with (
+            patch("notewise.ui.setup_wizard.load_config", return_value={}),
+            patch(
+                "notewise.ui.setup_wizard.get_available_models",
+                return_value={"chatgpt": ["chatgpt/gpt-5.3-codex"]},
+            ),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="chatgpt"),
+            patch(
+                "notewise.ui.setup_wizard.select_model",
+                return_value="chatgpt/gpt-5.3-codex",
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=True),
+            patch("rich.prompt.Prompt.ask", return_value="./output"),
+            patch("notewise.ui.setup_wizard._prompt_positive_int", return_value="5"),
+            patch("notewise.ui.setup_wizard.save_config"),
+            patch(
+                "notewise.ui.setup_wizard.run_oauth_login",
+                return_value=True,
+            ) as login,
+        ):
+            run_setup_wizard(force=True, console=console)
+
+        login.assert_called_once_with("chatgpt", console=console)
+
     def test_show_current_config_reports_read_errors(self):
         """Unreadable config files should not be misreported as missing config."""
         console = MagicMock()
@@ -322,6 +349,47 @@ class TestModelFetching:
         assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
         assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
 
+    def test_get_available_models_includes_model_cost_only_response_models(self):
+        """Models present only in LiteLLM metadata should still appear in setup."""
+        mock_cost = {
+            "chatgpt/gpt-5.4": {
+                "litellm_provider": "chatgpt",
+                "mode": "responses",
+            },
+            "chatgpt/gpt-5.4-pro": {
+                "litellm_provider": "chatgpt",
+                "mode": "responses",
+            },
+            "chatgpt/gpt-5.1-codex-mini": {
+                "litellm_provider": "chatgpt",
+                "mode": "responses",
+            },
+            "chatgpt/gpt-5.1-codex-max": {
+                "litellm_provider": "chatgpt",
+                "mode": "responses",
+            },
+            "openai/gpt-4o-audio-preview": {
+                "litellm_provider": "openai",
+                "mode": "chat",
+            },
+        }
+
+        with (
+            patch(
+                "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+                return_value={},
+            ),
+            patch("litellm.model_list", [], create=True),
+            patch("litellm.model_cost", mock_cost, create=True),
+        ):
+            models = get_available_models()
+
+        assert "chatgpt/gpt-5.4" in models["chatgpt"]
+        assert "chatgpt/gpt-5.4-pro" in models["chatgpt"]
+        assert "chatgpt/gpt-5.1-codex-mini" not in models["chatgpt"]
+        assert "chatgpt/gpt-5.1-codex-max" not in models["chatgpt"]
+        assert "openai/gpt-4o-audio-preview" not in models["openai"]
+
 
 class TestInteractiveFlow:
     """Test interactive prompts."""
@@ -450,6 +518,37 @@ class TestWizardOrchestration:
             assert config["MAX_CONCURRENT_VIDEOS"] == "10"
 
             mock_save.assert_called_once()
+
+    def test_run_setup_wizard_skips_api_key_for_oauth_provider(self):
+        """OAuth/device-flow providers should not prompt for static API keys."""
+        with (
+            patch("notewise.ui.setup_wizard.load_config", return_value={}),
+            patch(
+                "notewise.ui.setup_wizard.get_available_models",
+                return_value={"chatgpt": ["chatgpt/gpt-5-codex"]},
+            ),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="chatgpt"),
+            patch(
+                "notewise.ui.setup_wizard.select_model",
+                return_value="chatgpt/gpt-5-codex",
+            ),
+            patch("notewise.ui.setup_wizard.get_api_key") as mock_api_key,
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "4"]),
+            patch("notewise.ui.setup_wizard.run_oauth_login") as mock_login,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
+        ):
+            config = run_setup_wizard(force=True)
+
+        assert config == {
+            "DEFAULT_MODEL": "chatgpt/gpt-5-codex",
+            "OUTPUT_DIR": "/custom/out",
+            "MAX_CONCURRENT_VIDEOS": "4",
+        }
+        mock_api_key.assert_not_called()
+        mock_login.assert_not_called()
+        mock_save.assert_called_once()
+        assert mock_save.call_args.args[0] == config
 
     def test_run_setup_wizard_reprompts_for_invalid_concurrency(self):
         """Wizard should reject invalid concurrency input before saving config."""

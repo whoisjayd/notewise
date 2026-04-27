@@ -69,25 +69,63 @@ class CliProcessContext:
             intro=intro,
         )
 
+    def ensure_model_supported(self) -> bool:
+        """Reject known unsupported models before any YouTube network work."""
+        get_unsupported_model_message = getattr(
+            self.config,
+            "get_unsupported_model_message",
+            None,
+        )
+        if not callable(get_unsupported_model_message):
+            return True
+
+        message = get_unsupported_model_message(self.selected_model)
+        if not isinstance(message, str) or not message.strip():
+            return True
+
+        self.print_failure_panel(
+            "Unsupported Model",
+            [
+                ("Model", self.selected_model),
+                ("Issue", message.strip()),
+            ],
+        )
+        return False
+
     def ensure_api_key_available(self) -> bool:
         """Validate the selected model's API key after input preflight succeeds."""
         if self.api_key_checked is not None:
             return self.api_key_checked
 
-        key_name = self.config.get_api_key_name_for_model(self.selected_model)
-        configured_key = os.environ.get(key_name) if key_name else None
-        get_api_key_for_model = getattr(self.config, "get_api_key_for_model", None)
-        if not configured_key and key_name and callable(get_api_key_for_model):
-            configured_key = get_api_key_for_model(self.selected_model)
+        get_missing_config_names = getattr(
+            self.config,
+            "get_missing_config_names_for_model",
+            None,
+        )
+        if callable(get_missing_config_names):
+            missing_config_result = get_missing_config_names(self.selected_model)
+            if isinstance(missing_config_result, (list, tuple, set)):
+                missing_config = tuple(str(name) for name in missing_config_result)
+            else:
+                missing_config = None
 
-        if key_name and not configured_key:
+        else:
+            missing_config = None
+
+        if missing_config is None:
+            key_name = self.config.get_api_key_name_for_model(self.selected_model)
+            configured_key = os.environ.get(key_name) if key_name else None
+            missing_config = (key_name,) if key_name and not configured_key else ()
+
+        if missing_config:
+            expected_config = ", ".join(missing_config)
             config_file_exists = (get_state_dir() / CONFIG_FILENAME).exists()
             if not config_file_exists:
                 self.print_failure_panel(
                     "Setup Required",
                     [
                         ("Issue", "notewise: no configuration found."),
-                        ("API Key", key_name),
+                        ("Expected", expected_config),
                         ("Next Step", "Run `notewise setup` to get started."),
                     ],
                 )
@@ -96,8 +134,8 @@ class CliProcessContext:
             self.print_failure_panel(
                 "Setup Required",
                 [
-                    ("Model", f"Missing API key for {self.selected_model}"),
-                    ("Expected", key_name),
+                    ("Model", f"Missing provider config for {self.selected_model}"),
+                    ("Expected", expected_config),
                     ("Next Step", "Run `notewise setup` to configure it."),
                 ],
             )
