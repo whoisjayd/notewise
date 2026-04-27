@@ -9,7 +9,6 @@ Batch execution and single-video orchestration live in
 from __future__ import annotations
 
 import asyncio
-import os
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -182,9 +181,12 @@ class CorePipeline:
         return await asyncio.to_thread(func, *args, **kwargs)
 
     def _check_api_key(self) -> bool:
-        key_name = config.get_api_key_name_for_model(self.model)
-        if key_name and not os.environ.get(key_name):
-            logger.error(f"Missing API Key for {self.model}. Expected: {key_name}")
+        missing_config = config.get_missing_config_names_for_model(self.model)
+        if missing_config:
+            expected = ", ".join(missing_config)
+            logger.error(
+                f"Missing provider config for {self.model}. Expected: {expected}"
+            )
             return False
         return True
 

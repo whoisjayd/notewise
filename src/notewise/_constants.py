@@ -43,6 +43,201 @@ LEGACY_CONFIG_KEYS = frozenset(
     }
 )
 
+
+def _build_provider_api_key_env_vars(
+    api_key_providers: dict[str, tuple[str, ...]],
+) -> dict[str, tuple[str, ...]]:
+    """Build provider->accepted API-key env vars from env-var groups."""
+    provider_env_vars: dict[str, list[str]] = {}
+    for env_var, providers in api_key_providers.items():
+        for provider in providers:
+            provider_env_vars.setdefault(provider, []).append(env_var)
+    return {
+        provider: tuple(env_vars) for provider, env_vars in provider_env_vars.items()
+    }
+
+
+PROVIDER_API_KEY_ENV_VAR_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "AI21_API_KEY": ("ai21",),
+    "ANTHROPIC_API_KEY": ("anthropic",),
+    "AZURE_API_KEY": ("azure", "azure_ai", "azure_text"),
+    "AZURE_OPENAI_API_KEY": ("azure", "azure_text"),
+    "CEREBRAS_API_KEY": ("cerebras",),
+    "CLOUDFLARE_API_KEY": ("cloudflare",),
+    "COHERE_API_KEY": ("cohere", "cohere_chat"),
+    "DASHSCOPE_API_KEY": ("dashscope",),
+    "DATABRICKS_API_KEY": ("databricks",),
+    "DEEPINFRA_API_KEY": ("deepinfra",),
+    "DEEPSEEK_API_KEY": ("deepseek",),
+    "FIREWORKS_AI_API_KEY": ("fireworks_ai", "fireworks_ai-embedding-models"),
+    "GEMINI_API_KEY": ("gemini", "vertex", "vertex_ai"),
+    "GROQ_API_KEY": ("groq",),
+    "HUGGINGFACE_API_KEY": ("huggingface",),
+    "JINA_API_KEY": ("jina_ai",),
+    "MISTRAL_API_KEY": ("mistral",),
+    "NOVITA_API_KEY": ("novita",),
+    "NVIDIA_NIM_API_KEY": ("nvidia_nim",),
+    "OPENAI_API_KEY": ("openai",),
+    "OPENROUTER_API_KEY": ("openrouter",),
+    "PERPLEXITYAI_API_KEY": ("perplexity",),
+    "REPLICATE_API_KEY": ("replicate",),
+    "SAMBANOVA_API_KEY": ("sambanova",),
+    "TOGETHERAI_API_KEY": ("together", "together_ai"),
+    "VERCEL_AI_GATEWAY_API_KEY": ("vercel_ai_gateway",),
+    "VOYAGE_API_KEY": ("voyage",),
+    "WATSONX_API_KEY": ("watsonx",),
+    "XAI_API_KEY": ("xai",),
+}
+PROVIDER_API_KEY_ENV_VARS = _build_provider_api_key_env_vars(
+    PROVIDER_API_KEY_ENV_VAR_PROVIDERS
+)
+PROVIDER_SECRET_ENV_KEYS = frozenset(PROVIDER_API_KEY_ENV_VAR_PROVIDERS) | frozenset(
+    {
+        "AWS_ACCESS_KEY_ID",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+    }
+)
+OAUTH_DEVICE_PROVIDER_PREFIXES = frozenset({"chatgpt", "github_copilot"})
+OAUTH_LOGIN_CODEX_ALIAS = "codex"
+OAUTH_LOGIN_ALLOWED_PROVIDERS = (
+    "chatgpt",
+    "github_copilot",
+    OAUTH_LOGIN_CODEX_ALIAS,
+)
+OAUTH_LOGIN_DIRECT_PROVIDERS = ("chatgpt", "github_copilot")
+OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
+    "chatgpt": {
+        "label": "ChatGPT Subscription",
+        "safe_model": "chatgpt/gpt-5.3-codex",
+        "token_dir_env": "CHATGPT_TOKEN_DIR",
+        "token_dir_name": "chatgpt",
+    },
+    "github_copilot": {
+        "label": "GitHub Copilot",
+        "safe_model": "github_copilot/gpt-5-mini",
+        "token_dir_env": "GITHUB_COPILOT_TOKEN_DIR",
+        "token_dir_name": "github_copilot",
+    },
+}
+OAUTH_LOGIN_PROVIDER_LABELS = {
+    provider: config["label"] for provider, config in OAUTH_PROVIDER_CONFIGS.items()
+}
+OAUTH_LOGIN_SAFE_MODELS = {
+    provider: config["safe_model"]
+    for provider, config in OAUTH_PROVIDER_CONFIGS.items()
+}
+OAUTH_TOKEN_DIR_PARENT = "oauth"
+OAUTH_TOKEN_DIR_ENV_VARS = {
+    provider: config["token_dir_env"]
+    for provider, config in OAUTH_PROVIDER_CONFIGS.items()
+}
+OAUTH_TOKEN_DIR_NAMES = {
+    provider: config["token_dir_name"]
+    for provider, config in OAUTH_PROVIDER_CONFIGS.items()
+}
+OAUTH_LOGIN_TEST_PROMPT = "Reply with OK."
+OAUTH_LOGIN_TEST_INSTRUCTIONS = "You are validating OAuth login for notewise."
+OAUTH_LOGIN_TEST_MAX_OUTPUT_TOKENS = 4
+OAUTH_LOGIN_SUCCESS_MESSAGE = (
+    "OAuth login succeeded for {provider_label} using {model}."
+)
+OAUTH_LOGIN_FAILURE_MESSAGE = "OAuth login failed for {provider_label}: {error}"
+OAUTH_LOGIN_STORAGE_GUIDANCE = (
+    "No API key was written to notewise config. OAuth tokens are stored under "
+    "the notewise state directory by default: {storage_paths}. Override with "
+    "CHATGPT_TOKEN_DIR or GITHUB_COPILOT_TOKEN_DIR if needed."
+)
+OAUTH_LOGIN_TRIGGER_MESSAGE = (
+    "LiteLLM may print a device code or browser URL. Complete that prompt to "
+    "finish provider authentication."
+)
+OAUTH_LOGIN_PROVIDER_PROMPT = "Select OAuth provider"
+OAUTH_LOGIN_CODEX_PROMPT = "Use Codex through which provider?"
+OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE = (
+    "Unsupported provider. Choose one of: {allowed}."
+)
+OAUTH_SETUP_RUN_PROMPT = "Run OAuth login now?"
+UNSUPPORTED_MODEL_MESSAGE = (
+    "Model {model} is not currently supported for {provider_label}. "
+    "Run `notewise setup --force` to choose a supported model. "
+    "Supported models include: {supported_models}."
+)
+UNSUPPORTED_MODEL_LIST_LIMIT = 8
+AMBIENT_CREDENTIAL_PROVIDER_PREFIXES = frozenset(
+    {"amazon_nova", "bedrock", "bedrock_converse", "sagemaker"}
+)
+PROVIDER_AUTH_ENV_KEYS = frozenset(
+    {
+        "AWS_ACCESS_KEY_ID",
+        "AWS_PROFILE",
+        "AWS_REGION_NAME",
+        "AWS_SECRET_ACCESS_KEY",
+        "AWS_SESSION_TOKEN",
+        "ANTHROPIC_API_BASE",
+        "AZURE_API_BASE",
+        "AZURE_API_VERSION",
+        "AZURE_OPENAI_ENDPOINT",
+        "CHATGPT_API_BASE",
+        "CHATGPT_AUTH_FILE",
+        "CHATGPT_ORIGINATOR",
+        "CHATGPT_TOKEN_DIR",
+        "CHATGPT_USER_AGENT",
+        "CHATGPT_USER_AGENT_SUFFIX",
+        "CLOUDFLARE_ACCOUNT_ID",
+        "DATABRICKS_API_BASE",
+        "GITHUB_COPILOT_ACCESS_TOKEN_FILE",
+        "GITHUB_COPILOT_ACCESS_TOKEN_URL",
+        "GITHUB_COPILOT_API_BASE",
+        "GITHUB_COPILOT_API_KEY_FILE",
+        "GITHUB_COPILOT_API_KEY_URL",
+        "GITHUB_COPILOT_DEVICE_CODE_URL",
+        "GITHUB_COPILOT_TOKEN_DIR",
+        "HUGGINGFACE_API_BASE",
+        "OPENAI_API_BASE",
+        "OPENAI_BASE_URL",
+        "OPENAI_CHATGPT_API_BASE",
+        "VERTEX_PROJECT",
+        "VERTEXAI_PROJECT",
+        "VERTEX_LOCATION",
+        "VERTEXAI_LOCATION",
+    }
+)
+PROVIDER_REQUIRED_ENV_VARS = {
+    "cloudflare": ("CLOUDFLARE_ACCOUNT_ID",),
+    "databricks": ("DATABRICKS_API_BASE",),
+}
+RESPONSES_API_PROVIDER_PREFIXES = frozenset({"chatgpt", "github_copilot"})
+RESPONSES_API_ALL_MODEL_PROVIDER_PREFIXES = frozenset({"chatgpt"})
+RESPONSES_API_MODEL_MARKERS = ("codex",)
+GPT5_MODEL_MARKER = "gpt-5"
+GPT5_REQUIRED_TEMPERATURE = 1.0
+LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
+    "audio",
+    "computer-use",
+    "container",
+    "embedding",
+    "guard",
+    "image",
+    "moderation",
+    "realtime",
+    "research",
+    "robotics",
+    "search",
+    "safeguard",
+    "speech",
+    "transcribe",
+    "tts",
+    "ui-tars",
+    "vision",
+    "vl-",
+    "vl_",
+    "whisper",
+)
+LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
+    "chatgpt": ("gpt-5.1-codex",),
+}
+
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"
 DEFAULT_OUTPUT_DIR = "./output"
@@ -65,12 +260,43 @@ DEFAULT_STITCH_CHAR_BOUNDARY = 6000
 TRANSCRIPT_MAX_RETRIES = 3
 PLAYLIST_MAX_RETRIES = 3
 LLM_NUM_RETRIES = 3
+LLM_ERROR_PAYLOAD_MARKERS = (
+    "complete_input_dict",
+    "input=[",
+    "json_data",
+    "messages",
+    "request payload",
+)
+LLM_PAYLOAD_ERROR_SUMMARY = (
+    "Provider request failed. The provider returned an error containing request "
+    "payload details, so notewise suppressed it from logs."
+)
 HTTP_MAX_RETRIES = 3
 HTTP_BACKOFF_BASE = 1.0
 
 # ── Output ────────────────────────────────────────────────────────────────────
 MAX_FILENAME_LENGTH = 100
 LITELLM_MODELS_SNAPSHOT_FILENAME = "litellm_models_snapshot.json"
+LITELLM_MODEL_METADATA_SOURCE_URL = (
+    "https://raw.githubusercontent.com/BerriAI/litellm/main/"
+    "model_prices_and_context_window.json"
+)
+LITELLM_MODEL_METADATA_FETCH_TIMEOUT_SECONDS = 30
+LITELLM_MODEL_METADATA_FIELDS = (
+    "litellm_provider",
+    "mode",
+    "max_input_tokens",
+    "max_output_tokens",
+    "max_tokens",
+    "supported_endpoints",
+    "supported_output_modalities",
+    "supports_function_calling",
+    "supports_parallel_function_calling",
+    "supports_prompt_caching",
+    "supports_reasoning",
+    "supports_response_schema",
+    "supports_system_messages",
+)
 DEFAULT_NOTES_OUTPUT_FORMAT = "md"
 SUPPORTED_NOTES_OUTPUT_FORMATS = ("md", "html", "pdf", "docx")
 OUTPUT_FORMAT_SEPARATOR = ","
