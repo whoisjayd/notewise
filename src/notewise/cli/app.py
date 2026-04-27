@@ -17,7 +17,6 @@ from notewise._constants import (
     DEFAULT_USE_COMBINE_CHUNK,
     OAUTH_LOGIN_ALLOWED_PROVIDERS,
     OAUTH_LOGIN_CODEX_ALIAS,
-    OAUTH_LOGIN_CODEX_PROMPT,
     OAUTH_LOGIN_DIRECT_PROVIDERS,
     OAUTH_LOGIN_PROVIDER_LABELS,
     OAUTH_LOGIN_PROVIDER_PROMPT,
@@ -207,19 +206,25 @@ def _load_auth_dependencies() -> None:
         run_oauth_login = _run_oauth_login
 
 
+def _print_oauth_provider_choices(choices: list[str]) -> dict[str, str]:
+    """Print numbered OAuth provider choices and return the selection map."""
+    choice_labels = {
+        str(index): choice for index, choice in enumerate(choices, start=1)
+    }
+    for index, choice in choice_labels.items():
+        _get_console().print(
+            f"[dim]{index}.[/dim] {OAUTH_LOGIN_PROVIDER_LABELS[choice]}"
+        )
+    return choice_labels
+
+
 def _select_oauth_provider(provider: str | None) -> str:
     """Resolve an optional auth provider argument to a concrete OAuth provider."""
     from rich.prompt import Prompt
 
     choices = list(OAUTH_LOGIN_DIRECT_PROVIDERS)
     if provider is None:
-        choice_labels = {
-            str(index): choice for index, choice in enumerate(choices, start=1)
-        }
-        for index, choice in choice_labels.items():
-            _get_console().print(
-                f"[dim]{index}.[/dim] {OAUTH_LOGIN_PROVIDER_LABELS[choice]}"
-            )
+        choice_labels = _print_oauth_provider_choices(choices)
         selected = Prompt.ask(
             OAUTH_LOGIN_PROVIDER_PROMPT,
             choices=list(choice_labels),
@@ -232,18 +237,9 @@ def _select_oauth_provider(provider: str | None) -> str:
         raise typer.BadParameter(
             OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE.format(allowed=allowed)
         )
-    if normalized != OAUTH_LOGIN_CODEX_ALIAS:
-        return normalized
-
-    codex_choices = {
-        str(index): choice for index, choice in enumerate(choices, start=1)
-    }
-    for index, choice in codex_choices.items():
-        _get_console().print(
-            f"[dim]{index}.[/dim] {OAUTH_LOGIN_PROVIDER_LABELS[choice]}"
-        )
-    selected = Prompt.ask(OAUTH_LOGIN_CODEX_PROMPT, choices=list(codex_choices))
-    return codex_choices[selected]
+    if normalized == OAUTH_LOGIN_CODEX_ALIAS:
+        return "chatgpt"
+    return normalized
 
 
 def check_config_exists() -> bool:
@@ -395,6 +391,14 @@ def process(
             ),
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Write DEBUG-level diagnostics to the session log file.",
+        ),
+    ] = False,
     quiz: Annotated[
         bool,
         typer.Option(
@@ -470,10 +474,12 @@ def process(
         _load_process_dependencies()
         from notewise.cli._runtime import CliProcessRunner
         from notewise.errors import ValidationError
+        from notewise.llm.provider import suppress_litellm_noise
         from notewise.logging import configure_logging, get_session_log_path
         from notewise.pipeline._documents import normalize_output_formats
 
-        configure_logging()
+        configure_logging(verbose=verbose)
+        suppress_litellm_noise()
         settings = _get_config()
         try:
             selected_output_formats = normalize_output_formats(output_format)
@@ -579,6 +585,7 @@ def main(ctx: typer.Context) -> None:
         console.print("  [cyan]process[/cyan]      Generate study notes")
         console.print("  [cyan]setup[/cyan]        Configure API keys")
         console.print("  [cyan]config[/cyan]       Show the current masked config")
+        console.print("  [cyan]auth[/cyan]         Login to OAuth providers")
         console.print("  [cyan]stats[/cyan]        View processing totals")
         console.print("  [cyan]history[/cyan]      View recent videos")
         console.print("  [cyan]info[/cyan]         Show config or inspect a URL")
@@ -812,7 +819,7 @@ def auth_login(
     provider: Annotated[
         str | None,
         typer.Argument(
-            help="OAuth provider: chatgpt, github_copilot, or codex.",
+            help="OAuth provider: chatgpt or github_copilot; codex aliases chatgpt.",
         ),
     ] = None,
 ) -> None:

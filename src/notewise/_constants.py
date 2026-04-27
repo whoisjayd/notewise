@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Any
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 CACHE_DB_FILENAME = ".notewise_cache.db"
@@ -125,6 +127,120 @@ OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
         "token_dir_name": "github_copilot",
     },
 }
+AUTH_TYPE_API_KEY = "api_key"
+AUTH_TYPE_OAUTH_DEVICE = "oauth_device"
+PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
+    "gemini": {
+        "name": "Google Gemini",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "GEMINI_API_KEY",
+        "api_url": "https://aistudio.google.com/app/apikey",
+        "keywords": ["gemini", "vertex"],
+        "litellm_providers": ["gemini"],
+    },
+    "openai": {
+        "name": "OpenAI (ChatGPT)",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "OPENAI_API_KEY",
+        "api_url": "https://platform.openai.com/api-keys",
+        "keywords": ["gpt", "openai", "o1", "o3", "o4"],
+        "litellm_providers": ["openai"],
+    },
+    "anthropic": {
+        "name": "Anthropic (Claude)",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "ANTHROPIC_API_KEY",
+        "api_url": "https://console.anthropic.com/settings/keys",
+        "keywords": ["claude", "anthropic"],
+        "litellm_providers": ["anthropic"],
+    },
+    "groq": {
+        "name": "Groq",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "GROQ_API_KEY",
+        "api_url": "https://console.groq.com/keys",
+        "keywords": ["groq"],
+        "litellm_providers": ["groq"],
+    },
+    "xai": {
+        "name": "xAI (Grok)",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "XAI_API_KEY",
+        "api_url": "https://console.x.ai/",
+        "keywords": ["grok", "xai"],
+        "litellm_providers": ["xai"],
+    },
+    "mistral": {
+        "name": "Mistral AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "MISTRAL_API_KEY",
+        "api_url": "https://console.mistral.ai/api-keys/",
+        "keywords": ["mistral"],
+        "litellm_providers": ["mistral"],
+    },
+    "cohere": {
+        "name": "Cohere",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "COHERE_API_KEY",
+        "api_url": "https://dashboard.cohere.com/api-keys",
+        "keywords": ["cohere", "command"],
+        "litellm_providers": ["cohere_chat", "cohere"],
+    },
+    "deepseek": {
+        "name": "DeepSeek",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "DEEPSEEK_API_KEY",
+        "api_url": "https://platform.deepseek.com/api_keys",
+        "keywords": ["deepseek"],
+        "litellm_providers": ["deepseek"],
+    },
+    "openrouter": {
+        "name": "OpenRouter",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "OPENROUTER_API_KEY",
+        "api_url": "https://openrouter.ai/settings/keys",
+        "keywords": ["openrouter"],
+        "litellm_providers": ["openrouter"],
+    },
+    "together_ai": {
+        "name": "Together AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "TOGETHERAI_API_KEY",
+        "api_url": "https://api.together.ai/settings/api-keys",
+        "keywords": ["together"],
+        "litellm_providers": ["together_ai"],
+    },
+    "fireworks_ai": {
+        "name": "Fireworks AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "FIREWORKS_AI_API_KEY",
+        "api_url": "https://fireworks.ai/account/api-keys",
+        "keywords": ["fireworks"],
+        "litellm_providers": ["fireworks_ai"],
+    },
+    "perplexity": {
+        "name": "Perplexity",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "PERPLEXITYAI_API_KEY",
+        "api_url": "https://www.perplexity.ai/settings/api",
+        "keywords": ["perplexity", "sonar"],
+        "litellm_providers": ["perplexity"],
+    },
+    "github_copilot": {
+        "name": "GitHub Copilot",
+        "auth_type": AUTH_TYPE_OAUTH_DEVICE,
+        "api_url": "https://docs.github.com/en/copilot",
+        "keywords": ["github_copilot", "copilot", "codex"],
+        "litellm_providers": ["github_copilot"],
+    },
+    "chatgpt": {
+        "name": "ChatGPT Subscription",
+        "auth_type": AUTH_TYPE_OAUTH_DEVICE,
+        "api_url": "https://chatgpt.com/",
+        "keywords": ["chatgpt", "codex"],
+        "litellm_providers": ["chatgpt"],
+    },
+}
 OAUTH_LOGIN_PROVIDER_LABELS = {
     provider: config["label"] for provider, config in OAUTH_PROVIDER_CONFIGS.items()
 }
@@ -158,10 +274,10 @@ OAUTH_LOGIN_TRIGGER_MESSAGE = (
     "finish provider authentication."
 )
 OAUTH_LOGIN_PROVIDER_PROMPT = "Select OAuth provider"
-OAUTH_LOGIN_CODEX_PROMPT = "Use Codex through which provider?"
 OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE = (
     "Unsupported provider. Choose one of: {allowed}."
 )
+OAUTH_UNSUPPORTED_PROVIDER_ERROR = "Unsupported OAuth provider: {provider}."
 OAUTH_SETUP_RUN_PROMPT = "Run OAuth login now?"
 UNSUPPORTED_MODEL_MESSAGE = (
     "Model {model} is not currently supported for {provider_label}. "
@@ -222,12 +338,19 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "computer-use",
     "container",
     "embedding",
+    "firellava",
+    "flux",
+    "glm-4p5v",
     "guard",
     "image",
+    "internvl3",
+    "llava",
     "moderation",
+    "pixtral",
     "realtime",
     "research",
     "robotics",
+    "rolm-ocr",
     "search",
     "safeguard",
     "speech",
@@ -235,6 +358,7 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "tts",
     "ui-tars",
     "vision",
+    "-vl",
     "vl-",
     "vl_",
     "whisper",
@@ -242,6 +366,14 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
 LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
     "chatgpt": ("gpt-5.1-codex",),
 }
+THIRD_PARTY_DIAGNOSTIC_LOGGERS = (
+    "LiteLLM",
+    "litellm",
+    "openai",
+    "openai._base_client",
+    "httpx",
+    "httpcore",
+)
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
 DEFAULT_MODEL = "gemini/gemini-2.5-flash"

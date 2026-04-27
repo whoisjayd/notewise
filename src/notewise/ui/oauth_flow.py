@@ -16,10 +16,12 @@ from notewise._constants import (
     OAUTH_LOGIN_TEST_MAX_OUTPUT_TOKENS,
     OAUTH_LOGIN_TEST_PROMPT,
     OAUTH_LOGIN_TRIGGER_MESSAGE,
+    OAUTH_UNSUPPORTED_PROVIDER_ERROR,
     RESPONSES_API_MODEL_MARKERS,
     RESPONSES_API_PROVIDER_PREFIXES,
 )
 from notewise.config import configure_oauth_token_storage, get_oauth_token_storage_paths
+from notewise.errors import OAuthError
 from notewise.logging import redact_sensitive_text
 
 
@@ -60,8 +62,20 @@ async def run_oauth_login_async(
     """Trigger LiteLLM's OAuth/device-flow login with a tiny test request."""
     active_console = _resolve_console(console)
     configure_oauth_token_storage()
-    provider_label = OAUTH_LOGIN_PROVIDER_LABELS[provider]
-    model = OAUTH_LOGIN_SAFE_MODELS[provider]
+    provider_label = OAUTH_LOGIN_PROVIDER_LABELS.get(provider, provider)
+    model = OAUTH_LOGIN_SAFE_MODELS.get(provider)
+    if model is None:
+        error = OAuthError(OAUTH_UNSUPPORTED_PROVIDER_ERROR.format(provider=provider))
+        active_console.print(
+            "[red]"
+            + OAUTH_LOGIN_FAILURE_MESSAGE.format(
+                provider_label=provider_label,
+                error=redact_sensitive_text(str(error)),
+            )
+            + "[/red]"
+        )
+        active_console.print(f"[dim]{_storage_guidance()}[/dim]")
+        return False
 
     active_console.print(f"[cyan]{OAUTH_LOGIN_TRIGGER_MESSAGE}[/cyan]")
     try:

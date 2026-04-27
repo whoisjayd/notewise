@@ -61,12 +61,11 @@ Run LiteLLM's OAuth/device-flow login for subscription-backed providers without 
 notewise auth login                 # pick provider interactively
 notewise auth login chatgpt
 notewise auth login github_copilot
-notewise auth login codex           # choose ChatGPT or GitHub Copilot backing
 ```
 
-Use this in an interactive terminal so LiteLLM can show the device code or browser URL. `notewise auth login codex` is a convenience alias that asks whether Codex should use ChatGPT subscription or GitHub Copilot as the backing account.
+Use this in an interactive terminal so LiteLLM can show the device code or browser URL. Codex subscription users should run `notewise auth login chatgpt`; `notewise auth login codex` remains a compatibility alias for ChatGPT subscription login.
 
-notewise defaults provider token storage to `~/.notewise/oauth/chatgpt` and `~/.notewise/oauth/github_copilot`; override those locations with `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` when needed.
+notewise defaults provider token storage to `$NOTEWISE_HOME/oauth/chatgpt` and `$NOTEWISE_HOME/oauth/github_copilot` (or `~/.notewise/oauth/...` when `NOTEWISE_HOME` is unset); override those locations with `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` when needed.
 
 After login, run with the provider model normally:
 

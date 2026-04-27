@@ -26,6 +26,10 @@ from notewise._constants import (  # noqa: E402
     LITELLM_MODEL_METADATA_SOURCE_URL,
     LITELLM_MODELS_SNAPSHOT_FILENAME,
 )
+
+# Snapshot generation intentionally reuses setup wizard filtering internals so
+# runtime setup and regenerated snapshots stay byte-for-byte aligned. Update this
+# script if those private helper names or semantics change.
 from notewise.ui.setup_wizard import (  # noqa: E402
     _classify_provider,
     _is_setup_safe_model,
