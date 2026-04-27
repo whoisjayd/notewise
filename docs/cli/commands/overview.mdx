@@ -22,7 +22,7 @@ Running `notewise` without any command prints a summary. Running `notewise COMMA
     Run the interactive wizard to create `~/.notewise/config.env`.
   </Card>
   <Card title="auth login" icon="key-round" href="/cli/config-and-operations/setup-and-config">
-    Run OAuth/device-flow login for ChatGPT Subscription or GitHub Copilot.
+    Run OAuth/device-flow login for ChatGPT Subscription or GitHub Copilot; `codex` aliases ChatGPT.
   </Card>
   <Card title="config" icon="settings" href="/cli/config-and-operations/setup-and-config">
     Display the current resolved configuration (API keys masked).
@@ -88,6 +88,7 @@ Running `notewise` without any command prints a summary. Running `notewise COMMA
     ```bash
     notewise auth login chatgpt
     notewise auth login github_copilot
+    notewise auth login codex  # compatibility alias for ChatGPT subscription login
     notewise process "https://youtube.com/watch?v=VIDEO_ID" --model chatgpt/gpt-5.2
     ```
   </Tab>

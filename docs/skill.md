@@ -34,7 +34,7 @@ NoteWise supports multiple LLM providers via LiteLLM:
 | Cohere | COHERE_API_KEY | command-r-plus-08-2024 |
 | DeepSeek | DEEPSEEK_API_KEY | deepseek/deepseek-v3.2 |
 | OpenRouter / Azure / Vercel AI Gateway | provider gateway key | openrouter/openai/gpt-5 |
-| ChatGPT / GitHub Copilot | OAuth device flow | chatgpt/gpt-5.2 / github_copilot/gpt-5-mini |
+| ChatGPT / GitHub Copilot | OAuth device flow | chatgpt/gpt-5.3-codex / github_copilot/gpt-5-mini |
 
 Gemini is the default — no billing required to start.
 

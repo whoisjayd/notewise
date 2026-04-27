@@ -17,7 +17,7 @@ This file provides structured guidance for AI agents (Claude, Codex, Cursor, Cop
 
 ## Repository Layout (Critical Paths)
 
-```
+```text
 src/notewise/
 ├── _constants.py       ← ALL numeric/string defaults live here
 ├── config.py           ← AppSettings (Pydantic-settings), config file parsing
@@ -40,7 +40,7 @@ src/notewise/
 
 Other important root-level paths:
 
-```
+```text
 scripts/extract_litellm_model_snapshot.py ← Refresh bundled setup model catalog
 docs/docs/how-it-works/providers.mdx      ← Provider/user-facing model docs
 docs/reference/schema-and-output/configuration.mdx ← Config key reference

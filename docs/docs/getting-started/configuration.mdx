@@ -76,7 +76,7 @@ DEFAULT_MODEL=chatgpt/gpt-5.2
 DEFAULT_MODEL=github_copilot/gpt-5-mini
 ```
 
-Tokens default to `~/.notewise/oauth/chatgpt` and `~/.notewise/oauth/github_copilot` so they stay inside the notewise state directory unless you override the paths.
+Tokens default to `$NOTEWISE_HOME/oauth/chatgpt` and `$NOTEWISE_HOME/oauth/github_copilot` (or `~/.notewise/oauth/...` when `NOTEWISE_HOME` is unset) so they stay inside the notewise state directory unless you override the paths.
 
 See [LLM Providers](/docs/how-it-works/providers) for all supported models and key names.
 
@@ -115,8 +115,8 @@ GEMINI_API_KEY=your_key_here
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
 # OPENROUTER_API_KEY=sk-or-...
-# CHATGPT_TOKEN_DIR=~/.notewise/oauth/chatgpt
-# GITHUB_COPILOT_TOKEN_DIR=~/.notewise/oauth/github_copilot
+# CHATGPT_TOKEN_DIR=$NOTEWISE_HOME/oauth/chatgpt
+# GITHUB_COPILOT_TOKEN_DIR=$NOTEWISE_HOME/oauth/github_copilot
 ```
 
 ---

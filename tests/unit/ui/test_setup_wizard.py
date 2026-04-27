@@ -221,7 +221,6 @@ class TestModelFetching:
             for provider, models in CURATED_FALLBACK_MODELS.items()
         }
         bundled_models["gemini"] = [
-            "gemini/gemini-2.5-flash",
             "gemini/gemini-2.5-pro",
         ]
 
@@ -286,8 +285,12 @@ class TestModelFetching:
             "gemini/gemini-2.5-flash",
             "gemini/gemini-3-flash-preview",
             "gemini/gemini-3.1-pro-preview",
-            "gemini/gemini-2.0-flash",
+            "gemini/gemini-2.5-flash",
             "gemini/imagen-4.0-generate-001",
+            "replicate/black-forest-labs/flux-1.1-pro",
+            "openrouter/rekaai/reka-flash-3",
+            "openrouter/rekaai/reka-flash-3:free",
+            "openrouter/rekaai/rolm-ocr",
             "openrouter/google/gemini-2.5-flash",
             "claude-sonnet-4-5-20250929",
         ]
@@ -306,14 +309,25 @@ class TestModelFetching:
                 "litellm_provider": "gemini",
                 "mode": "chat",
             },
-            "gemini/gemini-2.0-flash": {
-                "litellm_provider": "gemini",
-                "mode": "chat",
-                "deprecation_date": "2026-06-01",
-            },
             "gemini/imagen-4.0-generate-001": {
                 "litellm_provider": "gemini",
                 "mode": "image_generation",
+            },
+            "replicate/black-forest-labs/flux-1.1-pro": {
+                "litellm_provider": "replicate",
+                "mode": "image_generation",
+            },
+            "openrouter/rekaai/reka-flash-3": {
+                "litellm_provider": "openrouter",
+                "mode": "chat",
+            },
+            "openrouter/rekaai/reka-flash-3:free": {
+                "litellm_provider": "openrouter",
+                "mode": "chat",
+            },
+            "openrouter/rekaai/rolm-ocr": {
+                "litellm_provider": "openrouter",
+                "mode": "chat",
             },
             "openrouter/google/gemini-2.5-flash": {
                 "litellm_provider": "openrouter",
@@ -346,6 +360,10 @@ class TestModelFetching:
             "gemini/gemini-3-flash-preview",
             "gemini/gemini-3.1-pro-preview",
         ]
+        assert "openrouter/rekaai/reka-flash-3" in models["openrouter"]
+        assert "openrouter/rekaai/reka-flash-3:free" in models["openrouter"]
+        assert "openrouter/rekaai/rolm-ocr" not in models["openrouter"]
+        assert "replicate/black-forest-labs/flux-1.1-pro" not in str(models)
         assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
         assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
 

@@ -14,6 +14,7 @@ import re
 from pathlib import Path
 from typing import Any, cast
 
+import structlog
 from pydantic import Field
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
@@ -52,6 +53,7 @@ from notewise._constants import (
 )
 
 
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
 _LEGACY_IGNORED_KEYS: frozenset[str] = LEGACY_CONFIG_KEYS
 _API_KEY_CONFIG_KEYS = frozenset(
@@ -115,16 +117,35 @@ def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
         with snapshot_path.open(encoding="utf-8") as snapshot_file:
             snapshot = json.load(snapshot_file)
     except (OSError, json.JSONDecodeError):
+        logger.warning(
+            "_load_bundled_model_snapshot failed to load or parse bundled snapshot",
+            snapshot_path=str(snapshot_path),
+            cache_variable="_MODEL_SNAPSHOT_CACHE",
+            exc_info=True,
+        )
         _MODEL_SNAPSHOT_CACHE = {}
         return _MODEL_SNAPSHOT_CACHE
 
     if not isinstance(snapshot, dict):
+        logger.warning(
+            "_load_bundled_model_snapshot ignored invalid bundled snapshot format",
+            snapshot_path=str(snapshot_path),
+            cache_variable="_MODEL_SNAPSHOT_CACHE",
+            snapshot_type=type(snapshot).__name__,
+        )
         _MODEL_SNAPSHOT_CACHE = {}
         return _MODEL_SNAPSHOT_CACHE
 
     normalized: dict[str, tuple[str, ...]] = {}
     for provider, models in snapshot.items():
         if not isinstance(provider, str) or not isinstance(models, list):
+            logger.warning(
+                "_load_bundled_model_snapshot skipped invalid provider entry",
+                snapshot_path=str(snapshot_path),
+                cache_variable="_MODEL_SNAPSHOT_CACHE",
+                provider_type=type(provider).__name__,
+                models_type=type(models).__name__,
+            )
             continue
         normalized[provider] = tuple(
             model for model in models if isinstance(model, str) and model

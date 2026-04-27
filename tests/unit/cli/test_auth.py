@@ -31,14 +31,15 @@ def test_auth_login_prompts_when_provider_omitted(mocker):
     login.assert_called_once_with("github_copilot", console=cli_app._get_console())
 
 
-def test_auth_login_codex_prompts_for_backing_provider(mocker):
-    """Codex should ask which OAuth provider backs the selected model family."""
-    mocker.patch("rich.prompt.Prompt.ask", return_value="1")
+def test_auth_login_codex_resolves_to_chatgpt_without_prompt(mocker):
+    """Codex is a compatibility alias for ChatGPT subscription login."""
+    prompt = mocker.patch("rich.prompt.Prompt.ask", return_value="1")
     login = mocker.patch("notewise.cli.app.run_oauth_login", return_value=True)
 
     result = runner.invoke(cli_app.app, ["auth", "login", "codex"])
 
     assert result.exit_code == 0
+    prompt.assert_not_called()
     login.assert_called_once_with("chatgpt", console=cli_app._get_console())
 
 

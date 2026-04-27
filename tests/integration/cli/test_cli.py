@@ -85,6 +85,7 @@ def reset_cli_app_globals(monkeypatch, tmp_path):
         "PipelineDashboard",
         "Live",
         "run_setup_wizard",
+        "run_oauth_login",
         "show_current_config",
     )
     for name in patch_points:
@@ -178,6 +179,16 @@ def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipelin
 
     assert result.exit_code == 0
     assert mock_cls.call_args.kwargs["output_formats"] == ["md", "html", "pdf"]
+
+
+def test_process_verbose_enables_debug_file_logging(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    """The verbose flag should request DEBUG diagnostics in the session log."""
+
+    with patch("notewise.logging.configure_logging") as mock_configure_logging:
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--verbose"])
+
+    assert result.exit_code == 0
+    mock_configure_logging.assert_called_once_with(verbose=True)
 
 
 def test_process_missing_api_key_exits_with_error(monkeypatch):
