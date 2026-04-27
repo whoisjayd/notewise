@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import bisect
 import re
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 
 import structlog
 from litellm import token_counter
@@ -578,6 +578,7 @@ class StudyMaterialGenerator:
         semaphore: asyncio.Semaphore | None = None,
         video_title: str = "Video",
         on_chapter_start: Callable[[int, int], None] | None = None,
+        generate_single: Callable[..., Awaitable[str]] | None = None,
     ) -> dict[str, str]:
         """Generate notes for all chapters concurrently, bounded by a semaphore.
 
@@ -586,6 +587,7 @@ class StudyMaterialGenerator:
             max_concurrent: Maximum simultaneous LLM calls (default 3).
             video_title: Video title for logging.
             on_chapter_start: Optional callback(chapter_num, total_chapters).
+            generate_single: Optional per-call chapter generator override.
 
         Returns:
             Mapping of chapter title to generated notes, in input order.
@@ -605,7 +607,10 @@ class StudyMaterialGenerator:
                     chapter=idx,
                     total_chapters=total,
                 )
-                notes = await self.generate_single_chapter_notes(ch_title, ch_text)
+                chapter_generator = (
+                    generate_single or self.generate_single_chapter_notes
+                )
+                notes = await chapter_generator(ch_title, ch_text)
                 return ch_title, notes
 
         tasks = [
