@@ -19,8 +19,8 @@ notewise logs --tail 80
 ### Common failure modes
 
 <AccordionGroup>
-  <Accordion title="Missing or wrong API key">
-    **Symptoms:** Process fails early with provider authentication errors. `doctor` reports a missing key.
+  <Accordion title="Missing or wrong provider auth">
+    **Symptoms:** Process fails early with provider authentication errors. `doctor` reports a missing key, or an OAuth provider asks for login.
 
     **Fix:**
     ```bash
@@ -35,6 +35,12 @@ notewise logs --tail 80
     | `claude-*` | `ANTHROPIC_API_KEY` |
     | `gemini/*` | `GEMINI_API_KEY` |
     | `groq/` | `GROQ_API_KEY` |
+
+    OAuth providers do not use API keys. Log in from an interactive terminal:
+    ```bash
+    notewise auth login chatgpt
+    notewise auth login github_copilot
+    ```
   </Accordion>
 
   <Accordion title="No transcript available">
