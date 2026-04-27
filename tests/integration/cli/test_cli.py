@@ -63,9 +63,14 @@ def _make_parsed_playlist(playlist_id: str = "PL123"):
 
 
 @pytest.fixture(autouse=True)
-def reset_cli_app_globals():
+def reset_cli_app_globals(monkeypatch, tmp_path):
     """Keep app-level lazy globals from leaking between CLI tests."""
     import notewise.cli.app as cli_app_module
+    import notewise.config as config_module
+
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+    object.__setattr__(config_module.settings, "_instance", None)
 
     patch_points = (
         "_console",
@@ -80,6 +85,7 @@ def reset_cli_app_globals():
         "PipelineDashboard",
         "Live",
         "run_setup_wizard",
+        "run_oauth_login",
         "show_current_config",
     )
     for name in patch_points:
@@ -87,6 +93,7 @@ def reset_cli_app_globals():
     yield
     for name in patch_points:
         setattr(cli_app_module, name, None)
+    object.__setattr__(config_module.settings, "_instance", None)
 
 
 # ---------------------------------------------------------------------------
@@ -174,6 +181,16 @@ def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipelin
     assert mock_cls.call_args.kwargs["output_formats"] == ["md", "html", "pdf"]
 
 
+def test_process_verbose_enables_debug_file_logging(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    """The verbose flag should request DEBUG diagnostics in the session log."""
+
+    with patch("notewise.logging.configure_logging") as mock_configure_logging:
+        result = runner.invoke(app, ["process", _VIDEO_URL, "--verbose"])
+
+    assert result.exit_code == 0
+    mock_configure_logging.assert_called_once_with(verbose=True)
+
+
 def test_process_missing_api_key_exits_with_error(monkeypatch):
     """CLI exits with code 1 and helpful message when required API key is missing."""
 
@@ -188,8 +205,8 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
             return_value=_make_parsed_video(),
         ),
         patch(
-            "notewise.config.AppSettings.get_api_key_name_for_model",
-            return_value="FAKE_KEY",
+            "notewise.config.AppSettings.get_missing_config_names_for_model",
+            return_value=("FAKE_KEY",),
         ),
     ):
         result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -198,6 +215,50 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
     assert "FAKE_KEY" in result.output
     assert "notewise: no configuration found." in result.output
     assert "Run `notewise setup` to get started." in result.output
+
+
+def test_process_rejects_unsupported_model_before_playlist_network(tmp_path):
+    """Unsupported models should fail before touching YouTube playlists."""
+
+    with (
+        patch("notewise.cli.app.check_config_exists", return_value=True),
+        patch(
+            "notewise.cli.app.parse_youtube_url",
+            return_value=_make_parsed_playlist(),
+        ) as mock_parse_youtube_url,
+        patch("notewise.cli.app.extract_playlist_videos") as mock_extract_playlist,
+        patch("notewise.cli.app.get_playlist_info") as mock_get_playlist_info,
+        patch("notewise.cli.app.config") as mock_config,
+    ):
+        mock_config.default_model = "gemini/gemini-2.5-flash"
+        mock_config.default_output_dir = tmp_path
+        mock_config.default_languages = ["en"]
+        mock_config.temperature = 0.7
+        mock_config.max_tokens = None
+        mock_config.max_concurrent_videos = 5
+        mock_config.youtube_requests_per_minute = 10
+        mock_config.youtube_cookie_file = None
+        mock_config.get_unsupported_model_message.return_value = (
+            "Model openrouter/unknown-model is not currently supported. "
+            "Run `notewise setup --force` to choose a supported model."
+        )
+
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                "https://youtube.com/playlist?list=PL123",
+                "--model",
+                "openrouter/unknown-model",
+            ],
+        )
+
+    assert result.exit_code == 1
+    assert "not currently supported" in result.output
+    assert "notewise setup --force" in result.output
+    mock_parse_youtube_url.assert_not_called()
+    mock_extract_playlist.assert_not_called()
+    mock_get_playlist_info.assert_not_called()
 
 
 def test_version():

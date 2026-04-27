@@ -15,6 +15,12 @@ from notewise._constants import (
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
+    OAUTH_LOGIN_ALLOWED_PROVIDERS,
+    OAUTH_LOGIN_CODEX_ALIAS,
+    OAUTH_LOGIN_DIRECT_PROVIDERS,
+    OAUTH_LOGIN_PROVIDER_LABELS,
+    OAUTH_LOGIN_PROVIDER_PROMPT,
+    OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 
@@ -38,6 +44,7 @@ Live: Any = None
 run_setup_wizard: Any = None
 show_current_config: Any = None
 check_for_updates: Any = None
+run_oauth_login: Any = None
 
 
 app = typer.Typer(
@@ -55,6 +62,11 @@ cache_app = typer.Typer(
 logs_app = typer.Typer(
     name="logs",
     help="Inspect and manage session logs.",
+    rich_markup_mode="rich",
+)
+auth_app = typer.Typer(
+    name="auth",
+    help="Authenticate OAuth/device-flow LLM providers.",
     rich_markup_mode="rich",
 )
 
@@ -182,6 +194,52 @@ def _load_update_dependencies() -> None:
         from notewise.updater import check_for_updates as _check_for_updates
 
         check_for_updates = _check_for_updates
+
+
+def _load_auth_dependencies() -> None:
+    """Populate OAuth login helpers lazily."""
+    global run_oauth_login
+
+    if run_oauth_login is None:
+        from notewise.ui.oauth_flow import run_oauth_login as _run_oauth_login
+
+        run_oauth_login = _run_oauth_login
+
+
+def _print_oauth_provider_choices(choices: list[str]) -> dict[str, str]:
+    """Print numbered OAuth provider choices and return the selection map."""
+    choice_labels = {
+        str(index): choice for index, choice in enumerate(choices, start=1)
+    }
+    for index, choice in choice_labels.items():
+        _get_console().print(
+            f"[dim]{index}.[/dim] {OAUTH_LOGIN_PROVIDER_LABELS[choice]}"
+        )
+    return choice_labels
+
+
+def _select_oauth_provider(provider: str | None) -> str:
+    """Resolve an optional auth provider argument to a concrete OAuth provider."""
+    from rich.prompt import Prompt
+
+    choices = list(OAUTH_LOGIN_DIRECT_PROVIDERS)
+    if provider is None:
+        choice_labels = _print_oauth_provider_choices(choices)
+        selected = Prompt.ask(
+            OAUTH_LOGIN_PROVIDER_PROMPT,
+            choices=list(choice_labels),
+        )
+        return choice_labels[selected]
+
+    normalized = provider.strip().lower()
+    if normalized not in OAUTH_LOGIN_ALLOWED_PROVIDERS:
+        allowed = ", ".join(OAUTH_LOGIN_ALLOWED_PROVIDERS)
+        raise typer.BadParameter(
+            OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE.format(allowed=allowed)
+        )
+    if normalized == OAUTH_LOGIN_CODEX_ALIAS:
+        return "chatgpt"
+    return normalized
 
 
 def check_config_exists() -> bool:
@@ -333,6 +391,14 @@ def process(
             ),
         ),
     ] = False,
+    verbose: Annotated[
+        bool,
+        typer.Option(
+            "--verbose",
+            "-v",
+            help="Write DEBUG-level diagnostics to the session log file.",
+        ),
+    ] = False,
     quiz: Annotated[
         bool,
         typer.Option(
@@ -408,10 +474,12 @@ def process(
         _load_process_dependencies()
         from notewise.cli._runtime import CliProcessRunner
         from notewise.errors import ValidationError
+        from notewise.llm.provider import suppress_litellm_noise
         from notewise.logging import configure_logging, get_session_log_path
         from notewise.pipeline._documents import normalize_output_formats
 
-        configure_logging()
+        configure_logging(verbose=verbose)
+        suppress_litellm_noise()
         settings = _get_config()
         try:
             selected_output_formats = normalize_output_formats(output_format)
@@ -517,6 +585,7 @@ def main(ctx: typer.Context) -> None:
         console.print("  [cyan]process[/cyan]      Generate study notes")
         console.print("  [cyan]setup[/cyan]        Configure API keys")
         console.print("  [cyan]config[/cyan]       Show the current masked config")
+        console.print("  [cyan]auth[/cyan]         Login to OAuth providers")
         console.print("  [cyan]stats[/cyan]        View processing totals")
         console.print("  [cyan]history[/cyan]      View recent videos")
         console.print("  [cyan]info[/cyan]         Show config or inspect a URL")
@@ -745,6 +814,23 @@ def doctor() -> None:
     render_doctor(_get_console())
 
 
+@auth_app.command("login")
+def auth_login(
+    provider: Annotated[
+        str | None,
+        typer.Argument(
+            help="OAuth provider: chatgpt or github_copilot; codex aliases chatgpt.",
+        ),
+    ] = None,
+) -> None:
+    """Run LiteLLM OAuth/device-flow login for subscription providers."""
+    console = _get_console()
+    selected_provider = _select_oauth_provider(provider)
+    _load_auth_dependencies()
+    if not run_oauth_login(selected_provider, console=console):
+        raise typer.Exit(code=1)
+
+
 @app.command("edit-config")
 def edit_config() -> None:
     """Open the config file in the configured editor or OS default editor."""
@@ -932,6 +1018,7 @@ def logs_clean(
 
 app.add_typer(cache_app, name="cache")
 app.add_typer(logs_app, name="logs")
+app.add_typer(auth_app, name="auth")
 
 
 if __name__ == "__main__":

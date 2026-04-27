@@ -143,6 +143,35 @@ class TestConfig:
         Config()
         assert os.environ.get("GEMINI_API_KEY") == "sync_test_key"
 
+    def test_oauth_token_dirs_default_to_notewise_state_dir(
+        self, tmp_path, monkeypatch
+    ):
+        """OAuth provider tokens should be scoped under the notewise state dir."""
+        state_dir = tmp_path / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
+        monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
+
+        Config()
+
+        assert os.environ["CHATGPT_TOKEN_DIR"] == str(state_dir / "oauth" / "chatgpt")
+        assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(
+            state_dir / "oauth" / "github_copilot"
+        )
+
+    def test_existing_oauth_token_dirs_are_preserved(self, tmp_path, monkeypatch):
+        """Explicit token dir env vars should override notewise defaults."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        monkeypatch.setenv("CHATGPT_TOKEN_DIR", str(tmp_path / "chatgpt-custom"))
+        monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path / "copilot-custom"))
+
+        Config()
+
+        assert os.environ["CHATGPT_TOKEN_DIR"] == str(tmp_path / "chatgpt-custom")
+        assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(
+            tmp_path / "copilot-custom"
+        )
+
     def test_load_positive_int_env_uses_default_when_env_is_missing(self, monkeypatch):
         """Missing optional int env uses field default."""
         monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
@@ -229,8 +258,97 @@ class TestGetApiKeyNameForModel:
     def test_empty_model_returns_none(self):
         assert self.cfg.get_api_key_name_for_model("") is None
 
-    def test_openrouter_returns_none(self):
-        assert self.cfg.get_api_key_name_for_model("openrouter/some-model") is None
+    def test_openrouter_model_returns_openrouter_key(self):
+        assert (
+            self.cfg.get_api_key_name_for_model("openrouter/some-model")
+            == "OPENROUTER_API_KEY"
+        )
+
+    def test_major_litellm_provider_api_keys(self):
+        """Major LiteLLM providers should map to their documented env vars."""
+        expected = {
+            "azure/gpt-4o": "AZURE_API_KEY",
+            "azure_ai/gpt-4o": "AZURE_API_KEY",
+            "vercel_ai_gateway/openai/gpt-4o-mini": "VERCEL_AI_GATEWAY_API_KEY",
+            "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo": "TOGETHERAI_API_KEY",
+            (
+                "fireworks_ai/accounts/fireworks/models/llama-v3p1-8b-instruct"
+            ): "FIREWORKS_AI_API_KEY",
+            "perplexity/sonar": "PERPLEXITYAI_API_KEY",
+            "huggingface/mistralai/Mistral-7B-Instruct-v0.2": "HUGGINGFACE_API_KEY",
+            "replicate/meta/meta-llama-3-8b-instruct": "REPLICATE_API_KEY",
+            "cerebras/llama3.1-8b": "CEREBRAS_API_KEY",
+            "deepinfra/meta-llama/Meta-Llama-3.1-8B-Instruct": "DEEPINFRA_API_KEY",
+            "sambanova/Meta-Llama-3.1-8B-Instruct": "SAMBANOVA_API_KEY",
+            "cloudflare/@cf/meta/llama-3.1-8b-instruct": "CLOUDFLARE_API_KEY",
+            "ai21/jamba-1.5-mini": "AI21_API_KEY",
+            "dashscope/qwen-plus": "DASHSCOPE_API_KEY",
+            "databricks/databricks-meta-llama-3-1-70b-instruct": "DATABRICKS_API_KEY",
+            "novita/meta-llama/llama-3.1-8b-instruct": "NOVITA_API_KEY",
+            "nvidia_nim/meta/llama-3.1-8b-instruct": "NVIDIA_NIM_API_KEY",
+            "watsonx/meta-llama/llama-3-3-70b-instruct": "WATSONX_API_KEY",
+            "voyage/voyage-3": "VOYAGE_API_KEY",
+            "jina_ai/jina-embeddings-v3": "JINA_API_KEY",
+        }
+
+        for model, env_var in expected.items():
+            assert self.cfg.get_api_key_name_for_model(model) == env_var
+
+    def test_oauth_and_credential_chain_providers_do_not_require_api_key(self):
+        """OAuth/device-flow and ambient credential providers skip key preflight."""
+        for model in (
+            "chatgpt/gpt-5-codex",
+            "github_copilot/gpt-5-codex",
+            "bedrock/anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "bedrock_converse/anthropic.claude-3-5-sonnet-20240620-v1:0",
+            "amazon_nova/amazon.nova-pro-v1:0",
+        ):
+            assert self.cfg.get_api_key_name_for_model(model) is None
+
+    def test_new_provider_keys_load_from_user_config(self, tmp_path, monkeypatch):
+        """New provider keys should load from config.env and sync to os.environ."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir()
+        (config_dir / "config.env").write_text(
+            "OPENROUTER_API_KEY=or-key\n",
+            encoding="utf-8",
+        )
+
+        cfg = Config()
+
+        assert cfg.get_api_key_for_model("openrouter/openai/gpt-4o-mini") == "or-key"
+        assert os.environ["OPENROUTER_API_KEY"] == "or-key"
+
+    def test_alternate_api_key_names_are_accepted(self, monkeypatch):
+        """Providers with alternate env var names should accept either key."""
+        monkeypatch.delenv("AZURE_API_KEY", raising=False)
+        monkeypatch.setenv("AZURE_OPENAI_API_KEY", "azure-openai-key")
+
+        assert self.cfg.get_api_key_for_model("azure/gpt-4o") == "azure-openai-key"
+        assert self.cfg.get_missing_config_names_for_model("azure/gpt-4o") == ()
+
+    def test_required_companion_env_vars_are_reported(self, monkeypatch):
+        """Providers with required companion env vars should report missing values."""
+        monkeypatch.setenv("CLOUDFLARE_API_KEY", "cf-key")
+        monkeypatch.delenv("CLOUDFLARE_ACCOUNT_ID", raising=False)
+
+        assert self.cfg.get_missing_config_names_for_model(
+            "cloudflare/@cf/meta/llama-3.1-8b-instruct"
+        ) == ("CLOUDFLARE_ACCOUNT_ID",)
+
+    def test_unsupported_model_message_applies_to_any_snapshot_provider(self):
+        """Model support preflight should not be limited to OAuth providers."""
+        message = self.cfg.get_unsupported_model_message("openrouter/unknown-model")
+
+        assert message is not None
+        assert "openrouter/unknown-model" in message
+        assert "not currently supported" in message
+        assert "notewise setup --force" in message
+
+    def test_supported_snapshot_model_has_no_unsupported_message(self):
+        assert self.cfg.get_unsupported_model_message("openrouter/openai/gpt-5") is None
 
     def test_reasoning_models(self):
         assert self.cfg.get_api_key_name_for_model("o1") == "OPENAI_API_KEY"

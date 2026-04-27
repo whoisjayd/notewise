@@ -17,7 +17,7 @@ This file provides structured guidance for AI agents (Claude, Codex, Cursor, Cop
 
 ## Repository Layout (Critical Paths)
 
-```
+```text
 src/notewise/
 ├── _constants.py       ← ALL numeric/string defaults live here
 ├── config.py           ← AppSettings (Pydantic-settings), config file parsing
@@ -32,7 +32,18 @@ src/notewise/
 ├── pipeline/generation.py ← StudyMaterialGenerator (chunking, LLM calls)
 ├── storage/repository.py  ← DatabaseRepository singleton (SQLAlchemy + SQLite)
 ├── ui/dashboard.py     ← Rich Live dashboard; reads PipelineEvent stream
+├── ui/oauth_flow.py    ← LiteLLM OAuth/device-flow login helpers
+├── ui/setup_wizard.py  ← Interactive provider/config setup wizard
+├── ui/litellm_models_snapshot.json ← Bundled text-only LiteLLM setup catalog
 └── youtube/            ← Transcript & metadata extraction; no LLM calls here
+```
+
+Other important root-level paths:
+
+```text
+scripts/extract_litellm_model_snapshot.py ← Refresh bundled setup model catalog
+docs/docs/how-it-works/providers.mdx      ← Provider/user-facing model docs
+docs/reference/schema-and-output/configuration.mdx ← Config key reference
 ```
 
 ---
@@ -48,6 +59,8 @@ These rules are enforced by CI and must never be broken:
 5. **Never put I/O (network, disk) in `domain/`.** The domain layer must remain pure.
 6. **Never hardcode API keys or secrets** — not even in tests.
 7. **All new CLI commands** must follow the lazy-import pattern: load heavy dependencies inside the command body using the `_load_*_dependencies()` helper pattern.
+8. **Never log raw LLM prompts, provider payloads, OAuth tokens, or credentials.** Redact through `logging.py`; provider failures should use summarized/redacted errors.
+9. **Provider/model docs must stay snapshot-valid.** If examples or setup model availability change, update the bundled LiteLLM snapshot, README, `.env.example`, docs, and tests together.
 
 ---
 
@@ -76,16 +89,37 @@ def my_command(
 
 ## Adding a New LLM Provider
 
-notewise routes providers via [LiteLLM](https://github.com/BerriAI/litellm). To register a new native provider:
+notewise routes providers via [LiteLLM](https://github.com/BerriAI/litellm). To register or improve provider support:
 
-1. Add the API key env-var name to `_NATIVE_PROVIDER_API_KEYS` in `config.py`.
-2. Add the key field to `AppSettings` with the correct `alias`.
-3. Add the key to `_ALLOWED_KEYS` in `config.py`.
-4. Sync the key to `os.environ` in `AppSettings.model_post_init`.
-5. Add detection logic in `get_api_key_name_for_model`.
-6. Add an entry to `PROVIDER_CONFIG` in `ui/setup_wizard.py`.
-7. Add the key to `.env.example`.
-8. Update `docs/reference/providers.mdx` and `docs/getting-started/configuration.mdx`.
+1. Add provider/API-key routing in `_constants.py`:
+   - `PROVIDER_API_KEY_ENV_VAR_PROVIDERS` for static API keys
+   - `PROVIDER_REQUIRED_ENV_VARS` for extra required env such as account IDs/base URLs
+   - `PROVIDER_AUTH_ENV_KEYS` for accepted pass-through auth/config keys
+2. If the key should be a first-class `AppSettings` field, add it to `config.py` with the correct `alias` and sync it in `AppSettings.model_post_init`. Many pass-through provider keys are already accepted via `_ALLOWED_KEYS` derived from `_constants.py` and written into `os.environ` by `UserConfigSource`.
+3. Add or update setup wizard metadata in `ui/setup_wizard.py` (`PROVIDER_CONFIG`) and keep examples in `ui/litellm_models_snapshot.json` valid.
+4. If model catalog behavior changes, regenerate the snapshot with:
+   ```bash
+   uv run python scripts/extract_litellm_model_snapshot.py
+   ```
+   The snapshot must contain text-generation models only; filter out image, audio, realtime, embedding, search/research, robotics, computer-use, container, and other non-text model families.
+5. Add the relevant config examples to `.env.example`.
+6. Update user docs together:
+   - `README.md`
+   - `docs/docs/how-it-works/providers.mdx`
+   - `docs/docs/getting-started/configuration.mdx`
+   - `docs/reference/schema-and-output/configuration.mdx`
+   - CLI docs under `docs/cli/` when commands or flags change
+7. Add/update tests in `tests/unit/config/`, `tests/unit/ui/`, `tests/unit/llm/`, and CLI tests when preflight or setup behavior changes.
+
+### OAuth/device-flow providers
+
+ChatGPT subscription and GitHub Copilot use LiteLLM OAuth/device-flow instead of static API keys.
+
+1. Add provider metadata to `OAUTH_PROVIDER_CONFIGS` in `_constants.py`.
+2. Keep `OAUTH_DEVICE_PROVIDER_PREFIXES`, `OAUTH_LOGIN_ALLOWED_PROVIDERS`, and safe login models aligned.
+3. Default token storage must stay under `NOTEWISE_HOME` / `~/.notewise/oauth/...` via `configure_oauth_token_storage()` unless the user explicitly sets `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR`.
+4. OAuth login flows belong in `ui/oauth_flow.py` and should be exposed through `notewise auth login` in `cli/app.py` with lazy imports.
+5. Unit tests must mock LiteLLM (`aresponses`/`acompletion`). Do not require live ChatGPT, Copilot, or browser/device login in tests.
 
 ---
 
@@ -121,6 +155,8 @@ The three prompt modules are:
 - `chapter_notes.py` — per-chapter notes
 - `quiz.py` — multiple-choice quiz
 
+Prompt changes should avoid source-referential filler such as “as stated in the transcript” and vague marketing labels. Keep generated Markdown structurally valid, especially fenced code blocks. Add/update tests in `tests/unit/llm/test_prompts.py` for prompt quality guardrails.
+
 ---
 
 ## Configuration Changes
@@ -129,9 +165,9 @@ Adding a new user-configurable key:
 
 1. Add the constant default to `_constants.py`.
 2. Add the field to `AppSettings` in `config.py` with an `alias` matching the env-var name.
-3. Add the key to `_ALLOWED_KEYS` in `config.py`.
+3. Add the key to `_ALLOWED_KEYS` in `config.py` or to the relevant `_constants.py` key set used to derive `_ALLOWED_KEYS`.
 4. Add the key to `.env.example` (commented out with a description).
-5. Update `docs/reference/configuration.mdx`.
+5. Update `docs/reference/schema-and-output/configuration.mdx` and `docs/docs/getting-started/configuration.mdx`.
 
 ---
 
@@ -141,6 +177,7 @@ Adding a new user-configurable key:
 - **Async tests** — mark as `async def test_...`. No `@pytest.mark.asyncio` needed (`asyncio_mode = "auto"`).
 - **Fixtures** — shared fixtures go in `tests/conftest.py`. Module-level fixtures stay in the test file.
 - **Coverage** — CI fails below 90%. Check: `uv run pytest --cov=src/notewise --cov-fail-under=90`.
+- **Provider/OAuth tests** — mock LiteLLM calls and token flows; never depend on live credentials, browser login, or real provider quota.
 
 ---
 
@@ -162,6 +199,7 @@ make fix          # auto-fix formatting and lint issues
 - Do not create `.env` files in the repository root (the config is at `~/.notewise/config.env`).
 - Do not add `print()` statements to production code — use `structlog.get_logger(__name__)`.
 - Do not suppress exceptions silently — log with `logger.warning(…, exc_info=True)` or re-raise.
+- Do not log provider request/response payloads or prompt text from LLM failures; use redacted summaries.
 - Do not write multi-line commit messages — the pre-commit hook rejects them.
 
 ---

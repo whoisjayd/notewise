@@ -45,6 +45,9 @@ class CliProcessRunner(CliProcessContext):
         *,
         looks_like_batch_file_path: Callable[[str], Any],
     ) -> bool:
+        if not self.ensure_model_supported():
+            return True
+
         input_path = Path(source_input).expanduser()
 
         if input_path.exists():

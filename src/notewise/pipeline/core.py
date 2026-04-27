@@ -9,7 +9,7 @@ Batch execution and single-video orchestration live in
 from __future__ import annotations
 
 import asyncio
-import os
+import json
 from collections.abc import Callable
 from pathlib import Path
 from typing import Any
@@ -23,6 +23,8 @@ from notewise._constants import (
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
+    OUTPUT_METADATA_FILENAME,
+    OUTPUT_METADATA_VIDEO_ID_KEY,
 )
 from notewise.config import get_cache_db_path
 from notewise.config import settings as config
@@ -182,9 +184,12 @@ class CorePipeline:
         return await asyncio.to_thread(func, *args, **kwargs)
 
     def _check_api_key(self) -> bool:
-        key_name = config.get_api_key_name_for_model(self.model)
-        if key_name and not os.environ.get(key_name):
-            logger.error(f"Missing API Key for {self.model}. Expected: {key_name}")
+        missing_config = config.get_missing_config_names_for_model(self.model)
+        if missing_config:
+            expected = ", ".join(missing_config)
+            logger.error(
+                f"Missing provider config for {self.model}. Expected: {expected}"
+            )
             return False
         return True
 
@@ -272,11 +277,38 @@ class CorePipeline:
     ) -> Path:
         async with self._output_lock:
             base_available = base not in self._reserved_output_targets and (
-                allow_existing_base or not base.exists()
+                allow_existing_base
+                or not base.exists()
+                or self._is_reusable_directory_output(base, video_id)
             )
             target = base if base_available else suffix_output_target(base, video_id)
             self._reserved_output_targets.add(target)
             return target
+
+    def _is_reusable_directory_output(self, target: Path, video_id: str) -> bool:
+        """Return True when a pre-existing chapter directory belongs to this video."""
+        if not target.is_dir():
+            return False
+
+        metadata_path = target / OUTPUT_METADATA_FILENAME
+        if not metadata_path.exists():
+            return False
+
+        try:
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return False
+
+        return metadata.get(OUTPUT_METADATA_VIDEO_ID_KEY) == video_id
+
+    def _write_output_target_metadata(self, target: Path, video_id: str) -> None:
+        """Write lightweight output ownership metadata for chapter directories."""
+        if not target.is_dir():
+            return
+
+        metadata_path = target / OUTPUT_METADATA_FILENAME
+        metadata = {OUTPUT_METADATA_VIDEO_ID_KEY: video_id}
+        metadata_path.write_text(json.dumps(metadata, sort_keys=True), encoding="utf-8")
 
     async def _release_output_target(self, target: Path | None) -> None:
         """Release an in-memory reservation once processing for that target ends."""

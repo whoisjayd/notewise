@@ -19,10 +19,15 @@ from typing import Any
 
 import structlog
 
-from notewise._constants import LOGS_DIR_NAME, SESSION_LOG_PREFIX, STATE_DIR_NAME
+from notewise._constants import (
+    LOGS_DIR_NAME,
+    PROVIDER_SECRET_ENV_KEYS,
+    SESSION_LOG_PREFIX,
+    STATE_DIR_NAME,
+    THIRD_PARTY_DIAGNOSTIC_LOGGERS,
+)
 
 
-_NOISY_LOGGERS = ("LiteLLM", "litellm", "httpx", "httpcore")
 _SESSION_LOG_PATH: Path | None = None
 _LOGGING_LOCK = threading.Lock()
 _LOGGING_CONFIGURED = False
@@ -48,10 +53,12 @@ _SENSITIVE_KEY_NAMES = frozenset(
         "cookies",
         "youtubecookiefile",
     }
+    | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
-    r"(?i)(?P<key>\b(?:gemini|openai|anthropic|groq|xai|mistral|cohere|deepseek)?"
-    r"_?api[_ -]?key|access[_ -]?token|refresh[_ -]?token|authorization|token|"
+    r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
+    r"session_token|access_token|refresh_token)|"
+    r"authorization|token|"
     r"secret|password|cookie(?:s)?|youtube_cookie_file\b)"
     r"(?P<sep>\s*[:=]\s*)"
     r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,\]}]+)"
@@ -172,6 +179,7 @@ def configure_logging(
     *,
     state_dir: Path | None = None,
     env: str | None = None,
+    verbose: bool = False,
 ) -> Path | None:
     """Configure structlog and stdlib logging for NoteWise.
 
@@ -191,11 +199,18 @@ def configure_logging(
         if _LOGGING_CONFIGURED:
             return _SESSION_LOG_PATH
 
-        # Suppress noisy third-party loggers early
+        # Keep terminal quiet via NullHandler while preserving file diagnostics.
         os.environ.setdefault("LITELLM_LOG", "ERROR")
-        for name in _NOISY_LOGGERS:
-            logging.getLogger(name).setLevel(logging.ERROR)
-        logging.getLogger("httpx").setLevel(logging.WARNING)
+        diagnostic_level = logging.DEBUG if verbose else logging.WARNING
+        for name in THIRD_PARTY_DIAGNOSTIC_LOGGERS:
+            diagnostic_logger = logging.getLogger(name)
+            diagnostic_logger.setLevel(diagnostic_level)
+            diagnostic_logger.propagate = True
+            # Some provider libraries attach their own StreamHandler to stderr.
+            # Remove local handlers so records flow only through NoteWise's root
+            # file handler, where redaction is applied and the Rich UI stays clean.
+            for handler in list(diagnostic_logger.handlers):
+                diagnostic_logger.removeHandler(handler)
 
         # Shared processors applied to every log record
         shared_processors: list[structlog.types.Processor] = [

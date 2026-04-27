@@ -23,16 +23,18 @@ Use this guide when helping users operate or contribute to NoteWise.
 
 NoteWise supports multiple LLM providers via LiteLLM:
 
-| Provider                | Config Key        | Default Model                        |
-| ----------------------- | ----------------- | ------------------------------------ |
-| Google Gemini (default) | GEMINI_API_KEY    | gemini/gemini-2.5-flash              |
-| OpenAI                  | OPENAI_API_KEY    | openai/gpt-4o                        |
-| Anthropic               | ANTHROPIC_API_KEY | anthropic/claude-3-5-sonnet-20241022 |
-| Groq                    | GROQ_API_KEY      | groq/llama3-70b-8192                 |
-| xAI                     | XAI_API_KEY       | xai/grok-4                           |
-| Mistral                 | MISTRAL_API_KEY   | mistral/mistral-large-latest         |
-| Cohere                  | COHERE_API_KEY    | cohere/command-r-plus                |
-| DeepSeek                | DEEPSEEK_API_KEY  | deepseek/deepseek-chat               |
+| Provider | Config Key / Auth | Default Model |
+| --- | --- | --- |
+| Google Gemini (default) | GEMINI_API_KEY | gemini/gemini-2.5-flash |
+| OpenAI | OPENAI_API_KEY | gpt-5.5 |
+| Anthropic | ANTHROPIC_API_KEY | claude-sonnet-4-5-20250929 |
+| Groq | GROQ_API_KEY | groq/llama-3.3-70b-versatile |
+| xAI | XAI_API_KEY | xai/grok-4-1-fast-non-reasoning-latest |
+| Mistral | MISTRAL_API_KEY | mistral/mistral-large-latest |
+| Cohere | COHERE_API_KEY | command-r-plus-08-2024 |
+| DeepSeek | DEEPSEEK_API_KEY | deepseek/deepseek-v3.2 |
+| OpenRouter / Azure / Vercel AI Gateway | provider gateway key | openrouter/openai/gpt-5 |
+| ChatGPT / GitHub Copilot | OAuth device flow | chatgpt/gpt-5.3-codex / github_copilot/gpt-5-mini |
 
 Gemini is the default — no billing required to start.
 
@@ -101,7 +103,8 @@ Gemini is the default — no billing required to start.
 
 1. Confirm model string format via /docs/how-it-works/providers
 2. Confirm matching API key variable via /docs/reference/schema-and-output/configuration
-3. Isolate with explicit flag: `notewise process "URL" --model gemini/gemini-2.5-flash`
+3. For OAuth providers, run `notewise auth login chatgpt` or `notewise auth login github_copilot` in an interactive terminal
+4. Isolate with explicit flag: `notewise process "URL" --model gemini/gemini-2.5-flash`
 
 ### User says "no transcript available"
 

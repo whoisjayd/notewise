@@ -38,7 +38,7 @@ icon: sliders-horizontal
 
 ### `notewise setup`
 
-Run the interactive setup wizard. It uses a bundled LiteLLM model catalog for fast startup and falls back to live metadata only when needed. Prompts for your LLM provider and API key, then writes `~/.notewise/config.env`.
+Run the interactive setup wizard. It uses a bundled LiteLLM model catalog for fast startup and falls back to live metadata only when needed. Prompts for your LLM provider and writes `~/.notewise/config.env`. API-key providers ask for the matching key; OAuth/device-flow providers such as ChatGPT subscription and GitHub Copilot skip API-key storage and offer to run OAuth login immediately.
 
 ```bash
 notewise setup
@@ -50,6 +50,29 @@ notewise setup --show     # display current config and exit
 | --- | --- |
 | `--force` / `-f` | Re-run wizard even when config already exists |
 | `--show` | Display current config and exit |
+
+---
+
+### `notewise auth login`
+
+Run LiteLLM's OAuth/device-flow login for subscription-backed providers without writing API keys to notewise config. This command makes a tiny test request so LiteLLM can create or refresh the provider token before you run `notewise process`.
+
+```bash
+notewise auth login                 # pick provider interactively
+notewise auth login chatgpt
+notewise auth login github_copilot
+```
+
+Use this in an interactive terminal so LiteLLM can show the device code or browser URL. Codex subscription users should run `notewise auth login chatgpt`; `notewise auth login codex` remains a compatibility alias for ChatGPT subscription login.
+
+notewise defaults provider token storage to `$NOTEWISE_HOME/oauth/chatgpt` and `$NOTEWISE_HOME/oauth/github_copilot` (or `~/.notewise/oauth/...` when `NOTEWISE_HOME` is unset); override those locations with `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` when needed.
+
+After login, run with the provider model normally:
+
+```bash
+notewise process "URL" --model chatgpt/gpt-5.2
+notewise process "URL" --model github_copilot/gpt-5-mini
+```
 
 ---
 
@@ -125,6 +148,10 @@ export NOTEWISE_HOME=/custom/path
     notewise config
     ```
 
-    Verify `DEFAULT_MODEL` and the matching provider API key are both present.
+    Verify `DEFAULT_MODEL` and the matching provider API key are both present. For OAuth providers, run once in an interactive terminal so LiteLLM can show the device code.
+  </Accordion>
+
+  <Accordion title="OAuth provider works locally but fails in CI">
+    OAuth login must be completed before headless runs. Run `notewise auth login chatgpt` or `notewise auth login github_copilot` interactively, then make sure the same `NOTEWISE_HOME`, `CHATGPT_TOKEN_DIR`, or `GITHUB_COPILOT_TOKEN_DIR` is available to the automation environment.
   </Accordion>
 </AccordionGroup>

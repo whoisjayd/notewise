@@ -49,7 +49,7 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 |                                        |                                                                                            |
 | -------------------------------------- | ------------------------------------------------------------------------------------------ |
 | 📹 **Single Video, Playlists & Batch** | Process one video, an entire playlist, or a `.txt` file of URLs in a single command        |
-| 🤖 **Multi-Provider LLM Support**      | Works with Gemini, OpenAI, Anthropic, Groq, Mistral, Cohere, DeepSeek, and xAI via LiteLLM |
+| 🤖 **Multi-Provider LLM Support**      | Works with Gemini, OpenAI, Anthropic, Groq, OpenRouter, Azure, Vercel AI Gateway, ChatGPT/Copilot OAuth, and other major LiteLLM providers |
 | 🗂️ **Chapter-Aware Notes**             | Automatically detects video chapters and generates separate, structured notes per chapter  |
 | ❓ **Quiz Generation**                 | Optionally produce a ready-to-use multiple-choice quiz alongside each study guide          |
 | 📄 **Multiple Output Formats**        | Write study notes as `.md`, `.html`, `.pdf`, or `.docx` with cleaner typography and layout |
@@ -82,13 +82,22 @@ curl -fsSL https://github.com/whoisjayd/notewise/releases/latest/download/instal
 
 ### 2 · Configure
 
-Run the interactive setup wizard once to store your LLM API key:
+Run the interactive setup wizard once to pick your provider and store any required API key:
 
 ```bash
 notewise setup
 ```
 
 This creates `~/.notewise/config.env`. The default model is **Gemini 2.5 Flash** — grab a free key at [aistudio.google.com](https://aistudio.google.com/app/apikey).
+
+Subscription-backed providers use OAuth instead of static API keys:
+
+```bash
+notewise auth login chatgpt
+notewise auth login github_copilot
+```
+
+OAuth tokens are stored under `~/.notewise/oauth/` by default, not in `config.env`.
 
 ### 3 · Generate Study Notes
 
@@ -116,7 +125,7 @@ Notes are written to `./output/` (or your configured directory) as Markdown by d
 ### Requirements
 
 - Python **3.10** or newer (3.10, 3.11, 3.12, and 3.13 are tested in CI)
-- An API key for at least one [supported LLM provider](#-supported-providers)
+- An API key or OAuth access for at least one [supported LLM provider](#-supported-providers)
 
 ### uv (recommended)
 
@@ -198,6 +207,8 @@ Environment variables always take precedence over the config file.
 | `MAX_CONCURRENT_VIDEOS`       | `5`                       | Parallel video processing limit    |
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request rate limit         |
 | `YOUTUBE_COOKIE_FILE`         | _(none)_                  | Path to Netscape cookies file      |
+| `CHATGPT_TOKEN_DIR`           | `~/.notewise/oauth/chatgpt` | Optional ChatGPT OAuth token dir  |
+| `GITHUB_COPILOT_TOKEN_DIR`    | `~/.notewise/oauth/github_copilot` | Optional GitHub Copilot OAuth token dir |
 
 Override any setting per-run via CLI flags — run `notewise process --help` for all options.
 
@@ -213,22 +224,31 @@ export NOTEWISE_HOME=/path/to/custom/dir
 
 notewise uses [LiteLLM](https://github.com/BerriAI/litellm) — any model string LiteLLM supports works here.
 
-| Provider      | Config Key          | Example Model String           |
-| ------------- | ------------------- | ------------------------------ |
-| Google Gemini | `GEMINI_API_KEY`    | `gemini/gemini-2.5-flash`      |
-| OpenAI        | `OPENAI_API_KEY`    | `gpt-4o`                       |
-| Anthropic     | `ANTHROPIC_API_KEY` | `claude-3-5-sonnet-20241022`   |
-| Groq          | `GROQ_API_KEY`      | `groq/llama3-70b-8192`         |
-| xAI           | `XAI_API_KEY`       | `xai/grok-2`                   |
-| Mistral       | `MISTRAL_API_KEY`   | `mistral/mistral-large-latest` |
-| Cohere        | `COHERE_API_KEY`    | `command-r-plus`               |
-| DeepSeek      | `DEEPSEEK_API_KEY`  | `deepseek/deepseek-chat`       |
+| Provider | Config Key / Auth | Example Model String |
+| --- | --- | --- |
+| Google Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` |
+| OpenAI | `OPENAI_API_KEY` | `gpt-5.5` |
+| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
+| Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` |
+| xAI | `XAI_API_KEY` | `xai/grok-4-1-fast-non-reasoning-latest` |
+| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-large-latest` |
+| Cohere | `COHERE_API_KEY` | `command-r-plus-08-2024` |
+| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-v3.2` |
+| OpenRouter | `OPENROUTER_API_KEY` | `openrouter/openai/gpt-5` |
+| Azure OpenAI / Azure AI | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` | `azure/gpt-5` |
+| Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` | `vercel_ai_gateway/<model>` |
+| Together / Fireworks / Perplexity | Provider API key | `together_ai/...`, `fireworks_ai/...`, `perplexity/sonar` |
+| ChatGPT Subscription | OAuth device flow | `chatgpt/gpt-5.2` |
+| GitHub Copilot | OAuth device flow | `github_copilot/gpt-5-mini` |
+| Amazon Bedrock | AWS credential chain | `bedrock/<model-id>` |
 
 Use any provider with `--model`:
 
 ```bash
-notewise process "URL" --model claude-3-5-sonnet-20241022
+notewise process "URL" --model claude-sonnet-4-5-20250929
 ```
+
+OAuth providers such as ChatGPT subscription and GitHub Copilot do not store an API key in notewise. Use `notewise auth login <provider>` from an interactive terminal so LiteLLM can show the device code or browser URL. notewise defaults token storage to `~/.notewise/oauth/chatgpt` and `~/.notewise/oauth/github_copilot`; override with `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` if needed.
 
 ## 🖥️ CLI Reference
 
@@ -240,6 +260,7 @@ notewise [COMMAND] [OPTIONS]
 | --------------- | ---------------------------------------------------------- |
 | `process <url>` | Generate study notes from a video, playlist, or batch file |
 | `setup`         | Run the interactive configuration wizard                   |
+| `auth login`    | Run OAuth/device-flow login for ChatGPT or GitHub Copilot  |
 | `config`        | Display the current configuration (secrets masked)         |
 | `stats`         | Show aggregate processing statistics                       |
 | `history`       | List recently processed videos                             |

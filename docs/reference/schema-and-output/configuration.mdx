@@ -42,9 +42,9 @@ export NOTEWISE_HOME=/custom/path
 The LiteLLM-format model string used when `--model` is not passed on the CLI.
 
 ```bash
-DEFAULT_MODEL=gpt-4o
-DEFAULT_MODEL=anthropic/claude-3-5-sonnet-20241022
-DEFAULT_MODEL=groq/llama3-70b-8192
+DEFAULT_MODEL=gpt-5.5
+DEFAULT_MODEL=claude-sonnet-4-5-20250929
+DEFAULT_MODEL=groq/llama-3.3-70b-versatile
 ```
 
 See [LLM Providers](/docs/how-it-works/providers) for the full routing table.
@@ -65,6 +65,44 @@ Set the key matching the provider of your chosen model. Only the key(s) you actu
 | `MISTRAL_API_KEY` | Mistral AI |
 | `COHERE_API_KEY` | Cohere |
 | `DEEPSEEK_API_KEY` | DeepSeek |
+| `OPENROUTER_API_KEY` | OpenRouter |
+| `AZURE_API_KEY`, `AZURE_OPENAI_API_KEY` | Azure OpenAI / Azure AI |
+| `VERCEL_AI_GATEWAY_API_KEY` | Vercel AI Gateway |
+| `TOGETHERAI_API_KEY` | Together AI |
+| `FIREWORKS_AI_API_KEY` | Fireworks AI |
+| `PERPLEXITYAI_API_KEY` | Perplexity |
+| `HUGGINGFACE_API_KEY` | Hugging Face |
+| `REPLICATE_API_KEY` | Replicate |
+| `CEREBRAS_API_KEY` | Cerebras |
+| `DEEPINFRA_API_KEY` | DeepInfra |
+| `SAMBANOVA_API_KEY` | SambaNova |
+| `CLOUDFLARE_API_KEY`, `CLOUDFLARE_ACCOUNT_ID` | Cloudflare Workers AI |
+| `AI21_API_KEY` | AI21 |
+| `DASHSCOPE_API_KEY` | DashScope / Qwen |
+| `DATABRICKS_API_KEY`, `DATABRICKS_API_BASE` | Databricks serving endpoints |
+| `NOVITA_API_KEY` | Novita AI |
+| `NVIDIA_NIM_API_KEY` | NVIDIA NIM |
+| `WATSONX_API_KEY` | IBM watsonx |
+| `VOYAGE_API_KEY` | Voyage AI |
+| `JINA_API_KEY` | Jina AI |
+
+OAuth/device-flow providers do not use static API keys:
+
+| Key | Provider |
+| --- | --- |
+| `CHATGPT_TOKEN_DIR`, `CHATGPT_AUTH_FILE` | Optional ChatGPT subscription token storage overrides |
+| `GITHUB_COPILOT_TOKEN_DIR`, `GITHUB_COPILOT_ACCESS_TOKEN_FILE`, `GITHUB_COPILOT_API_KEY_FILE` | Optional GitHub Copilot token storage overrides |
+
+Amazon Bedrock and related AWS providers use the standard AWS credential chain, such as `AWS_PROFILE`, `AWS_REGION_NAME`, `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_SESSION_TOKEN`.
+
+Run OAuth login explicitly before using subscription-backed providers in automation:
+
+```bash
+notewise auth login chatgpt
+notewise auth login github_copilot
+```
+
+If `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` is not set, notewise sets LiteLLM token storage under `~/.notewise/oauth/` by default.
 
 ---
 
@@ -193,4 +231,8 @@ TEMPERATURE=0.7
 GEMINI_API_KEY=your_key_here
 # OPENAI_API_KEY=sk-...
 # ANTHROPIC_API_KEY=sk-ant-...
+
+# OAuth providers do not use API keys. These optional paths override defaults.
+# CHATGPT_TOKEN_DIR=~/.notewise/oauth/chatgpt
+# GITHUB_COPILOT_TOKEN_DIR=~/.notewise/oauth/github_copilot
 ```

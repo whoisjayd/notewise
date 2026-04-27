@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 import time
 from types import SimpleNamespace
@@ -28,15 +29,21 @@ def _reset_logging_state() -> None:
 
 def test_redact_sensitive_text_masks_common_secret_shapes():
     """Raw API keys and bearer tokens should never survive log redaction."""
-    google_key = "AIza" + "A" * 32
-    bearer = "Bearer abcdefghijklmnopqrstuvwxyz123456"
+    google_key = "DUMMY_GOOGLE_KEY"
+    bearer = "DUMMY_BEARER_TOKEN"
+    openrouter_key = "DUMMY_OPENROUTER_KEY"
+    aws_secret = "DUMMY_AWS_SECRET"
 
     redacted = redact_sensitive_text(
-        f"gemini_api_key={google_key} authorization: {bearer}"
+        f"gemini_api_key={google_key} authorization: {bearer} "
+        f"OPENROUTER_API_KEY={openrouter_key} "
+        f"AWS_SECRET_ACCESS_KEY={aws_secret}"
     )
 
     assert google_key not in redacted
     assert bearer not in redacted
+    assert openrouter_key not in redacted
+    assert aws_secret not in redacted
     assert "[REDACTED]" in redacted
 
 
@@ -101,6 +108,65 @@ def test_configure_logging_is_idempotent(tmp_path):
     assert second == first
     assert logging_module.get_session_log_path() == first
     assert len(list((tmp_path / "logs").glob("*.log"))) == 1
+
+
+def test_configure_logging_keeps_third_party_debug_off_by_default(tmp_path):
+    """Third-party DEBUG logs should require explicit verbose logging."""
+    _reset_logging_state()
+    log_path = configure_logging(state_dir=tmp_path)
+    assert log_path is not None
+
+    dummy_secret = "Bearer dummy-token-value-1234567890"
+    for logger_name in ("openai", "openai._base_client", "LiteLLM", "litellm"):
+        logger = logging_module.logging.getLogger(logger_name)
+        assert logger.getEffectiveLevel() == logging.WARNING
+        assert logger.propagate is True
+        assert logger.handlers == []
+        logger.debug("debug detail authorization=%s", dummy_secret)
+        logger.warning("warning detail token=%s", dummy_secret)
+
+    text = log_path.read_text(encoding="utf-8")
+    assert dummy_secret not in text
+    assert "debug detail" not in text
+    assert "warning detail" in text
+    assert "[REDACTED]" in text
+
+
+def test_configure_logging_verbose_captures_third_party_debug(tmp_path):
+    """Verbose mode should write redacted third-party DEBUG logs to file only."""
+    _reset_logging_state()
+    log_path = configure_logging(state_dir=tmp_path, verbose=True)
+    assert log_path is not None
+
+    dummy_secret = "Bearer dummy-token-value-1234567890"
+    logger = logging_module.logging.getLogger("LiteLLM")
+    assert logger.getEffectiveLevel() == logging.DEBUG
+    assert logger.propagate is True
+    assert logger.handlers == []
+    logger.debug("debug detail authorization=%s", dummy_secret)
+
+    text = log_path.read_text(encoding="utf-8")
+    assert dummy_secret not in text
+    assert "debug detail" in text
+    assert "[REDACTED]" in text
+
+
+def test_configure_logging_removes_provider_stream_handlers(tmp_path, capsys):
+    """Provider DEBUG handlers should not print over the Rich terminal UI."""
+    _reset_logging_state()
+    provider_logger = logging_module.logging.getLogger("LiteLLM")
+    stream_handler = logging.StreamHandler()
+    provider_logger.addHandler(stream_handler)
+
+    log_path = configure_logging(state_dir=tmp_path)
+    assert log_path is not None
+
+    provider_logger.warning("Raw OpenAI Chunk={'delta': 'terminal leak check'}")
+
+    captured = capsys.readouterr()
+    assert "terminal leak check" not in captured.out
+    assert "terminal leak check" not in captured.err
+    assert "terminal leak check" in log_path.read_text(encoding="utf-8")
 
 
 def test_prune_log_files_removes_only_old_inactive_logs(tmp_path):

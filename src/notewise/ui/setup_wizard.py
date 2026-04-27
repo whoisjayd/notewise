@@ -4,13 +4,19 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from notewise._constants import (
+    AUTH_TYPE_API_KEY,
+    AUTH_TYPE_OAUTH_DEVICE,
     CONFIG_FILENAME,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
     LITELLM_MODELS_SNAPSHOT_FILENAME,
+    LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS,
+    LITELLM_TEXT_MODEL_EXCLUDED_MARKERS,
+    OAUTH_SETUP_RUN_PROMPT,
+    PROVIDER_CONFIG,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -22,68 +28,25 @@ if TYPE_CHECKING:
     from rich.console import Console
 
 
+class RunOAuthLoginProto(Protocol):
+    """Callable signature for the lazily imported OAuth login helper."""
+
+    def __call__(self, provider: str, *, console: Console | None = None) -> bool: ...
+
+
 LEGACY_CONFIG_KEYS = set(APP_LEGACY_CONFIG_KEYS)
+run_oauth_login: RunOAuthLoginProto | None = None
 
 
-# API key configuration for different providers
-PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
-    "gemini": {
-        "name": "Google Gemini",
-        "env_var": "GEMINI_API_KEY",
-        "api_url": "https://aistudio.google.com/app/apikey",
-        "keywords": ["gemini", "vertex"],
-        "litellm_providers": ["gemini"],
-    },
-    "openai": {
-        "name": "OpenAI (ChatGPT)",
-        "env_var": "OPENAI_API_KEY",
-        "api_url": "https://platform.openai.com/api-keys",
-        "keywords": ["gpt", "openai", "o1", "o3", "o4"],
-        "litellm_providers": ["openai"],
-    },
-    "anthropic": {
-        "name": "Anthropic (Claude)",
-        "env_var": "ANTHROPIC_API_KEY",
-        "api_url": "https://console.anthropic.com/settings/keys",
-        "keywords": ["claude", "anthropic"],
-        "litellm_providers": ["anthropic"],
-    },
-    "groq": {
-        "name": "Groq",
-        "env_var": "GROQ_API_KEY",
-        "api_url": "https://console.groq.com/keys",
-        "keywords": ["groq"],
-        "litellm_providers": ["groq"],
-    },
-    "xai": {
-        "name": "xAI (Grok)",
-        "env_var": "XAI_API_KEY",
-        "api_url": "https://console.x.ai/",
-        "keywords": ["grok", "xai"],
-        "litellm_providers": ["xai"],
-    },
-    "mistral": {
-        "name": "Mistral AI",
-        "env_var": "MISTRAL_API_KEY",
-        "api_url": "https://console.mistral.ai/api-keys/",
-        "keywords": ["mistral"],
-        "litellm_providers": ["mistral"],
-    },
-    "cohere": {
-        "name": "Cohere",
-        "env_var": "COHERE_API_KEY",
-        "api_url": "https://dashboard.cohere.com/api-keys",
-        "keywords": ["cohere", "command"],
-        "litellm_providers": ["cohere_chat", "cohere"],
-    },
-    "deepseek": {
-        "name": "DeepSeek",
-        "env_var": "DEEPSEEK_API_KEY",
-        "api_url": "https://platform.deepseek.com/api_keys",
-        "keywords": ["deepseek"],
-        "litellm_providers": ["deepseek"],
-    },
-}
+def _load_oauth_dependencies() -> None:
+    """Populate OAuth login helpers lazily."""
+    global run_oauth_login
+
+    if run_oauth_login is None:
+        from notewise.ui.oauth_flow import run_oauth_login as _run_oauth_login
+
+        run_oauth_login = _run_oauth_login
+
 
 CURATED_FALLBACK_MODELS: dict[str, list[str]] = {
     "gemini": [
@@ -126,19 +89,61 @@ CURATED_FALLBACK_MODELS: dict[str, list[str]] = {
         "deepseek/deepseek-v3",
         "deepseek/deepseek-reasoner",
     ],
+    "openrouter": [
+        "openrouter/openai/gpt-4o-mini",
+        "openrouter/anthropic/claude-3.5-sonnet",
+        "openrouter/google/gemini-2.5-flash",
+    ],
+    "together_ai": [
+        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
+        "together_ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
+        "together_ai/mistralai/Mixtral-8x7B-Instruct-v0.1",
+    ],
+    "fireworks_ai": [
+        "fireworks_ai/accounts/fireworks/models/llama-v3p1-8b-instruct",
+        "fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
+        "fireworks_ai/accounts/fireworks/models/mixtral-8x7b-instruct",
+    ],
+    "perplexity": [
+        "perplexity/sonar",
+        "perplexity/sonar-pro",
+        "perplexity/sonar-reasoning",
+    ],
+    "github_copilot": [
+        "github_copilot/claude-haiku-4.5",
+        "github_copilot/claude-opus-4.5",
+        "github_copilot/claude-opus-4.6-fast",
+        "github_copilot/claude-opus-41",
+        "github_copilot/claude-sonnet-4",
+        "github_copilot/claude-sonnet-4.5",
+        "github_copilot/gemini-2.5-pro",
+        "github_copilot/gemini-3-pro-preview",
+        "github_copilot/gpt-3.5-turbo",
+        "github_copilot/gpt-4",
+        "github_copilot/gpt-4.1",
+        "github_copilot/gpt-4o",
+        "github_copilot/gpt-4o-mini",
+        "github_copilot/gpt-5",
+        "github_copilot/gpt-5-mini",
+        "github_copilot/gpt-5.1",
+        "github_copilot/gpt-5.1-codex-max",
+        "github_copilot/gpt-5.2",
+        "github_copilot/gpt-5.3-codex",
+    ],
+    "chatgpt": [
+        "chatgpt/gpt-5.2",
+        "chatgpt/gpt-5.2-codex",
+        "chatgpt/gpt-5.3-chat-latest",
+        "chatgpt/gpt-5.4",
+        "chatgpt/gpt-5.4-pro",
+        "chatgpt/gpt-5.3-codex",
+        "chatgpt/gpt-5.3-codex-spark",
+        "chatgpt/gpt-5.3-instant",
+    ],
 }
 
-_ALLOWED_SETUP_MODEL_MODES = {"chat", "completion"}
-_NATIVE_PROVIDER_PREFIXES = {
-    "anthropic",
-    "cohere",
-    "deepseek",
-    "gemini",
-    "groq",
-    "mistral",
-    "openai",
-    "xai",
-}
+_ALLOWED_SETUP_MODEL_MODES = {"chat", "completion", "responses"}
+_NATIVE_PROVIDER_PREFIXES = set(PROVIDER_CONFIG)
 
 
 def _resolve_console(console: Console | None) -> Console:
@@ -340,7 +345,12 @@ def _load_litellm_models(*, console: Console | None = None) -> dict[str, list[st
 
         provider_models: dict[str, list[str]] = {}
 
-        for model in model_list:
+        candidate_models = {*model_list, *model_cost}
+        candidate_models.discard("sample_spec")
+
+        for model in candidate_models:
+            if not isinstance(model, str) or not model:
+                continue
             metadata = _get_model_metadata(model, model_cost)
             provider = _classify_provider(metadata)
             if provider is None:
@@ -395,12 +405,25 @@ def _classify_provider(metadata: dict[str, Any]) -> str | None:
     return None
 
 
-def _is_setup_safe_model(_model: str, metadata: dict[str, Any]) -> bool:
+def _is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
     """Return True when a model is safe to show in setup."""
     if not metadata:
         return False
     if metadata.get("deprecation_date"):
         return False
+
+    model_lower = model.lower()
+    if any(marker in model_lower for marker in LITELLM_TEXT_MODEL_EXCLUDED_MARKERS):
+        return False
+
+    provider_prefix, separator, _ = model_lower.partition("/")
+    if separator:
+        provider_exclusions = LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS.get(
+            provider_prefix,
+            (),
+        )
+        if any(marker in model_lower for marker in provider_exclusions):
+            return False
 
     mode = metadata.get("mode")
     if not isinstance(mode, str) or mode not in _ALLOWED_SETUP_MODEL_MODES:
@@ -648,8 +671,29 @@ def run_setup_wizard(
     model = select_model(provider_key, available_models, console=active_console)
 
     provider_info = PROVIDER_CONFIG[provider_key]
-    existing_key = current_config.get(provider_info["env_var"])
-    api_key = get_api_key(provider_key, existing_key, console=active_console)
+    env_var = provider_info.get("env_var")
+    api_key = None
+    if provider_info.get(
+        "auth_type", AUTH_TYPE_API_KEY
+    ) == AUTH_TYPE_API_KEY and isinstance(
+        env_var,
+        str,
+    ):
+        existing_key = current_config.get(env_var)
+        api_key = get_api_key(provider_key, existing_key, console=active_console)
+    elif provider_info.get("auth_type") == AUTH_TYPE_OAUTH_DEVICE:
+        active_console.print(
+            f"\n[bold yellow]OAuth Device Flow:[/bold yellow] {provider_info['name']}"
+        )
+        active_console.print(
+            "[dim]No API key is required for this provider. LiteLLM will show a "
+            "device code on first use and store provider tokens locally. Existing "
+            "API keys in config are preserved for future provider switches.[/dim]"
+        )
+        if Confirm.ask(OAUTH_SETUP_RUN_PROMPT, default=True):
+            _load_oauth_dependencies()
+            if run_oauth_login is not None:
+                run_oauth_login(provider_key, console=active_console)
 
     active_console.print("\n[bold cyan]Output Directory:[/bold cyan]")
     default_output = str(Path.cwd() / Path(DEFAULT_OUTPUT_DIR))
@@ -671,10 +715,11 @@ def run_setup_wizard(
 
     new_config = {
         "DEFAULT_MODEL": model,
-        provider_info["env_var"]: api_key,
         "OUTPUT_DIR": output_dir,
         "MAX_CONCURRENT_VIDEOS": concurrency,
     }
+    if isinstance(env_var, str) and api_key:
+        new_config[env_var] = api_key
 
     save_config(new_config, console=active_console)
 

@@ -8,11 +8,13 @@ Load order (later overrides earlier):
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from pathlib import Path
 from typing import Any, cast
 
+import structlog
 from pydantic import Field
 from pydantic.fields import FieldInfo
 from pydantic_settings import (
@@ -22,6 +24,7 @@ from pydantic_settings import (
 )
 
 from notewise._constants import (
+    AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
     CONFIG_FILENAME,
     DEFAULT_CHAPTER_MIN_DURATION,
@@ -35,36 +38,31 @@ from notewise._constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE,
     LEGACY_CONFIG_KEYS,
+    LITELLM_MODELS_SNAPSHOT_FILENAME,
+    OAUTH_DEVICE_PROVIDER_PREFIXES,
+    OAUTH_PROVIDER_CONFIGS,
+    OAUTH_TOKEN_DIR_ENV_VARS,
+    OAUTH_TOKEN_DIR_NAMES,
+    OAUTH_TOKEN_DIR_PARENT,
+    PROVIDER_API_KEY_ENV_VARS,
+    PROVIDER_AUTH_ENV_KEYS,
+    PROVIDER_REQUIRED_ENV_VARS,
     STATE_DIR_NAME,
+    UNSUPPORTED_MODEL_LIST_LIMIT,
+    UNSUPPORTED_MODEL_MESSAGE,
 )
 
 
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
-_NATIVE_PROVIDER_API_KEYS: dict[str, str] = {
-    "anthropic": "ANTHROPIC_API_KEY",
-    "cohere": "COHERE_API_KEY",
-    "deepseek": "DEEPSEEK_API_KEY",
-    "gemini": "GEMINI_API_KEY",
-    "groq": "GROQ_API_KEY",
-    "mistral": "MISTRAL_API_KEY",
-    "openai": "OPENAI_API_KEY",
-    "vertex": "GEMINI_API_KEY",
-    "vertex_ai": "GEMINI_API_KEY",
-    "xai": "XAI_API_KEY",
-}
-_UNSUPPORTED_GATEWAY_PREFIXES = frozenset({"azure", "openrouter", "vercel_ai_gateway"})
 _LEGACY_IGNORED_KEYS: frozenset[str] = LEGACY_CONFIG_KEYS
+_API_KEY_CONFIG_KEYS = frozenset(
+    env_var for env_vars in PROVIDER_API_KEY_ENV_VARS.values() for env_var in env_vars
+)
+_MODEL_SNAPSHOT_CACHE: dict[str, tuple[str, ...]] | None = None
 
 _ALLOWED_KEYS: frozenset[str] = frozenset(
     {
-        "GEMINI_API_KEY",
-        "OPENAI_API_KEY",
-        "ANTHROPIC_API_KEY",
-        "GROQ_API_KEY",
-        "XAI_API_KEY",
-        "MISTRAL_API_KEY",
-        "COHERE_API_KEY",
-        "DEEPSEEK_API_KEY",
         "DEFAULT_MODEL",
         "OUTPUT_DIR",
         "MAX_CONCURRENT_VIDEOS",
@@ -73,6 +71,8 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         "MAX_TOKENS",
         "YOUTUBE_COOKIE_FILE",
     }
+    | _API_KEY_CONFIG_KEYS
+    | PROVIDER_AUTH_ENV_KEYS
 )
 
 
@@ -87,6 +87,71 @@ def get_state_dir() -> Path:
 def get_cache_db_path() -> Path:
     """Return the canonical global cache DB path."""
     return get_state_dir() / CACHE_DB_FILENAME
+
+
+def get_oauth_token_storage_paths() -> dict[str, Path]:
+    """Return the notewise-scoped OAuth token directories by provider."""
+    state_dir = get_state_dir()
+    return {
+        provider: state_dir / OAUTH_TOKEN_DIR_PARENT / directory
+        for provider, directory in OAUTH_TOKEN_DIR_NAMES.items()
+    }
+
+
+def configure_oauth_token_storage() -> None:
+    """Default LiteLLM OAuth token directories to the notewise state dir."""
+    for provider, token_dir in get_oauth_token_storage_paths().items():
+        env_var = OAUTH_TOKEN_DIR_ENV_VARS[provider]
+        os.environ.setdefault(env_var, str(token_dir))
+
+
+def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
+    """Load the bundled setup model snapshot for runtime preflight checks."""
+    global _MODEL_SNAPSHOT_CACHE
+
+    if _MODEL_SNAPSHOT_CACHE is not None:
+        return _MODEL_SNAPSHOT_CACHE
+
+    snapshot_path = Path(__file__).parent / "ui" / LITELLM_MODELS_SNAPSHOT_FILENAME
+    try:
+        with snapshot_path.open(encoding="utf-8") as snapshot_file:
+            snapshot = json.load(snapshot_file)
+    except (OSError, json.JSONDecodeError):
+        logger.warning(
+            "_load_bundled_model_snapshot failed to load or parse bundled snapshot",
+            snapshot_path=str(snapshot_path),
+            cache_variable="_MODEL_SNAPSHOT_CACHE",
+            exc_info=True,
+        )
+        _MODEL_SNAPSHOT_CACHE = {}
+        return _MODEL_SNAPSHOT_CACHE
+
+    if not isinstance(snapshot, dict):
+        logger.warning(
+            "_load_bundled_model_snapshot ignored invalid bundled snapshot format",
+            snapshot_path=str(snapshot_path),
+            cache_variable="_MODEL_SNAPSHOT_CACHE",
+            snapshot_type=type(snapshot).__name__,
+        )
+        _MODEL_SNAPSHOT_CACHE = {}
+        return _MODEL_SNAPSHOT_CACHE
+
+    normalized: dict[str, tuple[str, ...]] = {}
+    for provider, models in snapshot.items():
+        if not isinstance(provider, str) or not isinstance(models, list):
+            logger.warning(
+                "_load_bundled_model_snapshot skipped invalid provider entry",
+                snapshot_path=str(snapshot_path),
+                cache_variable="_MODEL_SNAPSHOT_CACHE",
+                provider_type=type(provider).__name__,
+                models_type=type(models).__name__,
+            )
+            continue
+        normalized[provider] = tuple(
+            model for model in models if isinstance(model, str) and model
+        )
+    _MODEL_SNAPSHOT_CACHE = normalized
+    return _MODEL_SNAPSHOT_CACHE
 
 
 class UserConfigSource(PydanticBaseSettingsSource):
@@ -204,6 +269,7 @@ class AppSettings(BaseSettings):
 
     def model_post_init(self, __context: object) -> None:
         """Sync API keys back to os.environ for libraries that read env directly."""
+        configure_oauth_token_storage()
         key_map = {
             "gemini_api_key": "GEMINI_API_KEY",
             "openai_api_key": "OPENAI_API_KEY",
@@ -226,38 +292,142 @@ class AppSettings(BaseSettings):
 
     def get_api_key_name_for_model(self, model: str) -> str | None:
         """Return the env var name for the API key required by a given model."""
+        names = self.get_api_key_names_for_model(model)
+        return names[0] if names else None
+
+    def get_api_key_names_for_model(self, model: str) -> tuple[str, ...]:
+        """Return all accepted env var names for the selected model provider."""
+        model_lower = model.strip().lower()
+        if not model_lower:
+            return ()
+        provider, sep, _ = model_lower.partition("/")
+        if sep:
+            if (
+                provider in OAUTH_DEVICE_PROVIDER_PREFIXES
+                or provider in AMBIENT_CREDENTIAL_PROVIDER_PREFIXES
+            ):
+                return ()
+            return PROVIDER_API_KEY_ENV_VARS.get(provider, ())
+        if model_lower.startswith(("gemini", "vertex")):
+            return ("GEMINI_API_KEY",)
+        if model_lower.startswith(("gpt", "openai")) or _OPENAI_REASONING_MODEL.search(
+            model_lower
+        ):
+            return ("OPENAI_API_KEY",)
+        if model_lower.startswith(("claude", "anthropic")):
+            return ("ANTHROPIC_API_KEY",)
+        if model_lower.startswith("groq"):
+            return ("GROQ_API_KEY",)
+        if model_lower.startswith(("grok", "xai")):
+            return ("XAI_API_KEY",)
+        if model_lower.startswith("mistral"):
+            return ("MISTRAL_API_KEY",)
+        if model_lower.startswith(("cohere", "command")):
+            return ("COHERE_API_KEY",)
+        if model_lower.startswith("deepseek"):
+            return ("DEEPSEEK_API_KEY",)
+        return ()
+
+    def get_provider_prefix_for_model(self, model: str) -> str | None:
+        """Return the normalized LiteLLM provider prefix for a model string."""
         model_lower = model.strip().lower()
         if not model_lower:
             return None
         provider, sep, _ = model_lower.partition("/")
         if sep:
-            if provider in _UNSUPPORTED_GATEWAY_PREFIXES:
-                return None
-            return _NATIVE_PROVIDER_API_KEYS.get(provider)
-        if model_lower.startswith(("gemini", "vertex")):
-            return "GEMINI_API_KEY"
-        if model_lower.startswith(("gpt", "openai")) or _OPENAI_REASONING_MODEL.search(
-            model_lower
-        ):
-            return "OPENAI_API_KEY"
-        if model_lower.startswith(("claude", "anthropic")):
-            return "ANTHROPIC_API_KEY"
-        if model_lower.startswith("groq"):
-            return "GROQ_API_KEY"
-        if model_lower.startswith(("grok", "xai")):
-            return "XAI_API_KEY"
-        if model_lower.startswith("mistral"):
-            return "MISTRAL_API_KEY"
-        if model_lower.startswith(("cohere", "command")):
-            return "COHERE_API_KEY"
-        if model_lower.startswith("deepseek"):
-            return "DEEPSEEK_API_KEY"
+            return provider
         return None
+
+    def get_unsupported_model_message(self, model: str) -> str | None:
+        """Return a user-facing message when a known setup model is unsupported."""
+        normalized_model = model.strip().lower()
+        if not normalized_model:
+            return None
+
+        snapshot = _load_bundled_model_snapshot()
+        provider = self._get_snapshot_provider_for_model(normalized_model, snapshot)
+        if provider is None:
+            return None
+
+        supported_models = snapshot.get(provider, ())
+        if not supported_models or normalized_model in {
+            supported_model.lower() for supported_model in supported_models
+        }:
+            return None
+
+        listed_models = ", ".join(supported_models[:UNSUPPORTED_MODEL_LIST_LIMIT])
+        if len(supported_models) > UNSUPPORTED_MODEL_LIST_LIMIT:
+            listed_models = f"{listed_models}, ..."
+
+        provider_config = OAUTH_PROVIDER_CONFIGS.get(provider, {})
+        provider_label = provider_config.get("label", provider)
+        return UNSUPPORTED_MODEL_MESSAGE.format(
+            model=model,
+            provider_label=provider_label,
+            supported_models=listed_models,
+        )
+
+    def _get_snapshot_provider_for_model(
+        self,
+        normalized_model: str,
+        snapshot: dict[str, tuple[str, ...]],
+    ) -> str | None:
+        """Return the setup snapshot provider that should validate a model."""
+        provider = self.get_provider_prefix_for_model(normalized_model)
+        if provider is not None:
+            return provider if provider in snapshot else None
+
+        for snapshot_provider, supported_models in snapshot.items():
+            if normalized_model in {
+                supported_model.lower() for supported_model in supported_models
+            }:
+                return snapshot_provider
+
+        if normalized_model.startswith(
+            ("gpt", "openai")
+        ) or _OPENAI_REASONING_MODEL.search(normalized_model):
+            return "openai" if "openai" in snapshot else None
+        if normalized_model.startswith(("gemini", "vertex")):
+            return "gemini" if "gemini" in snapshot else None
+        if normalized_model.startswith(("claude", "anthropic")):
+            return "anthropic" if "anthropic" in snapshot else None
+        if normalized_model.startswith("groq"):
+            return "groq" if "groq" in snapshot else None
+        if normalized_model.startswith(("grok", "xai")):
+            return "xai" if "xai" in snapshot else None
+        if normalized_model.startswith("mistral"):
+            return "mistral" if "mistral" in snapshot else None
+        if normalized_model.startswith(("cohere", "command")):
+            return "cohere" if "cohere" in snapshot else None
+        if normalized_model.startswith("deepseek"):
+            return "deepseek" if "deepseek" in snapshot else None
+        return None
+
+    def get_required_env_names_for_model(self, model: str) -> tuple[str, ...]:
+        """Return non-API-key env vars required by a provider integration."""
+        provider = self.get_provider_prefix_for_model(model)
+        if provider is None:
+            return ()
+        return PROVIDER_REQUIRED_ENV_VARS.get(provider, ())
+
+    def get_missing_config_names_for_model(self, model: str) -> tuple[str, ...]:
+        """Return missing auth/config env names for a model provider."""
+        missing: list[str] = []
+        api_key_names = self.get_api_key_names_for_model(model)
+        if api_key_names and not any(os.environ.get(name) for name in api_key_names):
+            missing.append(" or ".join(api_key_names))
+        for name in self.get_required_env_names_for_model(model):
+            if not os.environ.get(name):
+                missing.append(name)
+        return tuple(missing)
 
     def get_api_key_for_model(self, model: str) -> str | None:
         """Return the API key value for a given model."""
-        var = self.get_api_key_name_for_model(model)
-        return os.environ.get(var) if var else None
+        for var in self.get_api_key_names_for_model(model):
+            value = os.environ.get(var)
+            if value:
+                return value
+        return None
 
 
 class _LazyAppSettings:

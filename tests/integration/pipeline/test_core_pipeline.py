@@ -168,11 +168,13 @@ def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
         chapter_transcripts: dict[str, str],
         *,
         on_chapter_start=None,
+        generate_single=None,
         **kwargs,
     ):
         del kwargs
         total = len(chapter_transcripts)
         result: dict[str, str] = {}
+        chapter_generator = generate_single or generator.generate_single_chapter_notes
 
         for index, (chapter_title, chapter_text) in enumerate(
             chapter_transcripts.items(),
@@ -180,7 +182,7 @@ def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
         ):
             if on_chapter_start is not None:
                 on_chapter_start(index, total)
-            result[chapter_title] = await generator.generate_single_chapter_notes(
+            result[chapter_title] = await chapter_generator(
                 chapter_title,
                 chapter_text,
             )
@@ -1102,6 +1104,103 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
 
 
 @pytest.mark.asyncio
+async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
+    temp_output_dir, mock_llm_provider
+):
+    """Concurrent chapter runs must not share per-video chapter title lookups."""
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    async def _generate_chapter(
+        chapter_title,
+        chapter_text,
+        on_chunk=None,
+        on_combine=None,  # noqa: ANN001
+    ):
+        del on_chunk, on_combine
+        await asyncio.sleep(0)
+        return f"# {chapter_title}\n\n{chapter_text}"
+
+    async def _delayed_concurrent_chapters(
+        chapter_transcripts,
+        *,
+        on_chapter_start=None,
+        generate_single=None,
+        **kwargs,
+    ):
+        del kwargs
+        await asyncio.sleep(0)
+        result: dict[str, str] = {}
+        total = len(chapter_transcripts)
+        chapter_generator = generate_single or p.generator.generate_single_chapter_notes
+        for index, (chapter_title, chapter_text) in enumerate(
+            chapter_transcripts.items(), start=1
+        ):
+            if on_chapter_start is not None:
+                on_chapter_start(index, total)
+            result[chapter_title] = await chapter_generator(
+                chapter_title,
+                chapter_text,
+            )
+        return result
+
+    p.generator.generate_single_chapter_notes.side_effect = _generate_chapter
+    p.generator.generate_chapter_notes_concurrent = AsyncMock(
+        side_effect=_delayed_concurrent_chapters
+    )
+
+    def _metadata(video_id, *_args, **_kwargs):
+        return VideoMetadata(
+            video_id=video_id,
+            title=f"Video {video_id}",
+            duration=7200,
+            chapters=[VideoChapter(title="Intro", start_seconds=0, end_seconds=None)],
+        )
+
+    def _split(transcript, _chapters):
+        if transcript.video_id == "vid-a":
+            return {
+                "Introduction & Recap": ChapterTranscript(
+                    title="Introduction & Recap",
+                    text="alpha",
+                    start_seconds=0,
+                )
+            }
+        return {
+            "System Design Setup": ChapterTranscript(
+                title="System Design Setup",
+                text="beta",
+                start_seconds=0,
+            )
+        }
+
+    with (
+        patch(_COMMON_PATCHES["metadata"], side_effect=_metadata),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            side_effect=_split,
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.side_effect = lambda video_id, *_args, **_kwargs: _make_transcript(
+            video_id=video_id,
+            text=f"transcript {video_id}",
+        )
+
+        result = await p.run(["vid-a", "vid-b"])
+
+    assert result.success_count == 2
+    assert result.failure_count == 0
+    assert result.errors == {}
+    assert (temp_output_dir / "Video vid-a" / "01_Introduction & Recap.md").read_text(
+        encoding="utf-8"
+    ) == "# Introduction & Recap\n\nalpha"
+    assert (temp_output_dir / "Video vid-b" / "01_System Design Setup.md").read_text(
+        encoding="utf-8"
+    ) == "# System Design Setup\n\nbeta"
+
+
+@pytest.mark.asyncio
 async def test_run_failed_chapter_generation_still_emits_chapter_complete(
     temp_output_dir, mock_llm_provider
 ):
@@ -2005,6 +2104,113 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
     assert (first_dir / "Shared Long_quiz.md").exists()
     assert (second_dir / "01_Intro.md").exists()
     assert (second_dir / "Shared Long (vid2)_quiz.md").exists()
+
+
+@pytest.mark.asyncio
+async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Metadata-less same-title folders should not be clobbered by chapter runs."""
+    existing_dir = temp_output_dir / "Resume Long"
+    existing_dir.mkdir()
+    (existing_dir / "01_Intro.md").write_text("old notes", encoding="utf-8")
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="resume-id",
+                    title="Resume Long",
+                    duration=7200,
+                    chapters=[
+                        VideoChapter(title="Intro", start_seconds=0, end_seconds=None)
+                    ],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="fresh chapter",
+                    start_seconds=0,
+                )
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(
+            video_id="resume-id", text="fresh transcript"
+        )
+
+        result = await p.run(["resume-id"])
+
+    assert result.success_count == 1
+    assert (existing_dir / "01_Intro.md").read_text(encoding="utf-8") == "old notes"
+    suffix_dir = temp_output_dir / "Resume Long (resume-id)"
+    assert (suffix_dir / "01_Intro.md").read_text(encoding="utf-8") == (
+        "# Chapter Notes"
+    )
+    assert (suffix_dir / ".notewise-output.json").exists()
+
+
+@pytest.mark.asyncio
+async def test_chapter_run_reuses_existing_matching_metadata_folder(
+    temp_output_dir, mock_llm_provider
+):
+    """Chapter folders are reusable only when ownership metadata matches."""
+    existing_dir = temp_output_dir / "Resume Long"
+    existing_dir.mkdir()
+    (existing_dir / ".notewise-output.json").write_text(
+        json.dumps({"video_id": "resume-id"}),
+        encoding="utf-8",
+    )
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="resume-id",
+                    title="Resume Long",
+                    duration=7200,
+                    chapters=[
+                        VideoChapter(title="Intro", start_seconds=0, end_seconds=None)
+                    ],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="fresh chapter",
+                    start_seconds=0,
+                )
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(
+            video_id="resume-id", text="fresh transcript"
+        )
+
+        result = await p.run(["resume-id"])
+
+    assert result.success_count == 1
+    assert (existing_dir / "01_Intro.md").read_text(encoding="utf-8") == (
+        "# Chapter Notes"
+    )
+    assert not (temp_output_dir / "Resume Long (resume-id)").exists()
 
 
 async def test_pipeline_persists_video_metadata_in_sqlite_cache(

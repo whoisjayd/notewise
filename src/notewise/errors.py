@@ -82,6 +82,10 @@ class LLMGenerationError(LLMError):
     """Raised when the LLM returns an error or empty result."""
 
 
+class OAuthError(LLMError):
+    """Raised when OAuth/device-flow provider login cannot proceed."""
+
+
 class PersistenceError(NoteWiseError):
     """Raised on SQLite / database failures."""
 
@@ -262,6 +266,7 @@ __all__ = [
     "ExtractionError",
     "LLMError",
     "LLMGenerationError",
+    "OAuthError",
     "PersistenceError",
     "UpdateError",
     "raise_if_video_unavailable",
