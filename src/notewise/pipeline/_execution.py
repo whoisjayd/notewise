@@ -149,7 +149,6 @@ async def process_single_video(
                         output_target.mkdir(parents=True, exist_ok=True)
                         pipeline._write_output_target_metadata(output_target, video_id)
                         transcript_output_dir = output_target
-                        working_output_dir = output_target / ".working"
                     else:
                         working_output_dir = await pipeline._reserve_output_target(
                             pipeline.output_dir / ".working" / sanitize_filename(title),

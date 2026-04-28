@@ -22,6 +22,7 @@ pytestmark = [
 ]
 
 _VIDEO_URL = "https://www.youtube.com/watch?v=8uiZC0l4Ajw"
+_VIDEO_WITH_CHAPTERS = _VIDEO_URL
 _PLAYLIST_URL = (
     "https://www.youtube.com/playlist?list=PL7s8EzBd1s8op6WSiYxr3U9E_T1DoIkJG"
 )
@@ -60,15 +61,32 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.parametrize(
-    ("url", "output_dir_name", "minimum_markdown_files", "extra_args"),
+    (
+        "url",
+        "output_dir_name",
+        "minimum_markdown_files",
+        "extra_args",
+        "expect_chapter_directory_output",
+    ),
     [
-        (_VIDEO_URL, "video", 1, []),
-        (_VIDEO_URL, "video-chapters", 1, ["--chapter-directory-output"]),
-        (_PLAYLIST_URL, "playlist", 2, []),
+        (_VIDEO_URL, "video", 1, [], False),
+        (
+            _VIDEO_WITH_CHAPTERS,
+            "video-chapters",
+            1,
+            ["--chapter-directory-output"],
+            True,
+        ),
+        (_PLAYLIST_URL, "playlist", 2, [], False),
     ],
 )
 def test_public_smoke(
-    url, output_dir_name, minimum_markdown_files, extra_args, tmp_path
+    url,
+    output_dir_name,
+    minimum_markdown_files,
+    extra_args,
+    expect_chapter_directory_output,
+    tmp_path,
 ):
     """Live public YouTube inputs should still process end-to-end."""
     _prepare_live_state_dir()
@@ -84,4 +102,16 @@ def test_public_smoke(
 
     markdown_files = list(output_dir.rglob("*.md"))
     assert len(markdown_files) >= minimum_markdown_files
+
+    if expect_chapter_directory_output:
+        chapter_dirs = [path for path in output_dir.iterdir() if path.is_dir()]
+        assert chapter_dirs, "expected a per-video directory for chapter output"
+
+        chapter_markdown_files = sorted(chapter_dirs[0].glob("*.md"))
+        assert len(chapter_markdown_files) >= 2
+        assert all(file.name[:2].isdigit() for file in chapter_markdown_files)
+        assert not any(
+            file.parent.name == ".working" for file in chapter_markdown_files
+        )
+
     assert "Done:" in result.stdout or "Batch Completed" in result.stdout

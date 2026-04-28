@@ -306,7 +306,6 @@ async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles
     assert "later segment" in third_notes
 
 
-@pytest.mark.asyncio
 async def test_process_single_video_bundles_chapters_into_single_markdown_by_default(
     pipeline,
     temp_output_dir,
@@ -1112,7 +1111,12 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
 ):
     """Chunked chapter generation should emit chapter part and combine events."""
     events: list[PipelineEvent] = []
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     async def _generate_chapter(
         chapter_title,
@@ -1191,7 +1195,12 @@ async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
     temp_output_dir, mock_llm_provider
 ):
     """Concurrent chapter runs must not share per-video chapter title lookups."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     async def _generate_chapter(
         chapter_title,
@@ -1289,7 +1298,12 @@ async def test_run_failed_chapter_generation_still_emits_chapter_complete(
 ):
     """Started chapter workers should always release their dashboard slot."""
     events: list[PipelineEvent] = []
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     async def _fail_chapter(
         chapter_title,
@@ -1346,7 +1360,12 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
     temp_output_dir, mock_llm_provider
 ):
     """Empty chapter splits should fall back to normal single-file generation."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -1384,7 +1403,12 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
     temp_output_dir, mock_llm_provider
 ):
     """Chapter-mode quizzes should live inside the per-video chapter folder."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        quiz=True,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -1486,6 +1510,7 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
     chapter_dir = temp_output_dir / "Long Video"
     assert (chapter_dir / "Long Video_transcript.txt").exists()
     assert not (temp_output_dir / "Long Video_transcript.txt").exists()
+    assert not (chapter_dir / ".working").exists()
 
 
 # ---------------------------------------------------------------------------
@@ -1508,7 +1533,7 @@ def _make_pipeline(
     force: bool = False,
     quiz: bool = False,
     output_format: str = "md",
-    chapter_directory_output: bool = True,
+    chapter_directory_output: bool = False,
 ):
     with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         p = CorePipeline(
@@ -1557,7 +1582,12 @@ async def test_checkpoint_skips_existing_single_file(
     _seed_cached_video("vid1", title="Test Video")
 
     events: list[PipelineEvent] = []
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -1646,7 +1676,12 @@ async def test_checkpoint_force_skips_cache_lookup(temp_output_dir, mock_llm_pro
 @pytest.mark.asyncio
 async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider):
     """When no prior output exists the video is processed normally."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -2009,7 +2044,12 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     _seed_cached_video("vid1", title="Shared Title")
 
     events: list[PipelineEvent] = []
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -2124,7 +2164,12 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
     temp_output_dir, mock_llm_provider
 ):
     """Same-title long videos should get separate chapter folders and quiz files."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        quiz=True,
+        chapter_directory_output=True,
+    )
     p.semaphore = asyncio.Semaphore(1)
 
     with (
@@ -2202,7 +2247,12 @@ async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
     existing_dir.mkdir()
     (existing_dir / "01_Intro.md").write_text("old notes", encoding="utf-8")
 
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -2258,7 +2308,12 @@ async def test_chapter_run_reuses_existing_matching_metadata_folder(
         encoding="utf-8",
     )
 
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -2304,7 +2359,12 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     temp_output_dir, mock_llm_provider
 ):
     """Successful runs should persist metadata/transcript/run-stats into SQLite."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     with (
         patch(
@@ -2348,7 +2408,12 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
     temp_output_dir, mock_llm_provider
 ):
     """Run result and DB stats should include prompt/completion + timing metrics."""
-    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=False)
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=False,
+        chapter_directory_output=True,
+    )
 
     @contextmanager
     def _collect_usage():
