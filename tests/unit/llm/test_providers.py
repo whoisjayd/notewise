@@ -448,6 +448,20 @@ class TestLLMProvider:
             cost_usd=pytest.approx(0.000091),
         )
 
+    async def test_generate_retries_empty_responses_api_stream(self):
+        """Empty Responses streams should be retried before surfacing failure."""
+        with patch("notewise.llm.provider.aresponses") as mock_aresponses:
+            mock_aresponses.side_effect = [
+                AsyncChunks([]),
+                AsyncChunks([SimpleNamespace(delta="Recovered")]),
+            ]
+
+            provider = LLMProvider("chatgpt/gpt-5.2")
+            result = await provider.generate("sys", "user")
+
+        assert result == "Recovered"
+        assert mock_aresponses.call_count == 2
+
     def test_normalize_responses_content_handles_structured_output(self):
         """Responses payloads without output_text should still flatten text blocks."""
         provider = LLMProvider("chatgpt/gpt-5-codex")

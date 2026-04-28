@@ -101,10 +101,20 @@ def test_public_smoke(
     )
 
     markdown_files = list(output_dir.rglob("*.md"))
-    assert len(markdown_files) >= minimum_markdown_files
+    visible_markdown_files = [
+        file
+        for file in markdown_files
+        if ".working" not in file.relative_to(output_dir).parts
+    ]
+    assert len(visible_markdown_files) >= minimum_markdown_files
 
     if expect_chapter_directory_output:
-        chapter_dirs = [path for path in output_dir.iterdir() if path.is_dir()]
+        assert not (output_dir / ".working").exists()
+        chapter_dirs = [
+            path
+            for path in output_dir.iterdir()
+            if path.is_dir() and not path.name.startswith(".")
+        ]
         assert chapter_dirs, "expected a per-video directory for chapter output"
 
         chapter_markdown_files = sorted(chapter_dirs[0].glob("*.md"))
