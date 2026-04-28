@@ -437,6 +437,16 @@ def process(
             ),
         ),
     ] = False,
+    chapter_directory_output: Annotated[
+        bool,
+        typer.Option(
+            "--chapter-directory-output",
+            help=(
+                "Write per-chapter Markdown files into a video folder. By default, "
+                "chapter-aware generation is combined into a single final notes file."
+            ),
+        ),
+    ] = False,
     cookie_file: Annotated[
         Path | None,
         typer.Option(
@@ -513,6 +523,7 @@ def process(
             use_combine_chunk=use_combine_chunk,
             export_transcript=export_transcript,
             timestamps=timestamps,
+            chapter_directory_output=chapter_directory_output,
             selected_cookie_file=(
                 str(cookie_file)
                 if cookie_file is not None

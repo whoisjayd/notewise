@@ -87,15 +87,14 @@ async def process_single_video(
 
             emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
 
-            use_chapters = bool(
-                duration > config.chapter_generation_min_duration and chapters
-            )
+            use_chapters = bool(chapters)
             chapter_directory_output = False
             bundled_output_formats: list[str] = []
             output_target: Path | None = None
             rendered_output_targets: dict[str, Path] = {}
             render_warning: str | None = None
             transcript_output_dir = pipeline.output_dir
+            working_output_dir: Path | None = None
 
             generation_start = time.perf_counter()
             usage_context = nullcontext(pipeline_module.UsageTotals())
@@ -121,16 +120,17 @@ async def process_single_video(
                         )
                         use_chapters = False
                     else:
-                        chapter_directory_output = (
-                            pipeline_module.DEFAULT_NOTES_OUTPUT_FORMAT
-                            in pipeline.output_formats
+                        chapter_directory_output = pipeline.chapter_directory_output
+                        bundled_output_formats = (
+                            [
+                                output_format
+                                for output_format in pipeline.output_formats
+                                if output_format
+                                != pipeline_module.DEFAULT_NOTES_OUTPUT_FORMAT
+                            ]
+                            if chapter_directory_output
+                            else list(pipeline.output_formats)
                         )
-                        bundled_output_formats = [
-                            output_format
-                            for output_format in pipeline.output_formats
-                            if output_format
-                            != pipeline_module.DEFAULT_NOTES_OUTPUT_FORMAT
-                        ]
 
                 if use_chapters:
                     total_chapters = len(chapter_transcripts)
@@ -149,6 +149,21 @@ async def process_single_video(
                         output_target.mkdir(parents=True, exist_ok=True)
                         pipeline._write_output_target_metadata(output_target, video_id)
                         transcript_output_dir = output_target
+                        working_output_dir = output_target / ".working"
+                    else:
+                        working_output_dir = await pipeline._reserve_output_target(
+                            pipeline.output_dir / ".working" / sanitize_filename(title),
+                            video_id,
+                            allow_existing_base=pipeline.force
+                            or current_cached_video is not None,
+                        )
+                        reserved_targets.append(working_output_dir)
+
+                    if working_output_dir is not None:
+                        working_output_dir.mkdir(parents=True, exist_ok=True)
+                        pipeline._write_output_target_metadata(
+                            working_output_dir, video_id
+                        )
 
                     for output_format in bundled_output_formats:
                         bundled_output_target = await pipeline._reserve_output_target(
@@ -170,9 +185,13 @@ async def process_single_video(
 
                     for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
                         chapter_file: Path | None = None
+                        safe_chapter = sanitize_filename(chap_title)
                         if chapter_directory_output and output_target is not None:
-                            safe_chapter = sanitize_filename(chap_title)
                             chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
+                        elif working_output_dir is not None:
+                            chapter_file = (
+                                working_output_dir / f"{i:02d}_{safe_chapter}.md"
+                            )
 
                         chapter_targets.append(
                             (chap_title, chapter_data.start_seconds, chapter_file)

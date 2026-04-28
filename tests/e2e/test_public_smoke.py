@@ -60,18 +60,23 @@ def _run_cli(*args: str) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.parametrize(
-    ("url", "output_dir_name", "minimum_markdown_files"),
+    ("url", "output_dir_name", "minimum_markdown_files", "extra_args"),
     [
-        (_VIDEO_URL, "video", 1),
-        (_PLAYLIST_URL, "playlist", 2),
+        (_VIDEO_URL, "video", 1, []),
+        (_VIDEO_URL, "video-chapters", 1, ["--chapter-directory-output"]),
+        (_PLAYLIST_URL, "playlist", 2, []),
     ],
 )
-def test_public_smoke(url, output_dir_name, minimum_markdown_files, tmp_path):
+def test_public_smoke(
+    url, output_dir_name, minimum_markdown_files, extra_args, tmp_path
+):
     """Live public YouTube inputs should still process end-to-end."""
     _prepare_live_state_dir()
     output_dir = tmp_path / output_dir_name
 
-    result = _run_cli("process", url, "--no-ui", "--output", str(output_dir))
+    result = _run_cli(
+        "process", url, "--no-ui", "--output", str(output_dir), *extra_args
+    )
 
     assert result.returncode == 0, (
         f"stdout:\n{result.stdout}\n\nstderr:\n{result.stderr}"
