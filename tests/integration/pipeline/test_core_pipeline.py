@@ -248,6 +248,7 @@ async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles
     ]
 
     pipeline.timestamps = True
+    pipeline.chapter_directory_output = True
     pipeline.force = True
     pipeline.quiz = False
     pipeline.export_transcript_format = None
@@ -303,6 +304,87 @@ async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles
     third_notes = third_chapter.read_text(encoding="utf-8")
     assert third_notes.startswith("# [05:00] Intro")
     assert "later segment" in third_notes
+
+
+@pytest.mark.asyncio
+async def test_process_single_video_bundles_chapters_into_single_markdown_by_default(
+    pipeline,
+    temp_output_dir,
+):
+    transcript = VideoTranscript(
+        video_id="vid-bundle",
+        segments=[
+            TranscriptSegment(text="intro segment", start=5.0, duration=5.0),
+            TranscriptSegment(text="deep dive", start=35.0, duration=5.0),
+        ],
+        language="English",
+        language_code="en",
+        is_generated=False,
+    )
+    chapters = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    pipeline.timestamps = True
+    pipeline.chapter_directory_output = False
+    pipeline.force = True
+    pipeline.quiz = False
+    pipeline.export_transcript_format = None
+    pipeline._get_cached_video = AsyncMock(return_value=None)
+    pipeline._acquire_youtube_request_slot = AsyncMock()
+    pipeline._reserve_output_target = AsyncMock(
+        side_effect=[
+            temp_output_dir / ".working" / "Short Chapter Video",
+            temp_output_dir / "Short Chapter Video.md",
+        ]
+    )
+    pipeline._release_output_target = AsyncMock()
+    pipeline._record_metrics = AsyncMock()
+    pipeline._persist_video_cache = AsyncMock()
+    pipeline._export_transcript = MagicMock()
+    pipeline.generator.generate_single_chapter_notes = AsyncMock(
+        side_effect=(
+            lambda chapter_title, chapter_text, **_kwargs: (
+                f"# {chapter_title}\n\n{chapter_text}"
+            )
+        )
+    )
+    pipeline.generator.generate_chapter_notes_concurrent = (
+        _mock_generate_chapter_notes_concurrent(pipeline.generator)
+    )
+
+    with (
+        patch(
+            "notewise.pipeline._execution.pipeline_module.get_video_metadata",
+            AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-bundle",
+                    title="Short Chapter Video",
+                    duration=120,
+                    chapters=chapters,
+                )
+            ),
+        ),
+        patch(
+            "notewise.pipeline._execution.pipeline_module.fetch_transcript",
+            AsyncMock(return_value=transcript),
+        ),
+    ):
+        ok = await pipeline._process_single_video("vid-bundle")
+
+    assert ok is True
+    bundled_notes = (temp_output_dir / "Short Chapter Video.md").read_text(
+        encoding="utf-8"
+    )
+    assert bundled_notes.startswith("# Short Chapter Video")
+    assert "# [00:00] Intro" in bundled_notes
+    assert "# [00:30] Deep Dive" in bundled_notes
+    assert not (temp_output_dir / "Short Chapter Video").exists()
+
+    working_dir = temp_output_dir / ".working" / "Short Chapter Video"
+    assert (working_dir / "01_Intro.md").exists()
+    assert (working_dir / "02_Deep Dive.md").exists()
 
 
 @pytest.mark.asyncio
@@ -885,6 +967,7 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
         VideoChapter(title="Intro", start_seconds=0, end_seconds=600),
         VideoChapter(title="Deep Dive", start_seconds=600, end_seconds=None),
     ]
+    pipeline.chapter_directory_output = True
 
     with (
         patch(
@@ -1355,6 +1438,7 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
             model="mock-model",
             output_dir=temp_output_dir,
             export_transcript="txt",
+            chapter_directory_output=True,
         )
         p.generator = MagicMock()
         p.generator.generate_single_chapter_notes = AsyncMock(
@@ -1424,6 +1508,7 @@ def _make_pipeline(
     force: bool = False,
     quiz: bool = False,
     output_format: str = "md",
+    chapter_directory_output: bool = True,
 ):
     with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
         p = CorePipeline(
@@ -1432,6 +1517,7 @@ def _make_pipeline(
             force=force,
             quiz=quiz,
             output_format=output_format,
+            chapter_directory_output=chapter_directory_output,
         )
         p.generator = MagicMock()
         p.generator.generate_study_notes = AsyncMock(return_value="# Notes")
@@ -1762,6 +1848,7 @@ async def test_non_markdown_chapter_output_bundles_into_single_document(
         mock_llm_provider,
         quiz=True,
         output_format="html",
+        chapter_directory_output=False,
     )
     chapter_meta = [
         VideoChapter(title="Intro", start_seconds=0, end_seconds=600),

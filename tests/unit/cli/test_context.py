@@ -37,6 +37,7 @@ def test_build_pipeline_passes_target_language() -> None:
         use_combine_chunk=False,
         export_transcript=None,
         timestamps=False,
+        chapter_directory_output=False,
         selected_cookie_file=None,
     )
 
@@ -56,6 +57,7 @@ def test_build_pipeline_passes_target_language() -> None:
         use_combine_chunk=False,
         export_transcript=None,
         timestamps=False,
+        chapter_directory_output=False,
         youtube_cookie_file=None,
         shared_state=None,
     )
@@ -86,6 +88,7 @@ def test_build_pipeline_uses_default_target_language_when_not_overridden() -> No
         use_combine_chunk=False,
         export_transcript=None,
         timestamps=False,
+        chapter_directory_output=False,
         selected_cookie_file=None,
     )
 
@@ -105,6 +108,7 @@ def test_build_pipeline_uses_default_target_language_when_not_overridden() -> No
         use_combine_chunk=False,
         export_transcript=None,
         timestamps=False,
+        chapter_directory_output=False,
         youtube_cookie_file=None,
         shared_state=None,
     )
