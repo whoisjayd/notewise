@@ -110,6 +110,7 @@ class CorePipeline:
         use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         export_transcript: str | None = None,
         timestamps: bool = False,
+        chapter_directory_output: bool = False,
         youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
     ):
@@ -143,6 +144,7 @@ class CorePipeline:
         self.use_combine_chunk = use_combine_chunk
         self.export_transcript_format = export_transcript
         self.timestamps = timestamps
+        self.chapter_directory_output = chapter_directory_output
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
         self.youtube_requests_per_minute = config.youtube_requests_per_minute
         self.errors: dict[str, str] = {}

@@ -40,6 +40,7 @@ class CliProcessContext:
     use_combine_chunk: bool
     export_transcript: str | None
     timestamps: bool
+    chapter_directory_output: bool
     selected_cookie_file: str | None
     selected_target_language: str = DEFAULT_TARGET_LANGUAGE
     api_key_checked: bool | None = None
@@ -166,6 +167,7 @@ class CliProcessContext:
             use_combine_chunk=self.use_combine_chunk,
             export_transcript=self.export_transcript,
             timestamps=self.timestamps,
+            chapter_directory_output=self.chapter_directory_output,
             youtube_cookie_file=self.selected_cookie_file,
             shared_state=shared_state,
         )

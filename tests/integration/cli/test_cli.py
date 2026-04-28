@@ -163,6 +163,18 @@ def test_process_passes_timestamps_flag(mock_config_exists, mock_pipeline):  # n
     assert mock_cls.call_args.kwargs["timestamps"] is True
 
 
+def test_process_passes_chapter_directory_output_flag(
+    mock_config_exists, mock_pipeline
+):
+    del mock_config_exists
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--chapter-directory-output"])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["chapter_directory_output"] is True
+
+
 def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
     mock_cls, _pipeline_instance = mock_pipeline
 
