@@ -27,7 +27,6 @@ from notewise._constants import (
     AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
     CONFIG_FILENAME,
-    DEFAULT_CHAPTER_MIN_DURATION,
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_LANGUAGES,
@@ -235,7 +234,6 @@ class AppSettings(BaseSettings):
     # Chunking (code defaults only; not exposed in config.env)
     chunk_size: int = DEFAULT_CHUNK_SIZE
     chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
-    chapter_generation_min_duration: int = DEFAULT_CHAPTER_MIN_DURATION
 
     # Concurrency
     max_concurrent_videos: int = Field(
