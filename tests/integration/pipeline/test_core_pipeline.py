@@ -334,7 +334,6 @@ async def test_process_single_video_bundles_chapters_into_single_markdown_by_def
     pipeline._acquire_youtube_request_slot = AsyncMock()
     pipeline._reserve_output_target = AsyncMock(
         side_effect=[
-            temp_output_dir / ".working" / "Short Chapter Video",
             temp_output_dir / "Short Chapter Video.md",
         ]
     )
@@ -380,10 +379,209 @@ async def test_process_single_video_bundles_chapters_into_single_markdown_by_def
     assert "# [00:00] Intro" in bundled_notes
     assert "# [00:30] Deep Dive" in bundled_notes
     assert not (temp_output_dir / "Short Chapter Video").exists()
+    assert not (temp_output_dir / ".working").exists()
+    assert not list(temp_output_dir.glob("Short Chapter Video_chapter_*.md"))
 
-    working_dir = temp_output_dir / ".working" / "Short Chapter Video"
-    assert (working_dir / "01_Intro.md").exists()
-    assert (working_dir / "02_Deep Dive.md").exists()
+
+@pytest.mark.asyncio
+async def test_bundled_chapter_output_suffixes_final_file_collision(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider)
+    p.timestamps = False
+    p.export_transcript_format = None
+
+    (temp_output_dir / "Collision Video.md").write_text(
+        "# Existing output",
+        encoding="utf-8",
+    )
+
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-collision",
+                    title="Collision Video",
+                    duration=60,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="intro transcript",
+                    start_seconds=0,
+                ),
+                "Deep Dive": ChapterTranscript(
+                    title="Deep Dive",
+                    text="deep dive transcript",
+                    start_seconds=30,
+                ),
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id="vid-collision")
+
+        result = await p.run(["vid-collision"])
+
+    assert result.success_count == 1
+    assert (temp_output_dir / "Collision Video.md").read_text(
+        encoding="utf-8"
+    ) == "# Existing output"
+    assert (temp_output_dir / "Collision Video (vid-collision).md").exists()
+    assert not (temp_output_dir / ".working").exists()
+
+
+@pytest.mark.asyncio
+async def test_bundled_chapter_failure_keeps_temporary_chapter_artifacts(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider)
+    p.timestamps = False
+    p.export_transcript_format = None
+
+    async def _generate_until_failure(
+        chapter_transcripts,
+        *,
+        generate_single=None,
+        on_chapter_complete=None,
+        **_kwargs,
+    ):
+        chapter_title, chapter_text = next(iter(chapter_transcripts.items()))
+        notes = await generate_single(chapter_title, chapter_text)
+        if on_chapter_complete is not None:
+            on_chapter_complete(chapter_title, notes)
+        raise RuntimeError("chapter generation stopped")
+
+    p.generator.generate_single_chapter_notes = AsyncMock(
+        return_value="# Intro\n\ncompleted before failure"
+    )
+    p.generator.generate_chapter_notes_concurrent = AsyncMock(
+        side_effect=_generate_until_failure
+    )
+
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-partial",
+                    title="Partial Video",
+                    duration=60,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="intro transcript",
+                    start_seconds=0,
+                ),
+                "Deep Dive": ChapterTranscript(
+                    title="Deep Dive",
+                    text="deep dive transcript",
+                    start_seconds=30,
+                ),
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id="vid-partial")
+
+        result = await p.run(["vid-partial"])
+
+    assert result.failure_count == 1
+    completed_chapter = temp_output_dir / "Partial Video_chapter_01_Intro.md"
+    assert completed_chapter.exists()
+    assert "completed before failure" in completed_chapter.read_text(encoding="utf-8")
+    assert not (temp_output_dir / "Partial Video.md").exists()
+    assert not (temp_output_dir / ".working").exists()
+
+
+@pytest.mark.asyncio
+async def test_bundled_chapter_retry_reuses_temporary_artifacts_with_force(
+    temp_output_dir, mock_llm_provider
+):
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
+    p.timestamps = True
+    p.export_transcript_format = None
+
+    (temp_output_dir / "Retry Video_chapter_01_Intro.md").write_text(
+        "# Intro\n\nexisting intro",
+        encoding="utf-8",
+    )
+    (temp_output_dir / "Retry Video_chapter_02_Deep Dive.md").write_text(
+        "# Deep Dive\n\nexisting deep dive",
+        encoding="utf-8",
+    )
+
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-retry",
+                    title="Retry Video",
+                    duration=60,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro",
+                    text="intro transcript",
+                    start_seconds=0,
+                ),
+                "Deep Dive": ChapterTranscript(
+                    title="Deep Dive",
+                    text="deep dive transcript",
+                    start_seconds=30,
+                ),
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id="vid-retry")
+
+        result = await p.run(["vid-retry"])
+
+    assert result.success_count == 1
+    p.generator.generate_chapter_notes_concurrent.assert_not_awaited()
+    bundled_notes = (temp_output_dir / "Retry Video.md").read_text(encoding="utf-8")
+    assert "# [00:00] Intro" in bundled_notes
+    assert "existing intro" in bundled_notes
+    assert "# [00:30] Deep Dive" in bundled_notes
+    assert "existing deep dive" in bundled_notes
+    assert not list(temp_output_dir.glob("Retry Video_chapter_*.md"))
 
 
 @pytest.mark.asyncio

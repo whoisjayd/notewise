@@ -187,22 +187,33 @@ class LLMProvider:
             if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
 
-            if self._uses_responses_api():
-                response = await self._generate_responses(
-                    system_prompt,
-                    user_prompt,
-                    temperature=provider_temperature,
-                    max_tokens=max_tokens,
-                )
-                content = self._normalize_responses_content(response)
-            else:
-                # LiteLLM's acompletion handles async requests to various providers
-                response = await acompletion(**kwargs)
-                if not response.choices or not response.choices[0].message.content:
+            response: Any | None = None
+            content = ""
+            for attempt in range(LLM_NUM_RETRIES + 1):
+                if self._uses_responses_api():
+                    response = await self._generate_responses(
+                        system_prompt,
+                        user_prompt,
+                        temperature=provider_temperature,
+                        max_tokens=max_tokens,
+                    )
+                    content = self._normalize_responses_content(response)
+                else:
+                    # LiteLLM's acompletion handles async requests to providers.
+                    response = await acompletion(**kwargs)
+                    if response.choices and response.choices[0].message.content:
+                        content = self._normalize_content(
+                            response.choices[0].message.content
+                        )
+                    else:
+                        content = ""
+
+                if content:
+                    break
+                if attempt == LLM_NUM_RETRIES:
                     raise LLMGenerationError(
                         "Received empty response from LLM provider"
                     )
-                content = self._normalize_content(response.choices[0].message.content)
 
             prompt_tokens, completion_tokens, total_tokens = self._extract_usage(
                 response
@@ -217,8 +228,6 @@ class LLMProvider:
                     call_cost_usd,
                 )
 
-            if not content:
-                raise LLMGenerationError("Received empty response from LLM provider")
             return self._clean_content(content)
 
         except LLMGenerationError:

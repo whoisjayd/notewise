@@ -94,7 +94,6 @@ async def process_single_video(
             rendered_output_targets: dict[str, Path] = {}
             render_warning: str | None = None
             transcript_output_dir = pipeline.output_dir
-            working_output_dir: Path | None = None
 
             generation_start = time.perf_counter()
             usage_context = nullcontext(pipeline_module.UsageTotals())
@@ -137,6 +136,8 @@ async def process_single_video(
                     ordered_chapters = list(chapter_transcripts.items())
                     chapters_to_generate: dict[str, str] = {}
                     chapter_targets: list[tuple[str, int, Path | None]] = []
+                    chapter_output_files: dict[str, Path] = {}
+                    temporary_chapter_files: list[Path] = []
 
                     if chapter_directory_output:
                         output_target = await pipeline._reserve_output_target(
@@ -149,21 +150,6 @@ async def process_single_video(
                         output_target.mkdir(parents=True, exist_ok=True)
                         pipeline._write_output_target_metadata(output_target, video_id)
                         transcript_output_dir = output_target
-                    else:
-                        working_output_dir = await pipeline._reserve_output_target(
-                            pipeline.output_dir / ".working" / sanitize_filename(title),
-                            video_id,
-                            allow_existing_base=pipeline.force
-                            or current_cached_video is not None,
-                        )
-                        reserved_targets.append(working_output_dir)
-
-                    if working_output_dir is not None:
-                        working_output_dir.mkdir(parents=True, exist_ok=True)
-                        pipeline._write_output_target_metadata(
-                            working_output_dir, video_id
-                        )
-
                     for output_format in bundled_output_formats:
                         bundled_output_target = await pipeline._reserve_output_target(
                             pipeline.output_dir
@@ -187,10 +173,15 @@ async def process_single_video(
                         safe_chapter = sanitize_filename(chap_title)
                         if chapter_directory_output and output_target is not None:
                             chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
-                        elif working_output_dir is not None:
-                            chapter_file = (
-                                working_output_dir / f"{i:02d}_{safe_chapter}.md"
+                        elif rendered_output_targets:
+                            chapter_file = pipeline.output_dir / (
+                                f"{sanitize_filename(title)}_chapter_"
+                                f"{i:02d}_{safe_chapter}.md"
                             )
+                            temporary_chapter_files.append(chapter_file)
+
+                        if chapter_file is not None:
+                            chapter_output_files[chap_title] = chapter_file
 
                         chapter_targets.append(
                             (chap_title, chapter_data.start_seconds, chapter_file)
@@ -198,7 +189,7 @@ async def process_single_video(
 
                         if (
                             chapter_file is not None
-                            and not pipeline.force
+                            and (not pipeline.force or rendered_output_targets)
                             and chapter_file.exists()
                         ):
                             logger.info(
@@ -208,6 +199,8 @@ async def process_single_video(
                             continue
 
                         chapters_to_generate[chap_title] = chapter_data.text
+
+                    generated_chapter_notes: dict[str, str] = {}
 
                     if chapters_to_generate:
                         chapter_indices = {
@@ -234,6 +227,16 @@ async def process_single_video(
                         original_generate_single = (
                             pipeline.generator.generate_single_chapter_notes
                         )
+
+                        def _write_completed_chapter(
+                            chapter_title: str,
+                            notes: str,
+                        ) -> None:
+                            chapter_file = chapter_output_files.get(chapter_title)
+                            if chapter_file is None:
+                                return
+                            chapter_file.parent.mkdir(parents=True, exist_ok=True)
+                            chapter_file.write_text(notes, encoding="utf-8")
 
                         async def _generate_single_chapter_notes_with_events(
                             chapter_title: str,
@@ -301,54 +304,63 @@ async def process_single_video(
                             semaphore=pipeline._chapter_semaphore,
                             video_title=title,
                             on_chapter_start=_on_chapter_start,
+                            on_chapter_complete=_write_completed_chapter,
                             generate_single=_generate_single_chapter_notes_with_events,
                         )
 
-                        bundled_chapter_notes: list[str] = []
+                    bundled_chapter_notes: list[str] = []
 
-                        for (
-                            chapter_title,
-                            start_seconds,
-                            chapter_file,
-                        ) in chapter_targets:
-                            notes = generated_chapter_notes.get(chapter_title)
-                            if notes is None:
-                                continue
-                            if pipeline.timestamps:
-                                pm = pipeline_module
-                                notes = pm.prefix_chapter_heading_with_timestamp(
-                                    notes,
-                                    chapter_title,
-                                    start_seconds,
-                                )
-
-                            if rendered_output_targets:
-                                bundled_chapter_notes.append(notes)
-
-                            if chapter_file is None:
-                                continue
-
-                            chapter_file.write_text(notes, encoding="utf-8")
+                    for (
+                        chapter_title,
+                        start_seconds,
+                        chapter_file,
+                    ) in chapter_targets:
+                        notes = generated_chapter_notes.get(chapter_title)
+                        if (
+                            notes is None
+                            and chapter_file is not None
+                            and chapter_file.exists()
+                        ):
+                            notes = chapter_file.read_text(encoding="utf-8")
+                        if notes is None:
+                            continue
+                        if pipeline.timestamps:
+                            pm = pipeline_module
+                            notes = pm.prefix_chapter_heading_with_timestamp(
+                                notes,
+                                chapter_title,
+                                start_seconds,
+                            )
 
                         if rendered_output_targets:
-                            bundled_notes = pipeline_module.build_chapter_bundle(
+                            bundled_chapter_notes.append(notes)
+
+                        if chapter_file is None:
+                            continue
+
+                        chapter_file.write_text(notes, encoding="utf-8")
+
+                    if rendered_output_targets:
+                        bundled_notes = pipeline_module.build_chapter_bundle(
+                            title,
+                            bundled_chapter_notes,
+                        )
+                        rendered_output_targets = (
+                            pipeline_module.render_notes_documents(
+                                bundled_notes,
                                 title,
-                                bundled_chapter_notes,
+                                rendered_output_targets,
+                                target_language=pipeline.target_language,
                             )
-                            rendered_output_targets = (
-                                pipeline_module.render_notes_documents(
-                                    bundled_notes,
-                                    title,
-                                    rendered_output_targets,
-                                    target_language=pipeline.target_language,
-                                )
+                        )
+                        if rendered_output_targets.get("pdf") is not None and (
+                            rendered_output_targets["pdf"].suffix.lower() == ".md"
+                        ):
+                            render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
+                                target_language=pipeline.target_language
                             )
-                            if rendered_output_targets.get("pdf") is not None and (
-                                rendered_output_targets["pdf"].suffix.lower() == ".md"
-                            ):
-                                render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
-                                    target_language=pipeline.target_language
-                                )
+                        for chapter_file in temporary_chapter_files:
+                            chapter_file.unlink(missing_ok=True)
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)
 
