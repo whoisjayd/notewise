@@ -1,0 +1,10 @@
+{
+  "name": "NoteWise",
+  "short_name": "NoteWise",
+  "description": "A terminal-native CLI that turns YouTube videos and playlists into hierarchical Markdown study notes, quizzes, transcripts, and PDF / DOCX / HTML exports.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0b1118",
+  "theme_color": "#0b1118",
+  "icons": [{ "src": "/favicon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }]
+}

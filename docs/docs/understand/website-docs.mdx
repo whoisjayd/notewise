@@ -1,0 +1,73 @@
+---
+title: "Website and docs"
+sidebarTitle: "Website & docs"
+description: "Work on the NoteWise marketing website and Mintlify documentation site."
+keywords: ["notewise website", "bun", "tanstack start", "mintlify", "umami"]
+---
+
+# Website and docs
+
+The repository ships two public web surfaces:
+
+- `website/` — the marketing site at `https://notewise.click`
+- `docs/` — the Mintlify documentation site at `https://docs.notewise.click`
+
+## Website structure
+
+The website is a TanStack Start/Vite app deployed to Cloudflare.
+
+| Path                                   | Purpose                                                          |
+| -------------------------------------- | ---------------------------------------------------------------- |
+| `website/src/routes/__root.tsx`        | HTML shell, SEO metadata, JSON-LD, analytics scripts             |
+| `website/src/routes/index.tsx`         | Landing page route composition                                   |
+| `website/src/routes/sitemap[.]xml.tsx` | Sitemap route                                                    |
+| `website/src/components/`              | Page sections and route-level components                         |
+| `website/src/ui/`                      | Reusable primitives such as `Reveal`, `Terminal`, and `FineIcon` |
+| `website/src/server/`                  | Server functions used by the site                                |
+| `website/wrangler.jsonc`               | Cloudflare deployment config                                     |
+
+Keep page sections directly under `website/src/components/`. Keep reusable UI primitives outside that folder in `website/src/ui/`.
+
+## Website workflow
+
+Use Bun for all website work. `website/bun.lock` is the canonical lockfile.
+
+```bash
+cd website
+bun install --frozen-lockfile
+bun run lint
+bunx tsc --noEmit
+bun run build
+bun run preview
+```
+
+Run `bun run build` before `bun run preview`; preview serves the built Cloudflare/TanStack output and catches production-only routing issues.
+
+## Website quality rules
+
+- Keep SEO metadata honest. Do not add synthetic ratings, fake reviews, or misleading license claims.
+- Preserve landmarks, visible focus states, skip links, and descriptive button labels.
+- Inherit the system theme on first load. Only a user theme toggle should persist `nw-theme` in local storage.
+- Avoid delayed reveal effects that make first paint feel broken or inconsistent.
+- Never commit `website/.dev.vars`, local env files, Cloudflare credentials, analytics secrets, OAuth tokens, or provider keys.
+
+## Docs workflow
+
+Mintlify docs live in `docs/`.
+
+| Path             | Purpose                                                       |
+| ---------------- | ------------------------------------------------------------- |
+| `docs/docs.json` | Mintlify navigation, redirects, SEO, theme, and site settings |
+| `docs/docs/`     | Documentation pages                                           |
+| `docs/umami.js`  | Custom JavaScript loaded by Mintlify on docs pages            |
+
+When adding a docs page, add the `.mdx` file under `docs/docs/` and update the `navigation.groups` list in `docs/docs.json`.
+
+## Analytics
+
+Both public web surfaces use Umami.
+
+- Website analytics are added in `website/src/routes/__root.tsx`.
+- Docs analytics are added through `docs/umami.js`, because Mintlify supports custom JavaScript files in the docs content directory.
+
+Do not add analytics provider blocks to `docs/docs.json` unless the analytics provider intentionally changes.

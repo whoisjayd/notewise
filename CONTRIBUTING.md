@@ -4,6 +4,7 @@ Thank you for taking the time to contribute! This document covers everything you
 
 > [!IMPORTANT]
 > Read and follow this guide before opening a pull request.
+>
 > - **All feature, fix, docs, and maintenance PRs must target `dev`.**
 > - **Only maintainer-managed release PRs should target `main`.**
 > - PRs that ignore this workflow, skip required validation, or do not follow these contribution rules may be closed without review.
@@ -16,6 +17,7 @@ Thank you for taking the time to contribute! This document covers everything you
 - [How to Contribute](#how-to-contribute)
 - [Development Setup](#development-setup)
 - [Project Structure](#project-structure)
+- [Website and Docs](#website-and-docs)
 - [Code Quality Standards](#code-quality-standards)
 - [Testing](#testing)
 - [Commit Messages](#commit-messages)
@@ -51,6 +53,7 @@ If you plan to work on something large, **open an issue first** so we can discus
 
 - Python **3.10** or newer
 - [uv](https://github.com/astral-sh/uv) — the project's package manager
+- [Bun](https://bun.sh/) **1.3.6** for the website in `website/`
 
 ### Clone and Install
 
@@ -146,6 +149,16 @@ notewise/
 ├── scripts/
 │   ├── extract_litellm_model_snapshot.py # Refresh LiteLLM setup catalog
 │   └── hooks/               # Git hook scripts
+├── website/                  # TanStack/Vite marketing site
+│   ├── src/routes/           # Site routes, metadata, sitemap
+│   ├── src/components/       # Page sections and route-level components
+│   ├── src/ui/               # Reusable UI primitives
+│   ├── package.json          # Bun scripts and website dependencies
+│   └── bun.lock              # Canonical website lockfile
+├── docs/                     # Mintlify documentation site source
+│   ├── docs.json             # Mintlify navigation, SEO, redirects
+│   ├── umami.js              # Custom analytics script loaded by Mintlify
+│   └── docs/                 # Documentation pages
 ├── .github/
 │   ├── workflows/           # CI/CD workflows
 │   └── ISSUE_TEMPLATE/      # Issue templates
@@ -163,6 +176,32 @@ notewise/
 - **Lazy imports in CLI** — heavy dependencies are imported inside command functions to keep startup fast
 - **Configuration via Pydantic Settings** — `AppSettings` in `config.py`; all defaults are in `_constants.py`
 - **Provider docs stay in sync** — model/provider changes must update README, CLI docs, configuration reference, `.env.example`, and provider tests together
+
+## Website and Docs
+
+The website is a separate Bun project in `website/`. Use Bun because `bun.lock` is the canonical lockfile; do not introduce a second package manager without updating the lockfile and contributor docs together.
+
+```bash
+cd website
+bun install --frozen-lockfile
+bun run lint
+bunx tsc --noEmit
+bun run build
+bun run preview
+```
+
+Run `bun run build` before `bun run preview`; preview serves the built Cloudflare/TanStack output and catches production-only routing issues.
+
+Website structure:
+
+- `website/src/routes/` — TanStack routes, shell metadata, sitemap, and JSON-LD.
+- `website/src/components/` — page sections and route-level components such as `Hero`, `Nav`, `FAQ`, and `DefaultError`.
+- `website/src/ui/` — reusable primitives such as `Reveal`, `Terminal`, and `FineIcon`.
+- `website/src/server/` — server functions used by the site.
+
+Keep website changes small and reviewable. Preserve route behavior, metadata, accessibility affordances, system-theme inheritance, and Cloudflare/Vite output paths unless the change explicitly needs them. Store local Cloudflare secrets in `website/.dev.vars`; never commit `.dev.vars`, API keys, OAuth tokens, or provider credentials.
+
+Docs live in `docs/` and use Mintlify. Add user-facing CLI docs under `docs/docs/`, and update `docs/docs.json` navigation when adding a new page. Mintlify custom JavaScript belongs as `.js` files in the docs content directory; analytics currently use `docs/umami.js`. Do not commit analytics provider secrets in `docs/docs.json`.
 
 ---
 
@@ -225,11 +264,11 @@ When changing LiteLLM provider support, OAuth behavior, model examples, or confi
 
 The test suite is split into three layers:
 
-| Layer | Path | Description |
-|-------|------|-------------|
-| Unit | `tests/unit/` | Fully mocked — fast, no network, no disk |
-| Integration | `tests/integration/` | Uses real SQLite and filesystem |
-| E2E | `tests/e2e/` | Public smoke tests against YouTube |
+| Layer       | Path                 | Description                              |
+| ----------- | -------------------- | ---------------------------------------- |
+| Unit        | `tests/unit/`        | Fully mocked — fast, no network, no disk |
+| Integration | `tests/integration/` | Uses real SQLite and filesystem          |
+| E2E         | `tests/e2e/`         | Public smoke tests against YouTube       |
 
 ### Run Tests
 
@@ -294,6 +333,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 ## Pull Request Process
 
 1. **Fork** the repository and create your branch from `dev`:
+
    ```bash
    git checkout dev
    git pull origin dev
@@ -303,6 +343,7 @@ Common types: `feat`, `fix`, `docs`, `test`, `refactor`, `chore`, `ci`, `perf`, 
 2. **Write your changes** — code, tests, and documentation together.
 
 3. **Run the full quality suite** locally before pushing:
+
    ```bash
    make ci
    ```

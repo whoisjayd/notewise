@@ -8,6 +8,8 @@ This file provides structured guidance for AI agents (Claude, Codex, Cursor, Cop
 
 `notewise` is a Python CLI application that converts YouTube videos and playlists into Markdown study notes using LLM APIs. It is packaged as a `src`-layout Python project, managed with `uv`, and published to PyPI.
 
+The repository also includes the public website under `website/` and docs source under `docs/`.
+
 - **Entry point:** `notewise/__main__.py` → `main()` → Typer app in `cli/app.py`
 - **Core pipeline:** `pipeline/core.py` → `CorePipeline`
 - **Version:** `src/notewise/__init__.py` (`__version__`)
@@ -45,6 +47,13 @@ scripts/extract_litellm_model_snapshot.py ← Refresh bundled setup model catalo
 docs/docs/config/providers.mdx            ← Provider/user-facing model docs
 docs/docs/config/configuration.mdx        ← Config key reference
 docs/docs/operate/commands.mdx            ← CLI command reference
+website/src/routes/__root.tsx             ← Website shell, metadata, JSON-LD
+website/src/routes/index.tsx              ← Website landing page route
+website/src/routes/sitemap[.]xml.tsx      ← Website sitemap route
+website/src/components/                   ← Website page/section components
+website/src/ui/                           ← Website reusable UI primitives
+website/wrangler.jsonc                    ← Cloudflare deployment config
+docs/umami.js                             ← Mintlify custom analytics script
 ```
 
 ---
@@ -62,6 +71,7 @@ These rules are enforced by CI and must never be broken:
 7. **All new CLI commands** must follow the lazy-import pattern: load heavy dependencies inside the command body using the `_load_*_dependencies()` helper pattern.
 8. **Never log raw LLM prompts, provider payloads, OAuth tokens, or credentials.** Redact through `logging.py`; provider failures should use summarized/redacted errors.
 9. **Provider/model docs must stay snapshot-valid.** If examples or setup model availability change, update the bundled LiteLLM snapshot, README, `.env.example`, docs, and tests together.
+10. **Website work uses Bun.** `website/bun.lock` is the canonical website lockfile; do not introduce npm/pnpm/yarn drift without updating docs and lockfiles together.
 
 ---
 
@@ -153,6 +163,7 @@ The SQLite schema is managed by a hand-rolled migration runner in `storage/migra
 All prompt templates live in `llm/prompts/`. They are plain Python string constants with `{placeholder}` substitution. Changes to prompts may significantly change output quality — always add or update golden-output style tests when modifying prompts.
 
 The three prompt modules are:
+
 - `study_notes.py` — main study guide generation
 - `chapter_notes.py` — per-chapter notes
 - `quiz.py` — multiple-choice quiz
@@ -170,6 +181,21 @@ Adding a new user-configurable key:
 3. Add the key to `_ALLOWED_KEYS` in `config.py` or to the relevant `_constants.py` key set used to derive `_ALLOWED_KEYS`.
 4. Add the key to `.env.example` (commented out with a description).
 5. Update `docs/docs/config/configuration.mdx` and any affected workflow or CLI reference pages.
+
+---
+
+## Website Changes
+
+The website is a TanStack/Vite app in `website/`.
+
+1. Keep package metadata and deploy names branded as notewise (`notewise-website`).
+2. Keep landing sections directly in `website/src/components/`; keep reusable primitives in `website/src/ui/`.
+3. Use Bun commands from `website/`: `bun install --frozen-lockfile`, `bun run lint`, `bunx tsc --noEmit`, `bun run build`, and then `bun run preview` for local production preview.
+4. Keep SEO metadata honest; do not add synthetic reviews, ratings, or misleading OSS/license claims.
+5. Preserve accessibility basics such as landmarks, focus states, skip links, and descriptive link/button labels.
+6. The website should inherit the system theme on first load. Only user toggles should persist `nw-theme` in local storage.
+7. Never commit `website/.dev.vars`, local env files, Cloudflare credentials, tokens, or analytics secrets.
+8. Docs analytics use Mintlify custom JavaScript in `docs/umami.js`; do not add analytics provider blocks to `docs/docs.json` unless intentionally changing providers.
 
 ---
 
@@ -208,13 +234,13 @@ make fix          # auto-fix formatting and lint issues
 
 ## Useful Make Targets
 
-| Target | Action |
-|--------|--------|
-| `make test` | Run full test suite in parallel |
-| `make test-unit` | Unit tests with coverage |
-| `make test-integration` | Integration tests |
-| `make fix` | Auto-fix formatting and lint |
-| `make quality` | All quality checks |
-| `make ci` | Full CI pipeline locally |
-| `make clean` | Remove all build/cache artifacts |
-| `make build` | Build wheel and sdist |
+| Target                  | Action                           |
+| ----------------------- | -------------------------------- |
+| `make test`             | Run full test suite in parallel  |
+| `make test-unit`        | Unit tests with coverage         |
+| `make test-integration` | Integration tests                |
+| `make fix`              | Auto-fix formatting and lint     |
+| `make quality`          | All quality checks               |
+| `make ci`               | Full CI pipeline locally         |
+| `make clean`            | Remove all build/cache artifacts |
+| `make build`            | Build wheel and sdist            |
