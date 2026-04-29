@@ -177,12 +177,12 @@ class TestConfigIO:
             patch("notewise.ui.setup_wizard.load_config", return_value={}),
             patch(
                 "notewise.ui.setup_wizard.get_available_models",
-                return_value={"chatgpt": ["chatgpt/gpt-5.3-codex"]},
+                return_value={"chatgpt": ["chatgpt/gpt-5.2"]},
             ),
             patch("notewise.ui.setup_wizard.select_provider", return_value="chatgpt"),
             patch(
                 "notewise.ui.setup_wizard.select_model",
-                return_value="chatgpt/gpt-5.3-codex",
+                return_value="chatgpt/gpt-5.2",
             ),
             patch("rich.prompt.Confirm.ask", return_value=True),
             patch("rich.prompt.Prompt.ask", return_value="./output"),

@@ -1,170 +1,79 @@
 ---
-title: NoteWise
-icon: house
+title: "NoteWise Documentation"
+sidebarTitle: "Overview"
+description: "Purpose, features, and starting paths for NoteWise, the YouTube-to-notes CLI."
+keywords: ["notewise", "youtube notes", "study notes", "cli", "litellm"]
 ---
 
+# NoteWise turns YouTube into study notes
 
-**It** is a command-line tool that turns YouTube content into comprehensive Markdown study notes — powered by the LLM of your choice, with no browser required.
+NoteWise is a Python CLI that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files you control: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-<Tip>
-  Built for learners and builders who want repeatable, automatable study workflows from long-form video content.
-</Tip>
+<video
+  src="https://raw.githubusercontent.com/whoisjayd/notewise/refs/heads/main/demo/notewise.mp4"
+  autoPlay
+  muted
+  loop
+  playsInline
+  controls
+  controlsList="nodownload"
+  disablePictureInPicture
+  preload="metadata"
+  style={{
+    width: "100%",
+    height: "100%",
+    display: "block",
+    borderRadius: "14px",
+    margin: "1.75rem 0 2.25rem",
+  }}
+/>
 
----
+## Why NoteWise exists
 
-### Quick start
+Most video summarizers hide the result in a web app. NoteWise is built for people who want durable notes, scriptable workflows, and clear local state.
 
-<CardGroup cols={{ base: 1, sm: 2, md: 2 }}>
-  <Card title="Quick Start" icon="rocket" href="/docs/getting-started/quickstart">
-    Get your first AI-powered study notes in under 5 minutes.
+<CardGroup cols={2}>
+  <Card title="Local study files" href="/docs/understand/pipeline-output">
+    Notes are written to your output directory. Markdown is the default, and rendered formats are optional.
   </Card>
-  <Card title="Installation" icon="download" href="/docs/getting-started/installation">
-    Install via pip, uv, or Docker.
+  <Card title="Bring your own model" href="/docs/config/providers">
+    Use LiteLLM model strings for Gemini, OpenAI, Anthropic, Groq, OpenRouter, Azure, Bedrock, ChatGPT OAuth, Copilot OAuth, and more.
   </Card>
-  <Card title="CLI Reference" icon="terminal" href="/cli/commands/overview">
-    Every command, option, and flag documented.
+  <Card title="Works for real YouTube inputs" href="/docs/use/playlists-batches">
+    Process watch URLs, Shorts, youtu.be links, playlists, bare IDs, and text batch files.
   </Card>
-  <Card title="Configuration" icon="settings" href="/docs/getting-started/configuration">
-    All settings, defaults, and override mechanisms.
+  <Card title="Designed for operations" href="/docs/operate/commands">
+    Inspect config, provider readiness, YouTube metadata, cache, logs, history, and stats from the CLI.
   </Card>
 </CardGroup>
 
----
+## What it produces
 
-### Choose your workflow
+| Output | How to create it |
+| --- | --- |
+| Markdown notes | Default `notewise process URL` output. |
+| HTML, PDF, DOCX | Use `--format html`, `--format pdf`, `--format docx`, or comma-separated formats. |
+| Quiz file | Add `--quiz`. |
+| Transcript export | Add `--export-transcript txt` or `--export-transcript json`. |
+| Chapter folder | Add `--chapter-directory-output` when the video has YouTube chapters. |
 
-<Tabs>
-  <Tab title="Single video">
-    ```bash
-    notewise process "https://youtube.com/watch?v=VIDEO_ID"
-    ```
-    Best for focused notes from one lecture or tutorial.
-  </Tab>
-  <Tab title="Playlist">
-    ```bash
-    notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
-    ```
-    Best for full course conversion with concurrent processing.
-  </Tab>
-  <Tab title="Batch file">
-    ```bash
-    notewise process my-urls.txt -o ./course-notes
-    ```
-    Best for scripted workflows and repeatable pipelines.
-  </Tab>
-  <Tab title="Docker">
-    ```bash
-    docker run --rm \
-      -e GEMINI_API_KEY="your_key" \
-      -v "$(pwd)/output:/output" \
-      ghcr.io/whoisjayd/notewise:latest \
-      process "URL" --no-ui
-    ```
-    Best for CI or containerized environments.
-  </Tab>
-</Tabs>
+## Start here
 
----
-
-### How it works
-
-```mermaid
-flowchart LR
-    A[YouTube URL] --> B[Fetch Transcript]
-    B --> C{Chapters?}
-    C -->|Yes| D[Chapter-level Generation]
-    C -->|No| E[Flat Generation]
-    D --> F[Combine Notes]
-    E --> F
-    F --> G[Write Markdown]
-    G --> H[(SQLite Cache)]
-```
-
-<Steps>
-  <Step title="Fetch the transcript">
-    Retrieves the video transcript with automatic language fallback and retries. Supports private and age-gated videos via cookie file.
-  </Step>
-  <Step title="Detect chapters">
-    Long videos (over 1 hour with chapter metadata) are split into chapters and processed concurrently for better quality.
-  </Step>
-  <Step title="Generate notes">
-    The transcript is chunked intelligently and sent through your configured LLM via LiteLLM. Supports Gemini, OpenAI, Anthropic, Groq, and more.
-  </Step>
-  <Step title="Write structured Markdown">
-    Study notes are written as Markdown files named from the video title. Optionally generates quizzes and transcript exports.
-  </Step>
-  <Step title="Cache locally">
-    Transcripts and run stats are stored in a local SQLite database. Already-processed videos are skipped on re-runs automatically.
-  </Step>
-</Steps>
-
----
-
-### Key features
-
-<CardGroup cols={{ base: 1, sm: 2, lg: 3 }}>
-  <Card title="Multi-provider LLM" icon="brain">
-    Gemini, OpenAI, Anthropic, Groq, Mistral, Cohere, DeepSeek, and xAI — all via LiteLLM. Switch models with a single flag.
+<CardGroup cols={2}>
+  <Card title="Install NoteWise" href="/docs/start/install">
+    Install the CLI with `uv`, `pipx`, `pip`, Docker, or standalone release binaries.
   </Card>
-  <Card title="Concurrent processing" icon="zap">
-    Multiple videos and chapters processed in parallel. Configurable concurrency keeps you within API and YouTube rate limits.
+  <Card title="Run the quickstart" href="/docs/start/quickstart">
+    Configure a provider, process one public video, and confirm the output file.
   </Card>
-  <Card title="Local SQLite cache" icon="database">
-    Transcripts and run stats persist across runs. Re-run a batch safely — only unprocessed videos are touched.
+  <Card title="Process more than one video" href="/docs/use/playlists-batches">
+    Use playlists, batch files, concurrency, rate limits, and cache behavior correctly.
   </Card>
-  <Card title="Rich terminal UI" icon="monitor">
-    Live progress dashboard. Use `--no-ui` for CI, cron, or log aggregators.
-  </Card>
-  <Card title="Playlist & batch support" icon="list">
-    Process entire playlists or a `.txt` file of URLs. Re-runs skip already-processed videos unless `--force` is used.
-  </Card>
-  <Card title="Docker-ready" icon="box">
-    Two-stage image published to GHCR on every release. Runs as a non-root user.
+  <Card title="Fix a failed run" href="/docs/operate/troubleshooting">
+    Start with `doctor`, `info`, `config`, cache checks, and recent logs.
   </Card>
 </CardGroup>
 
-<Tip>
-  The default model is **Gemini 2.5 Flash** — free tier available via [Google AI Studio](https://aistudio.google.com/app/apikey). No billing required to get started.
-</Tip>
+## Source-backed defaults
 
----
-
-### Example session
-
-<CodeGroup>
-```bash terminal
-$ notewise process "https://youtube.com/watch?v=dQw4w9WgXcQ"
-
- notewise  v1.2.1
-
-Processing 1 video...
-
- Video Title
-   ✔ Metadata fetched
-   ✔ Transcript fetched  (en, 342 segments)
-   ✔ Notes generated  (3 chunks)
-   ✔ Written → output/Video Title.md
-
-────────────────────────────────────────
-  1 processed · 0 failed · 12.4s · $0.0004
-```
-</CodeGroup>
-
----
-
-### Explore by role
-
-<CardGroup cols={{ base: 1, sm: 2 }}>
-  <Card title="New user" icon="user" href="/docs/getting-started/quickstart">
-    Start with Quick Start → Installation → Configuration.
-  </Card>
-  <Card title="Power user" icon="zap" href="/cli/commands/process">
-    Jump straight to the `process` command reference.
-  </Card>
-  <Card title="DevOps / CI" icon="server" href="/docs/guides/docker">
-    Docker and `--no-ui` patterns for automation.
-  </Card>
-  <Card title="Contributor" icon="git-pull-request" href="/development/local-setup/setup">
-    Dev setup, testing, and CI/CD docs.
-  </Card>
-</CardGroup>
+These docs track NoteWise `1.3.1`. Source defaults are Python `>=3.10`, model `gemini/gemini-2.5-flash`, output directory `./output`, output format `md`, temperature `0.7`, max concurrent videos `5`, YouTube request limit `10/min`, chunk size `4000`, overlap `200`, and max concurrent chapters `3`.

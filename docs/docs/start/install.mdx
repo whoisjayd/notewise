@@ -1,0 +1,68 @@
+---
+title: "Install NoteWise"
+sidebarTitle: "Install"
+description: "Install the NoteWise CLI and verify the command works."
+keywords: ["install notewise", "uv", "pipx", "pip", "docker", "python"]
+---
+
+# Install NoteWise
+
+NoteWise requires Python `>=3.10`. The CLI entry point is `notewise`.
+
+<Tabs sync={false}>
+  <Tab title="uv tool">
+    ```bash
+    uv tool install notewise
+    notewise version
+    ```
+  </Tab>
+  <Tab title="uvx">
+    ```bash
+    uvx notewise version
+    uvx notewise process "https://youtu.be/VIDEO_ID"
+    ```
+  </Tab>
+  <Tab title="pipx">
+    ```bash
+    pipx install notewise
+    notewise version
+    ```
+  </Tab>
+  <Tab title="pip">
+    ```bash
+    python -m pip install notewise
+    python -m notewise version
+    ```
+  </Tab>
+  <Tab title="Docker">
+    ```bash
+    docker run --rm ghcr.io/whoisjayd/notewise:latest version
+    ```
+  </Tab>
+</Tabs>
+
+## Standalone installers
+
+Release installers download the latest GitHub release asset and verify checksums when available.
+
+<CodeGroup>
+```bash macOS or Linux
+curl -fsSL https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.sh | bash
+```
+
+```powershell Windows PowerShell
+irm https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.ps1 | iex
+```
+</CodeGroup>
+
+Set `NOTEWISE_INSTALL_DIR` before running an installer to choose the install location.
+
+## Verify
+
+```bash
+notewise version
+notewise doctor
+notewise config-path
+```
+
+`doctor` checks config presence, provider readiness, output directory access, cache DB health, log directory, and the latest log file.

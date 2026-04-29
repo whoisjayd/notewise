@@ -17,6 +17,7 @@ from notewise._constants import (
     OAUTH_LOGIN_TEST_PROMPT,
     OAUTH_LOGIN_TRIGGER_MESSAGE,
     OAUTH_UNSUPPORTED_PROVIDER_ERROR,
+    RESPONSES_API_ALL_MODEL_PROVIDER_PREFIXES,
     RESPONSES_API_MODEL_MARKERS,
     RESPONSES_API_PROVIDER_PREFIXES,
 )
@@ -42,6 +43,8 @@ def _uses_responses_api(model: str) -> bool:
     provider, separator, _ = model_lower.partition("/")
     if not separator or provider not in RESPONSES_API_PROVIDER_PREFIXES:
         return False
+    if provider in RESPONSES_API_ALL_MODEL_PROVIDER_PREFIXES:
+        return True
     return any(marker in model_lower for marker in RESPONSES_API_MODEL_MARKERS)
 
 

@@ -32,7 +32,7 @@ The idea is simple: your time watching a video is valuable. The notes that _shou
 - 📋 **Researchers** quickly distilling hours of talks into organized, searchable reference material
 - 🏢 **Teams** turning internal video presentations into shareable written documentation
 
-The output isn't a transcript summary. It's structured, hierarchical Markdown — with headers, sub-topics, definitions, examples, and every concept explained in depth. Chapter-aware videos get per-chapter notes. Long courses produce an organized note file per session. Everything lands in your filesystem: portable, searchable, and permanently yours.
+The output isn't a transcript summary. It's structured, hierarchical Markdown — with headers, sub-topics, definitions, examples, and every concept explained in depth. Videos with YouTube chapters get chapter-aware notes by default, and you can opt into per-chapter files with `--chapter-directory-output`. Everything lands in your filesystem: portable, searchable, and permanently yours.
 
 ## 🎬 Demo
 
@@ -50,7 +50,7 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 | -------------------------------------- | ------------------------------------------------------------------------------------------ |
 | 📹 **Single Video, Playlists & Batch** | Process one video, an entire playlist, or a `.txt` file of URLs in a single command        |
 | 🤖 **Multi-Provider LLM Support**      | Works with Gemini, OpenAI, Anthropic, Groq, OpenRouter, Azure, Vercel AI Gateway, ChatGPT/Copilot OAuth, and other major LiteLLM providers |
-| 🗂️ **Chapter-Aware Notes**             | Automatically detects video chapters and generates separate, structured notes per chapter  |
+| 🗂️ **Chapter-Aware Notes**             | Detects YouTube chapters, generates bundled chapter-aware notes, and can write per-chapter files with `--chapter-directory-output` |
 | ❓ **Quiz Generation**                 | Optionally produce a ready-to-use multiple-choice quiz alongside each study guide          |
 | 📄 **Multiple Output Formats**        | Write study notes as `.md`, `.html`, `.pdf`, or `.docx` with cleaner typography and layout |
 | 📝 **Transcript Export**               | Export raw transcripts as plain `.txt` or timestamped `.json`                              |
@@ -287,6 +287,12 @@ notewise process URL [OPTIONS]
       --no-ui                Plain stdout output (CI/cron friendly)
       --quiz                 Also generate a multiple-choice quiz
       --export-transcript    Export raw transcript: txt or json
+      --target-language TEXT Output language for generated notes
+      --throttle FLOAT       Delay between YouTube requests
+      --verbose              Show verbose errors in no-UI mode
+      --timestamps           Include timestamps when exporting transcripts
+      --chapter-directory-output
+                              Write chapter-aware videos as per-chapter Markdown files
       --cookie-file PATH     Netscape cookies file for private videos
 ```
 
@@ -308,15 +314,14 @@ Real example files are included in `demo/`:
 - `demo/Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_quiz.md`
 - `demo/Learn Python in Less than 10 Minutes for Beginners (Fast & Easy)_transcript.json`
 
-For chapter-aware videos (>1 hour with chapters), notes are split by chapter:
+For chapter-aware videos, NoteWise writes bundled notes by default. Add `--chapter-directory-output` to write one Markdown file per chapter:
 
 ```
 output/
 └── Long Course Title/
-    ├── Chapter 01 - Introduction.md
-    ├── Chapter 02 - Core Concepts.md
-    ├── Long Course Title_quiz.md          # optional, --quiz
-    └── Long Course Title_transcript.txt   # optional, --export-transcript txt
+    ├── 01_Introduction.md
+    ├── 02_Core Concepts.md
+    └── .notewise-output.json
 ```
 
 ## 🐳 Docker

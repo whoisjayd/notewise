@@ -1,0 +1,55 @@
+---
+title: "Private videos and Docker"
+sidebarTitle: "Private videos and Docker"
+description: "Use cookies for restricted YouTube videos and run NoteWise safely in Docker."
+keywords: ["youtube cookies", "private videos", "docker", "notewise"]
+---
+
+# Use private videos and Docker
+
+Private, members-only, age-gated, or region-restricted videos need the same browser session access that can view the video. NoteWise reads a Netscape-format cookies file when you pass `--cookie-file` or set `YOUTUBE_COOKIE_FILE`.
+
+<Warning>
+  Cookie files are session tokens. Do not commit them, paste them into issues, or mount them writable in containers.
+</Warning>
+
+## Cookies
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --cookie-file ./youtube-cookies.txt
+```
+
+For repeated use:
+
+```bash
+YOUTUBE_COOKIE_FILE=/absolute/path/youtube-cookies.txt notewise process "https://youtu.be/VIDEO_ID"
+```
+
+If YouTube has no transcript for the selected language, NoteWise cannot generate notes from that video.
+
+## Docker
+
+The published image is `ghcr.io/whoisjayd/notewise:latest`. The runtime uses Python 3.13 slim, user `notewise` with uid `1001`, workdir `/output`, entrypoint `notewise`, and `NOTEWISE_HOME=/home/notewise/.notewise`.
+
+```bash
+docker run --rm \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -v "$PWD/output:/output" \
+  -v "$PWD/.notewise:/home/notewise/.notewise" \
+  ghcr.io/whoisjayd/notewise:latest \
+  process "https://youtu.be/VIDEO_ID" --no-ui
+```
+
+With cookies:
+
+```bash
+docker run --rm \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -v "$PWD/output:/output" \
+  -v "$PWD/.notewise:/home/notewise/.notewise" \
+  -v "$PWD/youtube-cookies.txt:/cookies/youtube.txt:ro" \
+  ghcr.io/whoisjayd/notewise:latest \
+  process "https://youtu.be/VIDEO_ID" --cookie-file /cookies/youtube.txt --no-ui
+```
+
+Persist `/home/notewise/.notewise` if you want cache, logs, config, and OAuth token directories to survive container runs.

@@ -1,0 +1,50 @@
+---
+title: "Cache, logs, history, and stats"
+sidebarTitle: "Cache and logs"
+description: "Inspect NoteWise run history, cache records, stats, and session logs."
+keywords: ["notewise cache", "notewise logs", "notewise history", "notewise stats", "sqlite"]
+---
+
+# Cache, logs, history, and stats
+
+NoteWise stores persistent state under `<state>`, where `<state>` is `NOTEWISE_HOME` or `~/.notewise`.
+
+## Cache
+
+The cache database is `<state>/.notewise_cache.db`. SQLite sidecars may include `.notewise_cache.db-wal` and `.notewise_cache.db-shm`.
+
+```bash
+notewise cache
+notewise cache info
+notewise cache show VIDEO_ID
+notewise cache prune --older-than 30
+notewise cache clear --yes
+```
+
+<Warning>
+  `cache clear` deletes the local SQLite DB and sidecars. It does not delete generated notes, quizzes, transcripts, HTML, PDF, or DOCX output files.
+</Warning>
+
+## History and stats
+
+```bash
+notewise history
+notewise stats
+notewise stats --model gemini/gemini-2.5-flash
+```
+
+`history` shows recent cached videos and run details. `stats` summarizes totals, tokens, costs, and model breakdowns from the cache database.
+
+## Logs
+
+Logs live under `<state>/logs` and use filenames like `notewise-YYYY-MM-DD_HH-MM-SS.log`.
+
+```bash
+notewise logs
+notewise logs --tail 100
+notewise logs --open
+notewise logs clean --older-than 7
+notewise logs clean --all
+```
+
+Logs are structlog key-value logs, not JSON. They should not include raw prompts, provider payloads, OAuth tokens, API keys, or cookies.

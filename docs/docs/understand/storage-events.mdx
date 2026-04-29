@@ -1,0 +1,48 @@
+---
+title: "Storage, events, and errors"
+sidebarTitle: "Storage and events"
+description: "Understand NoteWise SQLite tables, pipeline events, logs, and error classes."
+keywords: ["notewise storage", "sqlite", "events", "errors", "logs"]
+---
+
+# Storage, events, and errors
+
+NoteWise keeps operational state local. The default state root is `~/.notewise`, or `NOTEWISE_HOME` when set.
+
+## SQLite schema
+
+The cache DB is `<state>/.notewise_cache.db`. Schema version is `2`.
+
+| Table | Purpose |
+| --- | --- |
+| `video` | Cached video identity, title, duration, and cache time. |
+| `transcript` | Transcript content and language per video. |
+| `runstats` | Tokens, cost, model, transcript time, generation time, and timestamp. |
+| `exportrecord` | Format and output path for exported artifacts. |
+| `schema_version` | Hand-rolled migration version. |
+
+## Logs
+
+Logs are written under `<state>/logs` as `notewise-YYYY-MM-DD_HH-MM-SS.log`. The format is structlog key-value text, not JSON.
+
+## Pipeline events
+
+The UI dashboard reads typed pipeline events from `domain/events.py`.
+
+| Phase | Events |
+| --- | --- |
+| Pipeline | `pipeline_start`, `pipeline_complete` |
+| Metadata | `metadata_start`, `metadata_fetched` |
+| Transcript | `transcript_fetching`, `transcript_fetched` |
+| Notes | `generation_start`, `chunk_generating`, `generation_combining`, `generation_complete` |
+| Chapters | `chapter_generating`, `chapter_chunk_generating`, `chapter_combining`, `chapter_complete` |
+| Quiz | `quiz_generating`, `quiz_chunk_generating`, `quiz_combining`, `quiz_complete` |
+| Video result | `video_success`, `video_skipped`, `video_failed` |
+
+Event payloads can include video ID, title, chapter/chunk counts, phase label, error text, and output path.
+
+## Error model
+
+All custom exceptions live in `src/notewise/errors.py` and derive from `NoteWiseError`. User-facing categories include configuration, validation, YouTube extraction, transcript availability, playlist extraction, IP blocking, LLM generation, OAuth, persistence, and update failures.
+
+Use `notewise doctor`, `notewise info URL`, and `notewise logs --tail 100` before debugging source code.

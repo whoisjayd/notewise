@@ -1,0 +1,53 @@
+---
+title: "CLI commands"
+sidebarTitle: "Commands"
+description: "Reference for the NoteWise command surface from the Typer CLI source."
+keywords: ["notewise commands", "cli", "doctor", "stats", "history", "cache", "logs"]
+---
+
+# NoteWise CLI commands
+
+Run `notewise COMMAND --help` for command-specific flags. The command set is defined in `src/notewise/cli/app.py`.
+
+## Main commands
+
+| Command | Purpose |
+| --- | --- |
+| `notewise process URL` | Generate notes from one video, playlist, or batch file. |
+| `notewise setup` | Run the interactive config wizard. |
+| `notewise config` | Print masked effective config. |
+| `notewise config-path` | Print the active config path. |
+| `notewise edit-config` | Open the config file in an editor. |
+| `notewise auth login PROVIDER` | Login to OAuth providers. |
+| `notewise info` | Show runtime config and state paths. |
+| `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
+| `notewise doctor` | Check config, provider readiness, output, cache, and logs. |
+| `notewise stats` | Show processing totals and model breakdown. |
+| `notewise history` | Show recent processed videos. |
+| `notewise cache` | Inspect or maintain the SQLite cache. |
+| `notewise logs` | Inspect or clean session logs. |
+| `notewise update` | Check whether a newer release is available. |
+| `notewise version` | Show the installed version. |
+
+## Process command
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
+```
+
+Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file`, and `--use-combine-chunk`.
+
+## Setup and auth
+
+```bash
+notewise setup
+notewise setup --show
+notewise setup --force
+notewise auth login chatgpt
+notewise auth login github_copilot
+notewise auth login codex
+```
+
+## Exit behavior
+
+Successful commands exit with `0`. Processing failures exit with `1`.
