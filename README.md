@@ -6,13 +6,11 @@
 
 <br />
 
-<img src="https://img.shields.io/pypi/v/notewise?style=flat-square&label=version" alt="version" /> <img src="https://img.shields.io/badge/status-stable-22c55e?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/notewise?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
+<img src="https://img.shields.io/pypi/v/notewise?style=flat-square&label=version" alt="version" /> <img src="https://img.shields.io/badge/status-beta-f59e0b?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json&style=flat-square" alt="ruff" /> <img src="https://img.shields.io/badge/type--checked-ty-7c3aed?style=flat-square" alt="ty" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/codecov/c/github/whoisjayd/notewise?style=flat-square&logo=codecov&logoColor=white&label=coverage" alt="coverage" /> <img src="https://img.shields.io/badge/coverage%20gate-%E2%89%A590%25-22c55e?style=flat-square" alt="coverage gate" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <img src="https://img.shields.io/badge/packaged%20with-uv-de5fe9?style=flat-square" alt="uv" /> <img src="https://img.shields.io/badge/Docker-ghcr.io-2496ED?style=flat-square&logo=docker&logoColor=white" alt="docker" />
 
 <br /><br />
 
-[**Why NoteWise?**](#-why-notewise) · [**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Installation**](#-installation) · [**Configuration**](#configuration) · [**Providers**](#-supported-providers) · [**Contributing**](CONTRIBUTING.md)
-<br/>
-[**Web Docs**](https://docs.notewise.click)
+[**Why NoteWise?**](#-why-notewise) · [**Quick Start**](#-quick-start) · [**Features**](#-features) · [**Installation**](#-installation) · [**Configuration**](#configuration) · [**Providers**](#-supported-providers) · [**Contributing**](CONTRIBUTING.md) · [**Web Docs**](https://docs.notewise.click) · [**Website**](https://notewise.click)
 
 </div>
 
@@ -46,19 +44,19 @@ The output isn't a transcript summary. It's structured, hierarchical Markdown �
 
 ## ✨ Features
 
-|                                        |                                                                                            |
-| -------------------------------------- | ------------------------------------------------------------------------------------------ |
-| 📹 **Single Video, Playlists & Batch** | Process one video, an entire playlist, or a `.txt` file of URLs in a single command        |
+|                                        |                                                                                                                                            |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| 📹 **Single Video, Playlists & Batch** | Process one video, an entire playlist, or a `.txt` file of URLs in a single command                                                        |
 | 🤖 **Multi-Provider LLM Support**      | Works with Gemini, OpenAI, Anthropic, Groq, OpenRouter, Azure, Vercel AI Gateway, ChatGPT/Copilot OAuth, and other major LiteLLM providers |
-| 🗂️ **Chapter-Aware Notes**             | Detects YouTube chapters, generates bundled chapter-aware notes, and can write per-chapter files with `--chapter-directory-output` |
-| ❓ **Quiz Generation**                 | Optionally produce a ready-to-use multiple-choice quiz alongside each study guide          |
-| 📄 **Multiple Output Formats**        | Write study notes as `.md`, `.html`, `.pdf`, or `.docx` with cleaner typography and layout |
-| 📝 **Transcript Export**               | Export raw transcripts as plain `.txt` or timestamped `.json`                              |
-| ⚡ **Concurrent Processing**           | Configurable concurrency — process multiple videos and chapters simultaneously             |
-| 💾 **Local SQLite Cache**              | Transcripts and run stats are cached; skip already-processed videos automatically          |
-| 🖥️ **Rich Live Dashboard**             | Real-time progress UI with a `--no-ui` plain-output mode for CI/cron                       |
-| 🐳 **Docker Ready**                    | Minimal two-stage Docker image for reproducible, stateless runs                            |
-| 🔒 **Private Video Support**           | Pass a Netscape-format cookie file to process age-gated or login-required videos           |
+| 🗂️ **Chapter-Aware Notes**             | Detects YouTube chapters, generates bundled chapter-aware notes, and can write per-chapter files with `--chapter-directory-output`         |
+| ❓ **Quiz Generation**                 | Optionally produce a ready-to-use multiple-choice quiz alongside each study guide                                                          |
+| 📄 **Multiple Output Formats**         | Write study notes as `.md`, `.html`, `.pdf`, or `.docx` with cleaner typography and layout                                                 |
+| 📝 **Transcript Export**               | Export raw transcripts as plain `.txt` or timestamped `.json`                                                                              |
+| ⚡ **Concurrent Processing**           | Configurable concurrency — process multiple videos and chapters simultaneously                                                             |
+| 💾 **Local SQLite Cache**              | Transcripts and run stats are cached; skip already-processed videos automatically                                                          |
+| 🖥️ **Rich Live Dashboard**             | Real-time progress UI with a `--no-ui` plain-output mode for CI/cron                                                                       |
+| 🐳 **Docker Ready**                    | Minimal two-stage Docker image for reproducible, stateless runs                                                                            |
+| 🔒 **Private Video Support**           | Pass a Netscape-format cookie file to process age-gated or login-required videos                                                           |
 
 ## 🚀 Quick Start
 
@@ -198,16 +196,16 @@ Environment variables always take precedence over the config file.
 
 ### Key Settings
 
-| Key                           | Default                   | Description                        |
-| ----------------------------- | ------------------------- | ---------------------------------- |
-| `DEFAULT_MODEL`               | `gemini/gemini-2.5-flash` | LiteLLM-format model string        |
-| `OUTPUT_DIR`                  | `./output`                | Where study notes are saved        |
-| `TEMPERATURE`                 | `0.7`                     | LLM sampling temperature (0.0–1.0) |
-| `MAX_TOKENS`                  | _(model default)_         | Max tokens per LLM response        |
-| `MAX_CONCURRENT_VIDEOS`       | `5`                       | Parallel video processing limit    |
-| `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request rate limit         |
-| `YOUTUBE_COOKIE_FILE`         | _(none)_                  | Path to Netscape cookies file      |
-| `CHATGPT_TOKEN_DIR`           | `~/.notewise/oauth/chatgpt` | Optional ChatGPT OAuth token dir  |
+| Key                           | Default                            | Description                             |
+| ----------------------------- | ---------------------------------- | --------------------------------------- |
+| `DEFAULT_MODEL`               | `gemini/gemini-2.5-flash`          | LiteLLM-format model string             |
+| `OUTPUT_DIR`                  | `./output`                         | Where study notes are saved             |
+| `TEMPERATURE`                 | `0.7`                              | LLM sampling temperature (0.0–1.0)      |
+| `MAX_TOKENS`                  | _(model default)_                  | Max tokens per LLM response             |
+| `MAX_CONCURRENT_VIDEOS`       | `5`                                | Parallel video processing limit         |
+| `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                               | YouTube request rate limit              |
+| `YOUTUBE_COOKIE_FILE`         | _(none)_                           | Path to Netscape cookies file           |
+| `CHATGPT_TOKEN_DIR`           | `~/.notewise/oauth/chatgpt`        | Optional ChatGPT OAuth token dir        |
 | `GITHUB_COPILOT_TOKEN_DIR`    | `~/.notewise/oauth/github_copilot` | Optional GitHub Copilot OAuth token dir |
 
 Override any setting per-run via CLI flags — run `notewise process --help` for all options.
@@ -224,23 +222,23 @@ export NOTEWISE_HOME=/path/to/custom/dir
 
 notewise uses [LiteLLM](https://github.com/BerriAI/litellm) — any model string LiteLLM supports works here.
 
-| Provider | Config Key / Auth | Example Model String |
-| --- | --- | --- |
-| Google Gemini | `GEMINI_API_KEY` | `gemini/gemini-2.5-flash` |
-| OpenAI | `OPENAI_API_KEY` | `gpt-5.5` |
-| Anthropic | `ANTHROPIC_API_KEY` | `claude-sonnet-4-5-20250929` |
-| Groq | `GROQ_API_KEY` | `groq/llama-3.3-70b-versatile` |
-| xAI | `XAI_API_KEY` | `xai/grok-4-1-fast-non-reasoning-latest` |
-| Mistral | `MISTRAL_API_KEY` | `mistral/mistral-large-latest` |
-| Cohere | `COHERE_API_KEY` | `command-r-plus-08-2024` |
-| DeepSeek | `DEEPSEEK_API_KEY` | `deepseek/deepseek-v3.2` |
-| OpenRouter | `OPENROUTER_API_KEY` | `openrouter/openai/gpt-5` |
-| Azure OpenAI / Azure AI | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` | `azure/gpt-5` |
-| Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` | `vercel_ai_gateway/<model>` |
-| Together / Fireworks / Perplexity | Provider API key | `together_ai/...`, `fireworks_ai/...`, `perplexity/sonar` |
-| ChatGPT Subscription | OAuth device flow | `chatgpt/gpt-5.2` |
-| GitHub Copilot | OAuth device flow | `github_copilot/gpt-5-mini` |
-| Amazon Bedrock | AWS credential chain | `bedrock/<model-id>` |
+| Provider                          | Config Key / Auth                         | Example Model String                                      |
+| --------------------------------- | ----------------------------------------- | --------------------------------------------------------- |
+| Google Gemini                     | `GEMINI_API_KEY`                          | `gemini/gemini-2.5-flash`                                 |
+| OpenAI                            | `OPENAI_API_KEY`                          | `gpt-5.5`                                                 |
+| Anthropic                         | `ANTHROPIC_API_KEY`                       | `claude-sonnet-4-5-20250929`                              |
+| Groq                              | `GROQ_API_KEY`                            | `groq/llama-3.3-70b-versatile`                            |
+| xAI                               | `XAI_API_KEY`                             | `xai/grok-4-1-fast-non-reasoning-latest`                  |
+| Mistral                           | `MISTRAL_API_KEY`                         | `mistral/mistral-large-latest`                            |
+| Cohere                            | `COHERE_API_KEY`                          | `command-r-plus-08-2024`                                  |
+| DeepSeek                          | `DEEPSEEK_API_KEY`                        | `deepseek/deepseek-v3.2`                                  |
+| OpenRouter                        | `OPENROUTER_API_KEY`                      | `openrouter/openai/gpt-5`                                 |
+| Azure OpenAI / Azure AI           | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` | `azure/gpt-5`                                             |
+| Vercel AI Gateway                 | `VERCEL_AI_GATEWAY_API_KEY`               | `vercel_ai_gateway/<model>`                               |
+| Together / Fireworks / Perplexity | Provider API key                          | `together_ai/...`, `fireworks_ai/...`, `perplexity/sonar` |
+| ChatGPT Subscription              | OAuth device flow                         | `chatgpt/gpt-5.2`                                         |
+| GitHub Copilot                    | OAuth device flow                         | `github_copilot/gpt-5-mini`                               |
+| Amazon Bedrock                    | AWS credential chain                      | `bedrock/<model-id>`                                      |
 
 Use any provider with `--model`:
 
@@ -340,6 +338,8 @@ Mount `/output` to access generated files on the host. The container runs as a n
 
 ## 🛠️ Development
 
+The Python CLI is the main package. The marketing site lives in [`website/`](website/) and the documentation site lives in [`docs/`](docs/).
+
 ```bash
 # Clone & install
 git clone https://github.com/whoisjayd/notewise
@@ -355,6 +355,21 @@ make quality
 # Full CI pipeline locally
 make ci
 ```
+
+Website work uses Bun and the committed `website/bun.lock`:
+
+```bash
+cd website
+bun install --frozen-lockfile
+bun run lint
+bunx tsc --noEmit
+bun run build
+bun run preview
+```
+
+The website is a TanStack Start/Vite app for Cloudflare. Keep page sections in `website/src/components/`, reusable primitives in `website/src/ui/`, and route metadata in `website/src/routes/__root.tsx`. Run `bun run build` before `bun run preview`; preview serves the built Cloudflare/TanStack output and is the local production smoke test.
+
+Docs live in [`docs/`](docs/) and are configured by `docs/docs.json`. Mintlify custom JavaScript belongs as `.js` files in the docs content directory; current analytics are loaded from `docs/umami.js`. Do not add other analytics integrations unless the provider intentionally changes.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the complete contributor guide.
 
@@ -372,6 +387,7 @@ If you use notewise in a project or build on top of it, you are required to incl
 Contributions are welcome, but please read [CONTRIBUTING.md](CONTRIBUTING.md) before opening a PR.
 
 > [!IMPORTANT]
+>
 > - All normal contribution PRs must target `dev`.
 > - Only maintainer-managed release PRs should target `main`.
 > - PRs that do not follow the contributing guide, skip validation, or use the wrong base branch may be closed.

@@ -1,39 +1,69 @@
-# Python-generated files
+# Python
 __pycache__/
 *.py[oc]
+*$py.class
+.python-version
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.ty/
+.coverage
+coverage.xml
+htmlcov/
+
+# Packaging and build output
 build/
 dist/
 wheels/
-*.egg-info
+*.egg-info/
 
-# Virtual environments
-.venv
+# Virtual environments and local config
+.venv/
+venv/
+env/
 .env
-.opencode/
-nul
-.coverage
+.env.*
+!.env.example
+
+# Runtime output and local scratch
+output/
+.tmp/
+tmp/
+temp/
 drafts/
-.omc
-.claude
-
-# Generated content
-src/yt_study/output/
-coverage.xml
-htmlcov/
 dummy_path
-codex*
-.codex*
-*temp*
-*tmp*
-*.log
-*codex*
-cookies.txt
-.context-mem
-output
-*_cache
 urls.txt
+cookies.txt
+*_cache/
 
+# Logs
+*.log
 
+# Node / website
+node_modules/
+website/node_modules/
+website/.bun/
+website/dist/
+website/dist-ssr/
+website/.output/
+website/.vinxi/
+website/.tanstack/
+website/.nitro/
+website/.wrangler/
+website/.dev.vars
+website/.env
+website/.env.*
+!website/.env.example
+
+# Local agent/tool state
+.opencode/
+.codex/
+.claude/
+.omc
+.context-mem
+
+# Misc local artifacts
+nul
 gradient.svg
 notewise.tape
-.firecrawl
+.firecrawl/
