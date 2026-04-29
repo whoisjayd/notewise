@@ -116,7 +116,7 @@ OAUTH_LOGIN_DIRECT_PROVIDERS = ("chatgpt", "github_copilot")
 OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
     "chatgpt": {
         "label": "ChatGPT Subscription",
-        "safe_model": "chatgpt/gpt-5.3-codex",
+        "safe_model": "chatgpt/gpt-5.2",
         "token_dir_env": "CHATGPT_TOKEN_DIR",
         "token_dir_name": "chatgpt",
     },

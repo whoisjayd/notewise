@@ -1,0 +1,62 @@
+---
+title: "Pipeline and output"
+sidebarTitle: "Pipeline and output"
+description: "Understand how NoteWise processes YouTube inputs and writes output artifacts."
+keywords: ["notewise pipeline", "output files", "chapters", "markdown", "docx", "pdf"]
+---
+
+# Pipeline and output
+
+The processing path is implemented by `CorePipeline` and the pipeline execution helpers.
+
+## Processing flow
+
+<Steps>
+  <Step title="Cache check">
+    Unless `--force` is set, NoteWise checks the SQLite cache before metadata or transcript work.
+  </Step>
+  <Step title="Metadata and transcript">
+    NoteWise resolves YouTube metadata, captions, transcript segments, chapters, and playlist context when applicable.
+  </Step>
+  <Step title="Generation">
+    Transcript text is chunked with source defaults `4000` size and `200` overlap, then sent to the configured LiteLLM model.
+  </Step>
+  <Step title="Artifacts">
+    NoteWise writes notes, optional quizzes, optional transcript exports, and rendered formats.
+  </Step>
+  <Step title="Persistence">
+    Run stats, output paths, transcript content, tokens, costs, and timings are persisted to SQLite when possible.
+  </Step>
+</Steps>
+
+## Chapter behavior
+
+Videos with YouTube chapters use chapter-aware generation. Without `--chapter-directory-output`, the result is still bundled into a final notes file. With `--chapter-directory-output`, NoteWise writes per-chapter Markdown files into a folder and stores `.notewise-output.json` ownership metadata.
+
+## Output formats
+
+| Format | Behavior |
+| --- | --- |
+| `md` | Raw Markdown notes. Default. |
+| `html` | Markdown rendered with built-in CSS. |
+| `pdf` | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
+| `docx` | Uses `html2docx` and `python-docx`. |
+
+## File layout
+
+<Tree>
+  <Tree.Folder name="output" defaultOpen>
+    <Tree.File name="Video Title.md" />
+    <Tree.File name="Video Title.html" />
+    <Tree.File name="Video Title.docx" />
+    <Tree.File name="Video Title_quiz.md" />
+    <Tree.File name="Video Title_transcript.json" />
+    <Tree.Folder name="Video Title" defaultOpen>
+      <Tree.File name="01_Introduction.md" />
+      <Tree.File name="02_Main Topic.md" />
+      <Tree.File name=".notewise-output.json" />
+    </Tree.Folder>
+  </Tree.Folder>
+</Tree>
+
+Filenames are sanitized and capped at 100 characters. Batch collisions may append the video ID.

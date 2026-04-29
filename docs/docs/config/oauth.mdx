@@ -1,0 +1,53 @@
+---
+title: "OAuth login"
+sidebarTitle: "OAuth login"
+description: "Sign in to ChatGPT or GitHub Copilot through LiteLLM OAuth/device-flow providers."
+keywords: ["notewise auth login", "chatgpt", "github copilot", "oauth", "codex"]
+---
+
+# Sign in with OAuth providers
+
+ChatGPT subscription and GitHub Copilot use LiteLLM OAuth/device-flow login. They do not use static API keys in `config.env`.
+
+## Login commands
+
+<CodeGroup>
+```bash ChatGPT
+notewise auth login chatgpt
+```
+
+```bash GitHub Copilot
+notewise auth login github_copilot
+```
+
+```bash Codex alias
+notewise auth login codex
+```
+</CodeGroup>
+
+`codex` is a CLI alias for ChatGPT login.
+
+## Safe test models
+
+| Provider | Safe model used by login checks |
+| --- | --- |
+| ChatGPT | `chatgpt/gpt-5.2` |
+| GitHub Copilot | `github_copilot/gpt-5-mini` |
+
+## Token directories
+
+By default, token directories live under the NoteWise state root:
+
+| Provider | Default directory | Override env var |
+| --- | --- | --- |
+| ChatGPT | `<state>/oauth/chatgpt` | `CHATGPT_TOKEN_DIR` |
+| GitHub Copilot | `<state>/oauth/github_copilot` | `GITHUB_COPILOT_TOKEN_DIR` |
+
+Persist the state directory in Docker if you want OAuth login to survive container restarts.
+
+## Use after login
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --model chatgpt/gpt-5.2
+notewise process "https://youtu.be/VIDEO_ID" --model github_copilot/gpt-5-mini
+```

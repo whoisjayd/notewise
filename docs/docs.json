@@ -1,8 +1,8 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "maple",
+  "theme": "willow",
   "name": "NoteWise",
-  "description": "NoteWise is a CLI tool that converts YouTube videos and playlists into AI-powered Markdown study notes using Gemini, OpenAI, Anthropic, Groq, and more — no browser required.",
+  "description": "Source-backed documentation for the NoteWise YouTube-to-notes CLI.",
   "logo": {
     "light": "/logo.png",
     "dark": "/logo.png",
@@ -10,40 +10,47 @@
   },
   "favicon": "/favicon.ico",
   "colors": {
-    "primary": "#2563eb",
-    "light": "#60a5fa",
-    "dark": "#1d4ed8"
+    "primary": "#1D4ED8",
+    "light": "#2563EB",
+    "dark": "#93C5FD"
   },
   "icons": {
     "library": "lucide"
   },
   "fonts": {
-    "family": "JetBrains Mono"
+    "heading": {
+      "family": "Space Grotesk",
+      "weight": 600
+    },
+    "body": {
+      "family": "Geist",
+      "weight": 400
+    }
   },
   "appearance": {
     "default": "system",
     "strict": false
   },
   "background": {
-    "decoration": "gradient"
+    "decoration": "grid"
   },
   "seo": {
     "indexing": "all",
     "metatags": {
       "og:type": "website",
       "og:site_name": "NoteWise Docs",
-      "og:image": "https://notewise.click/og-image.png",
+      "og:image": "https://docs.notewise.click/og-image.png",
       "og:image:width": "1200",
       "og:image:height": "630",
       "twitter:card": "summary_large_image",
       "twitter:site": "@whynotjaydeep",
       "twitter:creator": "@whynotjaydeep",
-      "twitter:image": "https://notewise.click/og-image.png",
-      "theme-color": "#2563eb"
+      "twitter:image": "https://docs.notewise.click/og-image.png",
+      "theme-color": "#0EA5E9"
     }
   },
   "search": {
-    "prompt": "Search docs..."
+    "prompt": "Search NoteWise docs..."
   },
   "metadata": {
     "timestamp": true
@@ -74,109 +81,15 @@
     ],
     "primary": {
       "type": "button",
-      "label": "Get Started",
-      "href": "/docs/getting-started/quickstart"
+      "label": "Quickstart",
+      "href": "/docs/start/quickstart"
     }
   },
   "footer": {
     "socials": {
       "github": "https://github.com/whoisjayd/notewise",
       "x": "https://x.com/whynotjaydeep"
-    },
-    "links": [
-      {
-        "header": "Product",
-        "items": [
-          {
-            "label": "Quick Start",
-            "href": "/docs/getting-started/quickstart"
-          },
-          {
-            "label": "Installation",
-            "href": "/docs/getting-started/installation"
-          },
-          {
-            "label": "Configuration",
-            "href": "/docs/getting-started/configuration"
-          },
-          {
-            "label": "Docker",
-            "href": "/docs/guides/docker"
-          }
-        ]
-      },
-      {
-        "header": "Reference",
-        "items": [
-          {
-            "label": "CLI Overview",
-            "href": "/cli/commands/overview"
-          },
-          {
-            "label": "process Command",
-            "href": "/cli/commands/process"
-          },
-          {
-            "label": "Config Schema",
-            "href": "/reference/schema-and-output/configuration"
-          },
-          {
-            "label": "Output Format",
-            "href": "/reference/schema-and-output/output-format"
-          },
-          {
-            "label": "Error Codes",
-            "href": "/reference/pipeline-and-errors/errors"
-          }
-        ]
-      },
-      {
-        "header": "Resources",
-        "items": [
-          {
-            "label": "GitHub",
-            "href": "https://github.com/whoisjayd/notewise"
-          },
-          {
-            "label": "PyPI Package",
-            "href": "https://pypi.org/project/notewise/"
-          },
-          {
-            "label": "Report an Issue",
-            "href": "https://github.com/whoisjayd/notewise/issues"
-          },
-          {
-            "label": "Changelog",
-            "href": "https://github.com/whoisjayd/notewise/releases"
-          }
-        ]
-      },
-      {
-        "header": "Guides",
-        "items": [
-          {
-            "label": "Single Video",
-            "href": "/docs/guides/single-video"
-          },
-          {
-            "label": "Playlists & Batch",
-            "href": "/docs/guides/playlists-and-batch"
-          },
-          {
-            "label": "Private Videos",
-            "href": "/docs/guides/private-videos"
-          },
-          {
-            "label": "Cache & Logs",
-            "href": "/docs/guides/cache-and-logs"
-          },
-          {
-            "label": "Troubleshooting",
-            "href": "/docs/guides/troubleshooting"
-          }
-        ]
-      }
-    ]
+    }
   },
   "contextual": {
     "options": [
@@ -199,27 +112,147 @@
     },
     {
       "source": "/installation",
-      "destination": "/docs/getting-started/installation",
+      "destination": "/docs/start/install",
       "permanent": true
     },
     {
       "source": "/quickstart",
-      "destination": "/docs/getting-started/quickstart",
+      "destination": "/docs/start/quickstart",
       "permanent": true
     },
     {
       "source": "/config",
-      "destination": "/docs/getting-started/configuration",
+      "destination": "/docs/config/configuration",
       "permanent": true
     },
     {
-      "source": "/cli",
-      "destination": "/cli/commands/overview",
+      "source": "/cli/:slug*",
+      "destination": "/docs/operate/commands",
       "permanent": true
     },
     {
-      "source": "/reference",
-      "destination": "/reference/schema-and-output/configuration",
+      "source": "/reference/:slug*",
+      "destination": "/docs/understand/pipeline-output",
+      "permanent": true
+    },
+    {
+      "source": "/development/:slug*",
+      "destination": "/docs/understand/development",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/installation",
+      "destination": "/docs/start/install",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/quickstart",
+      "destination": "/docs/start/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/docs/getting-started/configuration",
+      "destination": "/docs/config/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/how-it-works/architecture",
+      "destination": "/docs/understand/pipeline-output",
+      "permanent": true
+    },
+    {
+      "source": "/docs/how-it-works/pipeline",
+      "destination": "/docs/understand/pipeline-output",
+      "permanent": true
+    },
+    {
+      "source": "/docs/how-it-works/providers",
+      "destination": "/docs/config/providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/single-video",
+      "destination": "/docs/use/process",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/playlists-and-batch",
+      "destination": "/docs/use/playlists-batches",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/private-videos",
+      "destination": "/docs/use/private-docker",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/docker",
+      "destination": "/docs/use/private-docker",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/cache-and-logs",
+      "destination": "/docs/operate/cache-logs-history",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/troubleshooting",
+      "destination": "/docs/operate/troubleshooting",
+      "permanent": true
+    },
+    {
+      "source": "/docs/core-concepts/processing-model",
+      "destination": "/docs/understand/pipeline-output",
+      "permanent": true
+    },
+    {
+      "source": "/docs/core-concepts/providers",
+      "destination": "/docs/config/providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/process-videos",
+      "destination": "/docs/use/process",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/private-videos",
+      "destination": "/docs/use/private-docker",
+      "permanent": true
+    },
+    {
+      "source": "/docs/workflows/docker-automation",
+      "destination": "/docs/use/private-docker",
+      "permanent": true
+    },
+    {
+      "source": "/docs/cli/command-reference",
+      "destination": "/docs/operate/commands",
+      "permanent": true
+    },
+    {
+      "source": "/docs/configuration",
+      "destination": "/docs/config/configuration",
+      "permanent": true
+    },
+    {
+      "source": "/docs/advanced/internals",
+      "destination": "/docs/understand/development",
+      "permanent": true
+    },
+    {
+      "source": "/docs/reference/output-and-storage",
+      "destination": "/docs/understand/pipeline-output",
+      "permanent": true
+    },
+    {
+      "source": "/docs/reference/errors-and-events",
+      "destination": "/docs/understand/storage-events",
+      "permanent": true
+    },
+    {
+      "source": "/docs/troubleshooting",
+      "destination": "/docs/operate/troubleshooting",
       "permanent": true
     }
   ],
@@ -233,114 +266,54 @@
     "404": {
       "redirect": true,
       "title": "Page not found",
-      "description": "The page you're looking for doesn't exist. Try [browsing the docs](/) or [searching](#) for what you need."
+      "description": "This page moved during the source-backed docs rebuild. Start from the overview or search the docs."
     }
   },
   "navigation": {
-    "tabs": [
+    "groups": [
       {
-        "tab": "Docs",
-        "icon": "book-open",
-        "groups": [
-          {
-            "group": "Getting Started",
-            "icon": "rocket",
-            "pages": [
-              "docs/index",
-              "docs/getting-started/installation",
-              "docs/getting-started/quickstart",
-              "docs/getting-started/configuration"
-            ]
-          },
-          {
-            "group": "How It Works",
-            "icon": "cpu",
-            "pages": [
-              "docs/how-it-works/architecture",
-              "docs/how-it-works/pipeline",
-              "docs/how-it-works/providers"
-            ]
-          },
-          {
-            "group": "Guides",
-            "icon": "compass",
-            "pages": [
-              "docs/guides/single-video",
-              "docs/guides/playlists-and-batch",
-              "docs/guides/private-videos",
-              "docs/guides/docker",
-              "docs/guides/cache-and-logs",
-              "docs/guides/troubleshooting"
-            ]
-          }
+        "group": "Start",
+        "icon": "rocket",
+        "pages": [
+          "docs/index",
+          "docs/start/install",
+          "docs/start/quickstart"
         ]
       },
       {
-        "tab": "CLI",
+        "group": "Use",
+        "icon": "youtube",
+        "pages": [
+          "docs/use/process",
+          "docs/use/playlists-batches",
+          "docs/use/private-docker"
+        ]
+      },
+      {
+        "group": "Configure",
+        "icon": "sliders-horizontal",
+        "pages": [
+          "docs/config/configuration",
+          "docs/config/providers",
+          "docs/config/oauth"
+        ]
+      },
+      {
+        "group": "Operate",
         "icon": "terminal",
-        "groups": [
-          {
-            "group": "Commands",
-            "icon": "square-terminal",
-            "pages": [
-              "cli/commands/overview",
-              "cli/commands/process"
-            ]
-          },
-          {
-            "group": "Config & Operations",
-            "icon": "sliders-horizontal",
-            "pages": [
-              "cli/config-and-operations/setup-and-config",
-              "cli/config-and-operations/operations"
-            ]
-          }
+        "pages": [
+          "docs/operate/commands",
+          "docs/operate/cache-logs-history",
+          "docs/operate/troubleshooting"
         ]
       },
       {
-        "tab": "Reference",
-        "icon": "library",
-        "groups": [
-          {
-            "group": "Schema & Output",
-            "icon": "folder-open",
-            "pages": [
-              "reference/schema-and-output/configuration",
-              "reference/schema-and-output/output-format",
-              "reference/schema-and-output/storage-schema"
-            ]
-          },
-          {
-            "group": "Pipeline & Errors",
-            "icon": "triangle-alert",
-            "pages": [
-              "reference/pipeline-and-errors/pipeline-events",
-              "reference/pipeline-and-errors/errors"
-            ]
-          }
-        ]
-      },
-      {
-        "tab": "Development",
-        "icon": "code-xml",
-        "groups": [
-          {
-            "group": "Local Setup",
-            "icon": "laptop",
-            "pages": [
-              "development/local-setup/setup",
-              "development/local-setup/testing",
-              "development/local-setup/ci-cd"
-            ]
-          },
-          {
-            "group": "Contributing",
-            "icon": "git-pull-request",
-            "pages": [
-              "development/contributing/documentation",
-              "development/contributing/ai-discovery"
-            ]
-          }
+        "group": "Understand",
+        "icon": "workflow",
+        "pages": [
+          "docs/understand/pipeline-output",
+          "docs/understand/storage-events",
+          "docs/understand/development"
         ]
       }
     ]

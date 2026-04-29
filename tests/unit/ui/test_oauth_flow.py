@@ -20,7 +20,7 @@ def test_run_oauth_login_triggers_litellm_responses_call(mocker):
     completion.assert_not_awaited()
     assert responses.await_args is not None
     kwargs = responses.await_args.kwargs
-    assert kwargs["model"] == "chatgpt/gpt-5.3-codex"
+    assert kwargs["model"] == "chatgpt/gpt-5.2"
     assert kwargs["input"] == [{"role": "user", "content": "Reply with OK."}]
     assert kwargs["max_output_tokens"] == 4
 

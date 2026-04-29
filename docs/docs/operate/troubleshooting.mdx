@@ -1,0 +1,50 @@
+---
+title: "Troubleshooting"
+sidebarTitle: "Troubleshooting"
+description: "Fix common NoteWise setup, provider, YouTube, output, cache, and log failures."
+keywords: ["notewise troubleshooting", "provider error", "youtube transcript", "cache", "logs"]
+---
+
+# Troubleshoot NoteWise
+
+Start with commands that do not generate notes. They narrow the problem before you spend provider quota.
+
+```bash
+notewise doctor
+notewise config
+notewise info "https://youtu.be/VIDEO_ID"
+notewise logs --tail 100
+```
+
+## Setup and provider failures
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Missing API key | `notewise config` | Set the provider env var or rerun `notewise setup`. |
+| Wrong model string | Command and config | Use a LiteLLM-compatible model string. |
+| OAuth expired | `notewise auth login ...` | Re-run login in an interactive terminal. |
+| Docker loses auth | Container mounts | Persist `/home/notewise/.notewise`. |
+| Provider rate limits | Logs | Add `--throttle`, reduce batch size, or use another model/provider. |
+
+## YouTube failures
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| No transcript | YouTube captions | Use another video or language. NoteWise needs transcript text. |
+| Private or members-only video | Browser access | Export Netscape cookies and pass `--cookie-file`. |
+| Playlist not resolving | `notewise info URL` | Use a playlist URL, watch+list URL, or supported bare playlist ID. |
+| Language mismatch | Transcript language | Try `--language en` or another available caption language. |
+
+## Output and cache issues
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Output not where expected | `notewise config` | Check `OUTPUT_DIR` and `--output`. |
+| Run skipped | Cache | Use `--force` to regenerate. |
+| No chapter folder | Command flags | Add `--chapter-directory-output`; the video must have YouTube chapters. |
+| Cache looks stale | `notewise cache show VIDEO_ID` | Prune or clear cache. Generated notes are separate files. |
+| Need deeper details | Logs | Run with `--verbose`, then inspect `notewise logs --tail 100`. |
+
+<Warning>
+  When asking for help, share command shape and redacted errors only. Do not share API keys, OAuth tokens, cookies, raw prompts, or provider payloads.
+</Warning>

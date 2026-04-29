@@ -217,7 +217,7 @@ When changing LiteLLM provider support, OAuth behavior, model examples, or confi
 - Keep OAuth token defaults under `NOTEWISE_HOME`/`~/.notewise` unless the user explicitly sets `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR`.
 - Do not log raw prompts, provider payloads, API keys, OAuth tokens, or AWS credentials. Add/update redaction tests when touching logging.
 - Refresh `src/notewise/ui/litellm_models_snapshot.json` with `uv run python scripts/extract_litellm_model_snapshot.py` when setup model availability changes. The snapshot should include text-generation models only.
-- Update docs in the same PR: `README.md`, `.env.example`, `docs/docs/how-it-works/providers.mdx`, `docs/docs/getting-started/configuration.mdx`, and `docs/reference/schema-and-output/configuration.mdx`.
+- Update docs in the same PR: `README.md`, `.env.example`, `docs/docs/config/providers.mdx`, `docs/docs/config/configuration.mdx`, `docs/docs/config/oauth.mdx`, and `docs/docs/operate/commands.mdx` when the CLI surface changes.
 
 ---
 

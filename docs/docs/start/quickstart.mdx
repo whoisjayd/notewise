@@ -1,0 +1,77 @@
+---
+title: "Quickstart"
+sidebarTitle: "Quickstart"
+description: "Configure NoteWise, process one YouTube video, and find the generated notes."
+keywords: ["notewise quickstart", "notewise setup", "youtube notes", "gemini"]
+---
+
+# Create your first notes
+
+Use one public YouTube video for the first run. After that, add formats, quizzes, transcripts, playlists, cookies, or Docker.
+
+<Steps>
+  <Step title="Create config">
+    ```bash
+    notewise setup
+    ```
+
+    The setup wizard writes supported keys to `~/.notewise/config.env` unless `NOTEWISE_HOME` points somewhere else.
+  </Step>
+  <Step title="Process one video">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID"
+    ```
+
+    By default this uses `gemini/gemini-2.5-flash`, requests English transcripts, and writes Markdown into `./output`.
+  </Step>
+  <Step title="Check the result">
+    ```bash
+    ls output
+    ```
+
+    The default file is a sanitized video title ending in `.md`.
+  </Step>
+</Steps>
+
+## Add one option
+
+<Tabs sync={false}>
+  <Tab title="Output folder">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID" --output ./notes
+    ```
+  </Tab>
+  <Tab title="Different model">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash
+    ```
+  </Tab>
+  <Tab title="Multiple formats">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID" --format md,docx
+    ```
+  </Tab>
+  <Tab title="Quiz">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID" --quiz
+    ```
+  </Tab>
+  <Tab title="Plain output">
+    ```bash
+    notewise process "https://youtu.be/VIDEO_ID" --no-ui
+    ```
+  </Tab>
+</Tabs>
+
+## If the first run fails
+
+Use these in order:
+
+```bash
+notewise doctor
+notewise config
+notewise info "https://youtu.be/VIDEO_ID"
+notewise logs --tail 100
+```
+
+Do not share API keys, OAuth tokens, cookies, raw prompts, or provider payloads when asking for help.
