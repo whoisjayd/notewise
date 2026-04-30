@@ -37,7 +37,6 @@
   "seo": {
     "indexing": "all",
     "metatags": {
-      "canonical": "https://docs.notewise.click",
       "description": "Install, configure, and use NoteWise to convert YouTube videos, playlists, and transcripts into structured Markdown study notes with LLM providers.",
       "keywords": "notewise, youtube to notes, youtube notes, youtube transcript, markdown study notes, ai study notes, llm cli, python cli, study guide generator, playlist notes, transcript notes",
       "author": "Jaydeep Solanki",
@@ -59,9 +58,6 @@
       "og:type": "website",
       "og:site_name": "NoteWise Docs",
       "og:locale": "en_US",
-      "og:title": "NoteWise Docs - YouTube to Markdown Study Notes CLI",
-      "og:description": "Install, configure, and operate NoteWise to turn YouTube videos, playlists, and transcripts into structured Markdown study notes with LLM providers.",
-      "og:url": "https://docs.notewise.click",
       "og:image": "https://docs.notewise.click/og-image.png",
       "og:image:secure_url": "https://docs.notewise.click/og-image.png",
       "og:image:width": "1200",
@@ -71,9 +67,6 @@
       "twitter:site": "@whynotjaydeep",
       "twitter:creator": "@whynotjaydeep",
       "twitter:domain": "docs.notewise.click",
-      "twitter:url": "https://docs.notewise.click",
-      "twitter:title": "NoteWise Docs - YouTube to Markdown Study Notes CLI",
-      "twitter:description": "Install, configure, and run NoteWise to turn YouTube videos, playlists, and transcripts into Markdown study notes with LLMs.",
       "twitter:image": "https://docs.notewise.click/og-image.png",
       "twitter:image:alt": "NoteWise documentation preview for the YouTube to Markdown study notes CLI",
       "twitter:image:width": "1200",

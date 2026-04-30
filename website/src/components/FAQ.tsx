@@ -9,7 +9,7 @@ const items = [
   },
   {
     q: "Will it cost me money?",
-    a: "The default Gemini 2.5 Flash key is free for personal use within Google's quota. Other providers bill by token at their published rates. NoteWise itself is free under MIT-Attribution.",
+    a: "Model usage may depend on your provider plan, quota, and current pricing. Check the provider docs before large runs; NoteWise itself is free and open source under the MIT License.",
   },
   {
     q: "Can I use private or members-only videos?",
@@ -47,8 +47,13 @@ export function FAQ() {
               <details className="group [&_summary::-webkit-details-marker]:hidden">
                 <summary className="-mx-2 flex cursor-pointer items-start justify-between gap-4 rounded-md px-2 py-5 sm:gap-6 sm:py-6">
                   <span className="t-cardtitle pr-2 text-balance">{it.q}</span>
-                  <span className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--rule)] text-stamp group-open:rotate-45 group-open:bg-stamp/5">
+                  <span
+                    aria-hidden="true"
+                    className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--rule)] text-stamp group-open:rotate-45 group-open:bg-stamp/5"
+                  >
                     <svg
+                      aria-hidden="true"
+                      focusable="false"
                       width="12"
                       height="12"
                       viewBox="0 0 12 12"

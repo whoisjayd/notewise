@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { FineIcon } from "@/ui/FineIcon";
 
@@ -34,9 +34,14 @@ async function copyCommand(command: string) {
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
   document.body.appendChild(textarea);
-  textarea.select();
-  document.execCommand("copy");
-  textarea.remove();
+  try {
+    textarea.select();
+    if (!document.execCommand("copy")) {
+      throw new Error("Copy command was rejected");
+    }
+  } finally {
+    textarea.remove();
+  }
 }
 
 export function InstallPage() {
@@ -115,8 +120,21 @@ function InstallOptionGroup({
 
 function CommandCard({ command }: { command: InstallCommand }) {
   const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
+  const resetTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (resetTimerRef.current !== null) {
+        window.clearTimeout(resetTimerRef.current);
+      }
+    };
+  }, []);
 
   const handleCopy = async () => {
+    if (resetTimerRef.current !== null) {
+      window.clearTimeout(resetTimerRef.current);
+    }
+
     try {
       await copyCommand(command.command);
       setCopyState("copied");
@@ -124,7 +142,10 @@ function CommandCard({ command }: { command: InstallCommand }) {
       setCopyState("failed");
     }
 
-    window.setTimeout(() => setCopyState("idle"), 1400);
+    resetTimerRef.current = window.setTimeout(() => {
+      setCopyState("idle");
+      resetTimerRef.current = null;
+    }, 1400);
   };
 
   return (
@@ -151,6 +172,13 @@ function CommandCard({ command }: { command: InstallCommand }) {
           />
           {copyState === "copied" ? "Copied" : copyState === "failed" ? "Failed" : "Copy"}
         </button>
+        <span className="sr-only" aria-live="polite">
+          {copyState === "copied"
+            ? `${command.label} command copied`
+            : copyState === "failed"
+              ? `Failed to copy ${command.label} command`
+              : ""}
+        </span>
       </div>
     </article>
   );

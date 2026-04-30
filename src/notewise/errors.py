@@ -6,6 +6,8 @@ all application code. Never define project-specific exceptions elsewhere.
 
 from __future__ import annotations
 
+from notewise._constants import OAUTH_FALLBACK_MESSAGE
+
 
 class NoteWiseError(Exception):
     """Base class for all NoteWise application exceptions."""
@@ -201,6 +203,9 @@ def format_user_error(error: Exception) -> str:
                 "or use a different video."
             )
         return "We couldn't get a usable transcript for this video."
+
+    if isinstance(error, OAuthError):
+        return OAUTH_FALLBACK_MESSAGE
 
     text = str(error).strip().lower()
 

@@ -25,7 +25,7 @@ class _FakeResponse:
         return self._payload
 
 
-def test_check_for_updates_reports_available_release(monkeypatch) -> None:
+def test_check_for_updates_reports_available_release(mocker) -> None:  # noqa: ANN001
     payload = b"""
     {
             "tag_name": "v1.4.1",
@@ -36,7 +36,7 @@ def test_check_for_updates_reports_available_release(monkeypatch) -> None:
     def fake_urlopen(*_args: object, **_kwargs: object) -> _FakeResponse:
         return _FakeResponse(payload)
 
-    monkeypatch.setattr(updater, "urlopen", fake_urlopen)
+    mocker.patch.object(updater, "urlopen", side_effect=fake_urlopen)
 
     status = updater.check_for_updates()
 
@@ -82,13 +82,11 @@ def test_python_install_reports_package_source(monkeypatch) -> None:
     assert updater._get_install_source() == "Python Package"
 
 
-def test_update_command_prints_detected_source_and_matching_command(
-    monkeypatch,
-) -> None:
-    monkeypatch.setattr(
+def test_update_command_prints_detected_source_and_matching_command(mocker) -> None:  # noqa: ANN001
+    mocker.patch.object(
         cli_app,
         "check_for_updates",
-        lambda: updater.UpdateStatus(
+        return_value=updater.UpdateStatus(
             current_version="1.4.0",
             latest_version="1.4.1",
             available=True,

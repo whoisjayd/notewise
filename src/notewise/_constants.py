@@ -275,6 +275,10 @@ OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE = (
 )
 OAUTH_UNSUPPORTED_PROVIDER_ERROR = "Unsupported OAuth provider: {provider}."
 OAUTH_SETUP_RUN_PROMPT = "Run OAuth login now?"
+OAUTH_FALLBACK_MESSAGE = (
+    "OAuth login failed or was cancelled. "
+    "Run `notewise auth login` for your provider and try again."
+)
 UNSUPPORTED_MODEL_MESSAGE = (
     "Model {model} is not currently supported for {provider_label}. "
     "Run `notewise setup --force` to choose a supported model. "
@@ -362,6 +366,22 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
 LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
     "chatgpt": ("gpt-5.1-codex",),
 }
+STRIP_SAFE_PROVIDER_ALIASES = frozenset(
+    {
+        "gemini",
+        "openai",
+        "anthropic",
+        "groq",
+        "xai",
+        "mistral",
+        "cohere",
+        "deepseek",
+        "fireworks_ai",
+        "chatgpt",
+        "github_copilot",
+        "vertex_ai",
+    }
+)
 THIRD_PARTY_DIAGNOSTIC_LOGGERS = (
     "LiteLLM",
     "litellm",

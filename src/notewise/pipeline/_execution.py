@@ -7,6 +7,7 @@ import time
 from collections.abc import Callable
 from contextlib import nullcontext
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any, cast
 
 import structlog
@@ -40,6 +41,7 @@ async def process_single_video(
     emit = pipeline._emit_event(on_event)
     async with pipeline.semaphore:
         reserved_targets: list[Path] = []
+        temporary_chapter_directory: TemporaryDirectory[str] | None = None
         try:
             emit(EventType.METADATA_START, video_id)
 
@@ -137,7 +139,6 @@ async def process_single_video(
                     chapters_to_generate: dict[str, str] = {}
                     chapter_targets: list[tuple[str, int, Path | None]] = []
                     chapter_output_files: dict[str, Path] = {}
-                    temporary_chapter_files: list[Path] = []
 
                     if chapter_directory_output:
                         output_target = await pipeline._reserve_output_target(
@@ -168,17 +169,23 @@ async def process_single_video(
                         output_target = next(iter(rendered_output_targets.values()))
                         transcript_output_dir = output_target.parent
 
+                    temporary_chapter_dir: Path | None = None
+                    if rendered_output_targets and not chapter_directory_output:
+                        temporary_chapter_directory = TemporaryDirectory(
+                            prefix="notewise-chapters-"
+                        )
+                        temporary_chapter_dir = Path(temporary_chapter_directory.name)
+
                     for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
                         chapter_file: Path | None = None
                         safe_chapter = sanitize_filename(chap_title)
                         if chapter_directory_output and output_target is not None:
                             chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
-                        elif rendered_output_targets:
-                            chapter_file = pipeline.output_dir / (
+                        elif temporary_chapter_dir is not None:
+                            chapter_file = temporary_chapter_dir / (
                                 f"{sanitize_filename(title)}_chapter_"
                                 f"{i:02d}_{safe_chapter}.md"
                             )
-                            temporary_chapter_files.append(chapter_file)
 
                         if chapter_file is not None:
                             chapter_output_files[chap_title] = chapter_file
@@ -236,7 +243,8 @@ async def process_single_video(
                             if chapter_file is None:
                                 return
                             chapter_file.parent.mkdir(parents=True, exist_ok=True)
-                            chapter_file.write_text(notes, encoding="utf-8")
+                            if not pipeline.timestamps:
+                                chapter_file.write_text(notes, encoding="utf-8")
 
                         async def _generate_single_chapter_notes_with_events(
                             chapter_title: str,
@@ -359,8 +367,17 @@ async def process_single_video(
                             render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
                                 target_language=pipeline.target_language
                             )
-                        for chapter_file in temporary_chapter_files:
-                            chapter_file.unlink(missing_ok=True)
+                        if pipeline.output_format in rendered_output_targets:
+                            primary_output_target = rendered_output_targets[
+                                pipeline.output_format
+                            ]
+                            if not chapter_directory_output:
+                                transcript_output_dir = primary_output_target.parent
+                                output_target = primary_output_target
+                            else:
+                                output_target = rendered_output_targets[
+                                    pipeline.output_format
+                                ]
                 else:
                     emit(EventType.GENERATION_START, video_id, title=title)
 
@@ -420,8 +437,11 @@ async def process_single_video(
                         render_warning = PDF_UNSUPPORTED_UNICODE_ERROR.format(
                             target_language=pipeline.target_language
                         )
-                    output_target = rendered_output_targets[pipeline.output_format]
-                    transcript_output_dir = output_target.parent
+                    primary_output_target = rendered_output_targets[
+                        pipeline.output_format
+                    ]
+                    transcript_output_dir = primary_output_target.parent
+                    output_target = primary_output_target
 
                 if pipeline.export_transcript_format:
                     pipeline._export_transcript(
@@ -510,6 +530,8 @@ async def process_single_video(
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
         finally:
+            if temporary_chapter_directory is not None:
+                temporary_chapter_directory.cleanup()
             for target in reserved_targets:
                 await pipeline._release_output_target(target)
 

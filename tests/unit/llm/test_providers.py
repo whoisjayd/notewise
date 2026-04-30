@@ -87,6 +87,47 @@ class TestLLMProvider:
 
             assert result == "# Title\nContent"
 
+    async def test_generate_cleanup_tilde_markdown_fences(self):
+        """Tilde code fences should be cleaned like backtick fences."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[
+                0
+            ].message.content = "~~~markdown\n# Title\nContent\n~~~"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            result = await provider.generate("sys", "user")
+
+            assert result == "# Title\nContent"
+
+    async def test_generate_logs_cost_estimation_failures(self, mocker):
+        """LiteLLM cost lookup failures should be visible for diagnostics."""
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch(
+            "notewise.llm.provider.completion_cost",
+            side_effect=RuntimeError("cost unavailable"),
+        )
+        mock_warning = mocker.patch("notewise.llm.provider.logger.warning")
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_response.usage.prompt_tokens = 1
+        mock_response.usage.completion_tokens = 2
+        mock_response.usage.total_tokens = 3
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider("gpt-4o")
+        with provider.collect_usage() as usage:
+            await provider.generate("sys", "user")
+
+        assert usage.cost_usd == 0.0
+        mock_warning.assert_called()
+        assert mock_warning.call_args.kwargs["model"] == "gpt-4o"
+        assert mock_warning.call_args.kwargs["exc_info"] is True
+
     async def test_generate_normalizes_block_content_payloads(self):
         """Structured content blocks should be normalized into plain text."""
         with (
@@ -600,7 +641,7 @@ class TestLLMProvider:
             _configure_litellm_runtime()
 
         runtime.verbose_logger.setLevel.assert_called_once_with(logging.WARNING)
-        assert runtime.verbose_logger.propagate is True
+        assert runtime.verbose_logger.propagate is False
         runtime.verbose_logger.removeHandler.assert_called_once()
 
     def test_extract_usage_handles_invalid_values(self):

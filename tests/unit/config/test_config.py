@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
+from notewise import config as config_module
 from notewise.config import AppSettings as Config
 from notewise.config import UserConfigSource
 
@@ -152,8 +153,10 @@ class TestConfig:
         monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
         monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
 
-        Config()
+        cfg = Config()
 
+        assert cfg.chatgpt_token_dir == state_dir / "oauth" / "chatgpt"
+        assert cfg.github_copilot_token_dir == state_dir / "oauth" / "github_copilot"
         assert os.environ["CHATGPT_TOKEN_DIR"] == str(state_dir / "oauth" / "chatgpt")
         assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(
             state_dir / "oauth" / "github_copilot"
@@ -165,11 +168,62 @@ class TestConfig:
         monkeypatch.setenv("CHATGPT_TOKEN_DIR", str(tmp_path / "chatgpt-custom"))
         monkeypatch.setenv("GITHUB_COPILOT_TOKEN_DIR", str(tmp_path / "copilot-custom"))
 
-        Config()
+        cfg = Config()
 
         assert os.environ["CHATGPT_TOKEN_DIR"] == str(tmp_path / "chatgpt-custom")
         assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(
             tmp_path / "copilot-custom"
+        )
+        assert cfg.chatgpt_token_dir == tmp_path / "chatgpt-custom"
+        assert cfg.github_copilot_token_dir == tmp_path / "copilot-custom"
+
+    def test_oauth_token_dirs_can_load_from_user_config(self, tmp_path, monkeypatch):
+        """OAuth token dir overrides in config.env should be accepted."""
+        state_dir = tmp_path / ".notewise"
+        config_dir = state_dir
+        config_dir.mkdir()
+        chatgpt_dir = tmp_path / "chatgpt-config"
+        copilot_dir = tmp_path / "copilot-config"
+        (config_dir / "config.env").write_text(
+            f"CHATGPT_TOKEN_DIR={chatgpt_dir}\n"
+            f"GITHUB_COPILOT_TOKEN_DIR={copilot_dir}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
+        monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
+
+        cfg = Config()
+
+        assert os.environ["CHATGPT_TOKEN_DIR"] == str(chatgpt_dir)
+        assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(copilot_dir)
+        assert cfg.chatgpt_token_dir == chatgpt_dir
+        assert cfg.github_copilot_token_dir == copilot_dir
+
+    def test_managed_oauth_token_dirs_refresh_when_state_dir_changes(
+        self, tmp_path, monkeypatch
+    ):
+        """Derived token dir env vars should not pin future state dirs."""
+        first_state_dir = tmp_path / "first"
+        second_state_dir = tmp_path / "second"
+        monkeypatch.setenv("NOTEWISE_HOME", str(first_state_dir))
+        monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
+        monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
+
+        Config()
+
+        monkeypatch.setenv("NOTEWISE_HOME", str(second_state_dir))
+        cfg = Config()
+
+        assert cfg.chatgpt_token_dir == second_state_dir / "oauth" / "chatgpt"
+        assert cfg.github_copilot_token_dir == (
+            second_state_dir / "oauth" / "github_copilot"
+        )
+        assert os.environ["CHATGPT_TOKEN_DIR"] == str(
+            second_state_dir / "oauth" / "chatgpt"
+        )
+        assert os.environ["GITHUB_COPILOT_TOKEN_DIR"] == str(
+            second_state_dir / "oauth" / "github_copilot"
         )
 
     def test_load_positive_int_env_uses_default_when_env_is_missing(self, monkeypatch):
@@ -348,7 +402,12 @@ class TestGetApiKeyNameForModel:
         assert "notewise setup --force" in message
 
     def test_supported_snapshot_model_has_no_unsupported_message(self):
-        assert self.cfg.get_unsupported_model_message("openrouter/openai/gpt-5") is None
+        snapshot = config_module._load_bundled_model_snapshot()
+        selected_model = next(
+            model for models in snapshot.values() for model in models if model
+        )
+
+        assert self.cfg.get_unsupported_model_message(selected_model) is None
 
     def test_reasoning_models(self):
         assert self.cfg.get_api_key_name_for_model("o1") == "OPENAI_API_KEY"

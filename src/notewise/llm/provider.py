@@ -46,7 +46,7 @@ def suppress_litellm_noise() -> None:
     verbose_logger = getattr(runtime, "verbose_logger", None)
     if verbose_logger is not None:
         verbose_logger.setLevel(logging.WARNING)
-        verbose_logger.propagate = True
+        verbose_logger.propagate = False
         for handler in list(verbose_logger.handlers):
             verbose_logger.removeHandler(handler)
     warnings.filterwarnings(
@@ -411,7 +411,14 @@ class LLMProvider:
                     call_type=call_type,
                 )
                 cost_value = max(0.0, float(cost or 0.0))
-            except Exception:
+            except Exception as exc:
+                logger.warning(
+                    "Failed to estimate LiteLLM completion cost",
+                    model=model,
+                    call_type=call_type,
+                    error_type=type(exc).__name__,
+                    exc_info=True,
+                )
                 continue
             if cost_value > 0:
                 return cost_value
@@ -451,19 +458,22 @@ class LLMProvider:
             Cleaned content string.
         """
         content = self._normalize_markdown_fences(content)
-        # Check for triple backticks
-        if content.startswith("```"):
+        fences = ("```", "~~~")
+        if content.startswith(fences):
             lines = content.splitlines()
             # Need at least fence start, content, fence end
-            if len(lines) >= 2 and lines[0].strip().startswith("```"):
+            if len(lines) >= 2 and lines[0].strip().startswith(fences):
                 # If the first line is just a fence (with optional language), remove it
                 # Check if the last line is also a fence
-                if lines[-1].strip() == "```":
+                if lines[-1].strip() in fences:
                     return "\n".join(lines[1:-1]).strip()
                 # Sometimes LLMs stop abruptly or formatting is weird;
                 # if it starts with fence, we strip the first line.
                 # If it ends with fence, strip that too.
-                return "\n".join(lines[1:]).strip().removesuffix("```").strip()
+                cleaned = "\n".join(lines[1:]).strip()
+                for fence in fences:
+                    cleaned = cleaned.removesuffix(fence).strip()
+                return cleaned
 
         return content
 

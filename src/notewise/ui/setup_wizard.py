@@ -17,6 +17,7 @@ from notewise._constants import (
     LITELLM_TEXT_MODEL_EXCLUDED_MARKERS,
     OAUTH_SETUP_RUN_PROMPT,
     PROVIDER_CONFIG,
+    STRIP_SAFE_PROVIDER_ALIASES,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -48,102 +49,8 @@ def _load_oauth_dependencies() -> None:
         run_oauth_login = _run_oauth_login
 
 
-CURATED_FALLBACK_MODELS: dict[str, list[str]] = {
-    "gemini": [
-        "gemini/gemini-2.5-flash",
-        "gemini/gemini-2.5-flash-lite",
-        "gemini/gemini-2.5-pro",
-    ],
-    "openai": [
-        "gpt-4o-mini",
-        "gpt-4o",
-        "o3-mini",
-    ],
-    "anthropic": [
-        "claude-haiku-4-5-20251001",
-        "claude-sonnet-4-5-20250929",
-        "claude-4-opus-20250514",
-    ],
-    "groq": [
-        "groq/llama-3.1-8b-instant",
-        "groq/llama-3.3-70b-versatile",
-        "groq/meta-llama/llama-4-scout-17b-16e-instruct",
-    ],
-    "xai": [
-        "xai/grok-3",
-        "xai/grok-3-mini-latest",
-        "xai/grok-4-0709",
-    ],
-    "mistral": [
-        "mistral/mistral-small-latest",
-        "mistral/mistral-medium-latest",
-        "mistral/mistral-large-latest",
-    ],
-    "cohere": [
-        "command-a-03-2025",
-        "command-r-plus-08-2024",
-        "command-r-08-2024",
-    ],
-    "deepseek": [
-        "deepseek/deepseek-chat",
-        "deepseek/deepseek-v3",
-        "deepseek/deepseek-reasoner",
-    ],
-    "openrouter": [
-        "openrouter/openai/gpt-4o-mini",
-        "openrouter/anthropic/claude-3.5-sonnet",
-        "openrouter/google/gemini-2.5-flash",
-    ],
-    "together_ai": [
-        "together_ai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
-        "together_ai/meta-llama/Meta-Llama-3.1-8B-Instruct-Turbo",
-        "together_ai/mistralai/Mixtral-8x7B-Instruct-v0.1",
-    ],
-    "fireworks_ai": [
-        "fireworks_ai/accounts/fireworks/models/llama-v3p1-8b-instruct",
-        "fireworks_ai/accounts/fireworks/models/llama-v3p3-70b-instruct",
-        "fireworks_ai/accounts/fireworks/models/mixtral-8x7b-instruct",
-    ],
-    "perplexity": [
-        "perplexity/sonar",
-        "perplexity/sonar-pro",
-        "perplexity/sonar-reasoning",
-    ],
-    "github_copilot": [
-        "github_copilot/claude-haiku-4.5",
-        "github_copilot/claude-opus-4.5",
-        "github_copilot/claude-opus-4.6-fast",
-        "github_copilot/claude-opus-41",
-        "github_copilot/claude-sonnet-4",
-        "github_copilot/claude-sonnet-4.5",
-        "github_copilot/gemini-2.5-pro",
-        "github_copilot/gemini-3-pro-preview",
-        "github_copilot/gpt-3.5-turbo",
-        "github_copilot/gpt-4",
-        "github_copilot/gpt-4.1",
-        "github_copilot/gpt-4o",
-        "github_copilot/gpt-4o-mini",
-        "github_copilot/gpt-5",
-        "github_copilot/gpt-5-mini",
-        "github_copilot/gpt-5.1",
-        "github_copilot/gpt-5.1-codex-max",
-        "github_copilot/gpt-5.2",
-        "github_copilot/gpt-5.3-codex",
-    ],
-    "chatgpt": [
-        "chatgpt/gpt-5.2",
-        "chatgpt/gpt-5.2-codex",
-        "chatgpt/gpt-5.3-chat-latest",
-        "chatgpt/gpt-5.4",
-        "chatgpt/gpt-5.4-pro",
-        "chatgpt/gpt-5.3-codex",
-        "chatgpt/gpt-5.3-codex-spark",
-        "chatgpt/gpt-5.3-instant",
-    ],
-}
-
 _ALLOWED_SETUP_MODEL_MODES = {"chat", "completion", "responses"}
-_NATIVE_PROVIDER_PREFIXES = set(PROVIDER_CONFIG)
+_NATIVE_PROVIDER_PREFIXES = STRIP_SAFE_PROVIDER_ALIASES
 
 
 def _resolve_console(console: Console | None) -> Console:
@@ -156,17 +63,12 @@ def _resolve_console(console: Console | None) -> Console:
 def _normalize_available_models(
     provider_models: dict[str, list[str]],
 ) -> dict[str, list[str]]:
-    """Normalize provider model lists and fill in curated fallbacks."""
-    normalized = {
+    """Normalize provider model lists from the LiteLLM catalog snapshot."""
+    return {
         provider: sorted({model for model in models if model})
         for provider, models in provider_models.items()
         if provider in PROVIDER_CONFIG
     }
-
-    for provider, fallback_models in CURATED_FALLBACK_MODELS.items():
-        normalized[provider] = normalized.get(provider) or list(fallback_models)
-
-    return normalized
 
 
 def _load_bundled_model_snapshot() -> dict[str, list[str]]:
@@ -417,9 +319,10 @@ def _is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
         return False
 
     provider_prefix, separator, _ = model_lower.partition("/")
-    if separator:
+    provider_key = provider_prefix if separator else _classify_provider(metadata)
+    if provider_key is not None:
         provider_exclusions = LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS.get(
-            provider_prefix,
+            provider_key,
             (),
         )
         if any(marker in model_lower for marker in provider_exclusions):
@@ -692,8 +595,14 @@ def run_setup_wizard(
         )
         if Confirm.ask(OAUTH_SETUP_RUN_PROMPT, default=True):
             _load_oauth_dependencies()
-            if run_oauth_login is not None:
-                run_oauth_login(provider_key, console=active_console)
+            if run_oauth_login is not None and not run_oauth_login(
+                provider_key,
+                console=active_console,
+            ):
+                active_console.print(
+                    "[red]OAuth login failed or was cancelled. Setup stopped.[/red]"
+                )
+                return current_config
 
     active_console.print("\n[bold cyan]Output Directory:[/bold cyan]")
     default_output = str(Path.cwd() / Path(DEFAULT_OUTPUT_DIR))
