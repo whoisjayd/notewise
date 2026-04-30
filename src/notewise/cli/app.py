@@ -695,6 +695,7 @@ def update() -> None:
 
     if not status.available:
         console.print("[green]You already have the latest NoteWise version.[/green]")
+        console.print(f"[dim]Install source: {status.install_source}[/dim]")
         return
 
     console.print(
@@ -702,9 +703,10 @@ def update() -> None:
         f"[green]{status.latest_version}[/green] "
         f"(current: {status.current_version})"
     )
+    console.print(f"[dim]Install source: {status.install_source}[/dim]")
     console.print(f"[dim]{status.release_url}[/dim]")
     console.print()
-    console.print("[bold]Upgrade with one of these commands:[/bold]")
+    console.print("[bold]Upgrade with:[/bold]")
     for command in status.update_commands:
         console.print(f"  [cyan]{command}[/cyan]")
 

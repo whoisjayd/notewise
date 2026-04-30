@@ -28,17 +28,13 @@ RELEASES_PAGE_URL = (
 )
 UPDATER_USER_AGENT = "NoteWise-Updater"
 UPDATE_HTTP_TIMEOUT_SECONDS = 30
+UPDATE_INSTALL_SOURCE_BINARY = "Standalone Binary"
+UPDATE_INSTALL_SOURCE_PYTHON = "Python Package"
 UPDATE_COMMAND_UV = "uv tool upgrade notewise"
 UPDATE_COMMAND_PIPX = "pipx upgrade notewise"
-UPDATE_COMMAND_PIP = "pip install --upgrade notewise"
-UPDATE_INSTALLER_UNIX_URL = (
-    f"https://github.com/{GITHUB_REPOSITORY_OWNER}/{GITHUB_REPOSITORY_NAME}/"
-    "releases/latest/download/install.sh"
-)
-UPDATE_INSTALLER_WINDOWS_URL = (
-    f"https://github.com/{GITHUB_REPOSITORY_OWNER}/{GITHUB_REPOSITORY_NAME}/"
-    "releases/latest/download/install.ps1"
-)
+UPDATE_COMMAND_PIP = "python -m pip install --upgrade notewise"
+UPDATE_INSTALLER_UNIX_URL = "https://notewise.click/install"
+UPDATE_INSTALLER_WINDOWS_URL = "https://notewise.click/install"
 UPDATE_COMMAND_BINARY_UNIX = f"curl -fsSL {UPDATE_INSTALLER_UNIX_URL} | sh"
 UPDATE_COMMAND_BINARY_WINDOWS = f"irm {UPDATE_INSTALLER_WINDOWS_URL} | iex"
 LEGACY_CONFIG_KEYS = frozenset(
