@@ -19,6 +19,8 @@ from notewise._constants import (
     UPDATE_COMMAND_PIPX,
     UPDATE_COMMAND_UV,
     UPDATE_HTTP_TIMEOUT_SECONDS,
+    UPDATE_INSTALL_SOURCE_BINARY,
+    UPDATE_INSTALL_SOURCE_PYTHON,
     UPDATER_USER_AGENT,
 )
 from notewise.errors import UpdateError
@@ -40,6 +42,7 @@ class UpdateStatus:
     current_version: str
     latest_version: str
     available: bool
+    install_source: str
     release_url: str
     update_commands: tuple[str, ...]
 
@@ -99,19 +102,26 @@ def get_latest_release() -> ReleaseInfo:
     )
 
 
+def _is_standalone_binary() -> bool:
+    """Return whether the app is running from a bundled standalone binary."""
+    return bool(getattr(sys, "frozen", False))
+
+
+def _get_install_source() -> str:
+    """Return a user-facing install source label."""
+    if _is_standalone_binary():
+        return UPDATE_INSTALL_SOURCE_BINARY
+    return UPDATE_INSTALL_SOURCE_PYTHON
+
+
 def _get_update_commands() -> tuple[str, ...]:
-    """Return the recommended upgrade commands for the current install shape."""
-    if getattr(sys, "frozen", False):
+    """Return the recommended upgrade commands for the current install source."""
+    if _is_standalone_binary():
         if os.name == "nt":
             return (UPDATE_COMMAND_BINARY_WINDOWS,)
         return (UPDATE_COMMAND_BINARY_UNIX,)
 
-    commands = [UPDATE_COMMAND_UV, UPDATE_COMMAND_PIPX, UPDATE_COMMAND_PIP]
-    if os.name == "nt":
-        commands.append(UPDATE_COMMAND_BINARY_WINDOWS)
-    else:
-        commands.append(UPDATE_COMMAND_BINARY_UNIX)
-    return tuple(commands)
+    return (UPDATE_COMMAND_UV, UPDATE_COMMAND_PIPX, UPDATE_COMMAND_PIP)
 
 
 def check_for_updates() -> UpdateStatus:
@@ -122,6 +132,7 @@ def check_for_updates() -> UpdateStatus:
         current_version=__version__,
         latest_version=latest_release.version,
         available=update_available,
+        install_source=_get_install_source(),
         release_url=latest_release.html_url,
         update_commands=_get_update_commands(),
     )
