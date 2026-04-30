@@ -5,8 +5,6 @@ description: "Work on the NoteWise marketing website and Mintlify documentation 
 keywords: ["notewise website", "bun", "tanstack start", "mintlify", "umami"]
 ---
 
-# Website and docs
-
 The repository ships two public web surfaces:
 
 - `website/` — the marketing site at `https://notewise.click`
@@ -14,19 +12,26 @@ The repository ships two public web surfaces:
 
 ## Website structure
 
-The website is a TanStack Start/Vite app deployed to Cloudflare.
+The website is a TanStack Start/Vite app built with Nitro for deployment to Vercel.
 
 | Path                                   | Purpose                                                          |
 | -------------------------------------- | ---------------------------------------------------------------- |
 | `website/src/routes/__root.tsx`        | HTML shell, SEO metadata, JSON-LD, analytics scripts             |
 | `website/src/routes/index.tsx`         | Landing page route composition                                   |
+| `website/src/routes/install.tsx`       | Smart `/install` route for shell, PowerShell, and browser clients |
 | `website/src/routes/sitemap[.]xml.tsx` | Sitemap route                                                    |
+| `website/src/components/SitemapPage.tsx` | Browser-friendly sitemap UI and sitemap link inventory          |
+| `website/src/components/sitemapData.ts` | Shared website/docs URL inventory for sitemap XML and UI        |
 | `website/src/components/`              | Page sections and route-level components                         |
-| `website/src/ui/`                      | Reusable primitives such as `Reveal`, `Terminal`, and `FineIcon` |
+| `website/src/ui/`                      | Reusable primitives including both `Terminal` and `FineIcon`     |
 | `website/src/server/`                  | Server functions used by the site                                |
-| `website/wrangler.jsonc`               | Cloudflare deployment config                                     |
+| `website/vite.config.ts`               | TanStack Start, Nitro, Vite, Tailwind, and path alias config     |
 
 Keep page sections directly under `website/src/components/`. Keep reusable UI primitives outside that folder in `website/src/ui/`.
+
+The `/install` surface is split deliberately: `website/src/routes/install.tsx` handles content negotiation and returns shell or PowerShell bootstrap scripts for CLI clients, while `website/src/components/InstallPage.tsx` renders the browser install page and copy buttons.
+
+The `/sitemap.xml` surface follows the same split: `website/src/routes/sitemap[.]xml.tsx` handles XML versus browser HTML responses, while `website/src/components/SitemapPage.tsx` owns the browser-readable table UI.
 
 ## Website workflow
 
@@ -41,7 +46,7 @@ bun run build
 bun run preview
 ```
 
-Run `bun run build` before `bun run preview`; preview serves the built Cloudflare/TanStack output and catches production-only routing issues.
+Run `bun run build` before `bun run preview`; preview serves the built TanStack output and catches production-only routing issues before Vercel deployment.
 
 ## Website quality rules
 
@@ -49,7 +54,7 @@ Run `bun run build` before `bun run preview`; preview serves the built Cloudflar
 - Preserve landmarks, visible focus states, skip links, and descriptive button labels.
 - Inherit the system theme on first load. Only a user theme toggle should persist `nw-theme` in local storage.
 - Avoid delayed reveal effects that make first paint feel broken or inconsistent.
-- Never commit `website/.dev.vars`, local env files, Cloudflare credentials, analytics secrets, OAuth tokens, or provider keys.
+- Never commit local website env files, Vercel credentials, analytics secrets, OAuth tokens, or provider keys.
 
 ## Docs workflow
 
@@ -62,6 +67,8 @@ Mintlify docs live in `docs/`.
 | `docs/umami.js`  | Custom JavaScript loaded by Mintlify on docs pages            |
 
 When adding a docs page, add the `.mdx` file under `docs/docs/` and update the `navigation.groups` list in `docs/docs.json`.
+
+Do not run Prettier on docs MDX. Mintlify component children can contain fenced code blocks, and Prettier may rewrite them into parser-breaking forms. For docs-only validation, parse `docs/docs.json` and run `node --check docs/umami.js`.
 
 ## Analytics
 

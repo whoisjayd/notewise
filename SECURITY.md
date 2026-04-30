@@ -21,6 +21,7 @@ Security fixes are provided for the latest maintained release line.
 ## Security Best Practices
 
 `notewise` handles API keys for various LLM providers.
+
 - Keys are stored locally in `~/.notewise/config.env`.
 - Keys are loaded into environment variables only at runtime.
 - We **NEVER** log API keys to the console or log files.

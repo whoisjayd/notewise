@@ -2,10 +2,9 @@
 title: "Pipeline and output"
 sidebarTitle: "Pipeline and output"
 description: "Understand how NoteWise processes YouTube inputs and writes output artifacts."
-keywords: ["notewise pipeline", "output files", "chapters", "markdown", "docx", "pdf"]
+keywords:
+  ["notewise pipeline", "output files", "chapters", "markdown", "docx", "pdf"]
 ---
-
-# Pipeline and output
 
 The processing path is implemented by `CorePipeline` and the pipeline execution helpers.
 
@@ -13,19 +12,24 @@ The processing path is implemented by `CorePipeline` and the pipeline execution 
 
 <Steps>
   <Step title="Cache check">
-    Unless `--force` is set, NoteWise checks the SQLite cache before metadata or transcript work.
+    Unless `--force` is set, NoteWise checks the SQLite cache before metadata or
+    transcript work.
   </Step>
   <Step title="Metadata and transcript">
-    NoteWise resolves YouTube metadata, captions, transcript segments, chapters, and playlist context when applicable.
+    NoteWise resolves YouTube metadata, captions, transcript segments, chapters,
+    and playlist context when applicable.
   </Step>
   <Step title="Generation">
-    Transcript text is chunked with source defaults `4000` size and `200` overlap, then sent to the configured LiteLLM model.
+    Transcript text is chunked with source defaults `4000` size and `200`
+    overlap, then sent to the configured LiteLLM model.
   </Step>
   <Step title="Artifacts">
-    NoteWise writes notes, optional quizzes, optional transcript exports, and rendered formats.
+    NoteWise writes notes, optional quizzes, optional transcript exports, and
+    rendered formats.
   </Step>
   <Step title="Persistence">
-    Run stats, output paths, transcript content, tokens, costs, and timings are persisted to SQLite when possible.
+    Run stats, output paths, transcript content, tokens, costs, and timings are
+    persisted to SQLite when possible.
   </Step>
 </Steps>
 
@@ -35,12 +39,12 @@ Videos with YouTube chapters use chapter-aware generation. Without `--chapter-di
 
 ## Output formats
 
-| Format | Behavior |
-| --- | --- |
-| `md` | Raw Markdown notes. Default. |
-| `html` | Markdown rendered with built-in CSS. |
-| `pdf` | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
-| `docx` | Uses `html2docx` and `python-docx`. |
+| Format | Behavior                                                                         |
+| ------ | -------------------------------------------------------------------------------- |
+| `md`   | Raw Markdown notes. Default.                                                     |
+| `html` | Markdown rendered with built-in CSS.                                             |
+| `pdf`  | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
+| `docx` | Uses `html2docx` and `python-docx`.                                              |
 
 ## File layout
 

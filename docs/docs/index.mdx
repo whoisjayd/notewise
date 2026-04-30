@@ -5,8 +5,6 @@ description: "Purpose, features, and starting paths for NoteWise, the YouTube-to
 keywords: ["notewise", "youtube notes", "study notes", "cli", "litellm"]
 ---
 
-# NoteWise turns YouTube into study notes
-
 NoteWise is a Python CLI that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files you control: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
 <video
@@ -34,40 +32,49 @@ Most video summarizers hide the result in a web app. NoteWise is built for peopl
 
 <CardGroup cols={2}>
   <Card title="Local study files" href="/docs/understand/pipeline-output">
-    Notes are written to your output directory. Markdown is the default, and rendered formats are optional.
+    Notes are written to your output directory. Markdown is the default, and
+    rendered formats are optional.
   </Card>
   <Card title="Bring your own model" href="/docs/config/providers">
-    Use LiteLLM model strings for Gemini, OpenAI, Anthropic, Groq, OpenRouter, Azure, Bedrock, ChatGPT OAuth, Copilot OAuth, and more.
+    Use LiteLLM model strings for Gemini, OpenAI, Anthropic, Groq, OpenRouter,
+    Azure, Bedrock, ChatGPT OAuth, Copilot OAuth, and more.
   </Card>
-  <Card title="Works for real YouTube inputs" href="/docs/use/playlists-batches">
-    Process watch URLs, Shorts, youtu.be links, playlists, bare IDs, and text batch files.
+  <Card
+    title="Works for real YouTube inputs"
+    href="/docs/use/playlists-batches"
+  >
+    Process watch URLs, Shorts, youtu.be links, playlists, bare IDs, and text
+    batch files.
   </Card>
   <Card title="Designed for operations" href="/docs/operate/commands">
-    Inspect config, provider readiness, YouTube metadata, cache, logs, history, and stats from the CLI.
+    Inspect config, provider readiness, YouTube metadata, cache, logs, history,
+    and stats from the CLI.
   </Card>
 </CardGroup>
 
 ## What it produces
 
-| Output | How to create it |
-| --- | --- |
-| Markdown notes | Default `notewise process URL` output. |
-| HTML, PDF, DOCX | Use `--format html`, `--format pdf`, `--format docx`, or comma-separated formats. |
-| Quiz file | Add `--quiz`. |
-| Transcript export | Add `--export-transcript txt` or `--export-transcript json`. |
-| Chapter folder | Add `--chapter-directory-output` when the video has YouTube chapters. |
+| Output            | How to create it                                                                  |
+| ----------------- | --------------------------------------------------------------------------------- |
+| Markdown notes    | Default `notewise process URL` output.                                            |
+| HTML, PDF, DOCX   | Use `--format html`, `--format pdf`, `--format docx`, or comma-separated formats. |
+| Quiz file         | Add `--quiz`.                                                                     |
+| Transcript export | Add `--export-transcript txt` or `--export-transcript json`.                      |
+| Chapter folder    | Add `--chapter-directory-output` when the video has YouTube chapters.             |
 
 ## Start here
 
 <CardGroup cols={2}>
   <Card title="Install NoteWise" href="/docs/start/install">
-    Install the CLI with `uv`, `pipx`, `pip`, Docker, or standalone release binaries.
+    Install the CLI with `uv`, `uvx`, `pipx`, `pip`, Docker, or the short
+    `notewise.click/install` binary endpoint.
   </Card>
   <Card title="Run the quickstart" href="/docs/start/quickstart">
     Configure a provider, process one public video, and confirm the output file.
   </Card>
   <Card title="Process more than one video" href="/docs/use/playlists-batches">
-    Use playlists, batch files, concurrency, rate limits, and cache behavior correctly.
+    Use playlists, batch files, concurrency, rate limits, and cache behavior
+    correctly.
   </Card>
   <Card title="Fix a failed run" href="/docs/operate/troubleshooting">
     Start with `doctor`, `info`, `config`, cache checks, and recent logs.

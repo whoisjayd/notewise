@@ -11,7 +11,7 @@
   "favicon": "/favicon.ico",
   "colors": {
     "primary": "#1D4ED8",
-    "light": "#2563EB",
+    "light": "#1D4ED8",
     "dark": "#93C5FD"
   },
   "icons": {
@@ -78,7 +78,7 @@
       "twitter:image:alt": "NoteWise documentation preview for the YouTube to Markdown study notes CLI",
       "twitter:image:width": "1200",
       "twitter:image:height": "630",
-      "theme-color": "#0EA5E9"
+      "theme-color": "#0B1118"
     }
   },
   "thumbnails": {

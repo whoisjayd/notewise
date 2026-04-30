@@ -5,20 +5,18 @@ description: "Understand NoteWise config files, environment variables, defaults,
 keywords: ["notewise config", "config.env", "NOTEWISE_HOME", "DEFAULT_MODEL"]
 ---
 
-# Configure NoteWise
-
 NoteWise reads settings from code defaults, `config.env`, environment variables, and command flags.
 
 ## State directory
 
 By default, state lives under `~/.notewise`.
 
-| File or folder | Purpose |
-| --- | --- |
-| `~/.notewise/config.env` | User config written by `notewise setup`. |
-| `~/.notewise/.notewise_cache.db` | SQLite cache and run history. |
-| `~/.notewise/logs/` | Session logs. |
-| `~/.notewise/oauth/` | Default OAuth token storage. |
+| File or folder                   | Purpose                                  |
+| -------------------------------- | ---------------------------------------- |
+| `~/.notewise/config.env`         | User config written by `notewise setup`. |
+| `~/.notewise/.notewise_cache.db` | SQLite cache and run history.            |
+| `~/.notewise/logs/`              | Session logs.                            |
+| `~/.notewise/oauth/`             | Default OAuth token storage.             |
 
 Set `NOTEWISE_HOME` to move this state root.
 
@@ -32,20 +30,21 @@ notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --o
 
 ## Common config keys
 
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model string. |
-| `OUTPUT_DIR` | `./output` | Default output directory. |
-| `MAX_CONCURRENT_VIDEOS` | `5` | Batch/playlist video workers. |
-| `YOUTUBE_REQUESTS_PER_MINUTE` | `10` | YouTube request limit. |
-| `TEMPERATURE` | `0.7` | LLM temperature. |
-| `MAX_TOKENS` | unset | Optional LLM max output tokens. |
-| `YOUTUBE_COOKIE_FILE` | unset | Default Netscape cookies file path. |
+| Key                           | Default                   | Meaning                             |
+| ----------------------------- | ------------------------- | ----------------------------------- |
+| `DEFAULT_MODEL`               | `gemini/gemini-2.5-flash` | LiteLLM model string.               |
+| `OUTPUT_DIR`                  | `./output`                | Default output directory.           |
+| `MAX_CONCURRENT_VIDEOS`       | `5`                       | Batch/playlist video workers.       |
+| `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request limit.              |
+| `TEMPERATURE`                 | `0.7`                     | LLM temperature.                    |
+| `MAX_TOKENS`                  | unset                     | Optional LLM max output tokens.     |
+| `YOUTUBE_COOKIE_FILE`         | unset                     | Default Netscape cookies file path. |
 
 Provider API keys and provider auth keys are also accepted in `config.env` when they are listed in source constants.
 
 <Note>
-  `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.env` keys.
+  `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default
+  settings, not normal `config.env` keys.
 </Note>
 
 ## Commands

@@ -2,32 +2,31 @@
 title: "CLI commands"
 sidebarTitle: "Commands"
 description: "Reference for the NoteWise command surface from the Typer CLI source."
-keywords: ["notewise commands", "cli", "doctor", "stats", "history", "cache", "logs"]
+keywords:
+  ["notewise commands", "cli", "doctor", "stats", "history", "cache", "logs"]
 ---
-
-# NoteWise CLI commands
 
 Run `notewise COMMAND --help` for command-specific flags. The command set is defined in `src/notewise/cli/app.py`.
 
 ## Main commands
 
-| Command | Purpose |
-| --- | --- |
-| `notewise process URL` | Generate notes from one video, playlist, or batch file. |
-| `notewise setup` | Run the interactive config wizard. |
-| `notewise config` | Print masked effective config. |
-| `notewise config-path` | Print the active config path. |
-| `notewise edit-config` | Open the config file in an editor. |
-| `notewise auth login PROVIDER` | Login to OAuth providers. |
-| `notewise info` | Show runtime config and state paths. |
-| `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
-| `notewise doctor` | Check config, provider readiness, output, cache, and logs. |
-| `notewise stats` | Show processing totals and model breakdown. |
-| `notewise history` | Show recent processed videos. |
-| `notewise cache` | Inspect or maintain the SQLite cache. |
-| `notewise logs` | Inspect or clean session logs. |
-| `notewise update` | Check whether a newer release is available. |
-| `notewise version` | Show the installed version. |
+| Command                        | Purpose                                                       |
+| ------------------------------ | ------------------------------------------------------------- |
+| `notewise process URL`         | Generate notes from one video, playlist, or batch file.       |
+| `notewise setup`               | Run the interactive config wizard.                            |
+| `notewise config`              | Print masked effective config.                                |
+| `notewise config-path`         | Print the active config path.                                 |
+| `notewise edit-config`         | Open the config file in an editor.                            |
+| `notewise auth login PROVIDER` | Login to OAuth providers.                                     |
+| `notewise info`                | Show runtime config and state paths.                          |
+| `notewise info URL`            | Inspect YouTube metadata and cache status without generation. |
+| `notewise doctor`              | Check config, provider readiness, output, cache, and logs.    |
+| `notewise stats`               | Show processing totals and model breakdown.                   |
+| `notewise history`             | Show recent processed videos.                                 |
+| `notewise cache`               | Inspect or maintain the SQLite cache.                         |
+| `notewise logs`                | Inspect or clean session logs.                                |
+| `notewise update`              | Check whether a newer release is available.                   |
+| `notewise version`             | Show the installed version.                                   |
 
 ## Process command
 
@@ -47,6 +46,16 @@ notewise auth login chatgpt
 notewise auth login github_copilot
 notewise auth login codex
 ```
+
+## Update command
+
+```bash
+notewise update
+```
+
+The update check compares the installed version with the latest GitHub release. It detects whether NoteWise is running as a standalone binary or as a Python package and prints the matching upgrade command group.
+
+Standalone binaries receive the short release installer command. Python package installs receive package-manager commands for `uv tool`, `pipx`, and `python -m pip`; use the one that matches how you installed NoteWise.
 
 ## Exit behavior
 

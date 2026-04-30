@@ -2,10 +2,9 @@
 title: "Development"
 sidebarTitle: "Development"
 description: "Set up the NoteWise codebase, run tests, and follow source invariants."
-keywords: ["notewise development", "uv", "make test", "coverage", "contributing"]
+keywords:
+  ["notewise development", "uv", "make test", "coverage", "contributing"]
 ---
-
-# Develop NoteWise
 
 Use `uv` for local development. The package uses a `src` layout and exposes `notewise = notewise.__main__:main`.
 
@@ -19,17 +18,18 @@ uv run notewise version
 
 ## Important paths
 
-| Path | Purpose |
-| --- | --- |
-| `src/notewise/cli/app.py` | Typer command surface. Heavy imports stay lazy inside command bodies. |
-| `src/notewise/_constants.py` | Numeric and string defaults. |
-| `src/notewise/config.py` | Pydantic settings, config file parsing, state paths. |
-| `src/notewise/errors.py` | All custom exceptions. |
-| `src/notewise/logging.py` | Logging configuration and redaction. |
-| `src/notewise/pipeline/core.py` | Pipeline entry point. |
-| `src/notewise/pipeline/_execution.py` | Processing flow. |
-| `src/notewise/storage/` | SQLite models, repository, and hand-rolled migrations. |
-| `src/notewise/domain/` | Pure domain objects. No network or disk I/O. |
+| Path                                  | Purpose                                                               |
+| ------------------------------------- | --------------------------------------------------------------------- |
+| `src/notewise/cli/app.py`             | Typer command surface. Heavy imports stay lazy inside command bodies. |
+| `src/notewise/_constants.py`          | Numeric and string defaults.                                          |
+| `src/notewise/config.py`              | Pydantic settings, config file parsing, state paths.                  |
+| `src/notewise/errors.py`              | All custom exceptions.                                                |
+| `src/notewise/logging.py`             | Logging configuration and redaction.                                  |
+| `src/notewise/pipeline/core.py`       | Pipeline entry point.                                                 |
+| `src/notewise/pipeline/_execution.py` | Processing flow.                                                      |
+| `src/notewise/storage/`               | SQLite models, repository, and hand-rolled migrations.                |
+| `src/notewise/domain/`                | Pure domain objects. No network or disk I/O.                          |
+| `scripts/make_help.py`                | Renders grouped `make help` output from Makefile `##` comments.       |
 
 ## Tests and checks
 
@@ -41,18 +41,20 @@ make quality
 make ci
 ```
 
+`make help` is generated from Makefile comments, so target descriptions should be updated in the target line itself instead of duplicated in a manual help block.
+
 Coverage must stay at or above `90%`.
 
 ## Source invariants
 
-| Rule | Why it exists |
-| --- | --- |
-| Constants in `_constants.py` | Keeps defaults discoverable and testable. |
-| Exceptions in `errors.py` | Keeps user-facing failure behavior consistent. |
-| Logging only in `logging.py` | Keeps redaction and session logs centralized. |
-| Lazy CLI imports | Keeps startup fast and help output lightweight. |
-| No I/O in `domain/` | Keeps value objects pure. |
-| No secrets in tests or docs | Prevents credential leakage. |
+| Rule                         | Why it exists                                   |
+| ---------------------------- | ----------------------------------------------- |
+| Constants in `_constants.py` | Keeps defaults discoverable and testable.       |
+| Exceptions in `errors.py`    | Keeps user-facing failure behavior consistent.  |
+| Logging only in `logging.py` | Keeps redaction and session logs centralized.   |
+| Lazy CLI imports             | Keeps startup fast and help output lightweight. |
+| No I/O in `domain/`          | Keeps value objects pure.                       |
+| No secrets in tests or docs  | Prevents credential leakage.                    |
 
 ## Release facts
 
