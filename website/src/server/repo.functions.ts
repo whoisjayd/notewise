@@ -17,7 +17,7 @@ export const getRepoStats = createServerFn({ method: "GET" }).handler(
     if (cache && Date.now() - cache.at < TTL) return cache.data;
 
     const fallback: RepoStats = {
-      version: "1.3.1",
+      version: "1.4.0",
       stars: 0,
       forks: 0,
       pushedAt: new Date().toISOString(),

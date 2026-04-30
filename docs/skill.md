@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.3.1`.
+Use this when answering questions about NoteWise `1.4.0`.
 
 ## Routes
 
@@ -34,7 +34,7 @@ Use this when answering questions about NoteWise `1.3.1`.
 
 ## Defaults
 
-- Version: `1.3.1`
+- Version: `1.4.0`
 - Python: `>=3.10`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output: `./output`
