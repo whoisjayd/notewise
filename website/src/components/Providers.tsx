@@ -1,4 +1,3 @@
-import { Reveal } from "@/ui/Reveal";
 import { FineIcon } from "@/ui/FineIcon";
 
 type Provider = { name: string; prefix: string; key: string; default?: boolean };
@@ -32,21 +31,24 @@ const oauthProviders = [
 
 export function Providers() {
   return (
-    <section id="providers" className="relative py-20 sm:py-28 md:py-36">
+    <section
+      id="providers"
+      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+    >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="grid gap-10 md:grid-cols-[1fr_1.5fr] md:gap-16 lg:gap-20">
           <div>
-            <Reveal>
+            <>
               <span className="t-eyebrow">No 04 · Providers</span>
-            </Reveal>
-            <Reveal delay={60}>
+            </>
+            <>
               <h2 className="mt-3 t-h2">
                 Bring the model
                 <br />
                 you <em className="text-stamp">already pay</em> for.
               </h2>
-            </Reveal>
-            <Reveal delay={120}>
+            </>
+            <>
               <p className="mt-5 max-w-md t-body">
                 NoteWise routes through{" "}
                 <a
@@ -60,17 +62,17 @@ export function Providers() {
                 . Set one environment variable, hand it any supported model string, and you're done.
                 Default is Gemini 2.5 Flash — its free tier comfortably covers a full course.
               </p>
-            </Reveal>
-            <Reveal delay={180}>
+            </>
+            <>
               <p className="mt-5 t-mono-meta">
-                ¶ Any LiteLLM model works — including local llama.cpp endpoints.
+                ¶ Any LiteLLM-supported model string works — including local llama.cpp endpoints.
               </p>
-            </Reveal>
+            </>
           </div>
 
           <div className="space-y-6">
             {/* ── Desktop table ─────────────────────────────────────────── */}
-            <Reveal delay={120}>
+            <>
               <div className="hidden md:block overflow-hidden rounded-lg border border-[var(--rule)]">
                 <div className="grid grid-cols-[1.1fr_1.2fr_1fr] bg-muted px-5 py-2.5 t-mono-meta uppercase tracking-[0.18em]">
                   <span>Provider</span>
@@ -81,7 +83,7 @@ export function Providers() {
                   {apiKeyProviders.map((p) => (
                     <li
                       key={p.name}
-                      className="grid grid-cols-[1.1fr_1.2fr_1fr] items-center gap-3 border-t border-[var(--rule)] bg-card px-5 py-3 hover:bg-accent/40 transition-colors"
+                      className="grid grid-cols-[1.1fr_1.2fr_1fr] items-center gap-3 border-t border-[var(--rule)] bg-card px-5 py-3"
                     >
                       <span className="flex items-center gap-2 min-w-0">
                         <span className="font-display text-[17px] truncate">{p.name}</span>
@@ -97,32 +99,28 @@ export function Providers() {
                   ))}
                 </ul>
               </div>
-            </Reveal>
+            </>
 
             {/* ── Mobile stacked cards ─────────────────────────────────── */}
             <div className="md:hidden grid grid-cols-1 sm:grid-cols-2 gap-3">
-              {apiKeyProviders.map((p, i) => (
-                <Reveal key={p.name} delay={Math.min(i * 30, 240)}>
-                  <div className="leaf-card p-4">
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="font-display text-[17px]">{p.name}</span>
-                      {p.default && (
-                        <span className="rounded-full border border-stamp/40 px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.18em] text-stamp">
-                          default
-                        </span>
-                      )}
-                    </div>
-                    <code className="mt-2 block t-code text-foreground/85 truncate">
-                      {p.prefix}
-                    </code>
-                    <code className="mt-1 block t-mono-meta truncate">{p.key}</code>
+              {apiKeyProviders.map((p) => (
+                <div key={p.name} className="leaf-card p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-display text-[17px]">{p.name}</span>
+                    {p.default && (
+                      <span className="rounded-full border border-stamp/40 px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.18em] text-stamp">
+                        default
+                      </span>
+                    )}
                   </div>
-                </Reveal>
+                  <code className="mt-2 block t-code text-foreground/85 truncate">{p.prefix}</code>
+                  <code className="mt-1 block t-mono-meta truncate">{p.key}</code>
+                </div>
               ))}
             </div>
 
             {/* ── OAuth providers ──────────────────────────────────────── */}
-            <Reveal delay={180}>
+            <>
               <div className="rounded-lg border border-[var(--rule)] overflow-hidden">
                 <div className="flex items-center gap-2 bg-muted px-5 py-2.5">
                   <FineIcon name="key" size={12} className="text-stamp" />
@@ -143,7 +141,7 @@ export function Providers() {
                   ))}
                 </ul>
               </div>
-            </Reveal>
+            </>
           </div>
         </div>
       </div>

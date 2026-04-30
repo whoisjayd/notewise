@@ -11,7 +11,7 @@ function fmtDate(iso: string) {
 
 export function Footer({ stats }: { stats: RepoStats }) {
   return (
-    <footer className="border-t border-[var(--rule)]">
+    <footer className="border-t border-[var(--rule)] bg-background">
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6 py-12">
         <div className="grid gap-10 grid-cols-1 sm:grid-cols-2 md:grid-cols-[1.4fr_1fr_1fr_1fr]">
           <div className="sm:col-span-2 md:col-span-1">
@@ -24,7 +24,7 @@ export function Footer({ stats }: { stats: RepoStats }) {
             <p className="mt-4 max-w-sm text-[13px] leading-[1.7] text-muted-foreground">
               An open-source CLI by{" "}
               <a
-                className="underline-ink"
+                className="hover-underline underline-ink"
                 href="https://github.com/whoisjayd"
                 target="_blank"
                 rel="noreferrer"
@@ -77,7 +77,7 @@ export function Footer({ stats }: { stats: RepoStats }) {
           <p className="font-mono text-[11px] text-muted-foreground">
             Made with care ·{" "}
             <a
-              className="underline-ink hover:text-foreground"
+              className="underline-ink"
               href="https://github.com/whoisjayd/notewise"
               target="_blank"
               rel="noreferrer"
@@ -115,12 +115,10 @@ function FooterLink({
         href={href}
         target={external ? "_blank" : undefined}
         rel={external ? "noreferrer" : undefined}
-        className="group inline-flex items-center gap-1.5 text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+        className="hover-underline inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"
       >
         {label}
-        {external && (
-          <FineIcon name="external" size={11} className="opacity-50 group-hover:opacity-100" />
-        )}
+        {external && <FineIcon name="external" size={11} className="opacity-50" />}
       </a>
     </li>
   );
