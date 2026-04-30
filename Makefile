@@ -61,16 +61,29 @@ PYTEST := $(UV) run --no-sync python -m pytest
 PYTEST_PARALLEL_FLAGS := -n auto --dist=loadfile
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
+HELP_SCRIPT := scripts/make_help.py
 
 # ==============================================================================
 # Directory Configuration
 # ==============================================================================
 SRC_DIR := src
 PKG_DIR := src/notewise
+SCRIPTS_DIR := scripts
 TEST_DIR := tests
+UNIT_TEST_DIR := $(TEST_DIR)/unit
+INTEGRATION_TEST_DIR := $(TEST_DIR)/integration
+PY_FILES := $(PKG_DIR) $(TEST_DIR) $(SCRIPTS_DIR)
 BUILD_DIR := build
 DIST_DIR := dist
 HTMLCOV_DIR := htmlcov
+MAKEFILE_PATH := $(firstword $(MAKEFILE_LIST))
+
+# ==============================================================================
+# Shared Command Arguments
+# ==============================================================================
+PYTEST_ALL := $(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS)
+COVERAGE_TERM_ARGS := --cov=$(PKG_DIR) --cov-report=term-missing
+COVERAGE_CI_ARGS := $(COVERAGE_TERM_ARGS) --cov-fail-under=90 --cov-report=xml --cov-report=html
 
 # ==============================================================================
 # Target Groups
@@ -90,109 +103,56 @@ CLEAN_TARGETS := clean-cache clean-build clean-test
 	coverage-open \
 	build publish publish-test \
 	show-deps show-outdated update-deps \
-	$(CLEAN_TARGETS) clean clean-all \
+	$(CLEAN_TARGETS) clean-empty-dirs clean clean-all \
 	all ci quick info
 
 # ==============================================================================
 # Help
 # ==============================================================================
+##@ Help
 help: ## Show all developer tasks
-	@echo ""
-	@echo "notewise developer tasks (OS: $(DETECTED_OS))"
-	@echo ""
-	@echo "Setup:"
-	@echo "  sync          Install all dependencies from lockfile"
-	@echo "  install       Install package in editable mode"
-	@echo "  install-dev   Install package + dev dependencies + hooks"
-	@echo "  dev-setup     Full contributor setup (alias for install-dev)"
-	@echo ""
-	@echo "Code Quality:"
-	@echo "  format        Format code with ruff"
-	@echo "  format-check  Check code formatting"
-	@echo "  lint          Run ruff with auto-fix"
-	@echo "  lint-check    Run ruff without auto-fix"
-	@echo "  type-check    Run ty type checker"
-	@echo "  version-check Verify pyproject/__init__/uv.lock versions match"
-	@echo "  deps-check    Detect unused/missing dependencies"
-	@echo "  security      Run bandit security scan"
-	@echo "  fix           Auto-fix formatting and lint issues"
-	@echo "  check         Run all quality checks (CI-safe)"
-	@echo "  verify        Run all quality checks with auto-fixes"
-	@echo "  audit         Run deps-check + security"
-	@echo "  quality       Alias for check"
-	@echo "  pre-commit    Run check + fast tests"
-	@echo "  hooks-install Install git pre-commit hooks"
-	@echo "  hooks-run     Run pre-commit on all files"
-	@echo ""
-	@echo "Testing:"
-	@echo "  test          Run full test suite"
-	@echo "  test-unit     Run unit tests with coverage"
-	@echo "  test-integration Run integration tests"
-	@echo "  test-fast     Run tests in quiet mode"
-	@echo "  test-cov      Run tests with coverage report"
-	@echo "  coverage-open Generate and open HTML coverage report"
-	@echo "  test-failed   Re-run only failed tests"
-	@echo "  test-verbose  Run tests with maximal verbosity"
-	@echo "  test-watch    Run tests in watch mode"
-	@echo ""
-	@echo "Build & Publish:"
-	@echo "  build         Build wheel and source distribution"
-	@echo "  publish       Publish to PyPI"
-	@echo "  publish-test  Publish to TestPyPI"
-	@echo ""
-	@echo "Cleanup:"
-	@echo "  clean         Remove generated files"
-	@echo "  clean-all     Remove generated files + virtualenvs"
-	@echo ""
-	@echo "Info:"
-	@echo "  show-deps     Show installed dependencies"
-	@echo "  show-outdated Show outdated dependencies"
-	@echo "  update-deps   Update dependencies and lockfile"
-	@echo "  info          Show tool versions"
-	@echo ""
-	@echo "Workflow Bundles:"
-	@echo "  quick         Fast validation (format-check + lint-check + test-fast)"
-	@echo "  ci            CI validation (check + test-cov)"
-	@echo "  all           Alias for ci"
+	@$(PYTHON_CMD) $(HELP_SCRIPT) "$(DETECTED_OS)" "$(MAKEFILE_PATH)"
 
 # ==============================================================================
 # Setup
 # ==============================================================================
+##@ Setup
 sync: ## Install all dependencies from lockfile
 	$(UV) sync --all-extras --dev --frozen
 
 install: ## Install package in editable mode
 	$(PIP) install -e .
 
-install-dev: ## Install package and development dependencies
+install-dev: ## Install package + dev dependencies + hooks
 	$(PIP) install -e .
 	$(UV) sync --all-extras --dev --frozen
 	$(MAKE) hooks-install
 
-dev-setup: install-dev ## Full contributor setup
+dev-setup: install-dev ## Full contributor setup (alias for install-dev)
 
 # ==============================================================================
 # Code Quality - Formatting
 # ==============================================================================
+##@ Code Quality
 format: ## Format code with ruff
-	$(RUFF) format $(PKG_DIR) $(TEST_DIR)
+	$(RUFF) format $(PY_FILES)
 
 format-check: ## Check code formatting
-	$(RUFF) format --check $(PKG_DIR) $(TEST_DIR)
+	$(RUFF) format --check $(PY_FILES)
 
 # ==============================================================================
 # Code Quality - Linting
 # ==============================================================================
 lint: ## Run ruff with auto-fix
-	$(RUFF) check $(PKG_DIR) $(TEST_DIR) --fix --unsafe-fixes
+	$(RUFF) check $(PY_FILES) --fix --unsafe-fixes
 
 lint-check: ## Run ruff without auto-fix
-	$(RUFF) check $(PKG_DIR) $(TEST_DIR)
+	$(RUFF) check $(PY_FILES)
 
 # ==============================================================================
 # Code Quality - Type Checking & Security
 # ==============================================================================
-type-check: ## Run static type checks
+type-check: ## Run ty type checker
 	$(TY) check $(PKG_DIR)
 
 version-check: ## Verify package version metadata is aligned
@@ -215,11 +175,12 @@ verify: $(QUALITY_FIX_TARGETS) ## Run all quality checks with auto-fixes
 
 fix: format lint ## Auto-fix formatting and lint issues
 
-audit: deps-check security ## Run dependency and security audits
+audit: deps-check security ## Run deps-check + security
 
 # ==============================================================================
 # Git Hooks
 # ==============================================================================
+##@ Git Hooks
 hooks-install: ## Install pre-commit hooks
 	$(PRE_COMMIT) install --hook-type pre-commit --hook-type pre-push --hook-type commit-msg
 
@@ -232,31 +193,21 @@ pre-commit: check test-fast ## Run checks + fast tests before commit
 # ==============================================================================
 # Testing
 # ==============================================================================
+##@ Testing
 test: ## Run full test suite
-	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -v
+	$(PYTEST_ALL) -v
 
 test-unit: ## Run unit tests with coverage
-	$(PYTEST) $(TEST_DIR)/unit \
-		$(PYTEST_PARALLEL_FLAGS) \
-		--cov=$(PKG_DIR) \
-		--cov-report=term-missing \
-		-v
+	$(PYTEST) $(UNIT_TEST_DIR) $(PYTEST_PARALLEL_FLAGS) $(COVERAGE_TERM_ARGS) -v
 
 test-integration: ## Run integration tests
-	$(PYTEST) $(TEST_DIR)/integration $(PYTEST_PARALLEL_FLAGS) -v
+	$(PYTEST) $(INTEGRATION_TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -v
 
 test-fast: ## Run tests in quiet mode
-	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) -q
+	$(PYTEST_ALL) -q
 
 test-cov: ## Run tests with coverage report
-	$(PYTEST) $(TEST_DIR) \
-		$(PYTEST_PARALLEL_FLAGS) \
-		--cov=$(PKG_DIR) \
-		--cov-fail-under=90 \
-		--cov-report=term-missing \
-		--cov-report=xml \
-		--cov-report=html \
-		-v
+	$(PYTEST_ALL) $(COVERAGE_CI_ARGS) -v
 	@echo ""
 	@echo "Coverage reports generated:"
 	@echo "  HTML: $(HTMLCOV_DIR)/index.html"
@@ -269,7 +220,7 @@ test-watch: ## Run tests in watch mode
 	$(UV_RUN) ptw $(TEST_DIR) -v
 
 test-failed: ## Re-run only failed tests
-	$(PYTEST) $(TEST_DIR) $(PYTEST_PARALLEL_FLAGS) --lf -v
+	$(PYTEST_ALL) --lf -v
 
 test-verbose: ## Run tests with maximal verbosity
 	$(PYTEST) $(TEST_DIR) -vv -s
@@ -277,6 +228,7 @@ test-verbose: ## Run tests with maximal verbosity
 # ==============================================================================
 # Build & Publish
 # ==============================================================================
+##@ Build & Publish
 build: clean-build ## Build wheel and source distribution
 	$(UV) build
 
@@ -292,6 +244,7 @@ publish-test: build ## Publish to TestPyPI
 # ==============================================================================
 # Dependency Management
 # ==============================================================================
+##@ Info
 show-deps: ## Show installed dependencies
 	$(UV) pip list
 
@@ -304,6 +257,7 @@ update-deps: ## Update dependencies and lockfile
 # ==============================================================================
 # Cleanup
 # ==============================================================================
+##@ Cleanup
 clean-cache: ## Remove Python and tool caches
 	@$(FIND_PYCACHE)
 	@$(FIND_CACHE)
@@ -332,6 +286,7 @@ clean-all: clean ## Remove generated files and virtualenvs
 # ==============================================================================
 # Info
 # ==============================================================================
+##@ Info
 info: ## Show tool and interpreter versions
 	@echo "OS: $(DETECTED_OS)"
 	@echo ""
@@ -344,6 +299,7 @@ info: ## Show tool and interpreter versions
 # ==============================================================================
 # Workflow Bundles
 # ==============================================================================
+##@ Workflow Bundles
 quick: format-check lint-check test-fast ## Fast pre-push validation
 
 ci: check test-cov ## CI-equivalent validation
