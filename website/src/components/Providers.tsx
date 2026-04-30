@@ -25,7 +25,7 @@ const oauthProviders = [
   {
     name: "GitHub Copilot (OAuth)",
     model: "github_copilot/gpt-5-mini",
-    cmd: "notewise auth login github",
+    cmd: "notewise auth login github_copilot",
   },
 ];
 
@@ -55,9 +55,10 @@ export function Providers() {
                   className="underline-ink"
                   href="https://github.com/BerriAI/litellm"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                 >
                   LiteLLM
+                  <span className="sr-only"> (opens in a new tab)</span>
                 </a>
                 . Set one environment variable, hand it any supported model string, and you're done.
                 Default is Gemini 2.5 Flash — its free tier comfortably covers a full course.
@@ -74,30 +75,46 @@ export function Providers() {
             {/* ── Desktop table ─────────────────────────────────────────── */}
             <>
               <div className="hidden md:block overflow-hidden rounded-lg border border-[var(--rule)]">
-                <div className="grid grid-cols-[1.1fr_1.2fr_1fr] bg-muted px-5 py-2.5 t-mono-meta uppercase tracking-[0.18em]">
-                  <span>Provider</span>
-                  <span>Model prefix</span>
-                  <span className="text-right">Env key</span>
-                </div>
-                <ul>
-                  {apiKeyProviders.map((p) => (
-                    <li
-                      key={p.name}
-                      className="grid grid-cols-[1.1fr_1.2fr_1fr] items-center gap-3 border-t border-[var(--rule)] bg-card px-5 py-3"
-                    >
-                      <span className="flex items-center gap-2 min-w-0">
-                        <span className="font-display text-[17px] truncate">{p.name}</span>
-                        {p.default && (
-                          <span className="rounded-full border border-stamp/40 px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.18em] text-stamp">
-                            default
-                          </span>
-                        )}
-                      </span>
-                      <code className="truncate t-code text-foreground/85">{p.prefix}</code>
-                      <code className="text-right t-mono-meta truncate">{p.key}</code>
-                    </li>
-                  ))}
-                </ul>
+                <table className="w-full table-fixed">
+                  <thead>
+                    <tr className="grid grid-cols-[1.1fr_1.2fr_1fr] bg-muted px-5 py-2.5 t-mono-meta uppercase tracking-[0.18em]">
+                      <th scope="col" className="text-left font-inherit">
+                        Provider
+                      </th>
+                      <th scope="col" className="text-left font-inherit">
+                        Model prefix
+                      </th>
+                      <th scope="col" className="text-right font-inherit">
+                        Env key
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {apiKeyProviders.map((p) => (
+                      <tr
+                        key={p.name}
+                        className="grid grid-cols-[1.1fr_1.2fr_1fr] items-center gap-3 border-t border-[var(--rule)] bg-card px-5 py-3"
+                      >
+                        <td className="flex items-center gap-2 min-w-0">
+                          <span className="font-display text-[17px] truncate">{p.name}</span>
+                          {p.default && (
+                            <span className="rounded-full border border-stamp/40 px-1.5 py-px font-mono text-[9.5px] uppercase tracking-[0.18em] text-stamp">
+                              default
+                            </span>
+                          )}
+                        </td>
+                        <td className="min-w-0">
+                          <code className="block truncate t-code text-foreground/85">
+                            {p.prefix}
+                          </code>
+                        </td>
+                        <td className="min-w-0 text-right">
+                          <code className="block truncate t-mono-meta">{p.key}</code>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </>
 

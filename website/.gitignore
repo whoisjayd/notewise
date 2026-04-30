@@ -11,6 +11,9 @@ lerna-debug.log*
 node_modules/
 .bun/
 .npm/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
 
 # Build output and framework caches
 dist/

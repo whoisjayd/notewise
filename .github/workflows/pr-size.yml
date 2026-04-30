@@ -13,7 +13,8 @@ jobs:
     name: Apply PR size label
     runs-on: ubuntu-latest
     steps:
-      - uses: pascalgn/size-label-action@v0.5.7
+      # pascalgn/size-label-action v0.5.7
+      - uses: pascalgn/size-label-action@56b489b027932ec0cf60438a1a5f1a19c8fc71ff
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:

@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap");
+@import "https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap";
 
 :root {
   --nw-bg: oklch(0.984 0.003 250);
@@ -125,6 +125,7 @@ h6,
   margin-right: auto !important;
 }
 
+/* stylelint-disable selector-type-no-unknown -- Mintlify renders MDX components as custom elements. */
 mdx-content > h2,
 #content > h2 {
   margin-top: 3.5rem !important;
@@ -152,6 +153,7 @@ card,
 tile {
   min-height: auto !important;
 }
+/* stylelint-enable selector-type-no-unknown */
 
 @media (max-width: 1024px) {
   #page-title {
@@ -178,6 +180,7 @@ tile {
     font-size: 1rem !important;
   }
 
+  /* stylelint-disable selector-type-no-unknown -- Mintlify renders MDX components as custom elements. */
   mdx-content > h2,
   #content > h2 {
     margin-top: 2.5rem !important;
@@ -191,8 +194,10 @@ tile {
   tile [class*="title"] {
     font-size: 1.2rem !important;
   }
+  /* stylelint-enable selector-type-no-unknown */
 }
 
+/* stylelint-disable selector-type-no-unknown -- Mintlify renders code blocks and navigation as custom elements. */
 code,
 pre,
 kbd,
@@ -218,7 +223,6 @@ mdx-content pre * {
   max-width: 100% !important;
   width: auto !important;
   white-space: pre-wrap !important;
-  word-break: break-word !important;
   overflow-wrap: anywhere !important;
 }
 
@@ -279,6 +283,7 @@ advanced-footer {
   border-top-color: var(--nw-border) !important;
   color: var(--nw-text-muted) !important;
 }
+/* stylelint-enable selector-type-no-unknown */
 
 html::-webkit-scrollbar,
 body::-webkit-scrollbar,

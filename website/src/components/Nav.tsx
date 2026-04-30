@@ -15,7 +15,8 @@ const items = [
 export function Nav({ version }: { version: string }) {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
-  const panelRef = useRef<HTMLDivElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
+  const toggleRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -27,7 +28,10 @@ export function Nav({ version }: { version: string }) {
   useEffect(() => {
     if (!open) return;
     const onClick = (e: MouseEvent) => {
-      if (!panelRef.current?.contains(e.target as Node)) setOpen(false);
+      const target = e.target as Node;
+      if (!panelRef.current?.contains(target) && !toggleRef.current?.contains(target)) {
+        setOpen(false);
+      }
     };
     document.addEventListener("mousedown", onClick);
     return () => document.removeEventListener("mousedown", onClick);
@@ -67,7 +71,7 @@ export function Nav({ version }: { version: string }) {
           <a
             href="https://github.com/whoisjayd/notewise"
             target="_blank"
-            rel="noreferrer"
+            rel="noopener noreferrer"
             aria-label="Open the NoteWise GitHub repository"
             className="hover-feedback hidden h-9 items-center gap-2 rounded-full border border-[var(--rule)] px-3 text-[12.5px] text-foreground/80 sm:inline-flex"
           >
@@ -83,6 +87,7 @@ export function Nav({ version }: { version: string }) {
           </a>
 
           <button
+            ref={toggleRef}
             type="button"
             aria-label={open ? "Close sections" : "Open sections"}
             aria-expanded={open}
@@ -106,8 +111,9 @@ export function Nav({ version }: { version: string }) {
       </div>
 
       {open && (
-        <div
+        <nav
           id="mobile-sections"
+          aria-label="Mobile navigation"
           ref={panelRef}
           className="md:hidden mx-3 mt-1 rounded-lg border border-[var(--rule)] bg-background shadow-lg overflow-hidden"
         >
@@ -130,7 +136,7 @@ export function Nav({ version }: { version: string }) {
               <a
                 href="https://github.com/whoisjayd/notewise"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
                 onClick={() => setOpen(false)}
                 className="hover-underline flex items-center gap-2 px-5 py-3.5 text-[14px]"
               >
@@ -139,7 +145,7 @@ export function Nav({ version }: { version: string }) {
               </a>
             </li>
           </ul>
-        </div>
+        </nav>
       )}
     </header>
   );

@@ -15,7 +15,11 @@ const recipes = [
         ),
       },
     ],
-    caption: "→ ./output/&lt;title&gt;.md",
+    caption: (
+      <>
+        -&gt; ./output/<code>&lt;title&gt;</code>.md
+      </>
+    ),
   },
   {
     title: "Full playlist · PDF + DOCX",
@@ -49,7 +53,11 @@ const recipes = [
         ),
       },
     ],
-    caption: "→ writes &lt;name&gt;.md and &lt;name&gt;_quiz.md per video",
+    caption: (
+      <>
+        -&gt; writes <code>&lt;name&gt;</code>.md and <code>&lt;name&gt;</code>_quiz.md per video
+      </>
+    ),
   },
   {
     title: "Sign in with ChatGPT — no API key",
@@ -102,16 +110,12 @@ export function Cookbook() {
 
         <div className="mt-12 sm:mt-14 grid gap-5 md:grid-cols-2">
           {recipes.map((r, i) => (
-            <div key={r.title} className="leaf-card p-5 sm:p-6">
+            <div key={`${r.title}-${i}`} className="leaf-card p-5 sm:p-6">
               <p className="t-eyebrow">Recipe · {String(i + 1).padStart(2, "0")}</p>
               <h3 className="mt-2 t-cardtitle text-balance">{r.title}</h3>
               <p className="mt-1.5 t-meta">{r.sub}</p>
               <div className="mt-4">
-                <Terminal
-                  title="zsh"
-                  lines={r.lines}
-                  caption={<span dangerouslySetInnerHTML={{ __html: r.caption }} />}
-                />
+                <Terminal title="zsh" lines={r.lines} caption={r.caption} />
               </div>
             </div>
           ))}

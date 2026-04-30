@@ -3,7 +3,6 @@
 from unittest.mock import MagicMock, mock_open, patch
 
 from notewise.ui.setup_wizard import (
-    CURATED_FALLBACK_MODELS,
     _strip_wrapped_quotes,
     get_api_key,
     get_available_models,
@@ -197,6 +196,34 @@ class TestConfigIO:
 
         login.assert_called_once_with("chatgpt", console=console)
 
+    def test_setup_wizard_stops_when_oauth_login_fails(self):
+        """Failed OAuth setup should not save a new OAuth-only model config."""
+        console = MagicMock()
+        current_config = {"DEFAULT_MODEL": "gemini/gemini-2.5-flash"}
+        with (
+            patch("notewise.ui.setup_wizard.load_config", return_value=current_config),
+            patch(
+                "notewise.ui.setup_wizard.get_available_models",
+                return_value={"chatgpt": ["chatgpt/gpt-5.2"]},
+            ),
+            patch("notewise.ui.setup_wizard.select_provider", return_value="chatgpt"),
+            patch(
+                "notewise.ui.setup_wizard.select_model",
+                return_value="chatgpt/gpt-5.2",
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=True),
+            patch("notewise.ui.setup_wizard.save_config") as save_config_mock,
+            patch(
+                "notewise.ui.setup_wizard.run_oauth_login",
+                return_value=False,
+            ) as login,
+        ):
+            result = run_setup_wizard(force=True, console=console)
+
+        assert result == current_config
+        login.assert_called_once_with("chatgpt", console=console)
+        save_config_mock.assert_not_called()
+
     def test_show_current_config_reports_read_errors(self):
         """Unreadable config files should not be misreported as missing config."""
         console = MagicMock()
@@ -217,12 +244,9 @@ class TestModelFetching:
     def test_get_available_models_uses_bundled_snapshot(self):
         """Bundled snapshot data should short-circuit the live LiteLLM fetch."""
         bundled_models = {
-            provider: list(models)
-            for provider, models in CURATED_FALLBACK_MODELS.items()
+            "gemini": ["gemini/gemini-2.5-pro"],
+            "openrouter": ["openrouter/google/gemini-2.5-flash"],
         }
-        bundled_models["gemini"] = [
-            "gemini/gemini-2.5-pro",
-        ]
 
         with patch(
             "notewise.ui.setup_wizard._load_bundled_model_snapshot",
@@ -259,7 +283,7 @@ class TestModelFetching:
             assert "unknown-provider" not in models
 
     def test_get_available_models_failure(self):
-        """Test fallback when litellm fails."""
+        """Absent bundled snapshot and LiteLLM metadata should return no models."""
         # Simulate import error or exception accessing model_list
         with (
             patch(
@@ -268,11 +292,9 @@ class TestModelFetching:
             ),
             patch.dict("sys.modules", {"litellm": None}),
         ):
-            # We expect the function to catch the ImportError/ModuleNotFoundError
-            # and return the fallback list.
             models = get_available_models()
 
-            assert models == CURATED_FALLBACK_MODELS
+            assert models == {}
 
     def test_get_available_models_filters_only_deprecated_gateway_and_non_text(self):
         """Setup should keep preview models while still hiding deprecated ones."""
@@ -365,7 +387,7 @@ class TestModelFetching:
         assert "openrouter/rekaai/rolm-ocr" not in models["openrouter"]
         assert "replicate/black-forest-labs/flux-1.1-pro" not in str(models)
         assert models["anthropic"] == ["claude-sonnet-4-5-20250929"]
-        assert models["mistral"] == CURATED_FALLBACK_MODELS["mistral"]
+        assert "mistral" not in models
 
     def test_get_available_models_includes_model_cost_only_response_models(self):
         """Models present only in LiteLLM metadata should still appear in setup."""
@@ -406,7 +428,31 @@ class TestModelFetching:
         assert "chatgpt/gpt-5.4-pro" in models["chatgpt"]
         assert "chatgpt/gpt-5.1-codex-mini" not in models["chatgpt"]
         assert "chatgpt/gpt-5.1-codex-max" not in models["chatgpt"]
-        assert "openai/gpt-4o-audio-preview" not in models["openai"]
+        assert "openai" not in models
+
+    def test_get_available_models_applies_provider_exclusions_to_unprefixed_models(
+        self,
+    ):
+        """Provider metadata should exclude unsafe unprefixed model names."""
+        mock_models = ["gpt-5.1-codex"]
+        mock_cost = {
+            "gpt-5.1-codex": {
+                "litellm_provider": "chatgpt",
+                "mode": "chat",
+            },
+        }
+
+        with (
+            patch(
+                "notewise.ui.setup_wizard._load_bundled_model_snapshot",
+                return_value={},
+            ),
+            patch("litellm.model_list", mock_models, create=True),
+            patch("litellm.model_cost", mock_cost, create=True),
+        ):
+            models = get_available_models()
+
+        assert "chatgpt" not in models
 
 
 class TestInteractiveFlow:

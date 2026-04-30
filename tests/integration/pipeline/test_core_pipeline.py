@@ -168,6 +168,7 @@ def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
         chapter_transcripts: dict[str, str],
         *,
         on_chapter_start=None,
+        on_chapter_complete=None,
         generate_single=None,
         **kwargs,
     ):
@@ -182,10 +183,13 @@ def _mock_generate_chapter_notes_concurrent(generator: MagicMock) -> AsyncMock:
         ):
             if on_chapter_start is not None:
                 on_chapter_start(index, total)
-            result[chapter_title] = await chapter_generator(
+            notes = await chapter_generator(
                 chapter_title,
                 chapter_text,
             )
+            if on_chapter_complete is not None:
+                on_chapter_complete(chapter_title, notes)
+            result[chapter_title] = notes
 
         return result
 
@@ -383,7 +387,6 @@ async def test_process_single_video_bundles_chapters_into_single_markdown_by_def
     assert not list(temp_output_dir.glob("Short Chapter Video_chapter_*.md"))
 
 
-@pytest.mark.asyncio
 async def test_bundled_chapter_output_suffixes_final_file_collision(
     temp_output_dir, mock_llm_provider
 ):
@@ -443,8 +446,7 @@ async def test_bundled_chapter_output_suffixes_final_file_collision(
     assert not (temp_output_dir / ".working").exists()
 
 
-@pytest.mark.asyncio
-async def test_bundled_chapter_failure_keeps_temporary_chapter_artifacts(
+async def test_bundled_chapter_failure_does_not_leak_temporary_chapter_artifacts(
     temp_output_dir, mock_llm_provider
 ):
     p = _make_pipeline(temp_output_dir, mock_llm_provider)
@@ -511,15 +513,12 @@ async def test_bundled_chapter_failure_keeps_temporary_chapter_artifacts(
         result = await p.run(["vid-partial"])
 
     assert result.failure_count == 1
-    completed_chapter = temp_output_dir / "Partial Video_chapter_01_Intro.md"
-    assert completed_chapter.exists()
-    assert "completed before failure" in completed_chapter.read_text(encoding="utf-8")
+    assert not list(temp_output_dir.glob("Partial Video_chapter_*.md"))
     assert not (temp_output_dir / "Partial Video.md").exists()
     assert not (temp_output_dir / ".working").exists()
 
 
-@pytest.mark.asyncio
-async def test_bundled_chapter_retry_reuses_temporary_artifacts_with_force(
+async def test_bundled_chapter_retry_ignores_stale_temporary_artifacts_with_force(
     temp_output_dir, mock_llm_provider
 ):
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
@@ -575,13 +574,13 @@ async def test_bundled_chapter_retry_reuses_temporary_artifacts_with_force(
         result = await p.run(["vid-retry"])
 
     assert result.success_count == 1
-    p.generator.generate_chapter_notes_concurrent.assert_not_awaited()
+    p.generator.generate_chapter_notes_concurrent.assert_awaited_once()
     bundled_notes = (temp_output_dir / "Retry Video.md").read_text(encoding="utf-8")
     assert "# [00:00] Intro" in bundled_notes
-    assert "existing intro" in bundled_notes
+    assert "# Chapter Notes" in bundled_notes
+    assert "existing intro" not in bundled_notes
     assert "# [00:30] Deep Dive" in bundled_notes
-    assert "existing deep dive" in bundled_notes
-    assert not list(temp_output_dir.glob("Retry Video_chapter_*.md"))
+    assert "existing deep dive" not in bundled_notes
 
 
 @pytest.mark.asyncio
@@ -1388,7 +1387,6 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
     assert [e.chapter_number for e in chapter_complete_events] == [1, 2]
 
 
-@pytest.mark.asyncio
 async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
     temp_output_dir, mock_llm_provider
 ):
@@ -2436,7 +2434,6 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
     assert (second_dir / "Shared Long (vid2)_quiz.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
     temp_output_dir, mock_llm_provider
 ):
@@ -2494,7 +2491,6 @@ async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
     assert (suffix_dir / ".notewise-output.json").exists()
 
 
-@pytest.mark.asyncio
 async def test_chapter_run_reuses_existing_matching_metadata_folder(
     temp_output_dir, mock_llm_provider
 ):

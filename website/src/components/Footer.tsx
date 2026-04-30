@@ -6,6 +6,7 @@ function fmtDate(iso: string) {
     year: "numeric",
     month: "short",
     day: "numeric",
+    timeZone: "UTC",
   });
 }
 
@@ -27,11 +28,11 @@ export function Footer({ stats }: { stats: RepoStats }) {
                 className="hover-underline underline-ink"
                 href="https://github.com/whoisjayd"
                 target="_blank"
-                rel="noreferrer"
+                rel="noopener noreferrer"
               >
                 whoisjayd
               </a>
-              . MIT with a friendly attribution clause — credit the project where you ship.
+              . MIT License.
             </p>
           </div>
 
@@ -80,7 +81,7 @@ export function Footer({ stats }: { stats: RepoStats }) {
               className="underline-ink"
               href="https://github.com/whoisjayd/notewise"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
             >
               contribute on GitHub
             </a>
@@ -114,7 +115,7 @@ function FooterLink({
       <a
         href={href}
         target={external ? "_blank" : undefined}
-        rel={external ? "noreferrer" : undefined}
+        rel={external ? "noopener noreferrer" : undefined}
         className="hover-underline inline-flex items-center gap-1.5 text-[13px] text-muted-foreground"
       >
         {label}

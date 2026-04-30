@@ -84,3 +84,15 @@ def test_representative_chapter_prompt_full_render_is_stable():
             target_language="English",
         )
     )
+
+
+def test_representative_combine_chapter_prompt_full_render_is_stable():
+    """Combine prompt renders should stay byte-for-byte stable."""
+    assert chapter_notes.get_combine_chapters_prompt(
+        {
+            "Intro": "Alpha notes",
+            "Deep Dive": "Beta notes",
+        }
+    ) == chapter_notes.COMBINE_CHAPTER_NOTES_PROMPT.format(
+        chapter_notes="## Intro\n\nAlpha notes\n\n## Deep Dive\n\nBeta notes"
+    )

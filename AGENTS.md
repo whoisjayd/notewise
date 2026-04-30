@@ -107,17 +107,20 @@ def my_command(
 
 notewise routes providers via [LiteLLM](https://github.com/BerriAI/litellm). To register or improve provider support:
 
-1. Add provider/API-key routing in `_constants.py`:
+1. Add provider/API-key routing in `_constants.py`, which is the source of truth:
    - `PROVIDER_API_KEY_ENV_VAR_PROVIDERS` for static API keys
    - `PROVIDER_REQUIRED_ENV_VARS` for extra required env such as account IDs/base URLs
    - `PROVIDER_AUTH_ENV_KEYS` for accepted pass-through auth/config keys
 2. If the key should be a first-class `AppSettings` field, add it to `config.py` with the correct `alias` and sync it in `AppSettings.model_post_init`. Many pass-through provider keys are already accepted via `_ALLOWED_KEYS` derived from `_constants.py` and written into `os.environ` by `UserConfigSource`.
-3. Add or update setup wizard metadata in `ui/setup_wizard.py` (`PROVIDER_CONFIG`) and keep examples in `ui/litellm_models_snapshot.json` valid.
+3. Add or update UI setup metadata only when relevant: update `PROVIDER_CONFIG` in `_constants.py`, ensure `ui/setup_wizard.py` consumes the shared constants, and keep examples in `ui/litellm_models_snapshot.json` valid.
 4. If model catalog behavior changes, regenerate the snapshot with:
+
    ```bash
    uv run python scripts/extract_litellm_model_snapshot.py
    ```
+
    The snapshot must contain text-generation models only; filter out image, audio, realtime, embedding, search/research, robotics, computer-use, container, and other non-text model families.
+
 5. Add the relevant config examples to `.env.example`.
 6. Update user docs together:
    - `README.md`
@@ -193,15 +196,15 @@ Adding a new user-configurable key:
 
 The website is a TanStack/Vite app in `website/`.
 
-1. Keep package metadata and deploy names branded as notewise (`notewise-website`).
-2. Keep landing sections directly in `website/src/components/`; keep reusable primitives such as `Terminal` and `FineIcon` in `website/src/ui/`.
-3. Keep `/install` split by responsibility: `website/src/routes/install.tsx` owns content negotiation for shell/PowerShell/browser requests, while `website/src/components/InstallPage.tsx` owns the browser UI and copy buttons.
-4. Keep `/sitemap.xml` split by responsibility: `website/src/routes/sitemap[.]xml.tsx` owns XML/browser negotiation, while `website/src/components/SitemapPage.tsx` owns the browser-friendly sitemap UI.
+1. Preserve package metadata and deploy names branded as notewise (`notewise-website`).
+2. Maintain landing sections directly in `website/src/components/`; keep reusable primitives such as `Terminal` and `FineIcon` in `website/src/ui/`.
+3. Ensure `/install` split by responsibility: `website/src/routes/install.tsx` owns content negotiation for shell/PowerShell/browser requests, while `website/src/components/InstallPage.tsx` owns the browser UI and copy buttons.
+4. Restrict `/sitemap.xml` split by responsibility: `website/src/routes/sitemap[.]xml.tsx` owns XML/browser negotiation, while `website/src/components/SitemapPage.tsx` owns the browser-friendly sitemap UI.
 5. Use Bun commands from `website/`: `bun install --frozen-lockfile`, `bun run lint`, `bunx tsc --noEmit`, `bun run build`, and then `bun run preview` for local production preview.
 6. Keep SEO metadata honest; do not add synthetic reviews, ratings, or misleading OSS/license claims.
 7. Preserve accessibility basics such as landmarks, focus states, skip links, and descriptive link/button labels.
 8. The website should inherit the system theme on first load. Only user toggles should persist `nw-theme` in local storage.
-9. Never commit local website env files, Vercel credentials, tokens, provider keys, or analytics secrets.
+9. Avoid committing local website env files, Vercel credentials, tokens, provider keys, or analytics secrets.
 10. Docs analytics use Mintlify custom JavaScript in `docs/umami.js`; do not add analytics provider blocks to `docs/docs.json` unless intentionally changing providers.
 11. Do not run Prettier on `docs/` files; validate docs config with JSON parsing and JavaScript syntax checks instead.
 

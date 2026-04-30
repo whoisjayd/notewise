@@ -59,6 +59,7 @@ _API_KEY_CONFIG_KEYS = frozenset(
     env_var for env_vars in PROVIDER_API_KEY_ENV_VARS.values() for env_var in env_vars
 )
 _MODEL_SNAPSHOT_CACHE: dict[str, tuple[str, ...]] | None = None
+_MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES: dict[str, str] = {}
 
 _ALLOWED_KEYS: frozenset[str] = frozenset(
     {
@@ -72,6 +73,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
     }
     | _API_KEY_CONFIG_KEYS
     | PROVIDER_AUTH_ENV_KEYS
+    | frozenset(OAUTH_TOKEN_DIR_ENV_VARS.values())
 )
 
 
@@ -97,11 +99,26 @@ def get_oauth_token_storage_paths() -> dict[str, Path]:
     }
 
 
-def configure_oauth_token_storage() -> None:
-    """Default LiteLLM OAuth token directories to the notewise state dir."""
-    for provider, token_dir in get_oauth_token_storage_paths().items():
+def configure_oauth_token_storage(
+    token_paths: dict[str, Path] | None = None,
+) -> dict[str, Path]:
+    """Sync LiteLLM OAuth token directories to the current settings paths."""
+    resolved_paths = token_paths or get_oauth_token_storage_paths()
+    for provider, token_dir in resolved_paths.items():
         env_var = OAUTH_TOKEN_DIR_ENV_VARS[provider]
-        os.environ.setdefault(env_var, str(token_dir))
+        env_value = str(token_dir)
+        if env_var not in os.environ or _is_managed_oauth_token_dir_env(env_var):
+            os.environ[env_var] = env_value
+        _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES[env_var] = env_value
+    return resolved_paths
+
+
+def _default_oauth_token_dir(provider: str) -> Path:
+    return get_oauth_token_storage_paths()[provider]
+
+
+def _is_managed_oauth_token_dir_env(env_var: str) -> bool:
+    return os.environ.get(env_var) == _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES.get(env_var)
 
 
 def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
@@ -253,6 +270,16 @@ class AppSettings(BaseSettings):
     )
     youtube_cookie_file: str | None = Field(None, alias="YOUTUBE_COOKIE_FILE")
 
+    # OAuth token storage
+    chatgpt_token_dir: Path = Field(
+        default_factory=lambda: _default_oauth_token_dir("chatgpt"),
+        alias="CHATGPT_TOKEN_DIR",
+    )
+    github_copilot_token_dir: Path = Field(
+        default_factory=lambda: _default_oauth_token_dir("github_copilot"),
+        alias="GITHUB_COPILOT_TOKEN_DIR",
+    )
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -267,7 +294,21 @@ class AppSettings(BaseSettings):
 
     def model_post_init(self, __context: object) -> None:
         """Sync API keys back to os.environ for libraries that read env directly."""
-        configure_oauth_token_storage()
+        default_token_dirs = get_oauth_token_storage_paths()
+        if _is_managed_oauth_token_dir_env("CHATGPT_TOKEN_DIR"):
+            object.__setattr__(self, "chatgpt_token_dir", default_token_dirs["chatgpt"])
+        if _is_managed_oauth_token_dir_env("GITHUB_COPILOT_TOKEN_DIR"):
+            object.__setattr__(
+                self,
+                "github_copilot_token_dir",
+                default_token_dirs["github_copilot"],
+            )
+        configure_oauth_token_storage(
+            {
+                "chatgpt": self.chatgpt_token_dir,
+                "github_copilot": self.github_copilot_token_dir,
+            }
+        )
         key_map = {
             "gemini_api_key": "GEMINI_API_KEY",
             "openai_api_key": "OPENAI_API_KEY",

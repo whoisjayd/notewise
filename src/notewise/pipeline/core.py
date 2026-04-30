@@ -190,7 +190,9 @@ class CorePipeline:
         if missing_config:
             expected = ", ".join(missing_config)
             logger.error(
-                f"Missing provider config for {self.model}. Expected: {expected}"
+                "Missing provider config",
+                model=self.model,
+                expected=expected,
             )
             return False
         return True
@@ -299,6 +301,12 @@ class CorePipeline:
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
+            logger.debug(
+                "Could not read output metadata",
+                metadata_path=str(metadata_path),
+                video_id=video_id,
+                exc_info=True,
+            )
             return False
 
         return metadata.get(OUTPUT_METADATA_VIDEO_ID_KEY) == video_id

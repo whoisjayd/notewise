@@ -3,13 +3,17 @@ import { FineIcon } from "@/ui/FineIcon";
 
 export function Install() {
   return (
-    <section id="install" className="relative border-t border-[var(--rule)] bg-background">
+    <section
+      id="install"
+      aria-labelledby="install-heading"
+      className="relative border-t border-[var(--rule)] bg-background"
+    >
       <div className="relative mx-auto max-w-[920px] px-5 sm:px-6 py-20 sm:py-28 md:py-36 text-center">
         <>
           <span className="t-eyebrow">Coda · Install</span>
         </>
         <>
-          <h2 className="mt-3 t-h2">
+          <h2 id="install-heading" className="mt-3 t-h2">
             Pick a video. <em className="text-stamp">Keep</em> what you learn.
           </h2>
         </>
@@ -88,7 +92,8 @@ export function Install() {
             <a
               href="https://docs.notewise.click"
               target="_blank"
-              rel="noreferrer"
+              rel="noopener noreferrer"
+              aria-label="Full docs (opens in a new tab)"
               className="hover-feedback inline-flex items-center justify-center gap-2 rounded-full border border-[var(--rule)] px-5 py-3 t-btn sm:py-2.5"
             >
               Full docs

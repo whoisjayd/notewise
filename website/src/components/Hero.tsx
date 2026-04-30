@@ -8,7 +8,9 @@ function fmtNumber(n: number) {
 }
 
 function relativeTime(iso: string) {
-  const diff = Date.now() - new Date(iso).getTime();
+  const timestamp = new Date(iso).getTime();
+  if (Number.isNaN(timestamp)) return "recently";
+  const diff = Date.now() - timestamp;
   const d = Math.floor(diff / 86_400_000);
   if (d < 1) return "today";
   if (d === 1) return "yesterday";
@@ -85,7 +87,7 @@ export function Hero({ stats }: { stats: RepoStats }) {
                 <a
                   href="https://github.com/whoisjayd/notewise"
                   target="_blank"
-                  rel="noreferrer"
+                  rel="noopener noreferrer"
                   className="hover-feedback inline-flex items-center justify-center gap-2 rounded-full border border-[var(--rule)] px-5 py-3 t-btn sm:py-2.5"
                 >
                   <FineIcon name="github" size={14} />
@@ -100,14 +102,16 @@ export function Hero({ stats }: { stats: RepoStats }) {
 
             <>
               <ul className="mt-9 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 t-meta sm:max-w-md">
-                {[
-                  { i: "playlist", t: "Videos & playlists" },
-                  { i: "chapters", t: "Chapter-aware notes" },
-                  { i: "route", t: "LiteLLM provider routing" },
-                  { i: "doc", t: "MD · HTML · PDF · DOCX" },
-                ].map((x) => (
+                {(
+                  [
+                    { i: "playlist", t: "Videos & playlists" },
+                    { i: "chapters", t: "Chapter-aware notes" },
+                    { i: "route", t: "LiteLLM provider routing" },
+                    { i: "doc", t: "MD · HTML · PDF · DOCX" },
+                  ] as const
+                ).map((x) => (
                   <li key={x.t} className="flex items-center gap-2">
-                    <FineIcon name={x.i as never} size={14} className="text-stamp" />
+                    <FineIcon name={x.i} size={14} className="text-stamp" />
                     <span>{x.t}</span>
                   </li>
                 ))}

@@ -117,11 +117,14 @@ def test_public_smoke(
         ]
         assert chapter_dirs, "expected a per-video directory for chapter output"
 
-        chapter_markdown_files = sorted(chapter_dirs[0].glob("*.md"))
-        assert len(chapter_markdown_files) >= 2
-        assert all(file.name[:2].isdigit() for file in chapter_markdown_files)
-        assert not any(
-            file.parent.name == ".working" for file in chapter_markdown_files
-        )
+        for chapter_dir in chapter_dirs:
+            chapter_markdown_files = sorted(chapter_dir.glob("*.md"))
+            assert len(chapter_markdown_files) >= 2
+            assert all(file.name[:2].isdigit() for file in chapter_markdown_files)
+            assert not any(
+                parent.name == ".working"
+                for file in chapter_markdown_files
+                for parent in file.parents
+            )
 
     assert "Done:" in result.stdout or "Batch Completed" in result.stdout
