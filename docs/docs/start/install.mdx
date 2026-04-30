@@ -1,13 +1,13 @@
 ---
 title: "Install NoteWise"
 sidebarTitle: "Install"
-description: "Install the NoteWise CLI and verify the command works."
-keywords: ["install notewise", "uv", "pipx", "pip", "docker", "python"]
+description: "Install the NoteWise CLI with uv, pipx, pip, Docker, or the short binary installer."
+keywords: ["install notewise", "notewise.click/install", "uv", "pipx", "pip", "docker", "python"]
 ---
 
-# Install NoteWise
+NoteWise requires Python `>=3.10` when installed from PyPI. The CLI entry point is `notewise`.
 
-NoteWise requires Python `>=3.10`. The CLI entry point is `notewise`.
+This page only covers installation choices. Pick one method, verify the CLI is available, then continue to [Quickstart](/docs/start/quickstart) for provider setup and your first video.
 
 <Tabs sync={false}>
   <Tab title="uv tool">
@@ -18,8 +18,7 @@ NoteWise requires Python `>=3.10`. The CLI entry point is `notewise`.
   </Tab>
   <Tab title="uvx">
     ```bash
-    uvx notewise version
-    uvx notewise process "https://youtu.be/VIDEO_ID"
+    uvx notewise --help
     ```
   </Tab>
   <Tab title="pipx">
@@ -43,16 +42,17 @@ NoteWise requires Python `>=3.10`. The CLI entry point is `notewise`.
 
 ## Standalone installers
 
-Release installers download the latest GitHub release asset and verify checksums when available.
+Use the standalone installer when you prefer a release binary instead of a Python tool environment. Browser visits show install options; `curl`/`wget` receive the POSIX installer; PowerShell receives the Windows installer. The release installers download the latest GitHub release asset and verify checksums.
 
 <CodeGroup>
 ```bash macOS or Linux
-curl -fsSL https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.sh | bash
+curl -fsSL https://notewise.click/install | sh
 ```
 
 ```powershell Windows PowerShell
-irm https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.ps1 | iex
+irm https://notewise.click/install | iex
 ```
+
 </CodeGroup>
 
 Set `NOTEWISE_INSTALL_DIR` before running an installer to choose the install location.
@@ -61,8 +61,6 @@ Set `NOTEWISE_INSTALL_DIR` before running an installer to choose the install loc
 
 ```bash
 notewise version
-notewise doctor
-notewise config-path
 ```
 
-`doctor` checks config presence, provider readiness, output directory access, cache DB health, log directory, and the latest log file.
+If `notewise version` prints a version, installation is done. Continue with [Quickstart](/docs/start/quickstart) to create config and process one public video.

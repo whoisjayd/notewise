@@ -49,8 +49,6 @@ website/.output/
 website/.vinxi/
 website/.tanstack/
 website/.nitro/
-website/.wrangler/
-website/.dev.vars
 website/.env
 website/.env.*
 !website/.env.example

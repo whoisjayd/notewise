@@ -148,6 +148,7 @@ notewise/
 │   └── conftest.py          # Shared fixtures
 ├── scripts/
 │   ├── extract_litellm_model_snapshot.py # Refresh LiteLLM setup catalog
+│   ├── make_help.py       # Render grouped make help output from Makefile comments
 │   └── hooks/               # Git hook scripts
 ├── website/                  # TanStack/Vite marketing site
 │   ├── src/routes/           # Site routes, metadata, sitemap
@@ -190,18 +191,24 @@ bun run build
 bun run preview
 ```
 
-Run `bun run build` before `bun run preview`; preview serves the built Cloudflare/TanStack output and catches production-only routing issues.
+Run `bun run build` before `bun run preview`; preview serves the built TanStack output and catches production-only routing issues before Vercel deployment.
 
 Website structure:
 
-- `website/src/routes/` — TanStack routes, shell metadata, sitemap, and JSON-LD.
-- `website/src/components/` — page sections and route-level components such as `Hero`, `Nav`, `FAQ`, and `DefaultError`.
-- `website/src/ui/` — reusable primitives such as `Reveal`, `Terminal`, and `FineIcon`.
+- `website/src/routes/` — TanStack routes, shell metadata, content negotiation, sitemap XML, and JSON-LD.
+- `website/src/routes/install.tsx` — smart `/install` route that serves shell/PowerShell bootstraps to CLI clients and falls through to the browser route component.
+- `website/src/routes/sitemap[.]xml.tsx` — `/sitemap.xml` route that serves XML to crawlers and browser-friendly HTML to people.
+- `website/src/components/` — page sections and route-level components such as `Hero`, `Nav`, `FAQ`, `InstallPage`, and `DefaultError`.
+- `website/src/components/SitemapPage.tsx` — browser-friendly sitemap table UI and URL inventory shared with the sitemap route.
+- `website/src/components/sitemapData.ts` — shared website/docs URL inventory for sitemap XML and the browser-friendly sitemap component.
+- `website/src/ui/` — reusable primitives including both `Terminal` and `FineIcon`.
 - `website/src/server/` — server functions used by the site.
 
-Keep website changes small and reviewable. Preserve route behavior, metadata, accessibility affordances, system-theme inheritance, and Cloudflare/Vite output paths unless the change explicitly needs them. Store local Cloudflare secrets in `website/.dev.vars`; never commit `.dev.vars`, API keys, OAuth tokens, or provider credentials.
+Keep website changes small and reviewable. Preserve route behavior, metadata, accessibility affordances, system-theme inheritance, and Vercel/Nitro build output unless the change explicitly needs them. Store local website environment values in ignored `website/.env*` files; never commit API keys, OAuth tokens, analytics secrets, or provider credentials.
 
 Docs live in `docs/` and use Mintlify. Add user-facing CLI docs under `docs/docs/`, and update `docs/docs.json` navigation when adding a new page. Mintlify custom JavaScript belongs as `.js` files in the docs content directory; analytics currently use `docs/umami.js`. Do not commit analytics provider secrets in `docs/docs.json`.
+
+Do not run Prettier on `docs/` or docs MDX. Mintlify component children can contain fenced code blocks, and Prettier may rewrite them into parser-breaking forms. For docs-only validation, use JSON parsing for `docs/docs.json` and `node --check docs/umami.js`.
 
 ---
 
@@ -225,10 +232,10 @@ make fix           # ruff format + ruff check --fix
 
 ```bash
 # Formatting
-uv run ruff format src/notewise tests
+uv run ruff format src/notewise tests scripts
 
 # Lint
-uv run ruff check src/notewise tests
+uv run ruff check src/notewise tests scripts
 
 # Type checking
 uv run ty check src/notewise

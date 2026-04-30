@@ -5,19 +5,17 @@ description: "Process YouTube playlists, playlist IDs, watch+list URLs, and batc
 keywords: ["notewise playlist", "batch file", "youtube playlist", "concurrency"]
 ---
 
-# Process playlists and batch files
-
 Use playlists when YouTube already groups the videos. Use batch files when you want full control over the input list.
 
 ## Playlist inputs
 
 NoteWise accepts:
 
-| Input | Example |
-| --- | --- |
-| Playlist URL | `https://www.youtube.com/playlist?list=PLAYLIST_ID` |
-| Watch URL with list | `https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID` |
-| Bare playlist ID | `PL...`, `UU...`, `LL...`, `FL...`, `RD...`, `UL...`, `WL...`, `OLAK5uy_...` |
+| Input               | Example                                                                      |
+| ------------------- | ---------------------------------------------------------------------------- |
+| Playlist URL        | `https://www.youtube.com/playlist?list=PLAYLIST_ID`                          |
+| Watch URL with list | `https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID`                  |
+| Bare playlist ID    | `PL...`, `UU...`, `LL...`, `FL...`, `RD...`, `UL...`, `WL...`, `OLAK5uy_...` |
 
 ```bash
 notewise process "https://www.youtube.com/playlist?list=PLAYLIST_ID"
@@ -42,11 +40,11 @@ notewise process urls.txt --output ./course-notes
 
 ## Concurrency and rate limits
 
-| Setting | Default | Source |
-| --- | --- | --- |
-| Video workers | `5` | `MAX_CONCURRENT_VIDEOS` |
+| Setting               | Default  | Source                        |
+| --------------------- | -------- | ----------------------------- |
+| Video workers         | `5`      | `MAX_CONCURRENT_VIDEOS`       |
 | YouTube request limit | `10/min` | `YOUTUBE_REQUESTS_PER_MINUTE` |
-| Chapter workers | `3` | code default |
+| Chapter workers       | `3`      | code default                  |
 
 Use `--throttle` when a provider plan needs slower repeated LLM calls.
 

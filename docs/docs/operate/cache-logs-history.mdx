@@ -2,10 +2,15 @@
 title: "Cache, logs, history, and stats"
 sidebarTitle: "Cache and logs"
 description: "Inspect NoteWise run history, cache records, stats, and session logs."
-keywords: ["notewise cache", "notewise logs", "notewise history", "notewise stats", "sqlite"]
+keywords:
+  [
+    "notewise cache",
+    "notewise logs",
+    "notewise history",
+    "notewise stats",
+    "sqlite",
+  ]
 ---
-
-# Cache, logs, history, and stats
 
 NoteWise stores persistent state under `<state>`, where `<state>` is `NOTEWISE_HOME` or `~/.notewise`.
 
@@ -22,7 +27,8 @@ notewise cache clear --yes
 ```
 
 <Warning>
-  `cache clear` deletes the local SQLite DB and sidecars. It does not delete generated notes, quizzes, transcripts, HTML, PDF, or DOCX output files.
+  `cache clear` deletes the local SQLite DB and sidecars. It does not delete
+  generated notes, quizzes, transcripts, HTML, PDF, or DOCX output files.
 </Warning>
 
 ## History and stats

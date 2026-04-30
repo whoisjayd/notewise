@@ -44,15 +44,19 @@ Other important root-level paths:
 
 ```text
 scripts/extract_litellm_model_snapshot.py ← Refresh bundled setup model catalog
+scripts/make_help.py                      ← Render grouped `make help` output from Makefile comments
 docs/docs/config/providers.mdx            ← Provider/user-facing model docs
 docs/docs/config/configuration.mdx        ← Config key reference
 docs/docs/operate/commands.mdx            ← CLI command reference
 website/src/routes/__root.tsx             ← Website shell, metadata, JSON-LD
 website/src/routes/index.tsx              ← Website landing page route
+website/src/routes/install.tsx            ← Smart /install route; serves shell/PowerShell bootstraps or InstallPage
 website/src/routes/sitemap[.]xml.tsx      ← Website sitemap route
+website/src/components/SitemapPage.tsx    ← Browser-friendly sitemap UI and URL inventory
+website/src/components/sitemapData.ts     ← Shared sitemap URL inventory for XML and browser UI
 website/src/components/                   ← Website page/section components
-website/src/ui/                           ← Website reusable UI primitives
-website/wrangler.jsonc                    ← Cloudflare deployment config
+website/src/ui/                           ← Website reusable UI primitives including Terminal and FineIcon
+website/vite.config.ts                    ← TanStack Start, Nitro, Vite plugins
 docs/umami.js                             ← Mintlify custom analytics script
 ```
 
@@ -72,6 +76,7 @@ These rules are enforced by CI and must never be broken:
 8. **Never log raw LLM prompts, provider payloads, OAuth tokens, or credentials.** Redact through `logging.py`; provider failures should use summarized/redacted errors.
 9. **Provider/model docs must stay snapshot-valid.** If examples or setup model availability change, update the bundled LiteLLM snapshot, README, `.env.example`, docs, and tests together.
 10. **Website work uses Bun.** `website/bun.lock` is the canonical website lockfile; do not introduce npm/pnpm/yarn drift without updating docs and lockfiles together.
+11. **Do not run Prettier on Mintlify docs.** Docs MDX in `docs/` is intentionally excluded because Prettier can rewrite fenced blocks inside Mintlify components into parser-breaking forms.
 
 ---
 
@@ -189,13 +194,16 @@ Adding a new user-configurable key:
 The website is a TanStack/Vite app in `website/`.
 
 1. Keep package metadata and deploy names branded as notewise (`notewise-website`).
-2. Keep landing sections directly in `website/src/components/`; keep reusable primitives in `website/src/ui/`.
-3. Use Bun commands from `website/`: `bun install --frozen-lockfile`, `bun run lint`, `bunx tsc --noEmit`, `bun run build`, and then `bun run preview` for local production preview.
-4. Keep SEO metadata honest; do not add synthetic reviews, ratings, or misleading OSS/license claims.
-5. Preserve accessibility basics such as landmarks, focus states, skip links, and descriptive link/button labels.
-6. The website should inherit the system theme on first load. Only user toggles should persist `nw-theme` in local storage.
-7. Never commit `website/.dev.vars`, local env files, Cloudflare credentials, tokens, or analytics secrets.
-8. Docs analytics use Mintlify custom JavaScript in `docs/umami.js`; do not add analytics provider blocks to `docs/docs.json` unless intentionally changing providers.
+2. Keep landing sections directly in `website/src/components/`; keep reusable primitives such as `Terminal` and `FineIcon` in `website/src/ui/`.
+3. Keep `/install` split by responsibility: `website/src/routes/install.tsx` owns content negotiation for shell/PowerShell/browser requests, while `website/src/components/InstallPage.tsx` owns the browser UI and copy buttons.
+4. Keep `/sitemap.xml` split by responsibility: `website/src/routes/sitemap[.]xml.tsx` owns XML/browser negotiation, while `website/src/components/SitemapPage.tsx` owns the browser-friendly sitemap UI.
+5. Use Bun commands from `website/`: `bun install --frozen-lockfile`, `bun run lint`, `bunx tsc --noEmit`, `bun run build`, and then `bun run preview` for local production preview.
+6. Keep SEO metadata honest; do not add synthetic reviews, ratings, or misleading OSS/license claims.
+7. Preserve accessibility basics such as landmarks, focus states, skip links, and descriptive link/button labels.
+8. The website should inherit the system theme on first load. Only user toggles should persist `nw-theme` in local storage.
+9. Never commit local website env files, Vercel credentials, tokens, provider keys, or analytics secrets.
+10. Docs analytics use Mintlify custom JavaScript in `docs/umami.js`; do not add analytics provider blocks to `docs/docs.json` unless intentionally changing providers.
+11. Do not run Prettier on `docs/` files; validate docs config with JSON parsing and JavaScript syntax checks instead.
 
 ---
 

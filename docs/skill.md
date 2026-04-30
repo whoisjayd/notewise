@@ -14,23 +14,23 @@ Use this when answering questions about NoteWise `1.3.1`.
 
 ## Routes
 
-| Intent | Route |
-| --- | --- |
-| Overview | `/docs` |
-| Install | `/docs/start/install` |
-| Quickstart | `/docs/start/quickstart` |
-| Process videos | `/docs/use/process` |
-| Playlists and batches | `/docs/use/playlists-batches` |
-| Private videos and Docker | `/docs/use/private-docker` |
-| Configuration | `/docs/config/configuration` |
-| Models and providers | `/docs/config/providers` |
-| OAuth login | `/docs/config/oauth` |
-| CLI commands | `/docs/operate/commands` |
+| Intent                      | Route                              |
+| --------------------------- | ---------------------------------- |
+| Overview                    | `/docs`                            |
+| Install                     | `/docs/start/install`              |
+| Quickstart                  | `/docs/start/quickstart`           |
+| Process videos              | `/docs/use/process`                |
+| Playlists and batches       | `/docs/use/playlists-batches`      |
+| Private videos and Docker   | `/docs/use/private-docker`         |
+| Configuration               | `/docs/config/configuration`       |
+| Models and providers        | `/docs/config/providers`           |
+| OAuth login                 | `/docs/config/oauth`               |
+| CLI commands                | `/docs/operate/commands`           |
 | Cache, logs, history, stats | `/docs/operate/cache-logs-history` |
-| Troubleshooting | `/docs/operate/troubleshooting` |
-| Pipeline and output | `/docs/understand/pipeline-output` |
-| Storage, events, errors | `/docs/understand/storage-events` |
-| Development | `/docs/understand/development` |
+| Troubleshooting             | `/docs/operate/troubleshooting`    |
+| Pipeline and output         | `/docs/understand/pipeline-output` |
+| Storage, events, errors     | `/docs/understand/storage-events`  |
+| Development                 | `/docs/understand/development`     |
 
 ## Defaults
 
