@@ -6,7 +6,7 @@ type IconName =
   | "play"
   | "playlist"
   | "chapters"
-  | "model"
+  | "route"
   | "cache"
   | "doc"
   | "lock"
@@ -54,10 +54,12 @@ const paths: Record<IconName, ReactElement> = {
       <path d="M4 9h16M4 14h16M9 5v14" />
     </>
   ),
-  model: (
+  route: (
     <>
-      <circle cx="12" cy="12" r="3" />
-      <path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.5 5.5l2.1 2.1M16.4 16.4l2.1 2.1M5.5 18.5l2.1-2.1M16.4 7.6l2.1-2.1" />
+      <circle cx="5" cy="12" r="2" />
+      <circle cx="19" cy="6" r="2" />
+      <circle cx="19" cy="18" r="2" />
+      <path d="M7 12h4c3 0 3-6 6-6M7 12h4c3 0 3 6 6 6" />
     </>
   ),
   cache: (

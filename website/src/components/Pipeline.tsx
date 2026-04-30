@@ -1,4 +1,3 @@
-import { Reveal } from "@/ui/Reveal";
 import { FineIcon } from "@/ui/FineIcon";
 
 const steps = [
@@ -42,28 +41,28 @@ const steps = [
 
 export function Pipeline() {
   return (
-    <section id="pipeline" className="relative">
+    <section id="pipeline" className="relative border-t border-[var(--rule)] bg-background">
       <div className="relative mx-auto max-w-[1200px] px-5 sm:px-6 py-20 sm:py-28 md:py-36">
         <div className="max-w-2xl">
-          <Reveal>
+          <>
             <span className="t-eyebrow">No 03 · Pipeline</span>
-          </Reveal>
-          <Reveal delay={60}>
+          </>
+          <>
             <h2 className="mt-3 t-h2">
               From <em className="text-stamp">URL</em> to filed-away notes, in six small steps.
             </h2>
-          </Reveal>
-          <Reveal delay={120}>
+          </>
+          <>
             <p className="mt-5 t-body max-w-xl">
               Nothing exotic. Each step is observable, tunable through CLI flags, and resumable from
               cache.
             </p>
-          </Reveal>
+          </>
         </div>
 
         <ol className="mt-12 sm:mt-14 grid gap-px overflow-hidden rounded-lg border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-3">
           {steps.map((s, i) => (
-            <Reveal key={s.n} as="li" delay={60 * i} className="bg-card p-5 sm:p-7">
+            <li key={s.n} className="bg-card p-5 sm:p-7">
               <div className="flex items-start justify-between">
                 <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-[var(--rule)] bg-muted text-stamp">
                   <FineIcon name={s.icon as never} size={17} />
@@ -72,7 +71,7 @@ export function Pipeline() {
               </div>
               <h3 className="mt-5 t-cardtitle">{s.title}</h3>
               <p className="mt-2 t-meta">{s.body}</p>
-            </Reveal>
+            </li>
           ))}
         </ol>
       </div>

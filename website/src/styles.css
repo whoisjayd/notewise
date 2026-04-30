@@ -1,7 +1,6 @@
 @import url("https://fonts.googleapis.com/css2?family=Geist:wght@400;450;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap");
 @import "tailwindcss" source(none);
 @source "../src";
-@import "tw-animate-css";
 
 @custom-variant dark (&:is(.dark *), &.dark);
 
@@ -236,13 +235,6 @@
     letter-spacing: -0.035em;
     text-wrap: balance;
   }
-  .t-h3 {
-    font-family: var(--font-display);
-    font-weight: 600;
-    font-size: clamp(20px, 1.8vw, 24px);
-    line-height: 1.2;
-    letter-spacing: -0.02em;
-  }
   .t-cardtitle {
     font-family: var(--font-display);
     font-weight: 600;
@@ -280,90 +272,6 @@
     font-size: 14px;
     font-weight: 500;
     letter-spacing: -0.005em;
-  }
-
-  /* Paper texture: subtle fiber + grain */
-  .paper-texture {
-    position: relative;
-    isolation: isolate;
-  }
-  .paper-texture::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    z-index: 0;
-    background-image:
-      radial-gradient(oklch(0.215 0.035 260 / 0.045) 1px, transparent 1.4px),
-      radial-gradient(oklch(0.215 0.035 260 / 0.03) 1px, transparent 1.4px);
-    background-size:
-      3px 3px,
-      7px 7px;
-    background-position:
-      0 0,
-      1px 2px;
-    mix-blend-mode: multiply;
-    opacity: 0.9;
-  }
-  .dark .paper-texture::before {
-    background-image:
-      radial-gradient(oklch(1 0 0 / 0.03) 1px, transparent 1.4px),
-      radial-gradient(oklch(1 0 0 / 0.018) 1px, transparent 1.4px);
-    mix-blend-mode: screen;
-  }
-  .paper-texture > * {
-    position: relative;
-    z-index: 1;
-  }
-
-  /* Soft vignette for hero */
-  .paper-vignette::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      ellipse 80% 60% at 50% 30%,
-      transparent 55%,
-      oklch(0.215 0.035 260 / 0.04) 100%
-    );
-  }
-  .dark .paper-vignette::after {
-    background: radial-gradient(
-      ellipse 80% 60% at 50% 30%,
-      transparent 55%,
-      oklch(0 0 0 / 0.32) 100%
-    );
-  }
-
-  /* Deckle edge — hand-drawn page-turn divider */
-  .deckle {
-    display: block;
-    width: 100%;
-    height: 14px;
-    color: var(--rule);
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 14' preserveAspectRatio='none'><path d='M0 7 Q 30 1 60 7 T 120 7 T 180 7 T 240 7 T 300 7 T 360 7 T 420 7 T 480 7 T 540 7 T 600 7 T 660 7 T 720 7 T 780 7 T 840 7 T 900 7 T 960 7 T 1020 7 T 1080 7 T 1140 7 T 1200 7' fill='none' stroke='%23000' stroke-opacity='0.18' stroke-width='1'/></svg>");
-    background-repeat: no-repeat;
-    background-size: 100% 14px;
-  }
-  .dark .deckle {
-    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 14' preserveAspectRatio='none'><path d='M0 7 Q 30 1 60 7 T 120 7 T 180 7 T 240 7 T 300 7 T 360 7 T 420 7 T 480 7 T 540 7 T 600 7 T 660 7 T 720 7 T 780 7 T 840 7 T 900 7 T 960 7 T 1020 7 T 1080 7 T 1140 7 T 1200 7' fill='none' stroke='%23ffffff' stroke-opacity='0.22' stroke-width='1'/></svg>");
-  }
-
-  /* Ruled-paper horizontal lines */
-  .ruled {
-    background-image: repeating-linear-gradient(
-      to bottom,
-      transparent 0,
-      transparent 31px,
-      var(--rule) 31px,
-      var(--rule) 32px
-    );
-  }
-
-  /* Margin-line (red vertical like notebook) */
-  .margin-line {
-    border-left: 1px solid color-mix(in oklab, var(--stamp) 60%, transparent);
   }
 
   /* Card with hand-drawn-ish edge */
@@ -405,18 +313,7 @@
     background-size: 100% 100%;
   }
 
-  /* Reveal */
-  .reveal {
-    opacity: 1;
-    transform: none;
-  }
-
   @media (prefers-reduced-motion: reduce) {
-    .reveal {
-      opacity: 1;
-      transform: none;
-      transition: none;
-    }
     html {
       scroll-behavior: auto;
     }
@@ -461,5 +358,31 @@
     text-transform: uppercase;
     transform: rotate(-3deg);
     display: inline-block;
+  }
+
+  .hover-underline {
+    background-image: linear-gradient(currentColor, currentColor);
+    background-position: 0 100%;
+    background-repeat: no-repeat;
+    background-size: 0 1px;
+    transition: background-size 120ms var(--ease-paper);
+  }
+
+  .hover-underline:hover,
+  .hover-underline:focus-visible {
+    background-size: 100% 1px;
+  }
+
+  .hover-feedback {
+    box-shadow: 0 0 0 0 transparent;
+    transition:
+      box-shadow 120ms var(--ease-paper),
+      border-color 120ms var(--ease-paper);
+  }
+
+  .hover-feedback:hover,
+  .hover-feedback:focus-visible {
+    border-color: color-mix(in oklch, var(--foreground) 48%, var(--rule));
+    box-shadow: 0 0 0 1px color-mix(in oklch, var(--foreground) 24%, transparent);
   }
 }

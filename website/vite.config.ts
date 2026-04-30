@@ -1,11 +1,10 @@
-import { cloudflare } from "@cloudflare/vite-plugin";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackStart } from "@tanstack/react-start/plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig, loadEnv, type PluginOption } from "vite";
-import tsConfigPaths from "vite-tsconfig-paths";
+import { nitro } from "nitro/vite";
+import { defineConfig, loadEnv } from "vite";
 
-export default defineConfig(({ command, mode }) => {
+export default defineConfig(({ mode }) => {
   const loadedEnv = loadEnv(mode, process.cwd(), "VITE_");
   const envDefine = Object.fromEntries(
     Object.entries(loadedEnv).map(([key, value]) => [
@@ -14,17 +13,10 @@ export default defineConfig(({ command, mode }) => {
     ]),
   );
 
-  const plugins: PluginOption[] = [
-    tailwindcss(),
-    tsConfigPaths({ projects: ["./tsconfig.json"] }),
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
-    tanstackStart(),
-    react(),
-  ].filter(Boolean) as PluginOption[];
-
   return {
     define: envDefine,
     resolve: {
+      tsconfigPaths: true,
       alias: {
         "@": `${process.cwd()}/src`,
       },
@@ -34,6 +26,6 @@ export default defineConfig(({ command, mode }) => {
       host: "::",
       port: 8080,
     },
-    plugins,
+    plugins: [tailwindcss(), tanstackStart(), nitro(), react()],
   };
 });

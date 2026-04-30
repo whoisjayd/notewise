@@ -1,5 +1,3 @@
-import { Reveal } from "@/ui/Reveal";
-
 const items = [
   {
     q: "Where do my notes live?",
@@ -29,24 +27,27 @@ const items = [
 
 export function FAQ() {
   return (
-    <section id="faq" className="relative py-20 sm:py-28 md:py-36 border-t border-[var(--rule)]">
+    <section
+      id="faq"
+      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+    >
       <div className="mx-auto max-w-[920px] px-5 sm:px-6">
         <div className="text-center">
-          <Reveal>
+          <>
             <span className="t-eyebrow">No 06 · Notes in the margin</span>
-          </Reveal>
-          <Reveal delay={60}>
+          </>
+          <>
             <h2 className="mt-3 t-h2">Honest answers, before you install.</h2>
-          </Reveal>
+          </>
         </div>
 
         <ul className="mt-12 sm:mt-14 divide-y divide-[var(--rule)] border-y border-[var(--rule)]">
           {items.map((it, i) => (
-            <Reveal key={it.q} as="li" delay={40 * i}>
+            <li key={it.q}>
               <details className="group [&_summary::-webkit-details-marker]:hidden">
-                <summary className="flex cursor-pointer items-start justify-between gap-4 sm:gap-6 py-5 sm:py-6 px-2 -mx-2 rounded-md hover:bg-accent/40 transition-colors">
+                <summary className="-mx-2 flex cursor-pointer items-start justify-between gap-4 rounded-md px-2 py-5 sm:gap-6 sm:py-6">
                   <span className="t-cardtitle pr-2 text-balance">{it.q}</span>
-                  <span className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--rule)] text-stamp transition-transform group-open:rotate-45 group-open:bg-stamp/5">
+                  <span className="mt-1 inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-full border border-[var(--rule)] text-stamp group-open:rotate-45 group-open:bg-stamp/5">
                     <svg
                       width="12"
                       height="12"
@@ -62,7 +63,7 @@ export function FAQ() {
                 </summary>
                 <p className="pb-6 pl-2 -mt-1 max-w-prose t-body">{it.a}</p>
               </details>
-            </Reveal>
+            </li>
           ))}
         </ul>
       </div>

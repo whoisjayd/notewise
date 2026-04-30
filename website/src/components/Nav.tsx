@@ -36,10 +36,8 @@ export function Nav({ version }: { version: string }) {
   return (
     <header
       className={cn(
-        "fixed inset-x-0 top-0 z-50 transition-all duration-300",
-        scrolled
-          ? "backdrop-blur-md bg-background/80 border-b border-[var(--rule)]"
-          : "bg-transparent",
+        "fixed inset-x-0 top-0 z-50 bg-background",
+        scrolled && "border-b border-[var(--rule)]",
       )}
     >
       <div className="mx-auto flex max-w-[1200px] items-center justify-between px-4 sm:px-6 py-3 sm:py-3.5">
@@ -58,7 +56,7 @@ export function Nav({ version }: { version: string }) {
             <a
               key={it.href}
               href={it.href}
-              className="text-[13px] text-muted-foreground hover:text-foreground transition-colors"
+              className="hover-underline text-[13px] text-muted-foreground"
             >
               {it.label}
             </a>
@@ -71,14 +69,14 @@ export function Nav({ version }: { version: string }) {
             target="_blank"
             rel="noreferrer"
             aria-label="Open the NoteWise GitHub repository"
-            className="hidden sm:inline-flex h-9 items-center gap-2 rounded-full border border-[var(--rule)] px-3 text-[12.5px] text-foreground/80 hover:text-foreground hover:bg-accent transition-colors"
+            className="hover-feedback hidden h-9 items-center gap-2 rounded-full border border-[var(--rule)] px-3 text-[12.5px] text-foreground/80 sm:inline-flex"
           >
             <FineIcon name="github" size={14} /> GitHub
           </a>
           <ThemeToggle />
           <a
             href="#install"
-            className="inline-flex items-center gap-1.5 rounded-full bg-foreground px-3.5 sm:px-4 py-2 text-[12.5px] font-medium text-background hover:opacity-90 transition-opacity"
+            className="hover-feedback inline-flex items-center gap-1.5 rounded-full border border-transparent bg-foreground px-3.5 py-2 text-[12.5px] font-medium text-background sm:px-4"
           >
             Install
             <FineIcon name="arrow" size={13} />
@@ -90,7 +88,7 @@ export function Nav({ version }: { version: string }) {
             aria-expanded={open}
             aria-controls="mobile-sections"
             onClick={() => setOpen((v) => !v)}
-            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--rule)] text-foreground/80"
+            className="hover-feedback inline-flex h-9 w-9 items-center justify-center rounded-full border border-[var(--rule)] text-foreground/80 md:hidden"
           >
             <svg
               width="14"
@@ -111,7 +109,7 @@ export function Nav({ version }: { version: string }) {
         <div
           id="mobile-sections"
           ref={panelRef}
-          className="md:hidden mx-3 mt-1 rounded-lg border border-[var(--rule)] bg-card/95 backdrop-blur-md shadow-lg overflow-hidden"
+          className="md:hidden mx-3 mt-1 rounded-lg border border-[var(--rule)] bg-background shadow-lg overflow-hidden"
         >
           <ul className="divide-y divide-[var(--rule)]">
             {items.map((it) => (
@@ -119,7 +117,7 @@ export function Nav({ version }: { version: string }) {
                 <a
                   href={it.href}
                   onClick={() => setOpen(false)}
-                  className="flex items-center justify-between px-5 py-3.5 text-[14px] hover:bg-accent transition-colors"
+                  className="hover-underline flex items-center justify-between px-5 py-3.5 text-[14px]"
                 >
                   <span>{it.label}</span>
                   <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
@@ -134,7 +132,7 @@ export function Nav({ version }: { version: string }) {
                 target="_blank"
                 rel="noreferrer"
                 onClick={() => setOpen(false)}
-                className="flex items-center gap-2 px-5 py-3.5 text-[14px] hover:bg-accent transition-colors"
+                className="hover-underline flex items-center gap-2 px-5 py-3.5 text-[14px]"
               >
                 <FineIcon name="github" size={14} /> GitHub
                 <FineIcon name="external" size={11} className="ml-auto opacity-60" />

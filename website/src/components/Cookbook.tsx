@@ -1,4 +1,3 @@
-import { Reveal } from "@/ui/Reveal";
 import { Terminal } from "@/ui/Terminal";
 
 const recipes = [
@@ -79,44 +78,42 @@ export function Cookbook() {
   return (
     <section
       id="cookbook"
-      className="relative py-20 sm:py-28 md:py-36 border-t border-[var(--rule)]"
+      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="max-w-2xl">
-          <Reveal>
+          <>
             <span className="t-eyebrow">No 05 · Cookbook</span>
-          </Reveal>
-          <Reveal delay={60}>
+          </>
+          <>
             <h2 className="mt-3 t-h2">
               Four commands that cover
               <br />
               most of <em className="text-stamp">a semester</em>.
             </h2>
-          </Reveal>
-          <Reveal delay={120}>
+          </>
+          <>
             <p className="mt-5 t-body max-w-xl">
               Anything more elaborate is a flag away —{" "}
               <code className="t-code text-foreground/85">notewise process --help</code>.
             </p>
-          </Reveal>
+          </>
         </div>
 
         <div className="mt-12 sm:mt-14 grid gap-5 md:grid-cols-2">
           {recipes.map((r, i) => (
-            <Reveal key={r.title} delay={60 * i}>
-              <div className="leaf-card p-5 sm:p-6">
-                <p className="t-eyebrow">Recipe · {String(i + 1).padStart(2, "0")}</p>
-                <h3 className="mt-2 t-cardtitle text-balance">{r.title}</h3>
-                <p className="mt-1.5 t-meta">{r.sub}</p>
-                <div className="mt-4">
-                  <Terminal
-                    title="zsh"
-                    lines={r.lines}
-                    caption={<span dangerouslySetInnerHTML={{ __html: r.caption }} />}
-                  />
-                </div>
+            <div key={r.title} className="leaf-card p-5 sm:p-6">
+              <p className="t-eyebrow">Recipe · {String(i + 1).padStart(2, "0")}</p>
+              <h3 className="mt-2 t-cardtitle text-balance">{r.title}</h3>
+              <p className="mt-1.5 t-meta">{r.sub}</p>
+              <div className="mt-4">
+                <Terminal
+                  title="zsh"
+                  lines={r.lines}
+                  caption={<span dangerouslySetInnerHTML={{ __html: r.caption }} />}
+                />
               </div>
-            </Reveal>
+            </div>
           ))}
         </div>
       </div>
