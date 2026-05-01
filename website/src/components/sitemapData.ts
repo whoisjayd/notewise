@@ -1,6 +1,6 @@
 const SITE_URL = "https://notewise.click";
 
-export const DOCS_URL = "https://docs.notewise.click";
+export const DOCS_URL = `${SITE_URL}/docs`;
 
 export const siteUrls = [
   { loc: "/", changefreq: "weekly", priority: "1.0" },

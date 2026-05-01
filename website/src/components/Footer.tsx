@@ -43,7 +43,7 @@ export function Footer({ stats }: { stats: RepoStats }) {
           </FooterCol>
 
           <FooterCol title="Read">
-            <FooterLink href="https://docs.notewise.click" label="Docs" external />
+            <FooterLink href="https://notewise.click/docs" label="Docs" external />
             <FooterLink
               href="https://github.com/whoisjayd/notewise#-quick-start"
               label="Quick start"

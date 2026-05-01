@@ -1,0 +1,60 @@
+{
+  "rewrites": [
+    {
+      "source": "/_mintlify/:path*",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/_mintlify/:path*"
+    },
+    {
+      "source": "/api/request",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/_mintlify/api/request"
+    },
+    {
+      "source": "/docs",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/docs"
+    },
+    {
+      "source": "/docs/",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/docs"
+    },
+    {
+      "source": "/docs/llms.txt",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/llms.txt"
+    },
+    {
+      "source": "/docs/llms-full.txt",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/llms-full.txt"
+    },
+    {
+      "source": "/docs/sitemap.xml",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/sitemap.xml"
+    },
+    {
+      "source": "/docs/robots.txt",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/robots.txt"
+    },
+    {
+      "source": "/docs/mcp",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/mcp"
+    },
+    {
+      "source": "/docs/og-image.png",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/og-image.png"
+    },
+    {
+      "source": "/docs/logo.png",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/logo.png"
+    },
+    {
+      "source": "/docs/favicon.ico",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/favicon.ico"
+    },
+    {
+      "source": "/docs/:path*",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/docs/:path*"
+    },
+    {
+      "source": "/mintlify-assets/:path+",
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/mintlify-assets/:path+"
+    }
+  ]
+}

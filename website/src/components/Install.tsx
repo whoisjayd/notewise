@@ -90,7 +90,7 @@ export function Install() {
               <FineIcon name="arrow" size={14} />
             </a>
             <a
-              href="https://docs.notewise.click"
+              href="https://notewise.click/docs"
               target="_blank"
               rel="noopener noreferrer"
               aria-label="Full docs (opens in a new tab)"

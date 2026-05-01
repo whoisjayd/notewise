@@ -10,7 +10,7 @@
 
 <br /><br />
 
-[Website](https://notewise.click) · [Docs](https://docs.notewise.click) · [Install](https://notewise.click/install) · [Quickstart](https://docs.notewise.click/docs/start/quickstart) · [Contributing](CONTRIBUTING.md)
+[Website](https://notewise.click) · [Docs](https://notewise.click/docs) · [Install](https://notewise.click/install) · [Quickstart](https://notewise.click/docs/start/quickstart) · [Contributing](CONTRIBUTING.md)
 
 </div>
 
@@ -58,7 +58,7 @@ Windows PowerShell:
 irm https://notewise.click/install | iex
 ```
 
-See the full [installation guide](https://docs.notewise.click/docs/start/install) for `uv`, `uvx`, `pipx`, `pip`, Docker, and standalone binaries.
+See the full [installation guide](https://notewise.click/docs/start/install) for `uv`, `uvx`, `pipx`, `pip`, Docker, and standalone binaries.
 
 ## Demo
 
@@ -72,16 +72,16 @@ See the full [installation guide](https://docs.notewise.click/docs/start/install
 
 ## Documentation
 
-| Need                         | Go here                                                                       |
-| ---------------------------- | ----------------------------------------------------------------------------- |
-| Install choices              | [Install NoteWise](https://docs.notewise.click/docs/start/install)            |
-| First successful run         | [Quickstart](https://docs.notewise.click/docs/start/quickstart)               |
-| Processing flags and formats | [Process videos](https://docs.notewise.click/docs/use/process)                |
-| Provider/model setup         | [Providers](https://docs.notewise.click/docs/config/providers)                |
-| OAuth providers              | [OAuth](https://docs.notewise.click/docs/config/oauth)                        |
-| Playlists and batches        | [Playlists & batches](https://docs.notewise.click/docs/use/playlists-batches) |
-| Troubleshooting              | [Troubleshooting](https://docs.notewise.click/docs/operate/troubleshooting)   |
-| CLI command reference        | [Commands](https://docs.notewise.click/docs/operate/commands)                 |
+| Need                         | Go here                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------ |
+| Install choices              | [Install NoteWise](https://notewise.click/docs/start/install)            |
+| First successful run         | [Quickstart](https://notewise.click/docs/start/quickstart)               |
+| Processing flags and formats | [Process videos](https://notewise.click/docs/use/process)                |
+| Provider/model setup         | [Providers](https://notewise.click/docs/config/providers)                |
+| OAuth providers              | [OAuth](https://notewise.click/docs/config/oauth)                        |
+| Playlists and batches        | [Playlists & batches](https://notewise.click/docs/use/playlists-batches) |
+| Troubleshooting              | [Troubleshooting](https://notewise.click/docs/operate/troubleshooting)   |
+| CLI command reference        | [Commands](https://notewise.click/docs/operate/commands)                 |
 
 ## Common commands
 
@@ -92,7 +92,7 @@ notewise doctor
 notewise update
 ```
 
-`notewise update` checks the latest release and prints the right upgrade command group for standalone binary or Python package installs. Run `notewise --help` or open the [command reference](https://docs.notewise.click/docs/operate/commands) for the full CLI surface.
+`notewise update` checks the latest release and prints the right upgrade command group for standalone binary or Python package installs. Run `notewise --help` or open the [command reference](https://notewise.click/docs/operate/commands) for the full CLI surface.
 
 ## Development
 

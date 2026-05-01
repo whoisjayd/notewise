@@ -82,7 +82,7 @@ export function InstallPage() {
           <a className="hover-underline" href="/">
             Website
           </a>
-          <a className="hover-underline" href="https://docs.notewise.click/docs/start/install">
+          <a className="hover-underline" href="https://notewise.click/docs/start/install">
             Full install docs
           </a>
           <a className="hover-underline" href="https://github.com/whoisjayd/notewise">

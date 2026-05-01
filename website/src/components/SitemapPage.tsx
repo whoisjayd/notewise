@@ -62,9 +62,8 @@ export function SitemapPage({ today }: { today: string }) {
           <section>
             <h2>Docs URLs</h2>
             <p>
-              Docs are served from <code>docs.notewise.click</code>, so they are listed here for
-              discoverability instead of being mixed into the <code>notewise.click</code> XML
-              urlset.
+              Docs are served under <code>notewise.click/docs</code>, so the public docs paths are
+              listed here alongside their page titles.
             </p>
             <table>
               <thead>

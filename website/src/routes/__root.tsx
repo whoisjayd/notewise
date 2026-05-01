@@ -13,7 +13,7 @@ const SITE_DESCRIPTION =
 const OG_IMAGE = `${SITE_URL}/og-image.png`;
 const GITHUB_URL = "https://github.com/whoisjayd/notewise";
 const PYPI_URL = "https://pypi.org/project/notewise/";
-const DOCS_URL = "https://docs.notewise.click";
+const DOCS_URL = `${SITE_URL}/docs`;
 const X_PROFILE_URL = "https://x.com/whynotjaydeep";
 
 const SOFTWARE_JSON_LD = {
