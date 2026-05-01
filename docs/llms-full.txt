@@ -1,0 +1,759 @@
+# NoteWise full documentation for LLMs
+
+NoteWise is a Python CLI (`>=3.10`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
+
+Current documented version: `1.4.0`.
+
+Canonical public docs base: `https://notewise.click/docs`
+
+Canonical routes:
+
+- Overview: `/docs`
+- Install: `/docs/start/install`
+- Quickstart: `/docs/start/quickstart`
+- Process videos: `/docs/use/process`
+- Playlists and batches: `/docs/use/playlists-batches`
+- Private videos and Docker: `/docs/use/private-docker`
+- Configuration: `/docs/config/configuration`
+- Models and providers: `/docs/config/providers`
+- OAuth login: `/docs/config/oauth`
+- CLI commands: `/docs/operate/commands`
+- Cache, logs, history, stats: `/docs/operate/cache-logs-history`
+- Troubleshooting: `/docs/operate/troubleshooting`
+- Pipeline and output: `/docs/understand/pipeline-output`
+- Storage, events, errors: `/docs/understand/storage-events`
+- Website and docs: `/docs/understand/website-docs`
+- Development: `/docs/understand/development`
+
+Security guidance: never request or expose API keys, OAuth tokens, cookies, raw LLM prompts, provider payloads, or unredacted logs.
+
+## Overview
+
+NoteWise exists for users who want durable notes, scriptable workflows, and clear local state instead of a web-app-only summarizer.
+
+What NoteWise produces:
+
+| Output | How to create it |
+| --- | --- |
+| Markdown notes | Default `notewise process URL` output. |
+| HTML, PDF, DOCX | Use `--format html`, `--format pdf`, `--format docx`, or comma-separated formats. |
+| Quiz file | Add `--quiz`. |
+| Transcript export | Add `--export-transcript txt` or `--export-transcript json`. |
+| Chapter folder | Add `--chapter-directory-output` when the video has YouTube chapters. |
+
+Source-backed defaults:
+
+- Python: `>=3.10`
+- Default model: `gemini/gemini-2.5-flash`
+- Default output directory: `./output`
+- Default output format: `md`
+- Supported formats: `md`, `html`, `pdf`, `docx`
+- Temperature: `0.7`
+- Max concurrent videos: `5`
+- YouTube requests per minute: `10`
+- Chunk size: `4000`
+- Chunk overlap: `200`
+- Max concurrent chapters: `3`
+
+## Install NoteWise
+
+NoteWise requires Python `>=3.10` when installed from PyPI. The CLI entry point is `notewise`.
+
+Install with `uv tool`:
+
+```bash
+uv tool install notewise
+notewise version
+```
+
+Run with `uvx`:
+
+```bash
+uvx notewise --help
+```
+
+Install with `pipx`:
+
+```bash
+pipx install notewise
+notewise version
+```
+
+Install with `pip`:
+
+```bash
+python -m pip install notewise
+python -m notewise version
+```
+
+Run with Docker:
+
+```bash
+docker run --rm ghcr.io/whoisjayd/notewise:latest version
+```
+
+Standalone installers download the latest GitHub release asset and verify checksums. Browser visits to `https://notewise.click/install` show install options. `curl` and `wget` receive the POSIX installer. PowerShell receives the Windows installer.
+
+macOS or Linux:
+
+```bash
+curl -fsSL https://notewise.click/install | sh
+```
+
+Windows PowerShell:
+
+```powershell
+irm https://notewise.click/install | iex
+```
+
+Set `NOTEWISE_INSTALL_DIR` before running an installer to choose the install location.
+
+Verify installation:
+
+```bash
+notewise version
+```
+
+## Quickstart
+
+Create config:
+
+```bash
+notewise setup
+```
+
+The setup wizard writes supported keys to `~/.notewise/config.env` unless `NOTEWISE_HOME` points somewhere else.
+
+Process one public YouTube video:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID"
+```
+
+By default, NoteWise uses `gemini/gemini-2.5-flash`, requests English transcripts, and writes Markdown into `./output`.
+
+Check the result:
+
+```bash
+ls output
+```
+
+The default file is a sanitized video title ending in `.md`.
+
+If the first run fails, start with:
+
+```bash
+notewise doctor
+```
+
+## Process videos
+
+`notewise process` accepts a YouTube video URL or a bare 11-character video ID. It fetches metadata and transcript text, generates notes with the configured LiteLLM model, writes files locally, and stores run metadata in SQLite.
+
+Supported video inputs:
+
+| Input | Example |
+| --- | --- |
+| Watch URL | `https://www.youtube.com/watch?v=VIDEO_ID` |
+| Short URL | `https://youtu.be/VIDEO_ID` |
+| Embed URL | `https://www.youtube.com/embed/VIDEO_ID` |
+| `/v/` URL | `https://www.youtube.com/v/VIDEO_ID` |
+| Shorts URL | `https://www.youtube.com/shorts/VIDEO_ID` |
+| Bare video ID | `VIDEO_ID` |
+
+Basic command:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID"
+```
+
+Common process options:
+
+| Option | Default | Use it for |
+| --- | --- | --- |
+| `--model`, `-m` | `gemini/gemini-2.5-flash` | Override the LiteLLM model for one run. |
+| `--output`, `-o` | `./output` | Write files to a specific folder. |
+| `--format` | `md` | Write `md`, `html`, `pdf`, `docx`, or a comma-separated list. |
+| `--language`, `-l` | `en` | Specify transcript language; this option can be repeated. |
+| `--target-language` | `English` | Generate notes in another language. |
+| `--temperature`, `-t` | `0.7` | Change LLM temperature, range `0.0` to `1.0`. |
+| `--max-tokens`, `-k` | provider default | Cap LLM output tokens. |
+| `--force`, `-F` | false | Ignore cache and regenerate. |
+| `--no-ui` | false | Disable the Rich live dashboard. |
+| `--verbose`, `-v` | false | Write DEBUG diagnostics to the session log. |
+| `--quiz` | false | Generate a quiz Markdown file. |
+| `--export-transcript` | none | Export transcript as `txt` or `json`. |
+| `--timestamps` | false | Prefix generated chapter headers with start times. |
+| `--chapter-directory-output` | false | Write per-chapter Markdown files when YouTube chapters exist. |
+| `--cookie-file`, `--cookies` | `YOUTUBE_COOKIE_FILE` | Read restricted videos with a Netscape cookies file. |
+| `--use-combine-chunk` | false | Use deprecated legacy chunk-combine behavior. |
+
+`--use-combine-chunk` is legacy behavior. The default long-transcript path uses boundary stitching.
+
+Examples:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --format md,docx
+notewise process "https://youtu.be/VIDEO_ID" --quiz --export-transcript json
+notewise process "https://youtu.be/VIDEO_ID" --force --no-ui
+```
+
+Chapter-aware generation is automatic when YouTube chapters exist. By default, the final notes are bundled into one output file. Use `--chapter-directory-output` only when you want separate per-chapter Markdown files.
+
+## Playlists and batch files
+
+Use playlists when YouTube already groups the videos. Use batch files when you want full control over the input list.
+
+Playlist inputs:
+
+| Input | Example |
+| --- | --- |
+| Playlist URL | `https://www.youtube.com/playlist?list=PLAYLIST_ID` |
+| Watch URL with list | `https://www.youtube.com/watch?v=VIDEO_ID&list=PLAYLIST_ID` |
+| Bare playlist ID | `PL...`, `UU...`, `LL...`, `FL...`, `RD...`, `UL...`, `WL...`, `OLAK5uy_...` |
+
+```bash
+notewise process "https://www.youtube.com/playlist?list=PLAYLIST_ID"
+```
+
+Playlist output is written under a sanitized playlist folder inside the selected output directory.
+
+Batch files contain one source per line. Blank lines and lines starting with `#` are ignored. Supported encodings are `utf-8`, `utf-8-sig`, and `utf-16`.
+
+Example batch file:
+
+```text
+# lectures
+https://youtu.be/VIDEO_ONE
+https://youtu.be/VIDEO_TWO
+https://www.youtube.com/playlist?list=PLAYLIST_ID
+```
+
+```bash
+notewise process urls.txt --output ./course-notes
+```
+
+Concurrency and rate limits:
+
+| Setting | Default | Source |
+| --- | --- | --- |
+| Video workers | `5` | `MAX_CONCURRENT_VIDEOS` |
+| YouTube request limit | `10/min` | `YOUTUBE_REQUESTS_PER_MINUTE` |
+| Chapter workers | `3` | code default |
+
+Use `--throttle` when a provider plan needs slower repeated LLM calls.
+
+NoteWise checks the local cache before metadata and transcript work unless `--force` is set. Use `--force` when you intentionally want a fresh generation.
+
+## Private videos and Docker
+
+Private, members-only, age-gated, or region-restricted videos need the same browser session access that can view the video. NoteWise reads a Netscape-format cookies file when you pass `--cookie-file` or set `YOUTUBE_COOKIE_FILE`.
+
+Cookie files are session tokens. Do not commit them, paste them into issues, or mount them writable in containers.
+
+Process with cookies:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --cookie-file ./youtube-cookies.txt
+```
+
+For repeated use:
+
+```bash
+YOUTUBE_COOKIE_FILE=/absolute/path/youtube-cookies.txt notewise process "https://youtu.be/VIDEO_ID"
+```
+
+If YouTube has no transcript for the selected language, NoteWise cannot generate notes from that video.
+
+The published Docker image is `ghcr.io/whoisjayd/notewise:latest`. The runtime uses Python 3.13 slim, user `notewise` with uid `1001`, workdir `/output`, entrypoint `notewise`, and `NOTEWISE_HOME=/home/notewise/.notewise`.
+
+Docker example:
+
+```bash
+docker run --rm \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -v "$PWD/output:/output" \
+  -v "$PWD/.notewise:/home/notewise/.notewise" \
+  ghcr.io/whoisjayd/notewise:latest \
+  process "https://youtu.be/VIDEO_ID" --no-ui
+```
+
+Docker with cookies:
+
+```bash
+docker run --rm \
+  -e GEMINI_API_KEY="$GEMINI_API_KEY" \
+  -v "$PWD/output:/output" \
+  -v "$PWD/.notewise:/home/notewise/.notewise" \
+  -v "$PWD/youtube-cookies.txt:/cookies/youtube.txt:ro" \
+  ghcr.io/whoisjayd/notewise:latest \
+  process "https://youtu.be/VIDEO_ID" --cookie-file /cookies/youtube.txt --no-ui
+```
+
+Persist `/home/notewise/.notewise` if you want cache, logs, config, and OAuth token directories to survive container runs.
+
+## Configuration
+
+NoteWise reads settings from code defaults, `config.env`, environment variables, and command flags.
+
+By default, state lives under `~/.notewise`.
+
+| File or folder | Purpose |
+| --- | --- |
+| `~/.notewise/config.env` | User config written by `notewise setup`. |
+| `~/.notewise/.notewise_cache.db` | SQLite cache and run history. |
+| `~/.notewise/logs/` | Session logs. |
+| `~/.notewise/oauth/` | Default OAuth token storage. |
+
+Set `NOTEWISE_HOME` to move the state root.
+
+For a command run, command-line flags win. Then environment variables, then `config.env`, then code defaults.
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
+```
+
+Common config keys:
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model string. |
+| `OUTPUT_DIR` | `./output` | Default output directory. |
+| `MAX_CONCURRENT_VIDEOS` | `5` | Batch/playlist video workers. |
+| `YOUTUBE_REQUESTS_PER_MINUTE` | `10` | YouTube request limit. |
+| `TEMPERATURE` | `0.7` | LLM temperature. |
+| `MAX_TOKENS` | unset | Optional LLM max output tokens. |
+| `YOUTUBE_COOKIE_FILE` | unset | Default Netscape cookies file path. |
+
+Provider API keys and provider auth keys are also accepted in `config.env` when they are listed in source constants.
+
+`chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.env` keys.
+
+Config commands:
+
+```bash
+notewise setup
+notewise setup --show
+notewise setup --force
+notewise config
+notewise config-path
+notewise edit-config
+```
+
+`notewise config` masks secrets before printing settings.
+
+## Models and providers
+
+NoteWise sends generation requests through LiteLLM. Use a model string like `provider/model-name` with `--model` or `DEFAULT_MODEL`.
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash
+```
+
+The source default is `gemini/gemini-2.5-flash`.
+
+Common provider routes:
+
+- Gemini: set `GEMINI_API_KEY` and use `gemini/gemini-2.5-flash`.
+- OpenAI or Anthropic: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, then use a matching LiteLLM model string.
+- Hosted routing: use OpenRouter, Vercel AI Gateway, Azure, Bedrock, Databricks, Cloudflare, Together, Fireworks, Perplexity, or Groq.
+- Subscription login: use ChatGPT or GitHub Copilot OAuth instead of static API keys.
+
+Credential map:
+
+| Provider | Credential |
+| --- | --- |
+| Gemini / Vertex | `GEMINI_API_KEY` |
+| OpenAI | `OPENAI_API_KEY` |
+| Anthropic | `ANTHROPIC_API_KEY` |
+| Groq | `GROQ_API_KEY` |
+| xAI | `XAI_API_KEY` |
+| Mistral | `MISTRAL_API_KEY` |
+| Cohere | `COHERE_API_KEY` |
+| DeepSeek | `DEEPSEEK_API_KEY` |
+| OpenRouter | `OPENROUTER_API_KEY` |
+| Azure | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` |
+| Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` |
+| Together | `TOGETHERAI_API_KEY` |
+| Fireworks | `FIREWORKS_AI_API_KEY` |
+| Perplexity | `PERPLEXITYAI_API_KEY` |
+| Cloudflare | `CLOUDFLARE_API_KEY` plus `CLOUDFLARE_ACCOUNT_ID` |
+| Databricks | `DATABRICKS_API_KEY` plus `DATABRICKS_API_BASE` |
+| Bedrock | AWS credential chain |
+
+Never share API keys, OAuth tokens, cookies, raw prompts, or provider payloads. Logs and error reports should stay redacted.
+
+When a model string has no explicit provider prefix, NoteWise can infer common key requirements from model names such as Gemini, GPT/OpenAI, Claude, Groq, Grok/xAI, Mistral, Cohere/Command, and DeepSeek.
+
+## OAuth login
+
+ChatGPT subscription and GitHub Copilot use LiteLLM OAuth/device-flow login. They do not use static API keys in `config.env`. User configuration is stored at `~/.notewise/config.env`; do not create a repo-root `.env` file for OAuth setup.
+
+Login commands:
+
+```bash
+notewise auth login chatgpt
+notewise auth login github_copilot
+notewise auth login codex
+```
+
+`codex` is a CLI alias for ChatGPT login.
+
+Safe test models:
+
+| Provider | Safe model used by login checks |
+| --- | --- |
+| ChatGPT | `chatgpt/gpt-5.2` |
+| GitHub Copilot | `github_copilot/gpt-5-mini` |
+
+Default token directories:
+
+| Provider | Default directory | Override env var |
+| --- | --- | --- |
+| ChatGPT | `<state>/oauth/chatgpt` | `CHATGPT_TOKEN_DIR` |
+| GitHub Copilot | `<state>/oauth/github_copilot` | `GITHUB_COPILOT_TOKEN_DIR` |
+
+Persist the state directory in Docker if you want OAuth login to survive container restarts.
+
+Use after login:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --model chatgpt/gpt-5.2
+notewise process "https://youtu.be/VIDEO_ID" --model github_copilot/gpt-5-mini
+```
+
+## CLI commands
+
+Run `notewise COMMAND --help` for command-specific flags. The command set is defined in `src/notewise/cli/app.py`.
+
+Main commands:
+
+| Command | Purpose |
+| --- | --- |
+| `notewise process URL` | Generate notes from one video, playlist, or batch file. |
+| `notewise setup` | Run the interactive config wizard. |
+| `notewise config` | Print masked effective config. |
+| `notewise config-path` | Print the active config path. |
+| `notewise edit-config` | Open the config file in an editor. |
+| `notewise auth login PROVIDER` | Login to OAuth providers. |
+| `notewise info` | Show runtime config and state paths. |
+| `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
+| `notewise doctor` | Check config, provider readiness, output, cache, and logs. |
+| `notewise stats` | Show processing totals and model breakdown. |
+| `notewise history` | Show recent processed videos. |
+| `notewise cache` | Inspect or maintain the SQLite cache. |
+| `notewise logs` | Inspect or clean session logs. |
+| `notewise update` | Check whether a newer release is available. |
+| `notewise version` | Show the installed version. |
+
+Process command example:
+
+```bash
+notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
+```
+
+Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file`, and `--use-combine-chunk`.
+
+Setup and auth:
+
+```bash
+notewise setup
+notewise setup --show
+notewise setup --force
+notewise auth login chatgpt
+notewise auth login github_copilot
+notewise auth login codex
+```
+
+Update command:
+
+```bash
+notewise update
+```
+
+The update check compares the installed version with the latest GitHub release. It detects whether NoteWise is running as a standalone binary or as a Python package and prints the matching upgrade command group.
+
+Standalone binaries receive the short release installer command. Python package installs receive package-manager commands for `uv tool`, `pipx`, and `python -m pip`; use the one that matches how you installed NoteWise.
+
+Successful commands exit with `0`. Processing failures exit with `1`.
+
+## Cache, logs, history, and stats
+
+NoteWise stores persistent state under `<state>`, where `<state>` is `NOTEWISE_HOME` or `~/.notewise`.
+
+The cache database is `<state>/.notewise_cache.db`. SQLite sidecars may include `.notewise_cache.db-wal` and `.notewise_cache.db-shm`.
+
+Cache commands:
+
+```bash
+notewise cache
+notewise cache info
+notewise cache show VIDEO_ID
+notewise cache prune --older-than 30
+notewise cache clear --yes
+```
+
+`cache clear` deletes the local SQLite DB and sidecars. It does not delete generated notes, quizzes, transcripts, HTML, PDF, or DOCX output files.
+
+History and stats commands:
+
+```bash
+notewise history
+notewise stats
+notewise stats --model gemini/gemini-2.5-flash
+```
+
+`history` shows recent cached videos and run details. `stats` summarizes totals, tokens, costs, and model breakdowns from the cache database.
+
+Logs live under `<state>/logs` and use filenames like `notewise-YYYY-MM-DD_HH-MM-SS.log`.
+
+Log commands:
+
+```bash
+notewise logs
+notewise logs --tail 100
+notewise logs --open
+notewise logs clean --older-than 7
+notewise logs clean --all
+```
+
+Logs are structlog key-value logs, not JSON. They should not include raw prompts, provider payloads, OAuth tokens, API keys, or cookies.
+
+## Troubleshooting
+
+Start with commands that do not generate notes. They narrow the problem before you spend provider quota.
+
+```bash
+notewise doctor
+notewise config
+notewise info "https://youtu.be/VIDEO_ID"
+notewise logs --tail 100
+```
+
+Setup and provider failures:
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Missing API key | `notewise config` | Set the provider env var or rerun `notewise setup`. |
+| Wrong model string | Command and config | Use a LiteLLM-compatible model string. |
+| OAuth expired | `notewise auth login ...` | Re-run login in an interactive terminal. |
+| Docker loses auth | Container mounts | Persist `/home/notewise/.notewise`. |
+| Provider rate limits | Logs | Add `--throttle`, reduce batch size, or use another model/provider. |
+
+YouTube failures:
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| No transcript | YouTube captions | Use another video or language. NoteWise needs transcript text. |
+| Private or members-only video | Browser access | Export Netscape cookies and pass `--cookie-file`. |
+| Playlist not resolving | `notewise info URL` | Use a playlist URL, watch+list URL, or supported bare playlist ID. |
+| Language mismatch | Transcript language | Try `--language en` or another available caption language. |
+
+Output and cache issues:
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Output not where expected | `notewise config` | Check `OUTPUT_DIR` and `--output`. |
+| Run skipped | Cache | Use `--force` to regenerate. |
+| No chapter folder | Command flags | Add `--chapter-directory-output`; the video must have YouTube chapters. |
+| Cache looks stale | `notewise cache show VIDEO_ID` | Prune or clear cache. Generated notes are separate files. |
+| Need deeper details | Logs | Run with `--verbose`, then inspect `notewise logs --tail 100`. |
+
+When asking for help, share command shape and redacted errors only. Do not share API keys, OAuth tokens, cookies, raw prompts, or provider payloads.
+
+## Pipeline and output
+
+The processing path is implemented by `CorePipeline` and the pipeline execution helpers.
+
+Processing flow:
+
+1. Cache check: unless `--force` is set, NoteWise checks the SQLite cache before metadata or transcript work.
+2. Metadata and transcript: NoteWise resolves YouTube metadata, captions, transcript segments, chapters, and playlist context when applicable.
+3. Generation: transcript text is chunked with source defaults `4000` size and `200` overlap, then sent to the configured LiteLLM model.
+4. Artifacts: NoteWise writes notes, optional quizzes, optional transcript exports, and rendered formats.
+5. Persistence: run stats, output paths, transcript content, tokens, costs, and timings are persisted to SQLite when possible.
+
+Videos with YouTube chapters use chapter-aware generation. Without `--chapter-directory-output`, the result is still bundled into a final notes file. With `--chapter-directory-output`, NoteWise writes per-chapter Markdown files into a folder and stores `.notewise-output.json` ownership metadata.
+
+Output formats:
+
+| Format | Behavior |
+| --- | --- |
+| `md` | Raw Markdown notes. Default. |
+| `html` | Markdown rendered with built-in CSS. |
+| `pdf` | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
+| `docx` | Uses `html2docx` and `python-docx`. |
+
+Example output layout:
+
+```text
+output/
+  Video Title.md
+  Video Title.html
+  Video Title.docx
+  Video Title_quiz.md
+  Video Title_transcript.json
+  Video Title/
+    01_Introduction.md
+    02_Main Topic.md
+    .notewise-output.json
+```
+
+Filenames are sanitized and capped at 100 characters. Batch collisions may append the video ID.
+
+## Storage, events, and errors
+
+NoteWise keeps operational state local. The default state root is `~/.notewise`, or `NOTEWISE_HOME` when set.
+
+The cache DB is `<state>/.notewise_cache.db`. Schema version is `2`.
+
+SQLite tables:
+
+| Table | Purpose |
+| --- | --- |
+| `video` | Cached video identity, title, duration, and cache time. |
+| `transcript` | Transcript content and language per video. |
+| `runstats` | Tokens, cost, model, transcript time, generation time, and timestamp. |
+| `exportrecord` | Format and output path for exported artifacts. |
+| `schema_version` | Hand-rolled migration version. |
+
+Logs are written under `<state>/logs` as `notewise-YYYY-MM-DD_HH-MM-SS.log`. The format is structlog key-value text, not JSON.
+
+The UI dashboard reads typed pipeline events from `domain/events.py`.
+
+Pipeline events:
+
+| Phase | Events |
+| --- | --- |
+| Pipeline | `pipeline_start`, `pipeline_complete` |
+| Metadata | `metadata_start`, `metadata_fetched` |
+| Transcript | `transcript_fetching`, `transcript_fetched` |
+| Notes | `generation_start`, `chunk_generating`, `generation_combining`, `generation_complete` |
+| Chapters | `chapter_generating`, `chapter_chunk_generating`, `chapter_combining`, `chapter_complete` |
+| Quiz | `quiz_generating`, `quiz_chunk_generating`, `quiz_combining`, `quiz_complete` |
+| Video result | `video_success`, `video_skipped`, `video_failed` |
+
+Event payloads can include video ID, title, chapter/chunk counts, phase label, error text, and output path.
+
+All custom exceptions live in `src/notewise/errors.py` and derive from `NoteWiseError`. User-facing categories include configuration, validation, YouTube extraction, transcript availability, playlist extraction, IP blocking, LLM generation, OAuth, persistence, and update failures.
+
+Use `notewise doctor`, `notewise info URL`, and `notewise logs --tail 100` before debugging source code.
+
+## Website and docs maintenance
+
+The repository ships two public web surfaces:
+
+- `website/`: the marketing site at `https://notewise.click`
+- `docs/`: the Mintlify documentation source served at `https://notewise.click/docs`
+
+The website is a TanStack Start/Vite app built with Nitro for deployment to Vercel.
+
+Important website paths:
+
+| Path | Purpose |
+| --- | --- |
+| `website/src/routes/__root.tsx` | HTML shell, SEO metadata, JSON-LD, analytics scripts. |
+| `website/src/routes/index.tsx` | Landing page route composition. |
+| `website/src/routes/install.tsx` | Smart `/install` route for shell, PowerShell, and browser clients. |
+| `website/src/routes/sitemap[.]xml.tsx` | Sitemap route. |
+| `website/src/components/SitemapPage.tsx` | Browser-friendly sitemap UI and sitemap link inventory. |
+| `website/src/components/sitemapData.ts` | Shared website/docs URL inventory for sitemap XML and UI. |
+| `website/src/components/` | Page sections and route-level components. |
+| `website/src/ui/` | Reusable primitives including both `Terminal` and `FineIcon`. |
+| `website/src/server/` | Server functions used by the site. |
+| `website/vite.config.ts` | TanStack Start, Nitro, Vite, Tailwind, and path alias config. |
+
+Use Bun for all website work. `website/bun.lock` is the canonical lockfile.
+
+```bash
+cd website
+bun install --frozen-lockfile
+bun run lint
+bunx tsc --noEmit
+bun run build
+bun run preview
+```
+
+Run `bun run build` before `bun run preview`; preview serves the built TanStack output and catches production-only routing issues before Vercel deployment.
+
+Website quality rules:
+
+- Keep SEO metadata honest. Do not add synthetic ratings, fake reviews, or misleading license claims.
+- Preserve landmarks, visible focus states, skip links, and descriptive button labels.
+- Inherit the system theme on first load. Only a user theme toggle should persist `nw-theme` in local storage.
+- Avoid delayed reveal effects that make first paint feel broken or inconsistent.
+- Never commit local website env files, Vercel credentials, analytics secrets, OAuth tokens, or provider keys.
+
+Mintlify docs live in `docs/`.
+
+Docs paths:
+
+| Path | Purpose |
+| --- | --- |
+| `docs/docs.json` | Mintlify navigation, redirects, SEO, theme, and site settings. |
+| `docs/start/` | Start section pages. |
+| `docs/use/` | User workflow pages. |
+| `docs/config/` | Configuration pages. |
+| `docs/operate/` | Operations and CLI pages. |
+| `docs/understand/` | Architecture and maintenance pages. |
+| `docs/umami.js` | Custom JavaScript loaded by Mintlify on docs pages. |
+
+When adding a docs page, add the `.mdx` file under the matching `docs/` section folder and update the `navigation.groups` list in `docs/docs.json`.
+
+Do not run Prettier on docs MDX. Mintlify component children can contain fenced code blocks, and Prettier may rewrite them into parser-breaking forms. For docs-only validation, parse `docs/docs.json` and run `node --check docs/umami.js`.
+
+Both public web surfaces use Umami. Website analytics are added in `website/src/routes/__root.tsx`. Docs analytics are added through `docs/umami.js`, because Mintlify supports custom JavaScript files in the docs content directory. Do not add analytics provider blocks to `docs/docs.json` unless the analytics provider intentionally changes.
+
+## Development
+
+Use `uv` for local development. The package uses a `src` layout and exposes `notewise = notewise.__main__:main`.
+
+Setup:
+
+```bash
+uv sync --dev
+make hooks-install
+uv run notewise version
+```
+
+Important paths:
+
+| Path | Purpose |
+| --- | --- |
+| `src/notewise/cli/app.py` | Typer command surface. Heavy imports stay lazy inside command bodies. |
+| `src/notewise/_constants.py` | Numeric and string defaults. |
+| `src/notewise/config.py` | Pydantic settings, config file parsing, state paths. |
+| `src/notewise/errors.py` | All custom exceptions. |
+| `src/notewise/logging.py` | Logging configuration and redaction. |
+| `src/notewise/pipeline/core.py` | Pipeline entry point. |
+| `src/notewise/pipeline/_execution.py` | Processing flow. |
+| `src/notewise/storage/` | SQLite models, repository, and hand-rolled migrations. |
+| `src/notewise/domain/` | Pure domain objects. No network or disk I/O. |
+| `scripts/make_help.py` | Renders grouped `make help` output from Makefile comments. |
+
+Tests and checks:
+
+```bash
+make test
+make test-unit
+make test-integration
+make quality
+make ci
+```
+
+`make help` is generated from Makefile comments, so target descriptions should be updated in the target line itself instead of duplicated in a manual help block.
+
+Coverage must stay at or above `90%`.
+
+Source invariants:
+
+| Rule | Why it exists |
+| --- | --- |
+| Constants in `_constants.py` | Keeps defaults discoverable and testable. |
+| Exceptions in `errors.py` | Keeps user-facing failure behavior consistent. |
+| Logging only in `logging.py` | Keeps redaction and session logs centralized. |
+| Lazy CLI imports | Keeps startup fast and help output lightweight. |
+| No I/O in `domain/` | Keeps value objects pure. |
+| No secrets in tests or docs | Prevents credential leakage. |
+
+Release workflows build Python distributions, PyInstaller standalone binaries, and Docker images. The GHCR image is multi-arch for `linux/amd64` and `linux/arm64`.

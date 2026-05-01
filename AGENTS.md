@@ -45,9 +45,9 @@ Other important root-level paths:
 ```text
 scripts/extract_litellm_model_snapshot.py ← Refresh bundled setup model catalog
 scripts/make_help.py                      ← Render grouped `make help` output from Makefile comments
-docs/docs/config/providers.mdx            ← Provider/user-facing model docs
-docs/docs/config/configuration.mdx        ← Config key reference
-docs/docs/operate/commands.mdx            ← CLI command reference
+docs/config/providers.mdx                 ← Provider/user-facing model docs
+docs/config/configuration.mdx             ← Config key reference
+docs/operate/commands.mdx                 ← CLI command reference
 website/src/routes/__root.tsx             ← Website shell, metadata, JSON-LD
 website/src/routes/index.tsx              ← Website landing page route
 website/src/routes/install.tsx            ← Smart /install route; serves shell/PowerShell bootstraps or InstallPage
@@ -85,7 +85,7 @@ These rules are enforced by CI and must never be broken:
 1. Define the function in `cli/app.py` using the `@app.command()` decorator.
 2. Import only `typer` and `_get_console()` at call time; load pipeline/storage modules lazily inside the function body.
 3. Add a test in `tests/unit/cli/` mocking all I/O.
-4. Document the command in `docs/docs/operate/commands.mdx` and any relevant workflow page under `docs/docs/use/`.
+4. Document the command in `docs/operate/commands.mdx` and any relevant workflow page under `docs/use/`.
 
 Example skeleton:
 
@@ -124,11 +124,11 @@ notewise routes providers via [LiteLLM](https://github.com/BerriAI/litellm). To 
 5. Add the relevant config examples to `.env.example`.
 6. Update user docs together:
    - `README.md`
-   - `docs/docs/config/providers.mdx`
-   - `docs/docs/config/configuration.mdx`
-   - `docs/docs/config/oauth.mdx` when OAuth behavior changes
-   - `docs/docs/operate/commands.mdx` when commands or flags change
-   - `docs/docs/use/process.mdx` or related workflow pages when user-facing behavior changes
+   - `docs/config/providers.mdx`
+   - `docs/config/configuration.mdx`
+   - `docs/config/oauth.mdx` when OAuth behavior changes
+   - `docs/operate/commands.mdx` when commands or flags change
+   - `docs/use/process.mdx` or related workflow pages when user-facing behavior changes
 7. Add/update tests in `tests/unit/config/`, `tests/unit/ui/`, `tests/unit/llm/`, and CLI tests when preflight or setup behavior changes.
 
 ### OAuth/device-flow providers
@@ -188,7 +188,7 @@ Adding a new user-configurable key:
 2. Add the field to `AppSettings` in `config.py` with an `alias` matching the env-var name.
 3. Add the key to `_ALLOWED_KEYS` in `config.py` or to the relevant `_constants.py` key set used to derive `_ALLOWED_KEYS`.
 4. Add the key to `.env.example` (commented out with a description).
-5. Update `docs/docs/config/configuration.mdx` and any affected workflow or CLI reference pages.
+5. Update `docs/config/configuration.mdx` and any affected workflow or CLI reference pages.
 
 ---
 

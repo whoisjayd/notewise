@@ -206,7 +206,7 @@ Website structure:
 
 Keep website changes small and reviewable. Preserve route behavior, metadata, accessibility affordances, system-theme inheritance, and Vercel/Nitro build output unless the change explicitly needs them. Store local website environment values in ignored `website/.env*` files; never commit API keys, OAuth tokens, analytics secrets, or provider credentials.
 
-Docs live in `docs/` and use Mintlify. Add user-facing CLI docs under `docs/docs/`, and update `docs/docs.json` navigation when adding a new page. Mintlify custom JavaScript belongs as `.js` files in the docs content directory; analytics currently use `docs/umami.js`. Do not commit analytics provider secrets in `docs/docs.json`.
+Docs live in `docs/` and use Mintlify. Add user-facing CLI docs under the matching `docs/` section folder, and update `docs/docs.json` navigation when adding a new page. Mintlify custom JavaScript belongs as `.js` files in the docs content directory; analytics currently use `docs/umami.js`. Do not commit analytics provider secrets in `docs/docs.json`.
 
 Do not run Prettier on `docs/` or docs MDX. Mintlify component children can contain fenced code blocks, and Prettier may rewrite them into parser-breaking forms. For docs-only validation, use JSON parsing for `docs/docs.json` and `node --check docs/umami.js`.
 
@@ -263,7 +263,7 @@ When changing LiteLLM provider support, OAuth behavior, model examples, or confi
 - Keep OAuth token defaults under `NOTEWISE_HOME`/`~/.notewise` unless the user explicitly sets `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR`.
 - Do not log raw prompts, provider payloads, API keys, OAuth tokens, or AWS credentials. Add/update redaction tests when touching logging.
 - Refresh `src/notewise/ui/litellm_models_snapshot.json` with `uv run python scripts/extract_litellm_model_snapshot.py` when setup model availability changes. The snapshot should include text-generation models only.
-- Update docs in the same PR: `README.md`, `.env.example`, `docs/docs/config/providers.mdx`, `docs/docs/config/configuration.mdx`, `docs/docs/config/oauth.mdx`, and `docs/docs/operate/commands.mdx` when the CLI surface changes.
+- Update docs in the same PR: `README.md`, `.env.example`, `docs/config/providers.mdx`, `docs/config/configuration.mdx`, `docs/config/oauth.mdx`, and `docs/operate/commands.mdx` when the CLI surface changes.
 
 ---
 

@@ -63,10 +63,14 @@ Mintlify docs live in `docs/`.
 | Path             | Purpose                                                       |
 | ---------------- | ------------------------------------------------------------- |
 | `docs/docs.json` | Mintlify navigation, redirects, SEO, theme, and site settings |
-| `docs/docs/`     | Documentation pages                                           |
+| `docs/start/`    | Start section pages                                           |
+| `docs/use/`      | User workflow pages                                           |
+| `docs/config/`   | Configuration pages                                           |
+| `docs/operate/`  | Operations and CLI pages                                      |
+| `docs/understand/` | Architecture and maintenance pages                          |
 | `docs/umami.js`  | Custom JavaScript loaded by Mintlify on docs pages            |
 
-When adding a docs page, add the `.mdx` file under `docs/docs/` and update the `navigation.groups` list in `docs/docs.json`.
+When adding a docs page, add the `.mdx` file under the matching `docs/` section folder and update the `navigation.groups` list in `docs/docs.json`.
 
 Do not run Prettier on docs MDX. Mintlify component children can contain fenced code blocks, and Prettier may rewrite them into parser-breaking forms. For docs-only validation, parse `docs/docs.json` and run `node --check docs/umami.js`.
 

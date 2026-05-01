@@ -173,117 +173,117 @@
       "permanent": true
     },
     {
-      "source": "/docs/getting-started/installation",
+      "source": "/getting-started/installation",
       "destination": "/docs/start/install",
       "permanent": true
     },
     {
-      "source": "/docs/getting-started/quickstart",
+      "source": "/getting-started/quickstart",
       "destination": "/docs/start/quickstart",
       "permanent": true
     },
     {
-      "source": "/docs/getting-started/configuration",
+      "source": "/getting-started/configuration",
       "destination": "/docs/config/configuration",
       "permanent": true
     },
     {
-      "source": "/docs/how-it-works/architecture",
+      "source": "/how-it-works/architecture",
       "destination": "/docs/understand/pipeline-output",
       "permanent": true
     },
     {
-      "source": "/docs/how-it-works/pipeline",
+      "source": "/how-it-works/pipeline",
       "destination": "/docs/understand/pipeline-output",
       "permanent": true
     },
     {
-      "source": "/docs/how-it-works/providers",
+      "source": "/how-it-works/providers",
       "destination": "/docs/config/providers",
       "permanent": true
     },
     {
-      "source": "/docs/guides/single-video",
+      "source": "/guides/single-video",
       "destination": "/docs/use/process",
       "permanent": true
     },
     {
-      "source": "/docs/guides/playlists-and-batch",
+      "source": "/guides/playlists-and-batch",
       "destination": "/docs/use/playlists-batches",
       "permanent": true
     },
     {
-      "source": "/docs/guides/private-videos",
+      "source": "/guides/private-videos",
       "destination": "/docs/use/private-docker",
       "permanent": true
     },
     {
-      "source": "/docs/guides/docker",
+      "source": "/guides/docker",
       "destination": "/docs/use/private-docker",
       "permanent": true
     },
     {
-      "source": "/docs/guides/cache-and-logs",
+      "source": "/guides/cache-and-logs",
       "destination": "/docs/operate/cache-logs-history",
       "permanent": true
     },
     {
-      "source": "/docs/guides/troubleshooting",
+      "source": "/guides/troubleshooting",
       "destination": "/docs/operate/troubleshooting",
       "permanent": true
     },
     {
-      "source": "/docs/core-concepts/processing-model",
+      "source": "/core-concepts/processing-model",
       "destination": "/docs/understand/pipeline-output",
       "permanent": true
     },
     {
-      "source": "/docs/core-concepts/providers",
+      "source": "/core-concepts/providers",
       "destination": "/docs/config/providers",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/process-videos",
+      "source": "/workflows/process-videos",
       "destination": "/docs/use/process",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/private-videos",
+      "source": "/workflows/private-videos",
       "destination": "/docs/use/private-docker",
       "permanent": true
     },
     {
-      "source": "/docs/workflows/docker-automation",
+      "source": "/workflows/docker-automation",
       "destination": "/docs/use/private-docker",
       "permanent": true
     },
     {
-      "source": "/docs/cli/command-reference",
+      "source": "/cli/command-reference",
       "destination": "/docs/operate/commands",
       "permanent": true
     },
     {
-      "source": "/docs/configuration",
+      "source": "/configuration",
       "destination": "/docs/config/configuration",
       "permanent": true
     },
     {
-      "source": "/docs/advanced/internals",
+      "source": "/advanced/internals",
       "destination": "/docs/understand/development",
       "permanent": true
     },
     {
-      "source": "/docs/reference/output-and-storage",
+      "source": "/reference/output-and-storage",
       "destination": "/docs/understand/pipeline-output",
       "permanent": true
     },
     {
-      "source": "/docs/reference/errors-and-events",
+      "source": "/reference/errors-and-events",
       "destination": "/docs/understand/storage-events",
       "permanent": true
     },
     {
-      "source": "/docs/troubleshooting",
+      "source": "/troubleshooting",
       "destination": "/docs/operate/troubleshooting",
       "permanent": true
     }
@@ -300,43 +300,43 @@
       {
         "group": "Start",
         "icon": "rocket",
-        "pages": ["docs/index", "docs/start/install", "docs/start/quickstart"]
+        "pages": ["index", "start/install", "start/quickstart"]
       },
       {
         "group": "Use",
         "icon": "youtube",
         "pages": [
-          "docs/use/process",
-          "docs/use/playlists-batches",
-          "docs/use/private-docker"
+          "use/process",
+          "use/playlists-batches",
+          "use/private-docker"
         ]
       },
       {
         "group": "Configure",
         "icon": "sliders-horizontal",
         "pages": [
-          "docs/config/configuration",
-          "docs/config/providers",
-          "docs/config/oauth"
+          "config/configuration",
+          "config/providers",
+          "config/oauth"
         ]
       },
       {
         "group": "Operate",
         "icon": "terminal",
         "pages": [
-          "docs/operate/commands",
-          "docs/operate/cache-logs-history",
-          "docs/operate/troubleshooting"
+          "operate/commands",
+          "operate/cache-logs-history",
+          "operate/troubleshooting"
         ]
       },
       {
         "group": "Understand",
         "icon": "workflow",
         "pages": [
-          "docs/understand/pipeline-output",
-          "docs/understand/storage-events",
-          "docs/understand/website-docs",
-          "docs/understand/development"
+          "understand/pipeline-output",
+          "understand/storage-events",
+          "understand/website-docs",
+          "understand/development"
         ]
       }
     ]
