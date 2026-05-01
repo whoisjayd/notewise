@@ -307,6 +307,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
           python-version: "3.12"
+      - uses: oven-sh/setup-bun@v2
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Run pre-commit hook parity checks
