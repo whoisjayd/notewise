@@ -10,47 +10,47 @@
     },
     {
       "source": "/docs",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs"
     },
     {
       "source": "/docs/",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs"
     },
     {
       "source": "/docs/llms.txt",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/llms.txt"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/llms.txt"
     },
     {
       "source": "/docs/llms-full.txt",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/llms-full.txt"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/llms-full.txt"
     },
     {
       "source": "/docs/sitemap.xml",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/sitemap.xml"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/sitemap.xml"
     },
     {
       "source": "/docs/robots.txt",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/robots.txt"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/robots.txt"
     },
     {
       "source": "/docs/mcp",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/mcp"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/mcp"
     },
     {
       "source": "/docs/og-image.png",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/og-image.png"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/og-image.png"
     },
     {
       "source": "/docs/logo.png",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/logo.png"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/logo.png"
     },
     {
       "source": "/docs/favicon.ico",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/favicon.ico"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/favicon.ico"
     },
     {
       "source": "/docs/:path*",
-      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/:path*"
+      "destination": "https://nirmauniversity-d6cdc5d7.mintlify.dev/docs/:path*"
     },
     {
       "source": "/mintlify-assets/:path+",

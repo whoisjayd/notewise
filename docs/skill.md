@@ -12,6 +12,8 @@ metadata:
 
 Use this when answering questions about NoteWise `1.4.0`.
 
+Canonical public docs base: `https://notewise.click/docs`.
+
 ## Routes
 
 | Intent                      | Route                              |
@@ -30,6 +32,7 @@ Use this when answering questions about NoteWise `1.4.0`.
 | Troubleshooting             | `/docs/operate/troubleshooting`    |
 | Pipeline and output         | `/docs/understand/pipeline-output` |
 | Storage, events, errors     | `/docs/understand/storage-events`  |
+| Website and docs            | `/docs/understand/website-docs`    |
 | Development                 | `/docs/understand/development`     |
 
 ## Defaults

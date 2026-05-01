@@ -118,7 +118,7 @@
     "primary": {
       "type": "button",
       "label": "Quickstart",
-      "href": "/docs/start/quickstart"
+      "href": "/start/quickstart"
     }
   },
   "footer": {
@@ -134,157 +134,157 @@
   "redirects": [
     {
       "source": "/yt-study/:slug*",
-      "destination": "/docs/:slug*",
+      "destination": "/:slug*",
       "permanent": true
     },
     {
       "source": "/yt_study/:slug*",
-      "destination": "/docs/:slug*",
+      "destination": "/:slug*",
       "permanent": true
     },
     {
       "source": "/installation",
-      "destination": "/docs/start/install",
+      "destination": "/start/install",
       "permanent": true
     },
     {
       "source": "/quickstart",
-      "destination": "/docs/start/quickstart",
+      "destination": "/start/quickstart",
       "permanent": true
     },
     {
       "source": "/config",
-      "destination": "/docs/config/configuration",
+      "destination": "/config/configuration",
       "permanent": true
     },
     {
       "source": "/cli/:slug*",
-      "destination": "/docs/operate/commands",
+      "destination": "/operate/commands",
       "permanent": true
     },
     {
       "source": "/reference/:slug*",
-      "destination": "/docs/understand/pipeline-output",
+      "destination": "/understand/pipeline-output",
       "permanent": true
     },
     {
       "source": "/development/:slug*",
-      "destination": "/docs/understand/development",
+      "destination": "/understand/development",
       "permanent": true
     },
     {
       "source": "/getting-started/installation",
-      "destination": "/docs/start/install",
+      "destination": "/start/install",
       "permanent": true
     },
     {
       "source": "/getting-started/quickstart",
-      "destination": "/docs/start/quickstart",
+      "destination": "/start/quickstart",
       "permanent": true
     },
     {
       "source": "/getting-started/configuration",
-      "destination": "/docs/config/configuration",
+      "destination": "/config/configuration",
       "permanent": true
     },
     {
       "source": "/how-it-works/architecture",
-      "destination": "/docs/understand/pipeline-output",
+      "destination": "/understand/pipeline-output",
       "permanent": true
     },
     {
       "source": "/how-it-works/pipeline",
-      "destination": "/docs/understand/pipeline-output",
+      "destination": "/understand/pipeline-output",
       "permanent": true
     },
     {
       "source": "/how-it-works/providers",
-      "destination": "/docs/config/providers",
+      "destination": "/config/providers",
       "permanent": true
     },
     {
       "source": "/guides/single-video",
-      "destination": "/docs/use/process",
+      "destination": "/use/process",
       "permanent": true
     },
     {
       "source": "/guides/playlists-and-batch",
-      "destination": "/docs/use/playlists-batches",
+      "destination": "/use/playlists-batches",
       "permanent": true
     },
     {
       "source": "/guides/private-videos",
-      "destination": "/docs/use/private-docker",
+      "destination": "/use/private-docker",
       "permanent": true
     },
     {
       "source": "/guides/docker",
-      "destination": "/docs/use/private-docker",
+      "destination": "/use/private-docker",
       "permanent": true
     },
     {
       "source": "/guides/cache-and-logs",
-      "destination": "/docs/operate/cache-logs-history",
+      "destination": "/operate/cache-logs-history",
       "permanent": true
     },
     {
       "source": "/guides/troubleshooting",
-      "destination": "/docs/operate/troubleshooting",
+      "destination": "/operate/troubleshooting",
       "permanent": true
     },
     {
       "source": "/core-concepts/processing-model",
-      "destination": "/docs/understand/pipeline-output",
+      "destination": "/understand/pipeline-output",
       "permanent": true
     },
     {
       "source": "/core-concepts/providers",
-      "destination": "/docs/config/providers",
+      "destination": "/config/providers",
       "permanent": true
     },
     {
       "source": "/workflows/process-videos",
-      "destination": "/docs/use/process",
+      "destination": "/use/process",
       "permanent": true
     },
     {
       "source": "/workflows/private-videos",
-      "destination": "/docs/use/private-docker",
+      "destination": "/use/private-docker",
       "permanent": true
     },
     {
       "source": "/workflows/docker-automation",
-      "destination": "/docs/use/private-docker",
+      "destination": "/use/private-docker",
       "permanent": true
     },
     {
       "source": "/cli/command-reference",
-      "destination": "/docs/operate/commands",
+      "destination": "/operate/commands",
       "permanent": true
     },
     {
       "source": "/configuration",
-      "destination": "/docs/config/configuration",
+      "destination": "/config/configuration",
       "permanent": true
     },
     {
       "source": "/advanced/internals",
-      "destination": "/docs/understand/development",
+      "destination": "/understand/development",
       "permanent": true
     },
     {
       "source": "/reference/output-and-storage",
-      "destination": "/docs/understand/pipeline-output",
+      "destination": "/understand/pipeline-output",
       "permanent": true
     },
     {
       "source": "/reference/errors-and-events",
-      "destination": "/docs/understand/storage-events",
+      "destination": "/understand/storage-events",
       "permanent": true
     },
     {
       "source": "/troubleshooting",
-      "destination": "/docs/operate/troubleshooting",
+      "destination": "/operate/troubleshooting",
       "permanent": true
     }
   ],
