@@ -1934,11 +1934,11 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         skipped_count=0,
     )
 
-    def _record_completion(title):  # noqa: ANN001
-        if title.endswith(" (skipped)"):
-            dashboard_instance.skipped_count += 1
+    def _record_skipped(title):  # noqa: ANN001
+        dashboard_instance.skipped_count += 1
+        dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
-    dashboard_instance.add_completion.side_effect = _record_completion
+    dashboard_instance.add_skipped.side_effect = _record_skipped
 
     with (
         patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
@@ -1966,7 +1966,7 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         result = runner.invoke(app, ["process", _VIDEO_URL])
 
     assert result.exit_code == 0
-    dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+    dashboard_instance.add_skipped.assert_called_with("Video One")
     assert FakeLive.instances[0].transient is True
 
 
@@ -2033,11 +2033,11 @@ def test_process_playlist_all_skipped_clears_live_dashboard(tmp_path):
         skipped_count=0,
     )
 
-    def _record_playlist_completion(title):  # noqa: ANN001
-        if title.endswith(" (skipped)"):
-            dashboard_instance.skipped_count += 1
+    def _record_playlist_skipped(title):  # noqa: ANN001
+        dashboard_instance.skipped_count += 1
+        dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
-    dashboard_instance.add_completion.side_effect = _record_playlist_completion
+    dashboard_instance.add_skipped.side_effect = _record_playlist_skipped
 
     with (
         patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
@@ -2139,11 +2139,11 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
         skipped_count=0,
     )
 
-    def _record_completion(title):  # noqa: ANN001
-        if title.endswith(" (skipped)"):
-            dashboard_instance.skipped_count += 1
+    def _record_skipped(title):  # noqa: ANN001
+        dashboard_instance.skipped_count += 1
+        dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
-    dashboard_instance.add_completion.side_effect = _record_completion
+    dashboard_instance.add_skipped.side_effect = _record_skipped
 
     with (
         patch("notewise.cli.app.CorePipeline", return_value=pipeline_instance),
@@ -2169,7 +2169,7 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
         result = runner.invoke(app, ["process", str(batch_file)])
 
     assert result.exit_code == 0
-    dashboard_instance.add_completion.assert_called_with("Video One (skipped)")
+    dashboard_instance.add_skipped.assert_called_with("Video One")
     assert FakeLive.instances[0].transient is True
 
 
