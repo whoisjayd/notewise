@@ -39,6 +39,7 @@ from notewise._constants import (
     DASHBOARD_SECTION_RECENT_ACTIVITY,
     DASHBOARD_SECTION_RUN_STATUS,
     DASHBOARD_SECTION_WORKERS,
+    DASHBOARD_SKIPPED_SUFFIX,
     DASHBOARD_UNKNOWN_VALUE,
     DASHBOARD_WORKER_DETAIL_LIMIT,
     DASHBOARD_WORKER_TITLE_LIMIT,
@@ -239,6 +240,8 @@ class PipelineDashboard:
                 snapshot = self.worker_snapshots[index]
                 if snapshot.started_at is None:
                     snapshot.started_at = monotonic()
+                if snapshot.phase == DASHBOARD_IDLE_STATUS:
+                    snapshot.phase = "Active"
                 snapshot.detail = status
 
     def update_worker_state(
@@ -344,7 +347,7 @@ class PipelineDashboard:
         Args:
             title: Title of the skipped video.
         """
-        self.recent_completions.appendleft(f"{title} (skipped)")
+        self.recent_completions.appendleft(f"{title}{DASHBOARD_SKIPPED_SUFFIX}")
         self.skipped_count += 1
         self.overall_progress.advance(self.overall_task)
 
@@ -384,15 +387,25 @@ class PipelineDashboard:
         header = Table.grid(expand=True)
         header.add_column(ratio=1)
         header.add_column(justify="right")
+        safe_run_label = self._safe_cell(
+            self.run_label,
+            limit=DASHBOARD_ACTIVITY_TITLE_LIMIT,
+        )
+        safe_model_name = self._safe_cell(
+            self.model_name,
+            limit=DASHBOARD_CONFIG_VALUE_LIMIT,
+        )
         header.add_row(
-            f"[bold white]📑 Source:[/bold white] "
-            f"[bold yellow]{self._safe_cell(self.run_label)}[/]",
-            f"[dim]🤖 {self._safe_cell(self.model_name)}[/dim]",
+            f"[bold white]📑 Source:[/bold white] [bold yellow]{safe_run_label}[/]",
+            f"[dim]🤖 {safe_model_name}[/dim]",
         )
         if self.output_path:
+            safe_output_path = self._safe_cell(
+                self.output_path,
+                limit=DASHBOARD_CONFIG_VALUE_LIMIT,
+            )
             header.add_row(
-                f"[bold white]📁 Output:[/bold white] "
-                f"[cyan]{self._safe_cell(self.output_path)}[/cyan]",
+                f"[bold white]📁 Output:[/bold white] [cyan]{safe_output_path}[/cyan]",
                 "[dim]Rich live dashboard[/dim]",
             )
         return header
@@ -489,8 +502,9 @@ class PipelineDashboard:
                     limit=DASHBOARD_ACTIVITY_TITLE_LIMIT,
                 )
                 safe_title = escape(display_title)
-                icon = "↷" if title.endswith(" (skipped)") else "✓"
-                color = "yellow" if title.endswith(" (skipped)") else "green"
+                is_skipped = title.endswith(DASHBOARD_SKIPPED_SUFFIX)
+                icon = "↷" if is_skipped else "✓"
+                color = "yellow" if is_skipped else "green"
                 completed_table.add_row(
                     f"[{color}]{icon}[/{color}] [dim]{safe_title}[/]"
                 )

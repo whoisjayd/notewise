@@ -3,6 +3,10 @@
 from rich.console import Console
 from rich.panel import Panel
 
+from notewise._constants import (
+    DASHBOARD_ACTIVITY_TITLE_LIMIT,
+    DASHBOARD_CONFIG_VALUE_LIMIT,
+)
 from notewise.ui.dashboard import DashboardConfigItem, PipelineDashboard
 
 
@@ -28,6 +32,21 @@ def test_dashboard_updates():
     # Check if the task description was updated in the progress instance
     task_id = dash.worker_tasks[0]
     assert "Processing..." in dash.worker_progress.tasks[task_id].description
+
+
+def test_dashboard_update_worker_counts_legacy_status_as_running() -> None:
+    """Legacy status updates should still count active workers as running."""
+    dash = PipelineDashboard(3, 1, "List", "Model")
+
+    dash.update_worker(0, "Processing...")
+
+    console = Console(width=100)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Running: 1" in output
+    assert "Queued: 2" in output
 
 
 def test_dashboard_update_worker_keeps_preformatted_markup():
@@ -159,6 +178,36 @@ def test_dashboard_update_overall_status() -> None:
     assert dash.overall_progress.tasks[dash.overall_task].description == (
         "Resolving playlist"
     )
+
+
+def test_dashboard_rendering_truncates_long_header_context() -> None:
+    """Header run, model, and output values should clamp before rendering."""
+    long_source = "Source-" + "A" * DASHBOARD_ACTIVITY_TITLE_LIMIT + "TAILSOURCE"
+    long_model = "Model-" + "B" * DASHBOARD_CONFIG_VALUE_LIMIT + "TAILMODEL"
+    long_output = "/tmp/" + "C" * DASHBOARD_CONFIG_VALUE_LIMIT + "TAILOUTPUT"
+    dash = PipelineDashboard(
+        1,
+        1,
+        "List",
+        long_model,
+        run_label=long_source,
+        output_path=long_output,
+    )
+
+    console = Console(width=240)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert long_source not in output
+    assert long_model not in output
+    assert long_output not in output
+    assert f"{long_source[:DASHBOARD_ACTIVITY_TITLE_LIMIT]}…" in output
+    assert f"{long_model[:DASHBOARD_CONFIG_VALUE_LIMIT]}…" in output
+    assert f"{long_output[:DASHBOARD_CONFIG_VALUE_LIMIT]}…" in output
+    assert "TAILSOURCE" not in output
+    assert "TAILMODEL" not in output
+    assert "TAILOUTPUT" not in output
 
 
 def test_dashboard_rendering_shows_safe_config_items() -> None:

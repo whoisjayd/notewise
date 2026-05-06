@@ -6,8 +6,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from notewise.cli import _batch_runner, _single_runner
 from notewise.domain.results import PipelineResult
 from notewise.ui.dashboard import PipelineDashboard
@@ -81,8 +79,7 @@ def _make_context(
     )
 
 
-@pytest.mark.asyncio
-async def test_run_single_url_passes_safe_dashboard_context(monkeypatch) -> None:
+async def test_run_single_url_passes_safe_dashboard_context(mocker) -> None:
     """Single-source UI runner should pass safe config rows to the dashboard."""
     captured: list[dict[str, object]] = []
     context = _make_context(captured)
@@ -91,7 +88,7 @@ async def test_run_single_url_passes_safe_dashboard_context(monkeypatch) -> None
         output_dir=Path("/tmp/notewise-notes"),
         playlist_name="Playlist A",
     )
-    monkeypatch.setattr(
+    mocker.patch.object(
         _single_runner, "prepare_source", AsyncMock(return_value=prepared)
     )
 
@@ -112,7 +109,6 @@ async def test_run_single_url_passes_safe_dashboard_context(monkeypatch) -> None
     assert "secret-dir" not in rendered_config
 
 
-@pytest.mark.asyncio
 async def test_run_batch_file_passes_safe_dashboard_context() -> None:
     """Batch UI runner should pass batch label and safe config rows to dashboard."""
     captured: list[dict[str, object]] = []

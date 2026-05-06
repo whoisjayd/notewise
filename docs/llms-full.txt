@@ -190,6 +190,12 @@ Common process options:
 
 `--use-combine-chunk` is legacy behavior. The default long-transcript path uses boundary stitching.
 
+### Live dashboard
+
+By default, `notewise process` shows a Rich live dashboard while work is running. The dashboard summarizes the source, selected output folder, safe runtime flags, progress counts, active video workers, chapter workers, and recent completions or failures. Secret values are never shown: API keys are summarized as present or missing, and cookie files are displayed by safe status/basename only.
+
+Use `--no-ui` when you want plain log-style terminal output instead of the live dashboard, such as in CI scripts or terminals that do not handle Rich live updates well.
+
 Examples:
 
 ```bash
