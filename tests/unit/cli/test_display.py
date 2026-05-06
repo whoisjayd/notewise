@@ -17,6 +17,7 @@ from notewise.cli._display import (
     restore_console_after_live,
     should_clear_dashboard_after_run,
     update_dashboard_chapter_slot,
+    update_dashboard_worker_for_event,
     use_transient_live_display,
 )
 from notewise.cli._types import (
@@ -116,6 +117,25 @@ def test_build_ui_event_handler_updates_structured_worker_state() -> None:
     assert dashboard.worker_snapshots[0].title == "—"
 
 
+def test_update_dashboard_worker_for_event_uses_safe_display_title() -> None:
+    """Structured worker state should use the sanitized display title argument."""
+    dashboard = PipelineDashboard(1, 1, "List", "Model")
+
+    update_dashboard_worker_for_event(
+        dashboard,
+        0,
+        "Display Title",
+        PipelineEvent(
+            event_type=EventType.METADATA_START,
+            video_id="vid1",
+            title="[red]Unsafe Event Title[/red]",
+        ),
+    )
+
+    assert dashboard.worker_snapshots[0].phase == "Metadata"
+    assert dashboard.worker_snapshots[0].title == "Display Title"
+
+
 def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
     """Safe dashboard config should summarize flags without leaking secrets."""
     context = SimpleNamespace(
@@ -174,6 +194,7 @@ def test_build_ui_event_handler_escapes_worker_titles() -> None:
     with console.capture() as capture:
         console.print(dashboard)
 
+    assert dashboard.worker_snapshots[0].title == "Bad [boom]"
     assert "Bad [boom]" in capture.get()
 
 

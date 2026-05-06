@@ -10,7 +10,7 @@ from typing import Any
 import structlog
 from rich.markup import escape
 
-from notewise._constants import DASHBOARD_IDLE_MARKUP
+from notewise._constants import DASHBOARD_IDLE_MARKUP, DASHBOARD_SKIPPED_SUFFIX
 from notewise.cli._context import CliProcessContext
 from notewise.cli._formatters import print_cost_summary, print_run_summary
 from notewise.cli._types import (
@@ -129,16 +129,16 @@ def _format_cookie_status(cookie_file: str | None) -> str:
 
 
 def build_dashboard_config_items(
-    context: Any,
+    context: CliProcessContext,
     *,
     output_dir: Path,
     video_workers: int,
     chapter_workers: int,
 ) -> tuple[DashboardConfigItem, ...]:
     """Build safe runtime config rows for the Rich dashboard."""
-    max_tokens = getattr(context, "selected_max_tokens", None)
+    max_tokens = context.selected_max_tokens
     max_tokens_label = "provider default" if max_tokens is None else str(max_tokens)
-    export_transcript = getattr(context, "export_transcript", None) or "off"
+    export_transcript = context.export_transcript or "off"
     return (
         DashboardConfigItem("Output", str(output_dir)),
         DashboardConfigItem(
@@ -169,11 +169,11 @@ def build_dashboard_config_items(
         ),
         DashboardConfigItem(
             "Cookies",
-            _format_cookie_status(getattr(context, "selected_cookie_file", None)),
+            _format_cookie_status(context.selected_cookie_file),
         ),
         DashboardConfigItem(
             "API key",
-            _format_api_key_status(getattr(context, "api_key_checked", None)),
+            _format_api_key_status(context.api_key_checked),
         ),
     )
 
@@ -253,8 +253,8 @@ def update_dashboard_worker_for_event(
     status_fn = UI_STATUS_MAP.get(event.event_type)
     if status_fn is None:
         return
-    dashboard.update_worker(slot, status_fn(title, event))
-    _update_structured_worker_state(dashboard, slot, event)
+    dashboard.update_worker(slot, status_fn(escape(title), event))
+    _update_structured_worker_state(dashboard, slot, event, title=title)
 
 
 def _clear_structured_worker_state(dashboard: Any, slot: int) -> None:
@@ -331,7 +331,7 @@ def build_ui_event_handler(
 
     def on_event(event: PipelineEvent) -> None:
         video_id = event.video_id
-        title = escape(_truncate_title(event.title or video_id))
+        title = _truncate_title(event.title or video_id)
         slot = slot_manager.get(video_id)
 
         if event.event_type == EventType.METADATA_START:
@@ -359,7 +359,7 @@ def build_ui_event_handler(
                 EventType.CHAPTER_CHUNK_GENERATING,
                 EventType.CHAPTER_COMBINING,
             ):
-                update_dashboard_chapter_slot(dashboard, title, event)
+                update_dashboard_chapter_slot(dashboard, escape(title), event)
 
         elif event.event_type == EventType.CHAPTER_COMPLETE:
             update_dashboard_chapter_slot(dashboard, title, event)
@@ -384,7 +384,9 @@ def build_ui_event_handler(
                 if callable(add_skipped):
                     add_skipped(event.title or video_id)
                 else:
-                    dashboard.add_completion(f"{event.title or video_id} (skipped)")
+                    dashboard.add_completion(
+                        f"{event.title or video_id}{DASHBOARD_SKIPPED_SUFFIX}"
+                    )
             else:
                 dashboard.add_failure(event.title or video_id)
 

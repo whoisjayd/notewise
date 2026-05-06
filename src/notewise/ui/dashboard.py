@@ -27,22 +27,41 @@ from rich.table import Table
 from rich.text import Text
 
 from notewise._constants import (
+    DASHBOARD_ACTIVE_PHASE,
     DASHBOARD_ACTIVITY_TITLE_LIMIT,
     DASHBOARD_CONFIG_VALUE_LIMIT,
+    DASHBOARD_HEADER_LIVE_LABEL,
+    DASHBOARD_HEADER_MODEL_ICON,
+    DASHBOARD_HEADER_OUTPUT_LABEL,
+    DASHBOARD_HEADER_SOURCE_LABEL,
     DASHBOARD_IDLE_MARKUP,
     DASHBOARD_IDLE_STATUS,
+    DASHBOARD_PANEL_TITLE_MARKUP,
     DASHBOARD_PROGRESS_BAR_WIDTH,
+    DASHBOARD_PROGRESS_LABEL_MARKUP,
+    DASHBOARD_PROGRESS_PERCENT_MARKUP,
+    DASHBOARD_PROGRESS_SEPARATOR,
+    DASHBOARD_PROGRESS_TOTAL_MARKUP,
     DASHBOARD_RECENT_ACTIVITY_LIMIT,
-    DASHBOARD_SECTION_ACTIVE_TASKS,
-    DASHBOARD_SECTION_CHAPTER_TASKS,
-    DASHBOARD_SECTION_FLAGS_CONFIG,
-    DASHBOARD_SECTION_RECENT_ACTIVITY,
-    DASHBOARD_SECTION_RUN_STATUS,
-    DASHBOARD_SECTION_WORKERS,
+    DASHBOARD_RECENT_EMPTY_MARKUP,
+    DASHBOARD_SECTION_ACTIVE_TASKS_HEADING,
+    DASHBOARD_SECTION_CHAPTER_TASKS_HEADING,
+    DASHBOARD_SECTION_FLAGS_CONFIG_HEADING,
+    DASHBOARD_SECTION_RECENT_ACTIVITY_HEADING,
+    DASHBOARD_SECTION_RUN_STATUS_HEADING,
+    DASHBOARD_SECTION_WORKERS_HEADING,
     DASHBOARD_SKIPPED_SUFFIX,
+    DASHBOARD_SUMMARY_COMPLETED_LABEL,
+    DASHBOARD_SUMMARY_FAILED_LABEL,
+    DASHBOARD_SUMMARY_QUEUED_LABEL,
+    DASHBOARD_SUMMARY_RUNNING_LABEL,
+    DASHBOARD_SUMMARY_SKIPPED_LABEL,
     DASHBOARD_UNKNOWN_VALUE,
     DASHBOARD_WORKER_DETAIL_LIMIT,
+    DASHBOARD_WORKER_LABEL_TEMPLATE,
+    DASHBOARD_WORKER_TABLE_HEADERS,
     DASHBOARD_WORKER_TITLE_LIMIT,
+    DASHBOARD_WORKER_VIDEO_PREFIX,
 )
 
 
@@ -130,17 +149,17 @@ class PipelineDashboard:
 
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
-            TextColumn("[bold blue]Total Progress"),
+            TextColumn(DASHBOARD_PROGRESS_LABEL_MARKUP),
             BarColumn(
                 bar_width=DASHBOARD_PROGRESS_BAR_WIDTH,
                 style="black",
                 complete_style="green",
                 finished_style="green",
             ),
-            TextColumn("[bold green]{task.percentage:>3.0f}%"),
-            TextColumn("•"),
-            TextColumn("[bold white]{task.completed}/{task.total}"),
-            TextColumn("•"),
+            TextColumn(DASHBOARD_PROGRESS_PERCENT_MARKUP),
+            TextColumn(DASHBOARD_PROGRESS_SEPARATOR),
+            TextColumn(DASHBOARD_PROGRESS_TOTAL_MARKUP),
+            TextColumn(DASHBOARD_PROGRESS_SEPARATOR),
             TimeElapsedColumn(),
             expand=True,
         )
@@ -159,7 +178,10 @@ class PipelineDashboard:
             prefix = "└──" if i == concurrency - 1 else "├──"
             tid = self.worker_progress.add_task(
                 DASHBOARD_IDLE_MARKUP,
-                label=f"{prefix} Worker {i + 1}",
+                label=DASHBOARD_WORKER_LABEL_TEMPLATE.format(
+                    prefix=prefix,
+                    number=i + 1,
+                ),
                 worker_id=i + 1,
             )
             self.worker_tasks.append(tid)
@@ -178,7 +200,10 @@ class PipelineDashboard:
             prefix = "└──" if chapter_index == self.chapter_concurrency - 1 else "├──"
             task_id = self.chapter_progress.add_task(
                 DASHBOARD_IDLE_MARKUP,
-                label=f"{prefix} Worker {chapter_index + 1}",
+                label=DASHBOARD_WORKER_LABEL_TEMPLATE.format(
+                    prefix=prefix,
+                    number=chapter_index + 1,
+                ),
                 chapter_slot=chapter_index + 1,
             )
             self.chapter_tasks.append(task_id)
@@ -241,7 +266,7 @@ class PipelineDashboard:
                 if snapshot.started_at is None:
                     snapshot.started_at = monotonic()
                 if snapshot.phase == DASHBOARD_IDLE_STATUS:
-                    snapshot.phase = "Active"
+                    snapshot.phase = DASHBOARD_ACTIVE_PHASE
                 snapshot.detail = status
 
     def update_worker_state(
@@ -396,8 +421,9 @@ class PipelineDashboard:
             limit=DASHBOARD_CONFIG_VALUE_LIMIT,
         )
         header.add_row(
-            f"[bold white]📑 Source:[/bold white] [bold yellow]{safe_run_label}[/]",
-            f"[dim]🤖 {safe_model_name}[/dim]",
+            f"[bold white]{DASHBOARD_HEADER_SOURCE_LABEL}[/bold white] "
+            f"[bold yellow]{safe_run_label}[/]",
+            f"[dim]{DASHBOARD_HEADER_MODEL_ICON} {safe_model_name}[/dim]",
         )
         if self.output_path:
             safe_output_path = self._safe_cell(
@@ -405,8 +431,9 @@ class PipelineDashboard:
                 limit=DASHBOARD_CONFIG_VALUE_LIMIT,
             )
             header.add_row(
-                f"[bold white]📁 Output:[/bold white] [cyan]{safe_output_path}[/cyan]",
-                "[dim]Rich live dashboard[/dim]",
+                f"[bold white]{DASHBOARD_HEADER_OUTPUT_LABEL}[/bold white] "
+                f"[cyan]{safe_output_path}[/cyan]",
+                f"[dim]{DASHBOARD_HEADER_LIVE_LABEL}[/dim]",
             )
         return header
 
@@ -424,11 +451,11 @@ class PipelineDashboard:
         table.add_column(style="cyan")
         table.add_column(style="blue")
         table.add_row(
-            f"Completed: {self.completed_count}",
-            f"Skipped: {self.skipped_count}",
-            f"Failed: {self.failed_count}",
-            f"Running: {running}",
-            f"Queued: {queued}",
+            f"{DASHBOARD_SUMMARY_COMPLETED_LABEL}: {self.completed_count}",
+            f"{DASHBOARD_SUMMARY_SKIPPED_LABEL}: {self.skipped_count}",
+            f"{DASHBOARD_SUMMARY_FAILED_LABEL}: {self.failed_count}",
+            f"{DASHBOARD_SUMMARY_RUNNING_LABEL}: {running}",
+            f"{DASHBOARD_SUMMARY_QUEUED_LABEL}: {queued}",
         )
         return table
 
@@ -467,10 +494,10 @@ class PipelineDashboard:
         table.add_column(style="white", ratio=4)
         table.add_column(style="magenta", ratio=3)
         table.add_column(style="dim", ratio=1)
-        table.add_row("ID", "Phase", "Video", "Detail", "Elapsed")
+        table.add_row(*DASHBOARD_WORKER_TABLE_HEADERS)
         for index, snapshot in enumerate(self.worker_snapshots, start=1):
             table.add_row(
-                f"W{index}",
+                f"{DASHBOARD_WORKER_VIDEO_PREFIX}{index}",
                 self._safe_cell(snapshot.phase),
                 self._safe_cell(snapshot.title, limit=DASHBOARD_WORKER_TITLE_LIMIT),
                 self._safe_cell(snapshot.detail, limit=DASHBOARD_WORKER_DETAIL_LIMIT),
@@ -510,7 +537,7 @@ class PipelineDashboard:
                 )
 
         if not has_activity:
-            completed_table.add_row("[dim italic]No videos completed yet...[/]")
+            completed_table.add_row(DASHBOARD_RECENT_EMPTY_MARKUP)
         return completed_table
 
     def __rich__(self) -> RenderableType:
@@ -523,7 +550,7 @@ class PipelineDashboard:
         elements: list[RenderableType] = [
             self._render_header(),
             Rule(style="dim"),
-            Text(f"📊 {DASHBOARD_SECTION_RUN_STATUS}", style="bold white"),
+            Text(DASHBOARD_SECTION_RUN_STATUS_HEADING, style="bold white"),
             self.overall_progress,
             self._render_progress_summary(),
             Rule(style="dim"),
@@ -533,7 +560,7 @@ class PipelineDashboard:
         if config_table is not None:
             elements.extend(
                 [
-                    Text(f"⚙️ {DASHBOARD_SECTION_FLAGS_CONFIG}", style="bold white"),
+                    Text(DASHBOARD_SECTION_FLAGS_CONFIG_HEADING, style="bold white"),
                     config_table,
                     Rule(style="dim"),
                 ]
@@ -542,10 +569,10 @@ class PipelineDashboard:
         if self.worker_tasks:
             elements.extend(
                 [
-                    Text(f"👷 {DASHBOARD_SECTION_WORKERS}", style="bold white"),
+                    Text(DASHBOARD_SECTION_WORKERS_HEADING, style="bold white"),
                     self._render_worker_table(),
                     Rule(style="dim"),
-                    Text(f"⚡ {DASHBOARD_SECTION_ACTIVE_TASKS}", style="bold white"),
+                    Text(DASHBOARD_SECTION_ACTIVE_TASKS_HEADING, style="bold white"),
                     self.worker_progress,
                     Rule(style="dim"),
                 ]
@@ -557,7 +584,7 @@ class PipelineDashboard:
         if self.chapter_tasks and has_active_chapter_workers:
             elements.extend(
                 [
-                    Text(f"🧩 {DASHBOARD_SECTION_CHAPTER_TASKS}", style="bold white"),
+                    Text(DASHBOARD_SECTION_CHAPTER_TASKS_HEADING, style="bold white"),
                     self.chapter_progress,
                     Rule(style="dim"),
                 ]
@@ -565,7 +592,7 @@ class PipelineDashboard:
 
         elements.extend(
             [
-                Text(f"✅ {DASHBOARD_SECTION_RECENT_ACTIVITY}", style="bold white"),
+                Text(DASHBOARD_SECTION_RECENT_ACTIVITY_HEADING, style="bold white"),
                 self._render_recent_activity(),
             ]
         )
@@ -574,7 +601,7 @@ class PipelineDashboard:
 
         return Panel(
             body,
-            title="[bold cyan]🎓 YouTube Study Material Pipeline[/bold cyan]",
+            title=DASHBOARD_PANEL_TITLE_MARKUP,
             border_style="cyan",
             padding=(0, 1),
         )

@@ -126,7 +126,7 @@ async def run_batch_file(
                     update_dashboard_worker_for_event(
                         dashboard,
                         worker_index,
-                        escape((latest_title or _fallback_video_id)[:40]),
+                        (latest_title or _fallback_video_id)[:40],
                         event,
                     )
 
