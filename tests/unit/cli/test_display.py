@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +10,7 @@ from rich.console import Console
 
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
+    build_dashboard_config_items,
     build_ui_event_handler,
     emit_headless_event,
     print_batch_summary,
@@ -73,6 +75,85 @@ def test_build_ui_event_handler_logs_slot_exhaustion_once_per_video() -> None:
         video_id="vid2",
         title="Video Two",
     )
+
+
+def test_build_ui_event_handler_updates_structured_worker_state() -> None:
+    """Dashboard bridge should keep detailed worker phase state in sync."""
+    dashboard = PipelineDashboard(1, 1, "List", "Model")
+    slot_manager = _WorkerSlotManager(1)
+    on_event = build_ui_event_handler(dashboard, slot_manager)
+
+    on_event(
+        PipelineEvent(
+            event_type=EventType.METADATA_START,
+            video_id="vid1",
+            title="Video A",
+        )
+    )
+    assert dashboard.worker_snapshots[0].phase == "Metadata"
+    assert dashboard.worker_snapshots[0].title == "Video A"
+
+    on_event(
+        PipelineEvent(
+            event_type=EventType.CHUNK_GENERATING,
+            video_id="vid1",
+            title="Video A",
+            chunk_number=2,
+            total_chunks=5,
+        )
+    )
+    assert dashboard.worker_snapshots[0].phase == "Generation"
+    assert dashboard.worker_snapshots[0].detail == "chunks 2/5"
+
+    on_event(
+        PipelineEvent(
+            event_type=EventType.VIDEO_SUCCESS,
+            video_id="vid1",
+            title="Video A",
+        )
+    )
+    assert dashboard.worker_snapshots[0].phase == "Idle"
+    assert dashboard.worker_snapshots[0].title == "—"
+
+
+def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
+    """Safe dashboard config should summarize flags without leaking secrets."""
+    context = SimpleNamespace(
+        selected_output_formats=["md", "pdf"],
+        selected_languages=["en", "hi"],
+        selected_target_language="English",
+        selected_temperature=0.3,
+        selected_max_tokens=8192,
+        selected_throttle_seconds=1.25,
+        force=True,
+        quiz=True,
+        use_combine_chunk=False,
+        export_transcript="srt",
+        timestamps=True,
+        chapter_directory_output=True,
+        selected_cookie_file="/tmp/sk-secret-cookie-dir/youtube-cookies.txt",
+        api_key_checked=True,
+    )
+
+    items = build_dashboard_config_items(
+        context,
+        output_dir=Path("/tmp/notewise-notes"),
+        video_workers=3,
+        chapter_workers=4,
+    )
+    rendered = "\n".join(f"{item.label}: {item.value}" for item in items)
+
+    assert "Output: /tmp/notewise-notes" in rendered
+    assert "Formats: md, pdf" in rendered
+    assert "Languages: en, hi" in rendered
+    assert "Target language: English" in rendered
+    assert "Temperature: 0.3" in rendered
+    assert "Max tokens: 8192" in rendered
+    assert "Video workers: 3" in rendered
+    assert "Chapter workers: 4" in rendered
+    assert "Cookies: configured: youtube-cookies.txt" in rendered
+    assert "API key: present" in rendered
+    assert "sk-secret-cookie-dir" not in rendered
 
 
 def test_build_ui_event_handler_escapes_worker_titles() -> None:

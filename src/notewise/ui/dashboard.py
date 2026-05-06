@@ -1,11 +1,15 @@
 """
 Dashboard UI component for pipeline visualization.
 
-Handles the rendering of progress bars, worker status, and completion logs
-using Rich's Live display capabilities.
+Handles the rendering of progress bars, worker status, configuration status,
+and completion logs using Rich's Live display capabilities.
 """
 
+from __future__ import annotations
+
 from collections import deque
+from dataclasses import dataclass
+from time import monotonic
 
 from rich.console import Group, RenderableType
 from rich.markup import escape
@@ -22,16 +26,58 @@ from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
 
+from notewise._constants import (
+    DASHBOARD_ACTIVITY_TITLE_LIMIT,
+    DASHBOARD_CONFIG_VALUE_LIMIT,
+    DASHBOARD_IDLE_MARKUP,
+    DASHBOARD_IDLE_STATUS,
+    DASHBOARD_PROGRESS_BAR_WIDTH,
+    DASHBOARD_RECENT_ACTIVITY_LIMIT,
+    DASHBOARD_SECTION_ACTIVE_TASKS,
+    DASHBOARD_SECTION_CHAPTER_TASKS,
+    DASHBOARD_SECTION_FLAGS_CONFIG,
+    DASHBOARD_SECTION_RECENT_ACTIVITY,
+    DASHBOARD_SECTION_RUN_STATUS,
+    DASHBOARD_SECTION_WORKERS,
+    DASHBOARD_UNKNOWN_VALUE,
+    DASHBOARD_WORKER_DETAIL_LIMIT,
+    DASHBOARD_WORKER_TITLE_LIMIT,
+)
+
+
+@dataclass(frozen=True)
+class DashboardConfigItem:
+    """One safe dashboard configuration value."""
+
+    label: str
+    value: str
+
+
+@dataclass
+class DashboardWorkerSnapshot:
+    """Structured state for one visible video worker."""
+
+    phase: str = DASHBOARD_IDLE_STATUS
+    title: str = DASHBOARD_UNKNOWN_VALUE
+    detail: str = ""
+    started_at: float | None = None
+
+    @property
+    def is_active(self) -> bool:
+        """Return whether this worker is processing a video."""
+        return self.started_at is not None and self.phase != DASHBOARD_IDLE_STATUS
+
 
 class PipelineDashboard:
     """
     Manages the TUI dashboard state and rendering.
 
     Provides a visual overview of:
-    - Overall playlist progress
-    - Individual worker threads status
-    - Recent completions
-    - Failures
+    - Run context and selected safe CLI/config values
+    - Overall playlist/batch progress
+    - Individual worker status
+    - Chapter worker status
+    - Recent completions, skips, and failures
     """
 
     @staticmethod
@@ -46,6 +92,10 @@ class PipelineDashboard:
         playlist_name: str,
         model_name: str,
         chapter_concurrency: int = 0,
+        *,
+        run_label: str | None = None,
+        output_path: str | None = None,
+        config_items: tuple[DashboardConfigItem, ...] = (),
     ):
         """
         Initialize the dashboard.
@@ -55,21 +105,33 @@ class PipelineDashboard:
             concurrency: Number of parallel workers.
             playlist_name: Name of the current batch/playlist.
             model_name: The LLM model in use.
+            chapter_concurrency: Number of parallel chapter workers.
+            run_label: Safe source label for the dashboard header.
+            output_path: Safe output location display value.
+            config_items: Safe runtime configuration values to render.
         """
         self.playlist_name = playlist_name
         self.model_name = model_name
+        self.run_label = run_label or playlist_name
+        self.output_path = output_path
+        self.config_items = tuple(config_items)
         self.chapter_concurrency = max(0, chapter_concurrency)
-        self.recent_completions: deque[str] = deque(maxlen=3)
-        self.recent_failures: deque[str] = deque(maxlen=3)
+        self.recent_completions: deque[str] = deque(
+            maxlen=DASHBOARD_RECENT_ACTIVITY_LIMIT
+        )
+        self.recent_failures: deque[str] = deque(maxlen=DASHBOARD_RECENT_ACTIVITY_LIMIT)
         self.skipped_count = 0
         self.completed_count = 0
         self.failed_count = 0
+        self.worker_snapshots: list[DashboardWorkerSnapshot] = [
+            DashboardWorkerSnapshot() for _ in range(concurrency)
+        ]
 
         # 1. Overall Progress Bar
         self.overall_progress = Progress(
             TextColumn("[bold blue]Total Progress"),
             BarColumn(
-                bar_width=40,
+                bar_width=DASHBOARD_PROGRESS_BAR_WIDTH,
                 style="black",
                 complete_style="green",
                 finished_style="green",
@@ -95,7 +157,9 @@ class PipelineDashboard:
         for i in range(concurrency):
             prefix = "└──" if i == concurrency - 1 else "├──"
             tid = self.worker_progress.add_task(
-                "[dim]Idle[/dim]", label=f"{prefix} Worker {i + 1}", worker_id=i + 1
+                DASHBOARD_IDLE_MARKUP,
+                label=f"{prefix} Worker {i + 1}",
+                worker_id=i + 1,
             )
             self.worker_tasks.append(tid)
 
@@ -112,7 +176,7 @@ class PipelineDashboard:
         for chapter_index in range(self.chapter_concurrency):
             prefix = "└──" if chapter_index == self.chapter_concurrency - 1 else "├──"
             task_id = self.chapter_progress.add_task(
-                "[dim]Idle[/dim]",
+                DASHBOARD_IDLE_MARKUP,
                 label=f"{prefix} Worker {chapter_index + 1}",
                 chapter_slot=chapter_index + 1,
             )
@@ -143,6 +207,21 @@ class PipelineDashboard:
         except ValueError:
             return None
 
+    def _safe_cell(self, value: str, *, limit: int | None = None) -> str:
+        """Return a markup-safe, optionally truncated table value."""
+        display_value = value
+        if limit is not None:
+            display_value = self._truncate_title(display_value, limit=limit)
+        return escape(display_value)
+
+    def _elapsed_for_worker(self, snapshot: DashboardWorkerSnapshot) -> str:
+        """Return a compact elapsed time string for a worker snapshot."""
+        if snapshot.started_at is None:
+            return DASHBOARD_UNKNOWN_VALUE
+        elapsed_seconds = max(0, int(monotonic() - snapshot.started_at))
+        minutes, seconds = divmod(elapsed_seconds, 60)
+        return f"{minutes:02d}:{seconds:02d}"
+
     def update_worker(self, index: int, status: str) -> None:
         """
         Update a specific worker's status text.
@@ -154,6 +233,39 @@ class PipelineDashboard:
         if 0 <= index < len(self.worker_tasks):
             task_id = self.worker_tasks[index]
             self._set_task_description(self.worker_progress, task_id, status)
+            if status == DASHBOARD_IDLE_MARKUP:
+                self.clear_worker_state(index)
+            elif 0 <= index < len(self.worker_snapshots):
+                snapshot = self.worker_snapshots[index]
+                if snapshot.started_at is None:
+                    snapshot.started_at = monotonic()
+                snapshot.detail = status
+
+    def update_worker_state(
+        self,
+        index: int,
+        *,
+        phase: str,
+        title: str,
+        detail: str = "",
+    ) -> None:
+        """Update the structured state shown in the worker table."""
+        if not 0 <= index < len(self.worker_snapshots):
+            return
+        if phase == DASHBOARD_IDLE_STATUS:
+            self.clear_worker_state(index)
+            return
+        snapshot = self.worker_snapshots[index]
+        snapshot.phase = phase or DASHBOARD_IDLE_STATUS
+        snapshot.title = title or DASHBOARD_UNKNOWN_VALUE
+        snapshot.detail = detail
+        if snapshot.started_at is None:
+            snapshot.started_at = monotonic()
+
+    def clear_worker_state(self, index: int) -> None:
+        """Reset one structured worker snapshot to idle."""
+        if 0 <= index < len(self.worker_snapshots):
+            self.worker_snapshots[index] = DashboardWorkerSnapshot()
 
     def start_chapter_worker(
         self,
@@ -201,7 +313,7 @@ class PipelineDashboard:
         self._chapter_slot_video_ids[slot_index] = None
         self.chapter_progress.update(
             self.chapter_tasks[slot_index],
-            description="[dim]Idle[/dim]",
+            description=DASHBOARD_IDLE_MARKUP,
         )
 
     def clear_chapter_workers(self, video_id: str | None = None) -> None:
@@ -212,7 +324,7 @@ class PipelineDashboard:
                 continue
             self._chapter_slot_keys[slot_index] = None
             self._chapter_slot_video_ids[slot_index] = None
-            self.chapter_progress.update(task_id, description="[dim]Idle[/dim]")
+            self.chapter_progress.update(task_id, description=DASHBOARD_IDLE_MARKUP)
 
     def add_completion(self, title: str) -> None:
         """
@@ -222,10 +334,18 @@ class PipelineDashboard:
             title: Title of the completed video.
         """
         self.recent_completions.appendleft(title)
-        if title.endswith(" (skipped)"):
-            self.skipped_count += 1
-        else:
-            self.completed_count += 1
+        self.completed_count += 1
+        self.overall_progress.advance(self.overall_task)
+
+    def add_skipped(self, title: str) -> None:
+        """
+        Register a skipped video and advance progress.
+
+        Args:
+            title: Title of the skipped video.
+        """
+        self.recent_completions.appendleft(f"{title} (skipped)")
+        self.skipped_count += 1
         self.overall_progress.advance(self.overall_task)
 
     def add_failure(self, title: str) -> None:
@@ -259,24 +379,94 @@ class PipelineDashboard:
         """
         self.overall_progress.update(self.overall_task, description=description)
 
-    def __rich__(self) -> RenderableType:
-        """
-        Render the dashboard interface.
-
-        Returns:
-            A Rich Renderable (Panel containing Group).
-        """
-        # Header Section
+    def _render_header(self) -> Table:
+        """Render the dashboard header and run context."""
         header = Table.grid(expand=True)
         header.add_column(ratio=1)
         header.add_column(justify="right")
         header.add_row(
-            f"[bold white]📑 Playlist:[/bold white] "
-            f"[bold yellow]{self.playlist_name}[/]",
-            f"[dim]🤖 {self.model_name}[/dim]",
+            f"[bold white]📑 Source:[/bold white] "
+            f"[bold yellow]{self._safe_cell(self.run_label)}[/]",
+            f"[dim]🤖 {self._safe_cell(self.model_name)}[/dim]",
         )
+        if self.output_path:
+            header.add_row(
+                f"[bold white]📁 Output:[/bold white] "
+                f"[cyan]{self._safe_cell(self.output_path)}[/cyan]",
+                "[dim]Rich live dashboard[/dim]",
+            )
+        return header
 
-        # Recent Completions Section
+    def _render_progress_summary(self) -> Table:
+        """Render high-level run counters."""
+        total = int(self.overall_progress.tasks[self.overall_task].total or 0)
+        processed = self.completed_count + self.skipped_count + self.failed_count
+        running = sum(1 for snapshot in self.worker_snapshots if snapshot.is_active)
+        queued = max(0, total - processed - running)
+
+        table = Table.grid(expand=True, padding=(0, 1))
+        table.add_column(style="green")
+        table.add_column(style="yellow")
+        table.add_column(style="red")
+        table.add_column(style="cyan")
+        table.add_column(style="blue")
+        table.add_row(
+            f"Completed: {self.completed_count}",
+            f"Skipped: {self.skipped_count}",
+            f"Failed: {self.failed_count}",
+            f"Running: {running}",
+            f"Queued: {queued}",
+        )
+        return table
+
+    def _render_config_items(self) -> Table | None:
+        """Render safe dashboard configuration items."""
+        if not self.config_items:
+            return None
+        table = Table.grid(expand=True, padding=(0, 1))
+        table.add_column(style="bold white", ratio=1)
+        table.add_column(style="cyan", ratio=2)
+        table.add_column(style="bold white", ratio=1)
+        table.add_column(style="cyan", ratio=2)
+
+        row: list[str] = []
+        for item in self.config_items:
+            row.extend(
+                [
+                    self._safe_cell(item.label),
+                    self._safe_cell(item.value, limit=DASHBOARD_CONFIG_VALUE_LIMIT),
+                ]
+            )
+            if len(row) == 4:
+                table.add_row(*row)
+                row = []
+        if row:
+            while len(row) < 4:
+                row.append("")
+            table.add_row(*row)
+        return table
+
+    def _render_worker_table(self) -> Table:
+        """Render structured worker state."""
+        table = Table.grid(expand=True, padding=(0, 1))
+        table.add_column(style="bold cyan", ratio=1)
+        table.add_column(style="white", ratio=2)
+        table.add_column(style="white", ratio=4)
+        table.add_column(style="magenta", ratio=3)
+        table.add_column(style="dim", ratio=1)
+        table.add_row("ID", "Phase", "Video", "Detail", "Elapsed")
+        for index, snapshot in enumerate(self.worker_snapshots, start=1):
+            table.add_row(
+                f"W{index}",
+                self._safe_cell(snapshot.phase),
+                self._safe_cell(snapshot.title, limit=DASHBOARD_WORKER_TITLE_LIMIT),
+                self._safe_cell(snapshot.detail, limit=DASHBOARD_WORKER_DETAIL_LIMIT),
+                self._elapsed_for_worker(snapshot),
+            )
+        return table
+
+    def _render_recent_activity(self) -> Table:
+        """Render recent completions and failures."""
         completed_table = Table.grid(expand=True, padding=(0, 1))
 
         has_activity = False
@@ -284,38 +474,64 @@ class PipelineDashboard:
         if self.recent_failures:
             has_activity = True
             for title in self.recent_failures:
-                display_title = self._truncate_title(title, limit=60)
+                display_title = self._truncate_title(
+                    title,
+                    limit=DASHBOARD_ACTIVITY_TITLE_LIMIT,
+                )
                 safe_title = escape(display_title)
                 completed_table.add_row(f"[red]✗[/red] [dim]{safe_title}[/]")
 
         if self.recent_completions:
             has_activity = True
             for title in self.recent_completions:
-                display_title = self._truncate_title(title, limit=60)
+                display_title = self._truncate_title(
+                    title,
+                    limit=DASHBOARD_ACTIVITY_TITLE_LIMIT,
+                )
                 safe_title = escape(display_title)
-                completed_table.add_row(f"[green]✓[/green] [dim]{safe_title}[/]")
+                icon = "↷" if title.endswith(" (skipped)") else "✓"
+                color = "yellow" if title.endswith(" (skipped)") else "green"
+                completed_table.add_row(
+                    f"[{color}]{icon}[/{color}] [dim]{safe_title}[/]"
+                )
 
         if not has_activity:
             completed_table.add_row("[dim italic]No videos completed yet...[/]")
+        return completed_table
 
-        # Compose Layout Group
-        # Only show worker progress if there are multiple tasks (not single
-        # video). OR if we want to show it anyway. The user requested hiding
-        # idle workers. But for simplicity, let's keep it consistent: always
-        # show tasks section, but maybe cleaner.
+    def __rich__(self) -> RenderableType:
+        """
+        Render the dashboard interface.
 
-        elements = [
-            header,
+        Returns:
+            A Rich Renderable (Panel containing Group).
+        """
+        elements: list[RenderableType] = [
+            self._render_header(),
             Rule(style="dim"),
+            Text(f"📊 {DASHBOARD_SECTION_RUN_STATUS}", style="bold white"),
             self.overall_progress,
+            self._render_progress_summary(),
             Rule(style="dim"),
         ]
 
-        # Only add active tasks section if there are workers
+        config_table = self._render_config_items()
+        if config_table is not None:
+            elements.extend(
+                [
+                    Text(f"⚙️ {DASHBOARD_SECTION_FLAGS_CONFIG}", style="bold white"),
+                    config_table,
+                    Rule(style="dim"),
+                ]
+            )
+
         if self.worker_tasks:
             elements.extend(
                 [
-                    Text("⚡ Active Tasks", style="bold white"),
+                    Text(f"👷 {DASHBOARD_SECTION_WORKERS}", style="bold white"),
+                    self._render_worker_table(),
+                    Rule(style="dim"),
+                    Text(f"⚡ {DASHBOARD_SECTION_ACTIVE_TASKS}", style="bold white"),
                     self.worker_progress,
                     Rule(style="dim"),
                 ]
@@ -327,14 +543,17 @@ class PipelineDashboard:
         if self.chapter_tasks and has_active_chapter_workers:
             elements.extend(
                 [
-                    Text("🧩 Chapter Tasks", style="bold white"),
+                    Text(f"🧩 {DASHBOARD_SECTION_CHAPTER_TASKS}", style="bold white"),
                     self.chapter_progress,
                     Rule(style="dim"),
                 ]
             )
 
         elements.extend(
-            [Text("✅ Recent Activity", style="bold white"), completed_table]
+            [
+                Text(f"✅ {DASHBOARD_SECTION_RECENT_ACTIVITY}", style="bold white"),
+                self._render_recent_activity(),
+            ]
         )
 
         body = Group(*elements)

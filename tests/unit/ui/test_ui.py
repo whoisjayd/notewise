@@ -3,7 +3,7 @@
 from rich.console import Console
 from rich.panel import Panel
 
-from notewise.ui.dashboard import PipelineDashboard
+from notewise.ui.dashboard import DashboardConfigItem, PipelineDashboard
 
 
 def test_dashboard_initialization():
@@ -121,11 +121,12 @@ def test_dashboard_completion():
 
 
 def test_dashboard_skipped_completion_tracks_skipped_count() -> None:
-    """Skipped completions should increment the skipped counter, not completed."""
+    """Skipped videos should increment the skipped counter, not completed."""
     dash = PipelineDashboard(10, 1, "List", "Model")
 
-    dash.add_completion("Video 1 (skipped)")
+    dash.add_skipped("Video 1")
 
+    assert "Video 1 (skipped)" in dash.recent_completions
     assert dash.skipped_count == 1
     assert dash.completed_count == 0
 
@@ -158,6 +159,82 @@ def test_dashboard_update_overall_status() -> None:
     assert dash.overall_progress.tasks[dash.overall_task].description == (
         "Resolving playlist"
     )
+
+
+def test_dashboard_rendering_shows_safe_config_items() -> None:
+    """Dashboard should show config items that callers have already made safe."""
+    dash = PipelineDashboard(
+        10,
+        1,
+        "List",
+        "Model",
+        config_items=(
+            DashboardConfigItem("Output", "./notes"),
+            DashboardConfigItem("Formats", "markdown, pdf"),
+            DashboardConfigItem("Cookies", "configured: cookies.txt"),
+            DashboardConfigItem("API key", "present"),
+        ),
+    )
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Flags & Config" in output
+    assert "Output" in output
+    assert "./notes" in output
+    assert "Formats" in output
+    assert "markdown, pdf" in output
+    assert "Cookies" in output
+    assert "configured: cookies.txt" in output
+    assert "API key" in output
+    assert "present" in output
+
+
+def test_dashboard_rendering_shows_progress_summary_counts() -> None:
+    """Dashboard should summarize completed, skipped, failed, and queued work."""
+    dash = PipelineDashboard(5, 2, "List", "Model")
+    dash.update_worker_state(
+        0, phase="Generation", title="Video A", detail="chunks 2/5"
+    )
+    dash.add_completion("Video Done")
+    dash.add_skipped("Video Cached")
+    dash.add_failure("Video Failed")
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Run Status" in output
+    assert "Completed: 1" in output
+    assert "Skipped: 1" in output
+    assert "Failed: 1" in output
+    assert "Running: 1" in output
+    assert "Queued: 1" in output
+
+
+def test_dashboard_rendering_shows_structured_worker_state() -> None:
+    """Detailed worker state should render phase, title, and progress detail."""
+    dash = PipelineDashboard(10, 2, "List", "Model")
+
+    dash.update_worker_state(
+        0,
+        phase="Generation",
+        title="Video A",
+        detail="chunks 2/5",
+    )
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Workers" in output
+    assert "Generation" in output
+    assert "Video A" in output
+    assert "chunks 2/5" in output
 
 
 def test_dashboard_rendering():

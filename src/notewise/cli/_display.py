@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import os
 from collections.abc import Callable
+from pathlib import Path
 from typing import Any
 
 import structlog
 from rich.markup import escape
 
+from notewise._constants import DASHBOARD_IDLE_MARKUP
 from notewise.cli._context import CliProcessContext
 from notewise.cli._formatters import print_cost_summary, print_run_summary
 from notewise.cli._types import (
@@ -19,6 +21,7 @@ from notewise.cli._types import (
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.logging import get_session_log_path
+from notewise.ui.dashboard import DashboardConfigItem
 
 
 _DashboardStatusFn = Callable[[str, PipelineEvent], str]
@@ -103,6 +106,164 @@ def _truncate_title(title: str, *, limit: int = _TITLE_LIMIT) -> str:
     return title[:limit] if len(title) > limit else title
 
 
+def _format_bool(value: bool) -> str:
+    """Return an on/off display value for dashboard flags."""
+    return "on" if value else "off"
+
+
+def _format_api_key_status(api_key_checked: bool | None) -> str:
+    """Return a safe API-key status without exposing provider config."""
+    if api_key_checked is True:
+        return "present"
+    if api_key_checked is False:
+        return "missing"
+    return "not checked"
+
+
+def _format_cookie_status(cookie_file: str | None) -> str:
+    """Return a safe cookie-file status without showing the full local path."""
+    if not cookie_file:
+        return "not configured"
+    basename = Path(cookie_file).name
+    return f"configured: {basename}" if basename else "configured"
+
+
+def build_dashboard_config_items(
+    context: Any,
+    *,
+    output_dir: Path,
+    video_workers: int,
+    chapter_workers: int,
+) -> tuple[DashboardConfigItem, ...]:
+    """Build safe runtime config rows for the Rich dashboard."""
+    max_tokens = getattr(context, "selected_max_tokens", None)
+    max_tokens_label = "provider default" if max_tokens is None else str(max_tokens)
+    export_transcript = getattr(context, "export_transcript", None) or "off"
+    return (
+        DashboardConfigItem("Output", str(output_dir)),
+        DashboardConfigItem(
+            "Formats",
+            ", ".join(str(item) for item in context.selected_output_formats),
+        ),
+        DashboardConfigItem(
+            "Languages",
+            ", ".join(str(item) for item in context.selected_languages),
+        ),
+        DashboardConfigItem("Target language", str(context.selected_target_language)),
+        DashboardConfigItem("Temperature", str(context.selected_temperature)),
+        DashboardConfigItem("Max tokens", max_tokens_label),
+        DashboardConfigItem("Video workers", str(video_workers)),
+        DashboardConfigItem("Chapter workers", str(chapter_workers)),
+        DashboardConfigItem("Throttle", f"{context.selected_throttle_seconds:g}s"),
+        DashboardConfigItem("Force", _format_bool(bool(context.force))),
+        DashboardConfigItem("Quiz", _format_bool(bool(context.quiz))),
+        DashboardConfigItem("Timestamps", _format_bool(bool(context.timestamps))),
+        DashboardConfigItem("Export transcript", str(export_transcript)),
+        DashboardConfigItem(
+            "Chapter directories",
+            _format_bool(bool(context.chapter_directory_output)),
+        ),
+        DashboardConfigItem(
+            "Combine chunks",
+            _format_bool(bool(context.use_combine_chunk)),
+        ),
+        DashboardConfigItem(
+            "Cookies",
+            _format_cookie_status(getattr(context, "selected_cookie_file", None)),
+        ),
+        DashboardConfigItem(
+            "API key",
+            _format_api_key_status(getattr(context, "api_key_checked", None)),
+        ),
+    )
+
+
+def _event_worker_phase_detail(event: PipelineEvent) -> tuple[str, str]:
+    """Return the structured worker phase/detail for a pipeline event."""
+    if event.event_type in (EventType.METADATA_START, EventType.METADATA_FETCHED):
+        return (
+            "Metadata",
+            "fetching" if event.event_type == EventType.METADATA_START else "ready",
+        )
+    if event.event_type in (
+        EventType.TRANSCRIPT_FETCHING,
+        EventType.TRANSCRIPT_FETCHED,
+    ):
+        return "Transcript", (
+            "fetching" if event.event_type == EventType.TRANSCRIPT_FETCHING else "ready"
+        )
+    if event.event_type == EventType.GENERATION_START:
+        return "Generation", "starting"
+    if event.event_type == EventType.CHUNK_GENERATING:
+        return "Generation", f"chunks {event.chunk_number}/{event.total_chunks}"
+    if event.event_type == EventType.GENERATION_COMBINING:
+        return _phase_label(event, "Finalizing"), f"{event.total_chunks} note parts"
+    if event.event_type == EventType.CHAPTER_GENERATING:
+        return "Chapters", f"chapter {event.chapter_number}/{event.total_chapters}"
+    if event.event_type == EventType.CHAPTER_CHUNK_GENERATING:
+        return "Chapters", (
+            f"chapter {event.chapter_number}/{event.total_chapters}, "
+            f"part {event.chunk_number}/{event.total_chunks}"
+        )
+    if event.event_type == EventType.CHAPTER_COMBINING:
+        return "Chapters", (
+            f"chapter {event.chapter_number}/{event.total_chapters}, "
+            f"{_phase_label(event, 'Finalizing').lower()} {event.total_chunks} parts"
+        )
+    if event.event_type == EventType.QUIZ_GENERATING:
+        return "Quiz", "generating"
+    if event.event_type == EventType.QUIZ_CHUNK_GENERATING:
+        return "Quiz", f"parts {event.chunk_number}/{event.total_chunks}"
+    if event.event_type == EventType.QUIZ_COMBINING:
+        return "Quiz", f"combining {event.total_chunks} parts"
+    if event.event_type == EventType.QUIZ_COMPLETE:
+        return "Quiz", "ready"
+    if event.event_type == EventType.GENERATION_COMPLETE:
+        return "Export", "generated"
+    return event.event_type.value, ""
+
+
+def _update_structured_worker_state(
+    dashboard: Any,
+    slot: int,
+    event: PipelineEvent,
+    *,
+    title: str | None = None,
+) -> None:
+    """Update detailed dashboard worker state when the dashboard supports it."""
+    update_worker_state = getattr(dashboard, "update_worker_state", None)
+    if not callable(update_worker_state):
+        return
+    phase, detail = _event_worker_phase_detail(event)
+    update_worker_state(
+        slot,
+        phase=phase,
+        title=title or event.title or event.video_id,
+        detail=detail,
+    )
+
+
+def update_dashboard_worker_for_event(
+    dashboard: Any,
+    slot: int,
+    title: str,
+    event: PipelineEvent,
+) -> None:
+    """Reflect one video event into legacy and structured worker UI state."""
+    status_fn = UI_STATUS_MAP.get(event.event_type)
+    if status_fn is None:
+        return
+    dashboard.update_worker(slot, status_fn(title, event))
+    _update_structured_worker_state(dashboard, slot, event)
+
+
+def _clear_structured_worker_state(dashboard: Any, slot: int) -> None:
+    """Clear detailed dashboard worker state when the dashboard supports it."""
+    clear_worker_state = getattr(dashboard, "clear_worker_state", None)
+    if callable(clear_worker_state):
+        clear_worker_state(slot)
+
+
 def use_transient_live_display() -> bool:
     """Use transient live cleanup only where terminals handle it reliably."""
     return os.name != "nt"
@@ -182,7 +343,7 @@ def build_ui_event_handler(
                     dashboard.clear_chapter_workers(video_id)
                 status_fn = UI_STATUS_MAP.get(event.event_type)
                 if status_fn:
-                    dashboard.update_worker(assigned, status_fn(title, event))
+                    update_dashboard_worker_for_event(dashboard, assigned, title, event)
             elif video_id not in warned_slot_exhaustion:
                 warned_slot_exhaustion.add(video_id)
                 logger.warning(
@@ -192,8 +353,7 @@ def build_ui_event_handler(
                 )
 
         elif event.event_type in UI_STATUS_MAP and slot is not None:
-            status_fn = UI_STATUS_MAP[event.event_type]
-            dashboard.update_worker(slot, status_fn(title, event))
+            update_dashboard_worker_for_event(dashboard, slot, title, event)
             if event.event_type in (
                 EventType.CHAPTER_GENERATING,
                 EventType.CHAPTER_CHUNK_GENERATING,
@@ -214,12 +374,17 @@ def build_ui_event_handler(
             if released is not None:
                 if hasattr(dashboard, "clear_chapter_workers"):
                     dashboard.clear_chapter_workers(video_id)
-                dashboard.update_worker(released, "[dim]Idle[/dim]")
+                _clear_structured_worker_state(dashboard, released)
+                dashboard.update_worker(released, DASHBOARD_IDLE_MARKUP)
 
             if event.event_type == EventType.VIDEO_SUCCESS:
                 dashboard.add_completion(event.title or video_id)
             elif event.event_type == EventType.VIDEO_SKIPPED:
-                dashboard.add_completion(f"{event.title or video_id} (skipped)")
+                add_skipped = getattr(dashboard, "add_skipped", None)
+                if callable(add_skipped):
+                    add_skipped(event.title or video_id)
+                else:
+                    dashboard.add_completion(f"{event.title or video_id} (skipped)")
             else:
                 dashboard.add_failure(event.title or video_id)
 

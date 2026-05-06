@@ -7,15 +7,19 @@ from pathlib import Path
 from typing import cast
 
 import structlog
+from rich.markup import escape
 
+from notewise._constants import DASHBOARD_IDLE_MARKUP
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
     UI_STATUS_MAP,
+    build_dashboard_config_items,
     emit_headless_event,
     print_batch_summary,
     restore_console_after_live,
     should_clear_dashboard_after_run,
     update_dashboard_chapter_slot,
+    update_dashboard_worker_for_event,
     use_transient_live_display,
 )
 from notewise.cli._source_resolution import (
@@ -53,6 +57,14 @@ async def run_batch_file(
             playlist_name=f"Batch File: {input_path.name}",
             model_name=context.selected_model,
             chapter_concurrency=context.config.max_concurrent_chapters,
+            run_label=f"Batch File: {input_path.name}",
+            output_path=str(context.selected_output),
+            config_items=build_dashboard_config_items(
+                context,
+                output_dir=context.selected_output,
+                video_workers=batch_workers,
+                chapter_workers=context.config.max_concurrent_chapters,
+            ),
         )
 
     shared_state = PipelineSharedState(semaphore=asyncio.Semaphore(batch_workers))
@@ -66,7 +78,7 @@ async def run_batch_file(
             job = await job_queue.get()
             if job is None:
                 if dashboard is not None:
-                    dashboard.update_worker(worker_index, "[dim]Idle[/dim]")
+                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
                 job_queue.task_done()
                 return
 
@@ -111,10 +123,11 @@ async def run_batch_file(
                         )
                     if event.event_type not in UI_STATUS_MAP:
                         return
-                    status_fn = UI_STATUS_MAP[event.event_type]
-                    dashboard.update_worker(
+                    update_dashboard_worker_for_event(
+                        dashboard,
                         worker_index,
-                        status_fn((latest_title or _fallback_video_id)[:40], event),
+                        escape((latest_title or _fallback_video_id)[:40]),
+                        event,
                     )
 
                 result = cast(
@@ -132,9 +145,11 @@ async def run_batch_file(
                 if dashboard is not None:
                     if hasattr(dashboard, "clear_chapter_workers"):
                         dashboard.clear_chapter_workers(fallback_video_id)
-                    dashboard.update_worker(worker_index, "[dim]Idle[/dim]")
+                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
                     if result.failure_count:
                         dashboard.add_failure(display_title)
+                    elif was_skipped and hasattr(dashboard, "add_skipped"):
+                        dashboard.add_skipped(display_title)
                     else:
                         dashboard.add_completion(completion_title)
 
@@ -166,7 +181,7 @@ async def run_batch_file(
                 if dashboard is not None:
                     if hasattr(dashboard, "clear_chapter_workers"):
                         dashboard.clear_chapter_workers(fallback_video_id)
-                    dashboard.update_worker(worker_index, "[dim]Idle[/dim]")
+                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
                     dashboard.add_failure(display_title)
                 batch_results.append(
                     _BatchJobResult(
