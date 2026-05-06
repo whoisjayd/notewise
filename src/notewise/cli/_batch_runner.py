@@ -118,7 +118,7 @@ async def run_batch_file(
                     ):
                         update_dashboard_chapter_slot(
                             dashboard,
-                            (latest_title or _fallback_video_id)[:40],
+                            escape((latest_title or _fallback_video_id)[:40]),
                             event,
                         )
                     if event.event_type not in UI_STATUS_MAP:

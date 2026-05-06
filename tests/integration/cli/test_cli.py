@@ -1411,20 +1411,22 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
     batch_file = tmp_path / "urls.txt"
     batch_file.write_text(_VIDEO_URL, encoding="utf-8")
 
+    malicious_title = "[red]Video One[/red]"
+
     async def _run_with_chapter_events(video_ids, on_event=None):  # noqa: ANN001
         if on_event:
             on_event(
                 PipelineEvent(
                     event_type=EventType.METADATA_START,
                     video_id=video_ids[0],
-                    title="Video One",
+                    title=malicious_title,
                 )
             )
             on_event(
                 PipelineEvent(
                     event_type=EventType.CHAPTER_GENERATING,
                     video_id=video_ids[0],
-                    title="Video One",
+                    title=malicious_title,
                     chapter_number=2,
                     total_chapters=5,
                 )
@@ -1433,7 +1435,7 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
                 PipelineEvent(
                     event_type=EventType.CHAPTER_CHUNK_GENERATING,
                     video_id=video_ids[0],
-                    title="Video One",
+                    title=malicious_title,
                     chapter_number=2,
                     total_chapters=5,
                     chunk_number=1,
@@ -1444,7 +1446,7 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
                 PipelineEvent(
                     event_type=EventType.VIDEO_SUCCESS,
                     video_id=video_ids[0],
-                    title="Video One",
+                    title=malicious_title,
                 )
             )
         return PipelineResult(
@@ -1495,6 +1497,8 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
     rendered_chapter_statuses = "\n".join(chapter_statuses)
     assert "Ch 2/5" in rendered_chapter_statuses
     assert "Part 1/2" in rendered_chapter_statuses
+    assert "\\[red]Video One\\[/red]" in rendered_chapter_statuses
+    assert "[red]Video One[/red]" not in rendered_chapter_statuses
 
 
 def test_process_no_ui_failure_exits_nonzero(
