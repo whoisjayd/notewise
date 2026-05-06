@@ -6,6 +6,7 @@ from typing import cast
 
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
+    build_dashboard_config_items,
     build_ui_event_handler,
     emit_headless_event,
     print_single_run_summary,
@@ -90,6 +91,14 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
         playlist_name=prepared.playlist_name,
         model_name=context.selected_model,
         chapter_concurrency=chapter_concurrency,
+        run_label=prepared.playlist_name,
+        output_path=str(prepared.output_dir),
+        config_items=build_dashboard_config_items(
+            context,
+            output_dir=prepared.output_dir,
+            video_workers=concurrency,
+            chapter_workers=chapter_concurrency,
+        ),
     )
     slot_manager = _WorkerSlotManager(concurrency)
     on_event = build_ui_event_handler(dashboard, slot_manager)
