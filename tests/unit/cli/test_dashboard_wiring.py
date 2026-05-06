@@ -99,7 +99,7 @@ async def test_run_single_url_passes_safe_dashboard_context(mocker) -> None:
     assert captured
     kwargs = captured[0]
     assert kwargs["run_label"] == "Playlist A"
-    assert kwargs["output_path"] == "/tmp/notewise-notes"
+    assert kwargs["output_path"] == str(Path("/tmp/notewise-notes"))
     rendered_config = "\n".join(
         f"{item.label}: {item.value}" for item in kwargs["config_items"]
     )
@@ -119,7 +119,7 @@ async def test_run_batch_file_passes_safe_dashboard_context() -> None:
     assert captured
     kwargs = captured[0]
     assert kwargs["run_label"] == "Batch File: videos.txt"
-    assert kwargs["output_path"] == "/tmp/notewise-output"
+    assert kwargs["output_path"] == str(Path("/tmp/notewise-output"))
     rendered_config = "\n".join(
         f"{item.label}: {item.value}" for item in kwargs["config_items"]
     )

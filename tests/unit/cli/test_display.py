@@ -163,7 +163,7 @@ def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
     )
     rendered = "\n".join(f"{item.label}: {item.value}" for item in items)
 
-    assert "Output: /tmp/notewise-notes" in rendered
+    assert f"Output: {Path('/tmp/notewise-notes')}" in rendered
     assert "Formats: md, pdf" in rendered
     assert "Languages: en, hi" in rendered
     assert "Target language: English" in rendered
