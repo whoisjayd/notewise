@@ -27,17 +27,9 @@ def test_helper_formatting_functions() -> None:
     now = datetime.now(timezone.utc)
     naive_now = datetime(2026, 3, 22, 12, 0, 0)
 
-    assert admin._mask_secret(None) == "(not set)"
-    assert admin._mask_secret("short") == "***"
-    assert admin._mask_secret("abcdefghijklmnop") == "abcdef...mnop"
     assert admin._human_size(0) == "0 B"
     assert admin._human_size(2048) == "2.0 KB"
     assert admin._format_duration(3661) == "1h 1m 1s"
-    assert admin._coerce_int(None, default=4) == 4
-    assert admin._coerce_int(True) == 1
-    assert admin._coerce_int(2.8) == 2
-    assert admin._coerce_int("7") == 7
-    assert admin._coerce_int("bad", default=3) == 3
     assert admin._format_datetime(None) == "Never"
     assert admin._format_datetime(now)
     assert admin._format_datetime(naive_now)

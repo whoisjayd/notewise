@@ -13,8 +13,12 @@ from notewise._constants import (
     CONFIG_FILENAME,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
+    DEFAULT_TEMPERATURE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
+    MAX_TEMPERATURE,
+    MIN_TEMPERATURE,
+    MIN_THROTTLE_SECONDS,
     OAUTH_LOGIN_ALLOWED_PROVIDERS,
     OAUTH_LOGIN_CODEX_ALIAS,
     OAUTH_LOGIN_DIRECT_PROVIDERS,
@@ -340,10 +344,11 @@ def process(
             "-t",
             help=(
                 "LLM response temperature (overrides config). "
-                "Range: 0.0 to 1.0 (default = 0.7)"
+                f"Range: {MIN_TEMPERATURE:.1f} to {MAX_TEMPERATURE:.1f} "
+                f"(default = {DEFAULT_TEMPERATURE:.1f})"
             ),
-            min=0.0,
-            max=1.0,
+            min=MIN_TEMPERATURE,
+            max=MAX_TEMPERATURE,
         ),
     ] = None,
     max_tokens: Annotated[
@@ -366,7 +371,7 @@ def process(
                 "Delay repeated LLM generation calls by this many seconds. "
                 "Useful for pacing chunked or chapter-based runs on low-quota plans."
             ),
-            min=0.0,
+            min=MIN_THROTTLE_SECONDS,
         ),
     ] = DEFAULT_THROTTLE_SECONDS,
     force: Annotated[

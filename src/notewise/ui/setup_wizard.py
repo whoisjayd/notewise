@@ -23,6 +23,8 @@ from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
 )
 from notewise.config import get_state_dir
+from notewise.errors import ConfigurationError
+from notewise.utils import mask_secret, parse_config_env_lines
 
 
 if TYPE_CHECKING:
@@ -97,20 +99,6 @@ def _load_bundled_model_snapshot() -> dict[str, list[str]]:
     return _normalize_available_models(provider_models)
 
 
-def _strip_wrapped_quotes(value: str) -> str:
-    """Remove one layer of matching quotes from config values."""
-    if (
-        len(value) >= 3
-        and value[0] in {"r", "R"}
-        and value[1] == value[-1]
-        and value[1] in {'"', "'"}
-    ):
-        return value[2:-1]
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        return value[1:-1]
-    return value
-
-
 def get_config_path() -> Path:
     """Get path to user config file."""
     config_dir = get_state_dir()
@@ -126,30 +114,15 @@ def load_config(*, suppress_errors: bool = False) -> dict[str, str]:
     if config_path.exists():
         try:
             with config_path.open(encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        loaded_config[key.strip()] = _strip_wrapped_quotes(
-                            value.strip()
-                        )
-        except Exception as error:
+                loaded_config.update(parse_config_env_lines(f))
+        except (OSError, UnicodeError) as error:
             if suppress_errors:
                 return {}
-            raise RuntimeError(
+            raise ConfigurationError(
                 f"Failed to read configuration from {config_path}: {error}"
             ) from error
 
     return loaded_config
-
-
-def _mask_secret(value: str | None) -> str:
-    """Return a partially masked secret for read-only config display."""
-    if not value:
-        return "(not set)"
-    if len(value) <= 8:
-        return "***"
-    return f"{value[:6]}...{value[-4:]} (set)"
 
 
 def save_config(
@@ -205,7 +178,7 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
     config_path = get_config_path()
     try:
         current_config = load_config()
-    except RuntimeError as error:
+    except ConfigurationError as error:
         active_console.print(f"[red]{error}[/red]")
         return {}
 
@@ -222,7 +195,7 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
     for key in sorted(current_config):
         value = current_config[key]
         if "KEY" in key or "TOKEN" in key or "SECRET" in key:
-            value = _mask_secret(value)
+            value = mask_secret(value, suffix=" (set)")
         table.add_row(key, value)
 
     active_console.print(f"[dim]Config:[/dim] {config_path}")

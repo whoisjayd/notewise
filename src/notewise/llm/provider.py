@@ -28,6 +28,7 @@ from notewise._constants import (
 from notewise.config import settings as config
 from notewise.errors import LLMGenerationError as _LLMGenerationError
 from notewise.logging import make_log_safe_text, redact_sensitive_text
+from notewise.utils import coerce_non_negative_int
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -55,11 +56,6 @@ def suppress_litellm_noise() -> None:
         category=UserWarning,
         module=r"pydantic\..*",
     )
-
-
-def _configure_litellm_runtime() -> None:
-    """Backward-compatible wrapper for LiteLLM runtime noise suppression."""
-    suppress_litellm_noise()
 
 
 def _summarize_error(error: Exception) -> str:
@@ -379,15 +375,9 @@ class LLMProvider:
             )
             total_raw = getattr(usage, "total_tokens", None)
 
-        def _to_non_negative_int(value: Any) -> int:
-            try:
-                return max(0, int(value or 0))
-            except (TypeError, ValueError):
-                return 0
-
-        prompt_tokens = _to_non_negative_int(prompt_raw)
-        completion_tokens = _to_non_negative_int(completion_raw)
-        total_tokens = _to_non_negative_int(
+        prompt_tokens = coerce_non_negative_int(prompt_raw)
+        completion_tokens = coerce_non_negative_int(completion_raw)
+        total_tokens = coerce_non_negative_int(
             total_raw or (prompt_tokens + completion_tokens)
         )
         return (prompt_tokens, completion_tokens, total_tokens)

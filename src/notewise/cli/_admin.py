@@ -12,22 +12,15 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from notewise._constants import CONFIG_FILENAME
+from notewise._constants import CONFIG_FILENAME, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.config import get_cache_db_path, get_state_dir
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
+from notewise.utils import coerce_int as _coerce_int
 
 
 if TYPE_CHECKING:
     from rich.console import Console
-
-
-def _mask_secret(value: str | None) -> str:
-    if not value:
-        return "(not set)"
-    if len(value) <= 8:
-        return "***"
-    return f"{value[:6]}...{value[-4:]}"
 
 
 def _human_size(num_bytes: int) -> str:
@@ -42,8 +35,8 @@ def _human_size(num_bytes: int) -> str:
 
 def _format_duration(seconds: float) -> str:
     total = max(0, int(seconds))
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
+    hours, remainder = divmod(total, SECONDS_PER_HOUR)
+    minutes, secs = divmod(remainder, SECONDS_PER_MINUTE)
     parts: list[str] = []
     if hours:
         parts.append(f"{hours}h")
@@ -51,26 +44,6 @@ def _format_duration(seconds: float) -> str:
         parts.append(f"{minutes}m")
     parts.append(f"{secs}s")
     return " ".join(parts)
-
-
-def _coerce_int(value: object | None, *, default: int = 0) -> int:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, (str, bytes, bytearray)):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return default
 
 
 def _format_datetime(value: datetime | None) -> str:
