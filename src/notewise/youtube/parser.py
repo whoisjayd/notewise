@@ -77,19 +77,12 @@ def extract_playlist_id(url: str) -> str | None:
     Returns:
         The playlist ID if found, else None.
     """
-    try:
-        parsed = _parse_supported_youtube_url(url)
-        if parsed is None:
-            return None
-        query_params = parse_qs(parsed.query)
+    parsed = _parse_supported_youtube_url(url)
+    if parsed is None:
+        return None
 
-        if "list" in query_params:
-            return _first_query_value(query_params, "list")
-    except Exception:
-        # Fail gracefully on malformed URLs
-        pass
-
-    return None
+    query_params = parse_qs(parsed.query)
+    return _first_query_value(query_params, "list")
 
 
 def parse_youtube_url(url: str) -> ParsedURL:

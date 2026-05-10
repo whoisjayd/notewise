@@ -237,6 +237,7 @@ class TestFetchTranscript:
 
         assert raw[0]["text"] == "ok"
         assert meta.language == "en"
+        assert meta.language_code == "en"
         assert meta.is_generated is True
         assert "Using native transcript" in message
 

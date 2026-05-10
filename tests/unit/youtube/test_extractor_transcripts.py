@@ -153,6 +153,10 @@ class TestParsePayload:
         segments = tx.parse_transcript_payload("not-json-or-xml", "unknown")
         assert segments == []
 
+    def test_parse_transcript_payload_ignores_wrong_json_shape(self):
+        segments = tx.parse_transcript_payload("[]", "unknown")
+        assert segments == []
+
 
 class TestHelpers:
     def test_transcript_segment_to_dict(self):

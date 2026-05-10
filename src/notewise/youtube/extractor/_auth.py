@@ -34,7 +34,7 @@ def _youtube_cookies(client: Any) -> dict[str, str]:
     out: dict[str, str] = {}
     for cookie in client._cookie_jar:
         domain = (cookie.domain or "").lstrip(".").lower()
-        if "youtube.com" not in domain:
+        if domain != "youtube.com" and not domain.endswith(".youtube.com"):
             continue
         if cookie.value is None:
             continue
@@ -80,7 +80,7 @@ def _get_sid_authorization_header(
 ) -> str | None:
     sapisid, one_p, three_p = _get_sid_cookies(client)
     additional = {"u": user_session_id} if user_session_id else None
-    out = []
+    out: list[str] = []
     for scheme, sid in (
         ("SAPISIDHASH", sapisid),
         ("SAPISID1PHASH", one_p),
@@ -105,7 +105,7 @@ def _extract_session_index(ytcfg: dict[str, Any]) -> int | None:
         if value is None:
             return None
         return int(str(value))
-    except Exception:
+    except ValueError:
         return None
 
 

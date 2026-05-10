@@ -9,12 +9,19 @@ from xml.etree import ElementTree
 
 import structlog
 
+from notewise._constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.youtube._constants import TRANSCRIPT_FORMAT_PRIORITY
 
 
 EXT_PRIORITY = TRANSCRIPT_FORMAT_PRIORITY
 _TAG_RE = re.compile(r"<[^>]+>")
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+_PARSER_FALLBACK_ERRORS = (
+    json.JSONDecodeError,
+    ElementTree.ParseError,
+    TypeError,
+    ValueError,
+)
 
 
 @dataclass(frozen=True)
@@ -82,7 +89,7 @@ def parse_transcript_payload(payload: str, ext: str | None) -> list[TranscriptSe
             parsed = parser(payload)
             if parsed:
                 return parsed
-        except Exception:
+        except _PARSER_FALLBACK_ERRORS:
             continue
     return []
 
@@ -150,11 +157,17 @@ def _infer_ext(track: dict[str, Any]) -> str:
 
 def _parse_json3(payload: str) -> list[TranscriptSegment]:
     parsed = json.loads(payload)
+    if not isinstance(parsed, dict):
+        return []
     events = parsed.get("events") or []
     segments: list[TranscriptSegment] = []
     for event in events:
+        if not isinstance(event, dict):
+            continue
         segs = event.get("segs") or []
-        text = "".join(segment.get("utf8", "") for segment in segs)
+        text = "".join(
+            segment.get("utf8", "") for segment in segs if isinstance(segment, dict)
+        )
         text = _clean_text(text)
         if not text:
             continue
@@ -249,7 +262,7 @@ def _parse_vtt_time(value: str) -> float:
         seconds = float(parts[1])
     else:
         return 0.0
-    return (hours * 3600) + (minutes * 60) + seconds
+    return (hours * SECONDS_PER_HOUR) + (minutes * SECONDS_PER_MINUTE) + seconds
 
 
 def _parse_time_or_seconds(

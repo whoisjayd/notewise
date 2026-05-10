@@ -9,6 +9,14 @@ from notewise.youtube._constants import (
     MAX_PLAYLIST_PAGES,
     YOUTUBE_PLAYLIST_URL,
 )
+from notewise.youtube.extractor._helpers import (
+    _extract_playlist_id,
+    _find_key,
+    _first_key,
+    _get_text,
+    _parse_count,
+    _parse_duration,
+)
 
 
 def _extract_playlist(
@@ -16,34 +24,30 @@ def _extract_playlist(
     target: str,
     include_entries: bool,
 ) -> dict[str, Any]:
-    playlist_id = client._extract_playlist_id(target)
+    playlist_id = _extract_playlist_id(target)
     webpage_url = YOUTUBE_PLAYLIST_URL.format(playlist_id=playlist_id)
     html = client._fetch_text(webpage_url)
     ytcfg = client._extract_ytcfg(html) or {}
     api_key = client._extract_innertube_api_key(html, ytcfg)
     data = client._extract_initial_data(html) or {}
 
-    meta_renderer = client._first_key(data, "playlistMetadataRenderer") or {}
-    primary = client._first_key(data, "playlistSidebarPrimaryInfoRenderer") or {}
-    secondary = client._first_key(data, "playlistSidebarSecondaryInfoRenderer") or {}
+    meta_renderer = _first_key(data, "playlistMetadataRenderer") or {}
+    primary = _first_key(data, "playlistSidebarPrimaryInfoRenderer") or {}
+    secondary = _first_key(data, "playlistSidebarSecondaryInfoRenderer") or {}
 
-    title = meta_renderer.get("title") or client._get_text(primary.get("title")) or ""
+    title = meta_renderer.get("title") or _get_text(primary.get("title")) or ""
     description = meta_renderer.get("description") or ""
-    owner = client._get_text(
+    owner = _get_text(
         ((secondary.get("videoOwner") or {}).get("videoOwnerRenderer") or {}).get(
             "title"
         )
     )
 
     stats = primary.get("stats") or []
-    playlist_count = (
-        client._parse_count(client._get_text(stats[0])) if len(stats) > 0 else None
-    )
-    view_count = (
-        client._parse_count(client._get_text(stats[1])) if len(stats) > 1 else None
-    )
+    playlist_count = _parse_count(_get_text(stats[0])) if len(stats) > 0 else None
+    view_count = _parse_count(_get_text(stats[1])) if len(stats) > 1 else None
 
-    entries = []
+    entries: list[dict[str, Any]] = []
     if include_entries:
         entries = client._extract_playlist_entries_paginated(
             data,
@@ -53,7 +57,7 @@ def _extract_playlist(
     if playlist_count is None:
         playlist_count = len(entries)
 
-    availability = _playlist_availability(client, data)
+    availability = _playlist_availability(data)
 
     return {
         "id": playlist_id,
@@ -70,15 +74,13 @@ def _extract_playlist(
     }
 
 
-def _playlist_availability(client: Any, data: dict[str, Any]) -> str:
+def _playlist_availability(data: dict[str, Any]) -> str:
     """Infer playlist availability from structured page alerts, not title text."""
-    for obj in client._find_key(data, "alertRenderer"):
+    for obj in _find_key(data, "alertRenderer"):
         renderer = obj.get("alertRenderer") or {}
         if not isinstance(renderer, dict):
             continue
-        text = client._get_text(renderer.get("text")) or client._get_text(
-            renderer.get("title")
-        )
+        text = _get_text(renderer.get("text")) or _get_text(renderer.get("title"))
         if not text:
             continue
         lowered = text.lower()
@@ -127,12 +129,11 @@ def _extract_playlist_entries_paginated(
 
 
 def _extract_playlist_entries(
-    client: Any,
     data: dict[str, Any],
     seen: set[str],
 ) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
-    for obj in client._find_key(data, "playlistVideoRenderer"):
+    for obj in _find_key(data, "playlistVideoRenderer"):
         r = obj["playlistVideoRenderer"]
         vid = r.get("videoId")
         if not vid or vid in seen:
@@ -141,29 +142,27 @@ def _extract_playlist_entries(
         out.append(
             {
                 "id": vid,
-                "title": client._get_text(r.get("title")) or "",
+                "title": _get_text(r.get("title")) or "",
                 "url": f"https://www.youtube.com/watch?v={vid}",
-                "duration": client._parse_duration(
-                    client._get_text(r.get("lengthText"))
-                ),
-                "channel": client._get_text(r.get("shortBylineText")),
-                "uploader": client._get_text(r.get("shortBylineText")),
+                "duration": _parse_duration(_get_text(r.get("lengthText"))),
+                "channel": _get_text(r.get("shortBylineText")),
+                "uploader": _get_text(r.get("shortBylineText")),
                 "ie_key": "Youtube",
             }
         )
     return out
 
 
-def _extract_continuation_token(client: Any, node: Any) -> str | None:
-    for obj in client._find_key(node, "continuationCommand"):
+def _extract_continuation_token(node: Any) -> str | None:
+    for obj in _find_key(node, "continuationCommand"):
         token = (obj.get("continuationCommand") or {}).get("token")
         if isinstance(token, str) and token:
             return token
-    for obj in client._find_key(node, "nextContinuationData"):
+    for obj in _find_key(node, "nextContinuationData"):
         token = (obj.get("nextContinuationData") or {}).get("continuation")
         if isinstance(token, str) and token:
             return token
-    for obj in client._find_key(node, "reloadContinuationData"):
+    for obj in _find_key(node, "reloadContinuationData"):
         token = (obj.get("reloadContinuationData") or {}).get("continuation")
         if isinstance(token, str) and token:
             return token
@@ -191,10 +190,10 @@ class _PlaylistMixin:
         data: dict[str, Any],
         seen: set[str],
     ) -> list[dict[str, Any]]:
-        return _extract_playlist_entries(self, data, seen)
+        return _extract_playlist_entries(data, seen)
 
     def _extract_continuation_token(self, node: Any) -> str | None:
-        return _extract_continuation_token(self, node)
+        return _extract_continuation_token(node)
 
     def _playlist_availability(self, data: dict[str, Any]) -> str:
-        return _playlist_availability(self, data)
+        return _playlist_availability(data)

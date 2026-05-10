@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import parse_qs, urlencode, urlparse
 
+from notewise._constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.errors import ExtractionError
 
 
@@ -84,7 +85,7 @@ def _with_fmt_json3(url: str) -> str:
 def _to_int(v: Any) -> int | None:
     try:
         return int(str(v)) if v not in (None, "") else None
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -94,21 +95,36 @@ def _parse_duration(text: str | None) -> int | None:
     parts = text.strip().split(":")
     try:
         if len(parts) == 3:
-            return int(parts[0]) * 3600 + int(parts[1]) * 60 + int(parts[2])
+            return (
+                int(parts[0]) * SECONDS_PER_HOUR
+                + int(parts[1]) * SECONDS_PER_MINUTE
+                + int(parts[2])
+            )
         if len(parts) == 2:
-            return int(parts[0]) * 60 + int(parts[1])
+            return int(parts[0]) * SECONDS_PER_MINUTE + int(parts[1])
         if len(parts) == 1 and parts[0].isdigit():
             return int(parts[0])
-    except Exception:
+    except ValueError:
         return None
     return None
+
+
+def _thumbnail_dimension(item: dict[str, Any], key: str) -> int:
+    try:
+        return int(item.get(key) or 0)
+    except (TypeError, ValueError):
+        return 0
 
 
 def _best_thumbnail(items: list[dict[str, Any]] | None) -> str | None:
     if not items:
         return None
     best = max(
-        items, key=lambda x: (int(x.get("width") or 0), int(x.get("height") or 0))
+        items,
+        key=lambda x: (
+            _thumbnail_dimension(x, "width"),
+            _thumbnail_dimension(x, "height"),
+        ),
     )
     url = best.get("url")
     return url if isinstance(url, str) else None
@@ -136,7 +152,7 @@ def _date_to_yyyymmdd(value: str | None) -> str | None:
         return None
     try:
         return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%Y%m%d")
-    except Exception:
+    except ValueError:
         if re.match(r"^\d{4}-\d{2}-\d{2}$", value):
             return value.replace("-", "")
         return None
@@ -150,7 +166,7 @@ def _iso_to_unix(value: str | None) -> int | None:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return int(dt.timestamp())
-    except Exception:
+    except (OverflowError, ValueError):
         return None
 
 
@@ -174,7 +190,7 @@ def _parse_count(text: str | None) -> int | None:
 
 
 def _find_key(node: Any, key: str) -> list[dict[str, Any]]:
-    out = []
+    out: list[dict[str, Any]] = []
     stack = [node]
     while stack:
         cur = stack.pop()
@@ -190,65 +206,3 @@ def _find_key(node: Any, key: str) -> list[dict[str, Any]]:
 def _first_key(node: Any, key: str) -> dict[str, Any] | None:
     found = _find_key(node, key)
     return found[0][key] if found else None
-
-
-class _HelperMixin:
-    @staticmethod
-    def _select_simple_video_fields(video: dict[str, Any]) -> dict[str, Any]:
-        return _select_simple_video_fields(video)
-
-    @staticmethod
-    def _extract_video_id(target: str) -> str:
-        return _extract_video_id(target)
-
-    @staticmethod
-    def _looks_like_playlist_url(target: str) -> bool:
-        return _looks_like_playlist_url(target)
-
-    @staticmethod
-    def _extract_playlist_id(target: str) -> str:
-        return _extract_playlist_id(target)
-
-    @staticmethod
-    def _with_fmt_json3(url: str) -> str:
-        return _with_fmt_json3(url)
-
-    @staticmethod
-    def _to_int(v: Any) -> int | None:
-        return _to_int(v)
-
-    @staticmethod
-    def _parse_duration(text: str | None) -> int | None:
-        return _parse_duration(text)
-
-    @staticmethod
-    def _best_thumbnail(items: list[dict[str, Any]] | None) -> str | None:
-        return _best_thumbnail(items)
-
-    @staticmethod
-    def _get_text(v: Any) -> str | None:
-        return _get_text(v)
-
-    @staticmethod
-    def _date_to_yyyymmdd(value: str | None) -> str | None:
-        return _date_to_yyyymmdd(value)
-
-    @staticmethod
-    def _iso_to_unix(value: str | None) -> int | None:
-        return _iso_to_unix(value)
-
-    @staticmethod
-    def _availability(playability: dict[str, Any]) -> str:
-        return _availability(playability)
-
-    @staticmethod
-    def _parse_count(text: str | None) -> int | None:
-        return _parse_count(text)
-
-    @staticmethod
-    def _find_key(node: Any, key: str) -> list[dict[str, Any]]:
-        return _find_key(node, key)
-
-    @staticmethod
-    def _first_key(node: Any, key: str) -> dict[str, Any] | None:
-        return _first_key(node, key)

@@ -11,6 +11,7 @@ from notewise.errors import (
     VideoUnavailableError,
     raise_if_video_unavailable,
 )
+from notewise.utils import coerce_int as _coerce_int
 from notewise.youtube._availability import (
     raise_for_playlist_availability as _check_playlist_availability,
 )
@@ -24,27 +25,6 @@ from .extractor.client import YouTubeExtractorConfig
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-
-
-def _coerce_int(value: object | None, *, default: int = 0) -> int:
-    """Convert extractor scalar values to ints without leaking type ambiguity."""
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, (str, bytes, bytearray)):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return default
 
 
 async def get_video_metadata(
