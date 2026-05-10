@@ -10,9 +10,9 @@
 
 # Python artifacts
 
-**pycache**/
-_.py[cod]
-_.egg-info/
+__pycache__/
+*.py[cod]
+*.egg-info/
 dist/
 build/
 
@@ -20,7 +20,9 @@ build/
 
 .mypy_cache/
 .ruff_cache/
+.ty_cache/
 .pytest_cache/
+.tmp/
 
 # Tests (not needed in the image)
 
@@ -54,3 +56,12 @@ logs/
 output/
 \*.env
 .env
+
+# Website local artifacts
+
+website/node_modules/
+website/dist/
+website/.output/
+website/.tanstack/
+website/.wrangler/
+website/.env*
