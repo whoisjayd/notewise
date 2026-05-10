@@ -38,6 +38,8 @@ from notewise._constants import (
     DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE,
     LEGACY_CONFIG_KEYS,
     LITELLM_MODELS_SNAPSHOT_FILENAME,
+    MAX_TEMPERATURE,
+    MIN_TEMPERATURE,
     OAUTH_DEVICE_PROVIDER_PREFIXES,
     OAUTH_PROVIDER_CONFIGS,
     OAUTH_TOKEN_DIR_ENV_VARS,
@@ -50,6 +52,7 @@ from notewise._constants import (
     UNSUPPORTED_MODEL_LIST_LIMIT,
     UNSUPPORTED_MODEL_MESSAGE,
 )
+from notewise.utils import parse_config_env_lines
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -188,20 +191,21 @@ class UserConfigSource(PydanticBaseSettingsSource):
             return self._cached_env_file
         result: dict[str, str] = {}
         try:
-            for line in path.read_text(encoding="utf-8").splitlines():
-                line = line.strip()
-                if not line or line.startswith("#") or "=" not in line:
-                    continue
-                key, _, value = line.partition("=")
-                key = key.strip()
-                value = value.strip().strip("'\"")
+            for key, value in parse_config_env_lines(
+                path.read_text(encoding="utf-8").splitlines()
+            ).items():
                 if key in _LEGACY_IGNORED_KEYS:
                     continue
                 if key in _ALLOWED_KEYS:
                     if key not in os.environ:
                         os.environ[key] = value
                     result[key.lower()] = value
-        except Exception:
+        except (OSError, UnicodeError):
+            logger.warning(
+                "UserConfigSource ignored unreadable user config file",
+                config_path=str(path),
+                exc_info=True,
+            )
             self._cached_env_file = {}
             return self._cached_env_file
 
@@ -245,7 +249,12 @@ class AppSettings(BaseSettings):
     deepseek_api_key: str | None = Field(None, alias="DEEPSEEK_API_KEY")
 
     # Generation parameters
-    temperature: float = Field(DEFAULT_TEMPERATURE, alias="TEMPERATURE", ge=0.0, le=1.0)
+    temperature: float = Field(
+        DEFAULT_TEMPERATURE,
+        alias="TEMPERATURE",
+        ge=MIN_TEMPERATURE,
+        le=MAX_TEMPERATURE,
+    )
     max_tokens: int | None = Field(None, alias="MAX_TOKENS", gt=0)
 
     # Chunking (code defaults only; not exposed in config.env)
