@@ -450,22 +450,24 @@ class LLMProvider:
         content = self._normalize_markdown_fences(content)
         fences = ("```", "~~~")
         if content.startswith(fences):
-            lines = content.splitlines()
-            # Need at least fence start, content, fence end
-            if len(lines) >= 2 and lines[0].strip().startswith(fences):
-                # If the first line is just a fence (with optional language), remove it
-                # Check if the last line is also a fence
-                if lines[-1].strip() in fences:
-                    return "\n".join(lines[1:-1]).strip()
-                # Sometimes LLMs stop abruptly or formatting is weird;
-                # if it starts with fence, we strip the first line.
-                # If it ends with fence, strip that too.
-                cleaned = "\n".join(lines[1:]).strip()
-                for fence in fences:
-                    cleaned = cleaned.removesuffix(fence).strip()
-                return cleaned
+            return self._strip_wrapping_fence_lines(content, fences)
 
         return content
+
+    @staticmethod
+    def _strip_wrapping_fence_lines(content: str, fences: tuple[str, ...]) -> str:
+        """Drop whole-response Markdown fences while preserving inner fences."""
+        lines = content.splitlines()
+        if len(lines) < 2 or not lines[0].strip().startswith(fences):
+            return content
+
+        if lines[-1].strip() in fences:
+            return "\n".join(lines[1:-1]).strip()
+
+        cleaned = "\n".join(lines[1:]).strip()
+        for fence in fences:
+            cleaned = cleaned.removesuffix(fence).strip()
+        return cleaned
 
     def _normalize_markdown_fences(self, content: str) -> str:
         """Normalize fence-only lines so Markdown previews close code blocks."""

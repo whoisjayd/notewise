@@ -17,7 +17,6 @@ from notewise._constants import (
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_TEMPERATURE,
     DEFAULT_THROTTLE_SECONDS,
-    DEFAULT_USE_COMBINE_CHUNK,
     TOKEN_ESTIMATE_CHARS_PER_TOKEN,
 )
 from notewise.config import settings as config
@@ -31,7 +30,6 @@ from notewise.llm.prompts.quiz import (
 )
 from notewise.llm.prompts.study_notes import (
     get_chunk_prompt,
-    get_combine_prompt,
     get_single_pass_prompt,
     get_stitch_prompt,
     get_system_prompt,
@@ -210,7 +208,6 @@ class StudyMaterialGenerator:
         temperature: float = DEFAULT_TEMPERATURE,
         max_tokens: int | None = None,
         throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
-        use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         target_language: str = DEFAULT_TARGET_LANGUAGE,
     ):
         """
@@ -221,14 +218,12 @@ class StudyMaterialGenerator:
             temperature: LLM response temperature.
             max_tokens: Maximum tokens for LLM responses.
             throttle_seconds: Delay between repeated LLM generation requests.
-            use_combine_chunk: Whether to use the deprecated legacy combine flow.
             target_language: Language to use for generated study notes.
         """
         self.provider = provider
         self.temperature = temperature
         self.max_tokens = max_tokens
         self.throttle_seconds = max(0.0, float(throttle_seconds))
-        self.use_combine_chunk = use_combine_chunk
         self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
         self._throttle_lock = asyncio.Lock()
         # Track the last request start so throttling spaces out bursts while still
@@ -260,21 +255,6 @@ class StudyMaterialGenerator:
             user_prompt=user_prompt,
             temperature=self.temperature,
             max_tokens=self.max_tokens,
-        )
-
-    async def _combine_chunk_notes(
-        self,
-        chunk_notes: list[str],
-        *,
-        system_prompt: str,
-    ) -> str:
-        """Run the deprecated legacy combine-all-chunks flow."""
-        return await self._generate_text(
-            system_prompt=system_prompt,
-            user_prompt=get_combine_prompt(
-                chunk_notes,
-                target_language=self.target_language,
-            ),
         )
 
     async def _stitch_chunk_notes(
@@ -312,21 +292,12 @@ class StudyMaterialGenerator:
         system_prompt: str,
         on_combine: Callable[[int], None] | None = None,
     ) -> str:
-        """Finalize chunk notes with default stitching or legacy combine."""
+        """Finalize chunk notes with boundary stitching."""
         if len(chunk_notes) == 1:
             return chunk_notes[0]
 
         if on_combine:
             on_combine(len(chunk_notes))
-
-        if self.use_combine_chunk:
-            logger.warning(
-                "Using deprecated legacy combine-chunk flow instead of stitching."
-            )
-            return await self._combine_chunk_notes(
-                chunk_notes,
-                system_prompt=system_prompt,
-            )
 
         return await self._stitch_chunk_notes(
             chunk_notes,
@@ -494,8 +465,7 @@ class StudyMaterialGenerator:
             chunk_notes.append(note)
 
         logger.info(
-            f"{video_title}: Finalizing {len(chunk_notes)} chunks via "
-            f"{'legacy combine' if self.use_combine_chunk else 'stitching'}..."
+            f"{video_title}: Finalizing {len(chunk_notes)} chunks via stitching..."
         )
         final_notes = await self._finalize_chunk_notes(
             chunk_notes,
@@ -517,7 +487,7 @@ class StudyMaterialGenerator:
 
         If the chapter transcript exceeds the configured chunk_size the text is
         split into overlapping chunks first.  Each chunk is processed with the
-        chapter-specific prompt and the results are merged with get_combine_prompt
+        chapter-specific prompt and the results are stitched across chunk boundaries
         to produce a single coherent Markdown section.
 
         Args:
@@ -566,7 +536,7 @@ class StudyMaterialGenerator:
 
         logger.info(
             f"Chapter '{chapter_title[:40]}': finalizing {len(chunk_notes)} parts "
-            f"via {'legacy combine' if self.use_combine_chunk else 'stitching'}..."
+            "via stitching..."
         )
         return await self._finalize_chunk_notes(
             chunk_notes,

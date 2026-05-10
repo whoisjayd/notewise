@@ -86,7 +86,7 @@ export function Cookbook() {
   return (
     <section
       id="cookbook"
-      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="max-w-2xl">

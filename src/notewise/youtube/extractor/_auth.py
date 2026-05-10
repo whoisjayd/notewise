@@ -215,9 +215,6 @@ class _AuthMixin:
     def _extract_session_index(self, ytcfg: dict[str, Any]) -> int | None:
         return _extract_session_index(ytcfg)
 
-    def _extract_data_sync_id(self, ytcfg: dict[str, Any]) -> str | None:
-        return _extract_data_sync_id(ytcfg)
-
     def _parse_data_sync_id(self, value: str | None) -> tuple[str | None, str | None]:
         return _parse_data_sync_id(value)
 
@@ -238,7 +235,3 @@ class _AuthMixin:
             origin,
             now=time.time,
         )
-
-    @staticmethod
-    def _default_headers() -> dict[str, str]:
-        return _default_headers()

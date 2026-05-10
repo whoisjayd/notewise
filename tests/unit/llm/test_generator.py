@@ -8,7 +8,7 @@ import pytest
 from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
 from notewise.llm.prompts.quiz import get_quiz_combine_prompt, get_quiz_prompt
-from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
+from notewise.llm.prompts.study_notes import get_stitch_prompt
 from notewise.pipeline.generation import (
     StudyMaterialGenerator,
     _normalize_stitched_document,
@@ -310,34 +310,6 @@ class TestStudyMaterialGenerator:
             "# Section One\n\nChunk one detail",
             "# Section One\n\nChunk two detail",
             target_language="Spanish",
-        )
-
-    @pytest.mark.asyncio
-    async def test_generate_study_notes_multiple_uses_legacy_combine_when_enabled(
-        self, mock_llm_provider
-    ):
-        """Legacy combine mode should bypass stitching when explicitly enabled."""
-        generator = StudyMaterialGenerator(mock_llm_provider, use_combine_chunk=True)
-        generator.provider.generate = AsyncMock(
-            side_effect=[
-                "# Section One\n\nChunk one detail",
-                "# Section One\n\nChunk two detail",
-                "# Combined\n\nMerged detail",
-            ]
-        )
-
-        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
-            result = await generator.generate_study_notes("Long text")
-
-        assert result == "# Combined\n\nMerged detail"
-        final_prompt = generator.provider.generate.await_args_list[-1].kwargs[
-            "user_prompt"
-        ]
-        assert final_prompt == get_combine_prompt(
-            [
-                "# Section One\n\nChunk one detail",
-                "# Section One\n\nChunk two detail",
-            ]
         )
 
     @pytest.mark.asyncio

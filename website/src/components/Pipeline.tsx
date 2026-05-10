@@ -48,7 +48,10 @@ const steps = [
 
 export function Pipeline() {
   return (
-    <section id="pipeline" className="relative border-t border-[var(--rule)] bg-background">
+    <section
+      id="pipeline"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background sm:scroll-mt-24"
+    >
       <div className="relative mx-auto max-w-[1200px] px-5 sm:px-6 py-20 sm:py-28 md:py-36">
         <div className="max-w-2xl">
           <span className="t-eyebrow">No 03 · Pipeline</span>
@@ -62,7 +65,7 @@ export function Pipeline() {
         </div>
 
         <ol className="mt-12 sm:mt-14 grid gap-px overflow-hidden rounded-lg border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-3">
-          {steps.map((s, i) => (
+          {steps.map((s) => (
             <li key={s.n} className="bg-card p-5 sm:p-7">
               <div className="flex items-start justify-between">
                 <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-[var(--rule)] bg-muted text-stamp">

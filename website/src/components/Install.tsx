@@ -11,7 +11,7 @@ export function Install() {
     <section
       id="install"
       aria-labelledby="install-heading"
-      className="relative border-t border-[var(--rule)] bg-background"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background sm:scroll-mt-24"
     >
       <div className="relative mx-auto max-w-[920px] px-5 sm:px-6 py-20 sm:py-28 md:py-36 text-center">
         <span className="t-eyebrow">Coda · Install</span>

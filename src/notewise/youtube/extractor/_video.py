@@ -184,14 +184,14 @@ def _final_chapter_end(duration: int | None, final_start: float) -> float | None
     return float(duration)
 
 
-def _extract_initial_data(_client: Any, html: str) -> dict[str, Any] | None:
+def _extract_initial_data(html: str) -> dict[str, Any] | None:
     return _extract_json_by_markers(
         html,
         ("var ytInitialData = ", "ytInitialData = "),
     )
 
 
-def _extract_player_response(_client: Any, html: str) -> dict[str, Any]:
+def _extract_player_response(html: str) -> dict[str, Any]:
     data = _extract_json_by_markers(
         html,
         ("var ytInitialPlayerResponse = ", "ytInitialPlayerResponse = "),
@@ -201,12 +201,11 @@ def _extract_player_response(_client: Any, html: str) -> dict[str, Any]:
     return data
 
 
-def _extract_ytcfg(_client: Any, html: str) -> dict[str, Any] | None:
+def _extract_ytcfg(html: str) -> dict[str, Any] | None:
     return _extract_json_by_markers(html, ("ytcfg.set(",))
 
 
 def _extract_innertube_api_key(
-    _client: Any,
     html: str,
     ytcfg: dict[str, Any] | None,
 ) -> str | None:
@@ -294,20 +293,20 @@ class _VideoMixin:
         return _extract_description_chapters(description, duration)
 
     def _extract_initial_data(self, html: str) -> dict[str, Any] | None:
-        return _extract_initial_data(self, html)
+        return _extract_initial_data(html)
 
     def _extract_player_response(self, html: str) -> dict[str, Any]:
-        return _extract_player_response(self, html)
+        return _extract_player_response(html)
 
     def _extract_ytcfg(self, html: str) -> dict[str, Any] | None:
-        return _extract_ytcfg(self, html)
+        return _extract_ytcfg(html)
 
     def _extract_innertube_api_key(
         self,
         html: str,
         ytcfg: dict[str, Any] | None,
     ) -> str | None:
-        return _extract_innertube_api_key(self, html, ytcfg)
+        return _extract_innertube_api_key(html, ytcfg)
 
     def _extract_json_by_markers(
         self,

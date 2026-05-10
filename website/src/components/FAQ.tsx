@@ -29,7 +29,7 @@ export function FAQ() {
   return (
     <section
       id="faq"
-      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[920px] px-5 sm:px-6">
         <div className="text-center">
@@ -38,7 +38,7 @@ export function FAQ() {
         </div>
 
         <ul className="mt-12 sm:mt-14 divide-y divide-[var(--rule)] border-y border-[var(--rule)]">
-          {items.map((it, i) => (
+          {items.map((it) => (
             <li key={it.q}>
               <details className="group [&_summary::-webkit-details-marker]:hidden">
                 <summary className="-mx-2 flex cursor-pointer items-start justify-between gap-4 rounded-md px-2 py-5 sm:gap-6 sm:py-6">

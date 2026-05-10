@@ -23,7 +23,6 @@ from notewise._constants import (
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
-    DEFAULT_USE_COMBINE_CHUNK,
     OUTPUT_METADATA_FILENAME,
     OUTPUT_METADATA_VIDEO_ID_KEY,
 )
@@ -108,7 +107,6 @@ class CorePipeline:
         throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         force: bool = False,
         quiz: bool = False,
-        use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         export_transcript: str | None = None,
         timestamps: bool = False,
         chapter_directory_output: bool = False,
@@ -136,13 +134,11 @@ class CorePipeline:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             throttle_seconds=throttle_seconds,
-            use_combine_chunk=use_combine_chunk,
             target_language=self.target_language,
         )
         self.throttle_seconds = self.generator.throttle_seconds
         self.force = force
         self.quiz = quiz
-        self.use_combine_chunk = use_combine_chunk
         self.export_transcript_format = export_transcript
         self.timestamps = timestamps
         self.chapter_directory_output = chapter_directory_output
@@ -395,7 +391,6 @@ async def run_pipeline(
     output_formats: list[str] | None = None,
     target_language: str = DEFAULT_TARGET_LANGUAGE,
     throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
-    use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
     pipeline_kwargs: dict[str, Any] = {
@@ -404,7 +399,6 @@ async def run_pipeline(
         "output_format": output_format,
         "target_language": target_language,
         "throttle_seconds": throttle_seconds,
-        "use_combine_chunk": use_combine_chunk,
     }
     if output_formats is not None:
         pipeline_kwargs["output_formats"] = output_formats

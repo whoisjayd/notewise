@@ -28,11 +28,13 @@ jobs:
       app_changed: ${{ steps.classify.outputs.app_changed }}
       workflow_changed: ${{ steps.classify.outputs.workflow_changed }}
       packaging_changed: ${{ steps.classify.outputs.packaging_changed }}
+      docker_changed: ${{ steps.classify.outputs.docker_changed }}
       tooling_changed: ${{ steps.classify.outputs.tooling_changed }}
       hook_changed: ${{ steps.classify.outputs.hook_changed }}
       run_quality: ${{ steps.classify.outputs.run_quality }}
       run_tests: ${{ steps.classify.outputs.run_tests }}
       run_package_build: ${{ steps.classify.outputs.run_package_build }}
+      run_docker: ${{ steps.classify.outputs.run_docker }}
       run_website: ${{ steps.classify.outputs.run_website }}
       run_docs: ${{ steps.classify.outputs.run_docs }}
       run_hook_parity: ${{ steps.classify.outputs.run_hook_parity }}
@@ -66,6 +68,9 @@ jobs:
               - 'src/notewise/__init__.py'
               - 'scripts/install.sh'
               - 'scripts/install.ps1'
+            docker_changed:
+              - 'Dockerfile'
+              - '.dockerignore'
             tooling_changed:
               - 'Makefile'
               - 'scripts/**/*.py'
@@ -83,6 +88,7 @@ jobs:
             workflow_changed="${{ steps.filter.outputs.workflow_changed }}"
             app_changed="${{ steps.filter.outputs.app_changed }}"
             packaging_changed="${{ steps.filter.outputs.packaging_changed }}"
+            docker_changed="${{ steps.filter.outputs.docker_changed }}"
             tooling_changed="${{ steps.filter.outputs.tooling_changed }}"
             hook_changed="${{ steps.filter.outputs.hook_changed }}"
           else
@@ -91,18 +97,20 @@ jobs:
             workflow_changed=true
             app_changed=true
             packaging_changed=true
+            docker_changed=true
             tooling_changed=true
             hook_changed=true
           fi
 
           docs_only=false
-          if [ "$docs_changed" = true ] && [ "$website_changed" != true ] && [ "$workflow_changed" != true ] && [ "$app_changed" != true ] && [ "$packaging_changed" != true ] && [ "$tooling_changed" != true ] && [ "$hook_changed" != true ]; then
+          if [ "$docs_changed" = true ] && [ "$website_changed" != true ] && [ "$workflow_changed" != true ] && [ "$app_changed" != true ] && [ "$packaging_changed" != true ] && [ "$docker_changed" != true ] && [ "$tooling_changed" != true ] && [ "$hook_changed" != true ]; then
             docs_only=true
           fi
 
           run_quality=false
           run_tests=false
           run_package_build=false
+          run_docker=false
           run_website=false
           run_docs=false
           run_hook_parity=false
@@ -113,6 +121,10 @@ jobs:
             run_quality=true
             run_tests=true
             run_package_build=true
+          fi
+
+          if [ "$docker_changed" = true ] || [ "$packaging_changed" = true ]; then
+            run_docker=true
           fi
 
           if [ "$website_changed" = true ]; then
@@ -142,11 +154,13 @@ jobs:
             echo "app_changed=$app_changed"
             echo "workflow_changed=$workflow_changed"
             echo "packaging_changed=$packaging_changed"
+            echo "docker_changed=$docker_changed"
             echo "tooling_changed=$tooling_changed"
             echo "hook_changed=$hook_changed"
             echo "run_quality=$run_quality"
             echo "run_tests=$run_tests"
             echo "run_package_build=$run_package_build"
+            echo "run_docker=$run_docker"
             echo "run_website=$run_website"
             echo "run_docs=$run_docs"
             echo "run_hook_parity=$run_hook_parity"
@@ -219,7 +233,7 @@ jobs:
         run: uv run python scripts/check_version_sync.py
 
   tests:
-    name: Unit Tests
+    name: Unit Tests (coverage)
     needs: changes
     if: needs.changes.outputs.run_tests == 'true'
     runs-on: ubuntu-latest
@@ -233,8 +247,8 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
-      - name: Run tests
-        run: uv run python -m pytest -q -n auto --dist=loadfile
+      - name: Run tests with coverage
+        run: uv run python -m pytest -q -n auto --dist=loadfile --cov=src/notewise --cov-fail-under=90 --cov-report=xml
 
   package-build:
     name: Package Build
@@ -253,6 +267,23 @@ jobs:
         run: uv sync --all-extras --dev --frozen
       - name: Build source and wheel distributions
         run: uv build
+
+  docker-build:
+    name: Docker Build
+    needs: changes
+    if: needs.changes.outputs.run_docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Docker image without pushing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: notewise:ci
+          cache-from: type=gha
 
   website-validation:
     name: Website Validation
@@ -325,6 +356,7 @@ jobs:
       - version-sync
       - tests
       - package-build
+      - docker-build
       - website-validation
       - docs-validation
       - hook-parity

@@ -25,7 +25,12 @@ function applyTheme(next: "light" | "dark") {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<"light" | "dark">("light");
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    if (typeof window === "undefined") {
+      return "light";
+    }
+    return getPreferredTheme();
+  });
 
   useEffect(() => {
     const query = window.matchMedia("(prefers-color-scheme: dark)");

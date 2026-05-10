@@ -41,7 +41,9 @@ _LIST_ITEM_RE = re.compile(r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)")
 _CODE_BLOCK_RE = re.compile(
     r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>", re.DOTALL
 )
+_FENCED_CODE_START_RE = re.compile(r"^\s*(```|~~~)")
 _LANGUAGE_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+_RAW_HTML_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^>\n]*)?/?>")
 _PDF_CHARACTER_TRANSLATIONS = str.maketrans(
     {
         "\u2018": "'",
@@ -172,11 +174,34 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
 def _markdown_to_html(markdown_text: str) -> str:
     import markdown as markdown_lib
 
+    safe_markdown = _escape_raw_html(_normalize_markdown_blocks(markdown_text))
     rendered_html = markdown_lib.markdown(
-        _normalize_markdown_blocks(markdown_text),
+        safe_markdown,
         extensions=list(MARKDOWN_RENDER_EXTENSIONS),
     )
     return _normalize_rendered_html(rendered_html)
+
+
+def _escape_raw_html(markdown_text: str) -> str:
+    escaped_lines: list[str] = []
+    in_code_fence = False
+
+    for line in markdown_text.splitlines():
+        if _FENCED_CODE_START_RE.match(line):
+            in_code_fence = not in_code_fence
+            escaped_lines.append(line)
+            continue
+        if in_code_fence or line.startswith(("    ", "\t")):
+            escaped_lines.append(line)
+            continue
+        escaped_lines.append(
+            _RAW_HTML_TAG_RE.sub(
+                lambda match: escape(match.group(0), quote=False),
+                line,
+            )
+        )
+
+    return "\n".join(escaped_lines)
 
 
 def _normalize_rendered_html(body_html: str) -> str:

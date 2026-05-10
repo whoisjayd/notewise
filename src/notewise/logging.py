@@ -23,7 +23,6 @@ from notewise._constants import (
     LOGS_DIR_NAME,
     PROVIDER_SECRET_ENV_KEYS,
     SESSION_LOG_PREFIX,
-    STATE_DIR_NAME,
     THIRD_PARTY_DIAGNOSTIC_LOGGERS,
 )
 
@@ -140,7 +139,11 @@ def get_session_log_path() -> Path | None:
 
 def get_log_dir(state_dir: Path | None = None) -> Path:
     """Return the directory that stores notewise session logs."""
-    base = state_dir or (Path.home() / STATE_DIR_NAME)
+    if state_dir is None:
+        from notewise.config import get_state_dir
+
+        state_dir = get_state_dir()
+    base = state_dir
     return base / LOGS_DIR_NAME
 
 
@@ -241,8 +244,7 @@ def configure_logging(
 
         session_log: Path | None = None
         try:
-            base = state_dir or (Path.home() / STATE_DIR_NAME)
-            log_dir = base / LOGS_DIR_NAME
+            log_dir = get_log_dir(state_dir)
             log_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"

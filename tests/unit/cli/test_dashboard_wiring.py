@@ -67,7 +67,6 @@ def _make_context(
         force=False,
         no_ui=False,
         quiz=True,
-        use_combine_chunk=True,
         export_transcript=None,
         timestamps=True,
         chapter_directory_output=True,

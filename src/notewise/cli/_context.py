@@ -37,7 +37,6 @@ class CliProcessContext:
     force: bool
     no_ui: bool
     quiz: bool
-    use_combine_chunk: bool
     export_transcript: str | None
     timestamps: bool
     chapter_directory_output: bool
@@ -164,7 +163,6 @@ class CliProcessContext:
             throttle_seconds=self.selected_throttle_seconds,
             force=self.force,
             quiz=self.quiz,
-            use_combine_chunk=self.use_combine_chunk,
             export_transcript=self.export_transcript,
             timestamps=self.timestamps,
             chapter_directory_output=self.chapter_directory_output,

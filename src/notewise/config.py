@@ -37,7 +37,6 @@ from notewise._constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE,
     LEGACY_CONFIG_KEYS,
-    LITELLM_MODELS_SNAPSHOT_FILENAME,
     MAX_TEMPERATURE,
     MIN_TEMPERATURE,
     OAUTH_DEVICE_PROVIDER_PREFIXES,
@@ -51,6 +50,10 @@ from notewise._constants import (
     STATE_DIR_NAME,
     UNSUPPORTED_MODEL_LIST_LIMIT,
     UNSUPPORTED_MODEL_MESSAGE,
+)
+from notewise.model_catalog import (
+    bundled_model_snapshot_path,
+    parse_model_snapshot,
 )
 from notewise.utils import parse_config_env_lines
 
@@ -131,7 +134,7 @@ def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
     if _MODEL_SNAPSHOT_CACHE is not None:
         return _MODEL_SNAPSHOT_CACHE
 
-    snapshot_path = Path(__file__).parent / "ui" / LITELLM_MODELS_SNAPSHOT_FILENAME
+    snapshot_path = bundled_model_snapshot_path()
     try:
         with snapshot_path.open(encoding="utf-8") as snapshot_file:
             snapshot = json.load(snapshot_file)
@@ -155,20 +158,10 @@ def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
         _MODEL_SNAPSHOT_CACHE = {}
         return _MODEL_SNAPSHOT_CACHE
 
-    normalized: dict[str, tuple[str, ...]] = {}
-    for provider, models in snapshot.items():
-        if not isinstance(provider, str) or not isinstance(models, list):
-            logger.warning(
-                "_load_bundled_model_snapshot skipped invalid provider entry",
-                snapshot_path=str(snapshot_path),
-                cache_variable="_MODEL_SNAPSHOT_CACHE",
-                provider_type=type(provider).__name__,
-                models_type=type(models).__name__,
-            )
-            continue
-        normalized[provider] = tuple(
-            model for model in models if isinstance(model, str) and model
-        )
+    normalized = {
+        provider: tuple(models)
+        for provider, models in parse_model_snapshot(snapshot).items()
+    }
     _MODEL_SNAPSHOT_CACHE = normalized
     return _MODEL_SNAPSHOT_CACHE
 

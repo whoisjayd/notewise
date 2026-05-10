@@ -371,7 +371,3 @@ class _TransportMixin:
         context: dict[str, Any],
     ) -> dict[str, str]:
         return _generate_api_headers(self, ytcfg, context)
-
-    @staticmethod
-    def _fetch_with_retry(operation: Any, *, url: str) -> Any:
-        return _fetch_with_retry(operation, url=url)

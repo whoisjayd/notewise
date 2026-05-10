@@ -26,14 +26,10 @@ from notewise._constants import (  # noqa: E402
     LITELLM_MODEL_METADATA_SOURCE_URL,
     LITELLM_MODELS_SNAPSHOT_FILENAME,
 )
-
-# Snapshot generation intentionally reuses setup wizard filtering internals so
-# runtime setup and regenerated snapshots stay byte-for-byte aligned. Update this
-# script if those private helper names or semantics change.
-from notewise.ui.setup_wizard import (  # noqa: E402
-    _classify_provider,
-    _is_setup_safe_model,
-    _normalize_available_models,
+from notewise.model_catalog import (  # noqa: E402
+    classify_provider,
+    is_setup_safe_model,
+    normalize_available_models,
 )
 
 
@@ -51,15 +47,15 @@ def build_snapshot(model_cost: dict[str, Any]) -> dict[str, list[str]]:
         if not isinstance(metadata, dict):
             continue
 
-        provider = _classify_provider(metadata)
+        provider = classify_provider(metadata)
         if provider is None:
             continue
-        if not _is_setup_safe_model(model, metadata):
+        if not is_setup_safe_model(model, metadata):
             continue
 
         provider_models.setdefault(provider, []).append(model)
 
-    return _normalize_available_models(provider_models)
+    return normalize_available_models(provider_models)
 
 
 def build_metadata_snapshot(model_cost: dict[str, Any]) -> dict[str, dict[str, Any]]:

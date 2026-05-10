@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+import pytest
 from typer.testing import CliRunner
 
 from notewise import updater
+from notewise._constants import UPDATE_METADATA_PARSE_ERROR
 from notewise.cli import app as cli_app
+from notewise.errors import UpdateError
 
 
 runner = CliRunner()
@@ -45,6 +48,16 @@ def test_check_for_updates_reports_available_release(mocker) -> None:  # noqa: A
     assert status.install_source == "Python Package"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
+
+
+def test_request_json_wraps_malformed_json(mocker) -> None:  # noqa: ANN001
+    def fake_urlopen(*_args: object, **_kwargs: object) -> _FakeResponse:
+        return _FakeResponse(b"not-json")
+
+    mocker.patch.object(updater, "urlopen", side_effect=fake_urlopen)
+
+    with pytest.raises(UpdateError, match=UPDATE_METADATA_PARSE_ERROR):
+        updater._request_json("https://example.com/latest")
 
 
 def test_binary_install_uses_windows_installer_command(monkeypatch) -> None:

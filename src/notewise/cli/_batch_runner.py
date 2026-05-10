@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import cast
+from typing import Any, cast
 
 import structlog
 from rich.markup import escape
@@ -43,6 +43,28 @@ from notewise.errors import UserVisibleCliError
 from notewise.pipeline.core import PipelineSharedState
 
 
+_BATCH_CHAPTER_EVENT_TYPES = (
+    EventType.CHAPTER_GENERATING,
+    EventType.CHAPTER_CHUNK_GENERATING,
+    EventType.CHAPTER_COMBINING,
+    EventType.CHAPTER_COMPLETE,
+)
+
+
+def _set_dashboard_worker_idle(dashboard: object, worker_index: int) -> None:
+    cast(Any, dashboard).update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
+
+
+def _finish_dashboard_video(
+    dashboard: object,
+    worker_index: int,
+    fallback_video_id: str,
+) -> None:
+    if hasattr(dashboard, "clear_chapter_workers"):
+        cast(Any, dashboard).clear_chapter_workers(fallback_video_id)
+    _set_dashboard_worker_idle(dashboard, worker_index)
+
+
 async def run_batch_file(
     context: CliProcessContext,
     input_path: Path,
@@ -53,15 +75,16 @@ async def run_batch_file(
         return True
 
     batch_workers = max(1, context.config.max_concurrent_videos)
+    batch_label = f"Batch File: {input_path.name}"
     dashboard = None
     if not context.no_ui:
         dashboard = context.dashboard_cls(
             total_videos=0,
             concurrency=batch_workers,
-            playlist_name=f"Batch File: {input_path.name}",
+            playlist_name=batch_label,
             model_name=context.selected_model,
             chapter_concurrency=context.config.max_concurrent_chapters,
-            run_label=f"Batch File: {input_path.name}",
+            run_label=batch_label,
             output_path=str(context.selected_output),
             config_items=build_dashboard_config_items(
                 context,
@@ -82,7 +105,7 @@ async def run_batch_file(
             job = await job_queue.get()
             if job is None:
                 if dashboard is not None:
-                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
+                    _set_dashboard_worker_idle(dashboard, worker_index)
                 job_queue.task_done()
                 return
 
@@ -114,12 +137,7 @@ async def run_batch_file(
                         "clear_chapter_workers",
                     ):
                         dashboard.clear_chapter_workers(_fallback_video_id)
-                    if event.event_type in (
-                        EventType.CHAPTER_GENERATING,
-                        EventType.CHAPTER_CHUNK_GENERATING,
-                        EventType.CHAPTER_COMBINING,
-                        EventType.CHAPTER_COMPLETE,
-                    ):
+                    if event.event_type in _BATCH_CHAPTER_EVENT_TYPES:
                         update_dashboard_chapter_slot(
                             dashboard,
                             escape((latest_title or _fallback_video_id)[:40]),
@@ -147,9 +165,7 @@ async def run_batch_file(
                 )
 
                 if dashboard is not None:
-                    if hasattr(dashboard, "clear_chapter_workers"):
-                        dashboard.clear_chapter_workers(fallback_video_id)
-                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
+                    _finish_dashboard_video(dashboard, worker_index, fallback_video_id)
                     if result.failure_count:
                         dashboard.add_failure(display_title)
                     elif was_skipped and hasattr(dashboard, "add_skipped"):
@@ -183,9 +199,7 @@ async def run_batch_file(
                 display_title = latest_title or fallback_video_id
                 structlog.get_logger(__name__).exception("batch.video_failure")
                 if dashboard is not None:
-                    if hasattr(dashboard, "clear_chapter_workers"):
-                        dashboard.clear_chapter_workers(fallback_video_id)
-                    dashboard.update_worker(worker_index, DASHBOARD_IDLE_MARKUP)
+                    _finish_dashboard_video(dashboard, worker_index, fallback_video_id)
                     dashboard.add_failure(display_title)
                 batch_results.append(
                     _BatchJobResult(
@@ -251,6 +265,15 @@ async def run_batch_file(
                 f"{resolution_concurrency} concurrent lookups."
             )
 
+        def update_preflight_status(resolved_count: int) -> None:
+            if dashboard is None:
+                return
+            dashboard.update_overall_status(
+                "Preflight: "
+                f"{resolved_count}/{len(urls)} sources resolved • "
+                f"{total_jobs} videos queued"
+            )
+
         tasks = [
             asyncio.create_task(resolve_source(item_index, batch_url))
             for item_index, batch_url in enumerate(urls, start=1)
@@ -264,12 +287,7 @@ async def run_batch_file(
                     prepared_obj,
                     error,
                 ) = await resolved_sources.get()
-                if dashboard is not None:
-                    dashboard.update_overall_status(
-                        "Preflight: "
-                        f"{resolved_count}/{len(urls)} sources resolved • "
-                        f"{total_jobs} videos queued"
-                    )
+                update_preflight_status(resolved_count)
                 if error is not None:
                     early_failures.extend(
                         ordered_batch_failures_from_error(item_index, batch_url, error)
@@ -292,11 +310,7 @@ async def run_batch_file(
                     total_jobs += 1
                     if dashboard is not None:
                         dashboard.set_total_videos(total_jobs)
-                        dashboard.update_overall_status(
-                            "Preflight: "
-                            f"{resolved_count}/{len(urls)} sources resolved • "
-                            f"{total_jobs} videos queued"
-                        )
+                        update_preflight_status(resolved_count)
                     await job_queue.put(
                         _BatchVideoJob(
                             sort_key=(item_index, video_index),
@@ -334,18 +348,14 @@ async def run_batch_file(
         try:
             with live:
                 await run_batch_queue()
+                failure_rows = [
+                    result.failure_row
+                    for result in batch_results
+                    if result.failure_row is not None
+                ]
                 synthetic_result = PipelineResult(
                     success_count=sum(1 for result in batch_results if result.success),
-                    failure_count=len(
-                        [
-                            *early_failures,
-                            *[
-                                result.failure_row
-                                for result in batch_results
-                                if result.failure_row is not None
-                            ],
-                        ]
-                    ),
+                    failure_count=len(early_failures) + len(failure_rows),
                     total_count=total_jobs,
                     video_ids=[result.display_title for result in batch_results],
                     errors={},

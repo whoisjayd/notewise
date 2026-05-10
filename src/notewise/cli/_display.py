@@ -164,10 +164,6 @@ def build_dashboard_config_items(
             _format_bool(bool(context.chapter_directory_output)),
         ),
         DashboardConfigItem(
-            "Combine chunks",
-            _format_bool(bool(context.use_combine_chunk)),
-        ),
-        DashboardConfigItem(
             "Cookies",
             _format_cookie_status(context.selected_cookie_file),
         ),

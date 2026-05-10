@@ -169,7 +169,7 @@ async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles
 
     with (
         patch(
-            "notewise.pipeline._execution.pipeline_module.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             AsyncMock(
                 return_value=VideoMetadata(
                     video_id="vid-dup",
@@ -180,7 +180,7 @@ async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles
             ),
         ),
         patch(
-            "notewise.pipeline._execution.pipeline_module.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             AsyncMock(return_value=transcript),
         ),
     ):
@@ -249,7 +249,7 @@ async def test_process_single_video_bundles_chapters_into_single_markdown_by_def
 
     with (
         patch(
-            "notewise.pipeline._execution.pipeline_module.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             AsyncMock(
                 return_value=VideoMetadata(
                     video_id="vid-bundle",
@@ -260,7 +260,7 @@ async def test_process_single_video_bundles_chapters_into_single_markdown_by_def
             ),
         ),
         patch(
-            "notewise.pipeline._execution.pipeline_module.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             AsyncMock(return_value=transcript),
         ),
     ):
@@ -309,7 +309,7 @@ async def test_bundled_chapter_output_suffixes_final_file_collision(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro",
@@ -383,7 +383,7 @@ async def test_bundled_chapter_failure_does_not_leak_temporary_chapter_artifacts
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro",
@@ -444,7 +444,7 @@ async def test_bundled_chapter_retry_ignores_stale_temporary_artifacts_with_forc
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro",
@@ -557,7 +557,7 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
     """Output file must use the video title, not the raw video_id."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -568,7 +568,7 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -592,7 +592,7 @@ async def test_run_single_video_events_emitted(pipeline):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -603,7 +603,7 @@ async def test_run_single_video_events_emitted(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -648,7 +648,7 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -659,7 +659,7 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -720,13 +720,13 @@ async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provid
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             return_value=VideoMetadata(
                 video_id="vid-auth", title="Video Title", duration=100, chapters=[]
             ),
         ) as mock_metadata,
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -751,14 +751,14 @@ async def test_run_fails_early_for_private_video(pipeline):
     """Private videos should fail before transcript fetching starts."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
                 "Make the video unlisted or public to process it."
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -782,7 +782,7 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
     """Transcript-level private video failures should keep the clean message."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -793,7 +793,7 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=PublicAccessRequiredError(
                 "Private YouTube videos are not supported. "
@@ -824,7 +824,7 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -835,7 +835,7 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -866,7 +866,7 @@ async def test_run_chapters_none_does_not_raise(pipeline):
     """When get_video_chapters returns None the pipeline must not raise TypeError."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=7200, chapters=[]
@@ -874,7 +874,7 @@ async def test_run_chapters_none_does_not_raise(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -900,11 +900,11 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     """When title fetch raises, the output file is named after the video_id."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             side_effect=RuntimeError("network error"),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -930,11 +930,11 @@ async def test_run_metadata_extraction_error_surfaces_to_user(pipeline):
     """Extractor metadata failures should fail the run instead of faking data."""
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             side_effect=ExtractorError("metadata backend unavailable"),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -965,7 +965,7 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
@@ -973,7 +973,7 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=YouTubeIPBlockError("IP blocked"),
         ),
@@ -1006,7 +1006,7 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ", title="Title", duration=100, chapters=[]
@@ -1014,7 +1014,7 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
             side_effect=RuntimeError("network timeout"),
         ),
@@ -1058,7 +1058,7 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1069,11 +1069,11 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
         ) as mock_split,
         patch(
             "notewise.pipeline.core.CorePipeline._check_api_key",
@@ -1120,6 +1120,75 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
 
 
 @pytest.mark.asyncio
+async def test_force_regenerates_existing_chapter_files_with_bundle_outputs(
+    temp_output_dir,
+    mock_llm_provider,
+):
+    """Force mode should not reuse stale chapter files for bundled outputs."""
+    video_id = "force-chapter-video"
+    video_title = "Force Chapters"
+    chapter_title = "Intro"
+    expected_folder = temp_output_dir / sanitize_filename(video_title)
+    expected_folder.mkdir()
+    chapter_file = expected_folder / f"01_{sanitize_filename(chapter_title)}.md"
+    chapter_file.write_text("# Stale Chapter", encoding="utf-8")
+
+    p = _make_pipeline(
+        temp_output_dir,
+        mock_llm_provider,
+        force=True,
+        chapter_directory_output=True,
+    )
+    p.output_formats = ["md", "html"]
+    p.generator.generate_single_chapter_notes.return_value = "# Fresh Chapter"
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id=video_id,
+                    title=video_title,
+                    duration=7200,
+                    chapters=[
+                        VideoChapter(
+                            title=chapter_title,
+                            start_seconds=0,
+                            end_seconds=None,
+                        ),
+                    ],
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata"
+        ) as mock_split,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id=video_id)
+        mock_split.return_value = {
+            chapter_title: ChapterTranscript(
+                title=chapter_title,
+                text="fresh transcript",
+                start_seconds=0,
+            )
+        }
+
+        result = await p.run([video_id])
+
+    assert result.success_count == 1
+    p.generator.generate_single_chapter_notes.assert_awaited_once()
+    assert chapter_file.read_text(encoding="utf-8") == "# Fresh Chapter"
+    assert "Fresh Chapter" in (temp_output_dir / f"{video_title}.html").read_text(
+        encoding="utf-8"
+    )
+    assert "Stale Chapter" not in (temp_output_dir / f"{video_title}.html").read_text(
+        encoding="utf-8"
+    )
+
+
+@pytest.mark.asyncio
 async def test_run_chapter_generation_emits_chapter_events(pipeline):
     """Chapter-based generation emits CHAPTER_GENERATING events with correct counts."""
     events: list[PipelineEvent] = []
@@ -1132,7 +1201,7 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -1143,10 +1212,10 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript", new_callable=AsyncMock
+            "notewise.pipeline._execution.fetch_transcript", new_callable=AsyncMock
         ) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata"
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata"
         ) as mock_split,
         patch(
             "notewise.pipeline.core.CorePipeline._check_api_key",
@@ -1240,7 +1309,7 @@ async def test_run_chapter_generation_emits_internal_chapter_progress(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Chapter 1": ChapterTranscript(
                     title="Chapter 1", text="text1", start_seconds=0
@@ -1356,7 +1425,7 @@ async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
         patch(_COMMON_PATCHES["metadata"], side_effect=_metadata),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             side_effect=_split,
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -1416,7 +1485,7 @@ async def test_run_failed_chapter_generation_still_emits_chapter_complete(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Chapter 1": ChapterTranscript(
                     title="Chapter 1", text="text1", start_seconds=0
@@ -1467,7 +1536,7 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={},
         ),
         patch(_COMMON_PATCHES["api_key"], return_value=True),
@@ -1511,7 +1580,7 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro", text="intro text", start_seconds=0
@@ -1574,7 +1643,7 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro", text="intro text", start_seconds=0
@@ -1604,11 +1673,11 @@ async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
 # ---------------------------------------------------------------------------
 
 _COMMON_PATCHES = dict(
-    metadata="notewise.pipeline.core.get_video_metadata",
-    title="notewise.pipeline.core.get_video_metadata",
-    duration="notewise.pipeline.core.get_video_metadata",
-    chapters="notewise.pipeline.core.get_video_metadata",
-    fetch="notewise.pipeline.core.fetch_transcript",
+    metadata="notewise.pipeline._execution.get_video_metadata",
+    title="notewise.pipeline._execution.get_video_metadata",
+    duration="notewise.pipeline._execution.get_video_metadata",
+    chapters="notewise.pipeline._execution.get_video_metadata",
+    fetch="notewise.pipeline._execution.fetch_transcript",
     api_key="notewise.pipeline.core.CorePipeline._check_api_key",
 )
 
@@ -2030,7 +2099,7 @@ async def test_non_markdown_chapter_output_bundles_into_single_document(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
         ) as mock_split,
         patch(_COMMON_PATCHES["api_key"], return_value=True),
     ):
@@ -2328,7 +2397,7 @@ async def test_duplicate_chapter_video_titles_get_unique_folders(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             side_effect=[
                 {
                     "Intro": ChapterTranscript(
@@ -2395,7 +2464,7 @@ async def test_chapter_run_does_not_reuse_metadata_less_same_title_folder(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro",
@@ -2455,7 +2524,7 @@ async def test_chapter_run_reuses_existing_matching_metadata_folder(
         ),
         patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
         patch(
-            "notewise.pipeline.core.split_transcript_by_chapters_with_metadata",
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
             return_value={
                 "Intro": ChapterTranscript(
                     title="Intro",
@@ -2689,7 +2758,7 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -2700,7 +2769,7 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -2727,7 +2796,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -2738,7 +2807,7 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -2802,7 +2871,7 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -2813,7 +2882,7 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(
@@ -2842,7 +2911,7 @@ async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
 
     with (
         patch(
-            "notewise.pipeline.core.get_video_metadata",
+            "notewise.pipeline._execution.get_video_metadata",
             new=AsyncMock(
                 return_value=VideoMetadata(
                     video_id="dQw4w9WgXcQ",
@@ -2853,7 +2922,7 @@ async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
             ),
         ),
         patch(
-            "notewise.pipeline.core.fetch_transcript",
+            "notewise.pipeline._execution.fetch_transcript",
             new_callable=AsyncMock,
         ) as mock_fetch,
         patch(

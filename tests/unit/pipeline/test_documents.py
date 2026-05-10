@@ -55,6 +55,48 @@ def test_markdown_to_html_normalizes_top_level_lists() -> None:
     assert "<li>item one</li>" in html
 
 
+def test_markdown_to_html_escapes_raw_html() -> None:
+    html = _markdown_to_html("# Notes\n\n<script>alert('x')</script>")
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;alert('x')&lt;/script&gt;" in html
+
+
+def test_markdown_to_html_preserves_blockquotes() -> None:
+    html = _markdown_to_html("> Important idea")
+
+    assert "<blockquote>" in html
+    assert "Important idea" in html
+
+
+def test_markdown_to_html_escapes_raw_html_inside_blockquotes() -> None:
+    html = _markdown_to_html("> <script>alert(1)</script>")
+
+    assert "<blockquote>" in html
+    assert "<script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_markdown_to_html_preserves_autolinks() -> None:
+    html = _markdown_to_html("See <https://example.com>")
+
+    assert '<a href="https://example.com">https://example.com</a>' in html
+
+
+def test_markdown_to_html_preserves_fenced_code_angle_brackets() -> None:
+    html = _markdown_to_html("```html\n<div>hi</div>\n```")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "&amp;lt;div&amp;gt;" not in html
+
+
+def test_markdown_to_html_preserves_indented_code_angle_brackets() -> None:
+    html = _markdown_to_html("    <div>hi</div>")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "&amp;lt;div&amp;gt;" not in html
+
+
 def test_normalize_rendered_html_promotes_code_blocks() -> None:
     html = _normalize_rendered_html("<pre><code>print('hi')</code></pre>")
 

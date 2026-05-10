@@ -147,7 +147,6 @@ def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
         selected_throttle_seconds=1.25,
         force=True,
         quiz=True,
-        use_combine_chunk=False,
         export_transcript="srt",
         timestamps=True,
         chapter_directory_output=True,

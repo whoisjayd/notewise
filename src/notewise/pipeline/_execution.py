@@ -9,12 +9,10 @@ from contextlib import nullcontext
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, cast
+from typing import Any
 
 import structlog
 
-from notewise._constants import PDF_UNSUPPORTED_UNICODE_ERROR
-from notewise.config import settings as config
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.errors import (
@@ -22,11 +20,20 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
+from notewise.llm.provider import UsageTotals
 from notewise.logging import make_log_safe_text
+from notewise.pipeline._artifacts import generate_and_write_quiz
+from notewise.pipeline._chapter_outputs import generate_chapter_outputs
+from notewise.pipeline._documents import get_output_extension
+from notewise.pipeline._helpers import coerce_usage_totals
+from notewise.pipeline._output_rendering import render_notes_with_warning
 from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
-
-from . import core as pipeline_module
+from notewise.youtube.metadata import get_video_metadata
+from notewise.youtube.transcript import (
+    fetch_transcript,
+    split_transcript_by_chapters_with_metadata,
+)
 
 
 logger = structlog.get_logger(__name__)
@@ -40,6 +47,16 @@ class _VideoInputs:
     transcript: Any
     transcript_text: str
     transcript_seconds: float
+
+
+@dataclass(frozen=True)
+class _GeneratedOutputs:
+    rendered_output_targets: dict[str, Path]
+    render_warning: str | None
+    output_target: Path | None
+    transcript_output_dir: Path
+    chapter_directory_output: bool
+    temporary_chapter_directory: TemporaryDirectory[str] | None
 
 
 def _notes_artifact_exists(target: Path, output_format: str) -> bool:
@@ -68,7 +85,7 @@ def _cached_video_has_requested_artifacts(
     for output_format in pipeline.output_formats:
         if pipeline.chapter_directory_output and output_format == "md":
             continue
-        output_extension = pipeline_module.get_output_extension(output_format)
+        output_extension = get_output_extension(output_format)
         artifact = output_dir / f"{safe_title}{output_extension}"
         if not _notes_artifact_exists(artifact, output_format):
             return False
@@ -98,7 +115,7 @@ async def _fetch_video_inputs(
     emit: Callable[..., None],
 ) -> _VideoInputs:
     await pipeline._acquire_youtube_request_slot()
-    meta = await pipeline_module.get_video_metadata(
+    meta = await get_video_metadata(
         video_id,
         pipeline.youtube_cookie_file,
     )
@@ -115,7 +132,7 @@ async def _fetch_video_inputs(
     emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
 
     transcript_start = time.perf_counter()
-    transcript = await pipeline_module.fetch_transcript(
+    transcript = await fetch_transcript(
         video_id,
         pipeline.languages,
         on_request=pipeline._acquire_youtube_request_slot,
@@ -137,7 +154,7 @@ async def _fetch_video_inputs(
 
 
 def _usage_context(provider: Any) -> Any:
-    usage_context = nullcontext(pipeline_module.UsageTotals())
+    usage_context = nullcontext(UsageTotals())
     usage_collector = getattr(provider, "collect_usage", None)
     if not callable(usage_collector):
         return usage_context
@@ -146,27 +163,6 @@ def _usage_context(provider: Any) -> Any:
     if hasattr(candidate, "__enter__") and hasattr(candidate, "__exit__"):
         return candidate
     return usage_context
-
-
-def _render_notes_with_warning(
-    notes: str,
-    title: str,
-    rendered_output_targets: dict[str, Path],
-    target_language: str,
-) -> tuple[dict[str, Path], str | None]:
-    rendered_output_targets = pipeline_module.render_notes_documents(
-        notes,
-        title,
-        rendered_output_targets,
-        target_language=target_language,
-    )
-    if rendered_output_targets.get("pdf") is not None and (
-        rendered_output_targets["pdf"].suffix.lower() == ".md"
-    ):
-        return rendered_output_targets, PDF_UNSUPPORTED_UNICODE_ERROR.format(
-            target_language=target_language
-        )
-    return rendered_output_targets, None
 
 
 async def _generate_single_file_output(
@@ -195,9 +191,7 @@ async def _generate_single_file_output(
             video_id,
             title=title,
             total_chunks=total_parts,
-            phase_label=(
-                "Combining" if pipeline.generator.use_combine_chunk else "Stitching"
-            ),
+            phase_label="Stitching",
         )
 
     notes = await pipeline.generator.generate_study_notes(
@@ -211,17 +205,14 @@ async def _generate_single_file_output(
     for output_format in pipeline.output_formats:
         current_output_target = await pipeline._reserve_output_target(
             pipeline.output_dir
-            / (
-                f"{sanitize_filename(title)}"
-                f"{pipeline_module.get_output_extension(output_format)}"
-            ),
+            / (f"{sanitize_filename(title)}{get_output_extension(output_format)}"),
             video_id,
             allow_existing_base=pipeline.force or current_cached_video is not None,
         )
         reserved_targets.append(current_output_target)
         rendered_output_targets[output_format] = current_output_target
 
-    rendered_output_targets, render_warning = _render_notes_with_warning(
+    rendered_output_targets, render_warning = render_notes_with_warning(
         notes,
         title,
         rendered_output_targets,
@@ -229,250 +220,6 @@ async def _generate_single_file_output(
     )
     output_target = rendered_output_targets[pipeline.output_format]
     return rendered_output_targets, render_warning, output_target, output_target.parent
-
-
-async def _generate_chapter_outputs(
-    pipeline: Any,
-    video_id: str,
-    title: str,
-    chapter_transcripts: dict[str, Any],
-    current_cached_video: Any,
-    reserved_targets: list[Path],
-    emit: Callable[..., None],
-) -> tuple[
-    dict[str, Path],
-    str | None,
-    Path | None,
-    Path,
-    TemporaryDirectory[str] | None,
-]:
-    chapter_directory_output = pipeline.chapter_directory_output
-    bundled_output_formats = (
-        [
-            output_format
-            for output_format in pipeline.output_formats
-            if output_format != pipeline_module.DEFAULT_NOTES_OUTPUT_FORMAT
-        ]
-        if chapter_directory_output
-        else list(pipeline.output_formats)
-    )
-    total_chapters = len(chapter_transcripts)
-    ordered_chapters = list(chapter_transcripts.items())
-    chapters_to_generate: dict[str, str] = {}
-    chapter_targets: list[tuple[str, int, Path | None]] = []
-    chapter_output_files: dict[str, Path] = {}
-    rendered_output_targets: dict[str, Path] = {}
-    render_warning: str | None = None
-    output_target: Path | None = None
-    transcript_output_dir = pipeline.output_dir
-    temporary_chapter_directory: TemporaryDirectory[str] | None = None
-
-    if chapter_directory_output:
-        output_target = await pipeline._reserve_output_target(
-            pipeline.output_dir / sanitize_filename(title),
-            video_id,
-            allow_existing_base=pipeline.force or current_cached_video is not None,
-        )
-        reserved_targets.append(output_target)
-        output_target.mkdir(parents=True, exist_ok=True)
-        pipeline._write_output_target_metadata(output_target, video_id)
-        transcript_output_dir = output_target
-
-    for output_format in bundled_output_formats:
-        bundled_output_target = await pipeline._reserve_output_target(
-            pipeline.output_dir
-            / (
-                f"{sanitize_filename(title)}"
-                f"{pipeline_module.get_output_extension(output_format)}"
-            ),
-            video_id,
-            allow_existing_base=pipeline.force or current_cached_video is not None,
-        )
-        reserved_targets.append(bundled_output_target)
-        rendered_output_targets[output_format] = bundled_output_target
-
-    if output_target is None and rendered_output_targets:
-        output_target = next(iter(rendered_output_targets.values()))
-        transcript_output_dir = output_target.parent
-
-    temporary_chapter_dir: Path | None = None
-    if rendered_output_targets and not chapter_directory_output:
-        temporary_chapter_directory = TemporaryDirectory(prefix="notewise-chapters-")
-        temporary_chapter_dir = Path(temporary_chapter_directory.name)
-
-    for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
-        chapter_file: Path | None = None
-        safe_chapter = sanitize_filename(chap_title)
-        if chapter_directory_output and output_target is not None:
-            chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
-        elif temporary_chapter_dir is not None:
-            chapter_file = temporary_chapter_dir / (
-                f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}.md"
-            )
-
-        if chapter_file is not None:
-            chapter_output_files[chap_title] = chapter_file
-
-        chapter_targets.append((chap_title, chapter_data.start_seconds, chapter_file))
-
-        if (
-            chapter_file is not None
-            and (not pipeline.force or rendered_output_targets)
-            and chapter_file.exists()
-        ):
-            logger.info(
-                f"Skipping chapter {i}/{total_chapters}"
-                f" '{chap_title[:40]}' (already exists)"
-            )
-            continue
-
-        chapters_to_generate[chap_title] = chapter_data.text
-
-    generated_chapter_notes: dict[str, str] = {}
-
-    if chapters_to_generate:
-        chapter_indices = {
-            chapter_title: index
-            for index, (chapter_title, _) in enumerate(ordered_chapters, start=1)
-        }
-
-        def _on_chapter_start(index: int, _total: int) -> None:
-            chapter_title = list(chapters_to_generate.keys())[index - 1]
-            emit(
-                EventType.CHAPTER_GENERATING,
-                video_id,
-                title=title,
-                chapter_number=chapter_indices[chapter_title],
-                total_chapters=total_chapters,
-            )
-
-        original_generate_single = pipeline.generator.generate_single_chapter_notes
-
-        def _write_completed_chapter(chapter_title: str, notes: str) -> None:
-            chapter_file = chapter_output_files.get(chapter_title)
-            if chapter_file is None:
-                return
-            chapter_file.parent.mkdir(parents=True, exist_ok=True)
-            if not pipeline.timestamps:
-                chapter_file.write_text(notes, encoding="utf-8")
-
-        async def _generate_single_chapter_notes_with_events(
-            chapter_title: str,
-            chapter_text: str,
-            on_chunk: Callable[[int, int], None] | None = None,
-            on_combine: Callable[[int], None] | None = None,
-        ) -> str:
-            chapter_number = chapter_indices[chapter_title]
-
-            def _on_chapter_chunk(chunk_num: int, total: int) -> None:
-                emit(
-                    EventType.CHAPTER_CHUNK_GENERATING,
-                    video_id,
-                    title=title,
-                    chapter_number=chapter_number,
-                    total_chapters=total_chapters,
-                    chunk_number=chunk_num,
-                    total_chunks=total,
-                )
-                if on_chunk:
-                    on_chunk(chunk_num, total)
-
-            def _on_chapter_combine(total_parts: int) -> None:
-                emit(
-                    EventType.CHAPTER_COMBINING,
-                    video_id,
-                    title=title,
-                    chapter_number=chapter_number,
-                    total_chapters=total_chapters,
-                    total_chunks=total_parts,
-                    phase_label=(
-                        "Combining"
-                        if pipeline.generator.use_combine_chunk
-                        else "Stitching"
-                    ),
-                )
-                if on_combine:
-                    on_combine(total_parts)
-
-            try:
-                return cast(
-                    str,
-                    await original_generate_single(
-                        chapter_title=chapter_title,
-                        chapter_text=chapter_text,
-                        on_chunk=_on_chapter_chunk,
-                        on_combine=_on_chapter_combine,
-                    ),
-                )
-            finally:
-                emit(
-                    EventType.CHAPTER_COMPLETE,
-                    video_id,
-                    title=title,
-                    chapter_number=chapter_number,
-                    total_chapters=total_chapters,
-                )
-
-        generate_chapter_notes = pipeline.generator.generate_chapter_notes_concurrent
-        generated_chapter_notes = await generate_chapter_notes(
-            chapters_to_generate,
-            max_concurrent=config.max_concurrent_chapters,
-            semaphore=pipeline._chapter_semaphore,
-            video_title=title,
-            on_chapter_start=_on_chapter_start,
-            on_chapter_complete=_write_completed_chapter,
-            generate_single=_generate_single_chapter_notes_with_events,
-        )
-
-    bundled_chapter_notes: list[str] = []
-
-    for chapter_title, start_seconds, chapter_file in chapter_targets:
-        notes = generated_chapter_notes.get(chapter_title)
-        if notes is None and chapter_file is not None and chapter_file.exists():
-            notes = chapter_file.read_text(encoding="utf-8")
-        if notes is None:
-            continue
-        if pipeline.timestamps:
-            notes = pipeline_module.prefix_chapter_heading_with_timestamp(
-                notes,
-                chapter_title,
-                start_seconds,
-            )
-
-        if rendered_output_targets:
-            bundled_chapter_notes.append(notes)
-
-        if chapter_file is None:
-            continue
-
-        chapter_file.write_text(notes, encoding="utf-8")
-
-    if rendered_output_targets:
-        bundled_notes = pipeline_module.build_chapter_bundle(
-            title,
-            bundled_chapter_notes,
-        )
-        rendered_output_targets, render_warning = _render_notes_with_warning(
-            bundled_notes,
-            title,
-            rendered_output_targets,
-            pipeline.target_language,
-        )
-        if pipeline.output_format in rendered_output_targets:
-            primary_output_target = rendered_output_targets[pipeline.output_format]
-            if not chapter_directory_output:
-                transcript_output_dir = primary_output_target.parent
-                output_target = primary_output_target
-            else:
-                output_target = rendered_output_targets[pipeline.output_format]
-
-    return (
-        rendered_output_targets,
-        render_warning,
-        output_target,
-        transcript_output_dir,
-        temporary_chapter_directory,
-    )
 
 
 async def _record_successful_video(
@@ -487,7 +234,7 @@ async def _record_successful_video(
     generation_seconds: float,
     raw_usage_totals: Any,
 ) -> PipelineMetrics:
-    usage_totals = pipeline_module.coerce_usage_totals(raw_usage_totals)
+    usage_totals = coerce_usage_totals(raw_usage_totals)
     video_metrics = PipelineMetrics(
         prompt_tokens=usage_totals.prompt_tokens,
         completion_tokens=usage_totals.completion_tokens,
@@ -511,6 +258,124 @@ async def _record_successful_video(
         generation_seconds=video_metrics.generation_seconds,
     )
     return video_metrics
+
+
+def _get_chapter_transcripts(
+    video_id: str,
+    video_inputs: _VideoInputs,
+) -> dict[str, Any] | None:
+    if not video_inputs.chapters:
+        return None
+
+    chapter_transcripts = split_transcript_by_chapters_with_metadata(
+        video_inputs.transcript,
+        video_inputs.chapters,
+    )
+    if chapter_transcripts:
+        return chapter_transcripts
+
+    logger.warning(
+        f"No usable chapter transcripts found for {video_id}; "
+        "falling back to single-file generation."
+    )
+    return None
+
+
+async def _generate_video_outputs(
+    pipeline: Any,
+    video_id: str,
+    video_inputs: _VideoInputs,
+    current_cached_video: Any,
+    reserved_targets: list[Path],
+    emit: Callable[..., None],
+) -> _GeneratedOutputs:
+    chapter_transcripts = _get_chapter_transcripts(video_id, video_inputs)
+    if chapter_transcripts is not None:
+        (
+            rendered_output_targets,
+            render_warning,
+            output_target,
+            transcript_output_dir,
+            temporary_chapter_directory,
+        ) = await generate_chapter_outputs(
+            pipeline,
+            video_id,
+            video_inputs.title,
+            chapter_transcripts,
+            current_cached_video,
+            reserved_targets,
+            emit,
+        )
+        return _GeneratedOutputs(
+            rendered_output_targets=rendered_output_targets,
+            render_warning=render_warning,
+            output_target=output_target,
+            transcript_output_dir=transcript_output_dir,
+            chapter_directory_output=pipeline.chapter_directory_output,
+            temporary_chapter_directory=temporary_chapter_directory,
+        )
+
+    (
+        rendered_output_targets,
+        render_warning,
+        output_target,
+        transcript_output_dir,
+    ) = await _generate_single_file_output(
+        pipeline,
+        video_id,
+        video_inputs.title,
+        video_inputs.transcript_text,
+        current_cached_video,
+        reserved_targets,
+        emit,
+    )
+    return _GeneratedOutputs(
+        rendered_output_targets=rendered_output_targets,
+        render_warning=render_warning,
+        output_target=output_target,
+        transcript_output_dir=transcript_output_dir,
+        chapter_directory_output=False,
+        temporary_chapter_directory=None,
+    )
+
+
+async def _write_optional_artifacts(
+    pipeline: Any,
+    video_id: str,
+    video_inputs: _VideoInputs,
+    outputs: _GeneratedOutputs,
+    emit: Callable[..., None],
+) -> None:
+    if pipeline.export_transcript_format:
+        pipeline._export_transcript(
+            video_inputs.transcript,
+            video_inputs.title,
+            outputs.transcript_output_dir,
+            video_id,
+        )
+
+    if not pipeline.quiz or outputs.output_target is None:
+        return
+
+    quiz_output_dir = (
+        outputs.output_target
+        if outputs.chapter_directory_output
+        else pipeline.output_dir
+    )
+    quiz_name = (
+        outputs.output_target.name
+        if outputs.chapter_directory_output
+        else outputs.output_target.stem
+    )
+    await generate_and_write_quiz(
+        pipeline.generator,
+        video_inputs.transcript_text,
+        quiz_name,
+        output_dir=quiz_output_dir,
+        emit=emit,
+        video_id=video_id,
+        title=video_inputs.title,
+    )
 
 
 async def process_single_video(
@@ -552,109 +417,38 @@ async def process_single_video(
 
             video_inputs = await _fetch_video_inputs(pipeline, video_id, emit)
             title = video_inputs.title
-            duration = video_inputs.duration
-            chapters = video_inputs.chapters
-            transcript_obj = video_inputs.transcript
             transcript_text = video_inputs.transcript_text
             transcript_seconds = video_inputs.transcript_seconds
-
-            use_chapters = bool(chapters)
-            chapter_directory_output = False
-            output_target: Path | None = None
-            rendered_output_targets: dict[str, Path] = {}
-            render_warning: str | None = None
-            transcript_output_dir = pipeline.output_dir
 
             generation_start = time.perf_counter()
             usage_context = _usage_context(pipeline.provider)
 
             with usage_context as raw_usage_totals:
-                if use_chapters:
-                    chapter_transcripts = (
-                        pipeline_module.split_transcript_by_chapters_with_metadata(
-                            transcript_obj,
-                            chapters,
-                        )
-                    )
-
-                    if not chapter_transcripts:
-                        logger.warning(
-                            f"No usable chapter transcripts found for {video_id}; "
-                            "falling back to single-file generation."
-                        )
-                        use_chapters = False
-                    else:
-                        chapter_directory_output = pipeline.chapter_directory_output
-
-                if use_chapters:
-                    (
-                        rendered_output_targets,
-                        render_warning,
-                        output_target,
-                        transcript_output_dir,
-                        temporary_chapter_directory,
-                    ) = await _generate_chapter_outputs(
-                        pipeline,
-                        video_id,
-                        title,
-                        chapter_transcripts,
-                        current_cached_video,
-                        reserved_targets,
-                        emit,
-                    )
-                else:
-                    (
-                        rendered_output_targets,
-                        render_warning,
-                        output_target,
-                        transcript_output_dir,
-                    ) = await _generate_single_file_output(
-                        pipeline,
-                        video_id,
-                        title,
-                        transcript_text,
-                        current_cached_video,
-                        reserved_targets,
-                        emit,
-                    )
-
-                if pipeline.export_transcript_format:
-                    pipeline._export_transcript(
-                        transcript_obj,
-                        title,
-                        transcript_output_dir,
-                        video_id,
-                    )
-
-                if pipeline.quiz and output_target is not None:
-                    quiz_output_dir = (
-                        output_target
-                        if chapter_directory_output
-                        else pipeline.output_dir
-                    )
-                    quiz_name = (
-                        output_target.name
-                        if chapter_directory_output
-                        else output_target.stem
-                    )
-                    await pipeline_module.generate_and_write_quiz(
-                        pipeline.generator,
-                        transcript_text,
-                        quiz_name,
-                        output_dir=quiz_output_dir,
-                        emit=emit,
-                        video_id=video_id,
-                        title=title,
-                    )
+                outputs = await _generate_video_outputs(
+                    pipeline,
+                    video_id,
+                    video_inputs,
+                    current_cached_video,
+                    reserved_targets,
+                    emit,
+                )
+                temporary_chapter_directory = outputs.temporary_chapter_directory
+                await _write_optional_artifacts(
+                    pipeline,
+                    video_id,
+                    video_inputs,
+                    outputs,
+                    emit,
+                )
 
             generation_seconds = time.perf_counter() - generation_start
             await _record_successful_video(
                 pipeline,
                 video_id=video_id,
                 title=title,
-                duration=duration,
+                duration=video_inputs.duration,
                 transcript_text=transcript_text,
-                transcript_language=transcript_obj.language_code,
+                transcript_language=video_inputs.transcript.language_code,
                 transcript_seconds=transcript_seconds,
                 generation_seconds=generation_seconds,
                 raw_usage_totals=raw_usage_totals,
@@ -663,8 +457,8 @@ async def process_single_video(
                 EventType.GENERATION_COMPLETE,
                 video_id,
                 title=title,
-                error=render_warning,
-                output_path=output_target,
+                error=outputs.render_warning,
+                output_path=outputs.output_target,
             )
             emit(EventType.VIDEO_SUCCESS, video_id, title=title)
             return True

@@ -194,6 +194,3 @@ class _PlaylistMixin:
 
     def _extract_continuation_token(self, node: Any) -> str | None:
         return _extract_continuation_token(node)
-
-    def _playlist_availability(self, data: dict[str, Any]) -> str:
-        return _playlist_availability(data)

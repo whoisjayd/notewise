@@ -1827,17 +1827,15 @@ def test_process_quiz_flag_passed_to_pipeline(
     assert call_kwargs.get("quiz") is True
 
 
-def test_process_use_combine_chunk_flag_passed_to_pipeline(
+def test_process_use_combine_chunk_flag_is_removed(
     mock_config_exists,  # noqa: ARG001
-    mock_pipeline,
+    mock_pipeline,  # noqa: ARG001
 ):
-    """--use-combine-chunk is forwarded to CorePipeline."""
-    mock_cls, _pipeline_instance = mock_pipeline
+    """--use-combine-chunk should no longer be accepted."""
     result = runner.invoke(app, ["process", _VIDEO_URL, "--use-combine-chunk"])
 
-    assert result.exit_code == 0
-    call_kwargs = mock_cls.call_args.kwargs
-    assert call_kwargs.get("use_combine_chunk") is True
+    assert result.exit_code != 0
+    assert "No such option" in result.output
 
 
 def test_process_throttle_flag_passed_to_pipeline(

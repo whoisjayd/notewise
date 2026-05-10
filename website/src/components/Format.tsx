@@ -25,7 +25,7 @@ export function Format() {
   return (
     <section
       id="format"
-      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="grid gap-12 md:grid-cols-[1fr_1.4fr] md:gap-16 lg:gap-20">

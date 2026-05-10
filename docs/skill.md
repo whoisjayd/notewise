@@ -52,7 +52,7 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `stats`, `history`, `info`, `doctor`, `edit-config`, `auth login`, `cache`, `logs`.
 
-`process` flags: `--model/-m`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--use-combine-chunk`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
+`process` flags: `--model/-m`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
 
 ## Config
 

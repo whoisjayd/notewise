@@ -110,6 +110,19 @@ def test_configure_logging_is_idempotent(tmp_path):
     assert len(list((tmp_path / "logs").glob("*.log"))) == 1
 
 
+def test_configure_logging_defaults_to_notewise_home(tmp_path, monkeypatch):
+    """Default session logs should follow the configured state directory."""
+    _reset_logging_state()
+    state_dir = tmp_path / "custom-state"
+    monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+
+    log_path = configure_logging()
+
+    assert log_path is not None
+    assert log_path.parent == state_dir / "logs"
+    assert logging_module.get_log_dir() == state_dir / "logs"
+
+
 def test_configure_logging_keeps_third_party_debug_off_by_default(tmp_path):
     """Third-party DEBUG logs should require explicit verbose logging."""
     _reset_logging_state()
