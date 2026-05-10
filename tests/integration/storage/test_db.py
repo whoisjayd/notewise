@@ -13,10 +13,6 @@ from notewise.storage import CACHE_DB_FILENAME
 from notewise.storage.repository import DatabaseRepository as DatabaseManager
 
 
-def build_cache_db_path():
-    return get_cache_db_path()
-
-
 @pytest.fixture(autouse=True)
 def _close_db_instances():
     """Close all DatabaseManager singletons after each test."""
@@ -35,7 +31,7 @@ def test_database_manager_singleton_for_same_path(tmp_path):
 
 def test_build_cache_db_path_scopes_under_user_config_dir():
     """Cache DB path should be stable and stored under ~/.notewise."""
-    cache_path = build_cache_db_path()
+    cache_path = get_cache_db_path()
 
     assert cache_path.parent == Path(os.environ["NOTEWISE_HOME"])
     assert cache_path.name == CACHE_DB_FILENAME
@@ -43,8 +39,8 @@ def test_build_cache_db_path_scopes_under_user_config_dir():
 
 def test_build_cache_db_path_is_stable_across_calls():
     """Cache DB path should remain stable across repeated calls."""
-    cache_one = build_cache_db_path()
-    cache_two = build_cache_db_path()
+    cache_one = get_cache_db_path()
+    cache_two = get_cache_db_path()
 
     assert cache_one == cache_two
 

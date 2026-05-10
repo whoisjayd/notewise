@@ -11,6 +11,7 @@ from typing import Any
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
+from notewise._constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.domain.events import EventType
 from notewise.domain.youtube import VideoTranscript
 from notewise.utils import sanitize_filename
@@ -21,8 +22,8 @@ logger = structlog.get_logger(__name__)
 
 def _format_timestamp(seconds: int) -> str:
     total = max(0, int(seconds))
-    hours, rem = divmod(total, 3600)
-    minutes, secs = divmod(rem, 60)
+    hours, rem = divmod(total, SECONDS_PER_HOUR)
+    minutes, secs = divmod(rem, SECONDS_PER_MINUTE)
     if hours:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"

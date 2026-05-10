@@ -18,6 +18,7 @@ from notewise._constants import (
     DEFAULT_TEMPERATURE,
     DEFAULT_THROTTLE_SECONDS,
     DEFAULT_USE_COMBINE_CHUNK,
+    TOKEN_ESTIMATE_CHARS_PER_TOKEN,
 )
 from notewise.config import settings as config
 from notewise.llm.prompts.chapter_notes import (
@@ -336,10 +337,13 @@ class StudyMaterialGenerator:
         """Count tokens in text using model-specific tokenizer."""
         try:
             count = token_counter(model=self.provider.model, text=text)
-            return int(count) if count is not None else len(text) // 4
+            return (
+                int(count)
+                if count is not None
+                else len(text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
+            )
         except Exception:
-            # Fallback: ~4 chars per token
-            return len(text) // 4
+            return len(text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
 
     def count_tokens(self, text: str) -> int:
         """Public token-counting API used by pipeline stats and tests."""

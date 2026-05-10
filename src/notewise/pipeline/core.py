@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any
 
 import structlog
+from aiolimiter import AsyncLimiter
 from sqlalchemy.exc import SQLAlchemyError
 
 from notewise._constants import (
@@ -51,7 +52,7 @@ from notewise.pipeline._helpers import (
     estimate_tokens_used,
     suffix_output_target,
 )
-from notewise.pipeline._limiter import LimiterProtocol, get_youtube_limiter
+from notewise.pipeline._limiter import get_youtube_limiter
 from notewise.pipeline._state import PipelineSharedState, dedupe_video_ids
 from notewise.storage import DatabaseRepository, VideoSchema
 from notewise.utils import sanitize_filename
@@ -168,7 +169,7 @@ class CorePipeline:
             self._reserved_output_targets = shared_state.reserved_output_targets
         self.db = DatabaseRepository.get_instance(self._cache_db_path())
 
-    def _get_youtube_request_limiter(self) -> LimiterProtocol:
+    def _get_youtube_request_limiter(self) -> AsyncLimiter:
         return get_youtube_limiter(self.youtube_requests_per_minute)
 
     async def _acquire_youtube_request_slot(self) -> None:
@@ -254,17 +255,6 @@ class CorePipeline:
     async def _record_metrics(self, metrics: PipelineMetrics) -> None:
         async with self._metrics_lock:
             self._run_metrics.add_from(metrics)
-
-    @staticmethod
-    def _coerce_usage_int(value: Any) -> int:
-        return coerce_usage_int(value)
-
-    @staticmethod
-    def _coerce_usage_float(value: Any) -> float:
-        return coerce_usage_float(value)
-
-    def _coerce_usage_totals(self, raw_usage: Any) -> UsageTotals:
-        return coerce_usage_totals(raw_usage)
 
     def _estimate_tokens_used(self, transcript_text: str) -> int:
         try:

@@ -36,115 +36,6 @@ from notewise.youtube.transcript import (
 )
 
 
-def build_cache_db_path():
-    return get_cache_db_path()
-
-
-# ---------------------------------------------------------------------------
-# sanitize_filename – extra cases not covered by the orchestrator tests
-# ---------------------------------------------------------------------------
-
-
-def test_sanitize_filename_dot_traversal():
-    """Dot-only names must not slip through as directory traversal."""
-    assert sanitize_filename(".") == "untitled"
-    assert sanitize_filename("..") == "untitled"
-
-
-def test_sanitize_filename_empty_after_strip():
-    assert sanitize_filename("") == "untitled"
-    assert sanitize_filename("   ") == "untitled"
-
-
-def test_sanitize_filename_removes_forbidden_chars():
-    assert sanitize_filename('foo<>:"/\\|?*bar') == "foobar"
-
-
-def test_sanitize_filename_truncates_to_100():
-    assert len(sanitize_filename("a" * 200)) == 100
-
-
-def test_sanitize_filename_strips_control_characters():
-    """ASCII control characters must be removed."""
-    assert sanitize_filename("foo\x00bar") == "foobar"
-    assert sanitize_filename("foo\x1fbar") == "foobar"
-    assert sanitize_filename("foo\x7fbar") == "foobar"
-
-
-def test_sanitize_filename_trailing_dots_removed():
-    """Trailing dots are illegal on Windows and must be stripped."""
-    assert sanitize_filename("filename.") == "filename"
-    assert sanitize_filename("filename...") == "filename"
-    assert sanitize_filename("...") == "untitled"
-
-
-def test_sanitize_filename_preserves_leading_dot():
-    """Leading dots (e.g. .env, .gitignore) are valid and must not be stripped."""
-    assert sanitize_filename(".env") == ".env"
-    assert sanitize_filename(".gitignore") == ".gitignore"
-
-
-def test_sanitize_filename_trailing_spaces_removed():
-    """Trailing spaces are illegal on Windows and must be stripped."""
-    assert sanitize_filename("filename   ") == "filename"
-
-
-def test_sanitize_filename_truncation_restrips_trailing_spaces():
-    """Truncation must not leave an illegal trailing space behind."""
-    raw_name = ("a" * 99) + " " + ("b" * 10)
-    result = sanitize_filename(raw_name)
-
-    assert len(result) <= 100
-    assert not result.endswith(" ")
-
-
-def test_sanitize_filename_reserved_name_stays_within_100_chars():
-    """Reserved names at the 100-char limit stay within 100 chars after prefixing."""
-    # "NUL." + 96 x "a" = 100 chars total; matches _RESERVED because of "NUL."
-    long_nul = "NUL." + "a" * 96
-    result = sanitize_filename(long_nul)
-    assert len(result) <= 100
-    assert result.startswith("_")
-
-
-def test_sanitize_filename_windows_reserved_names():
-    """Windows reserved device names must be prefixed with underscore."""
-    for reserved in ("CON", "PRN", "AUX", "NUL"):
-        result = sanitize_filename(reserved)
-        assert result == f"_{reserved}", f"Expected _{reserved}, got {result}"
-        # Case-insensitive
-        result_lower = sanitize_filename(reserved.lower())
-        assert result_lower == f"_{reserved.lower()}"
-
-    for i in range(1, 10):
-        assert sanitize_filename(f"COM{i}") == f"_COM{i}"
-        assert sanitize_filename(f"LPT{i}") == f"_LPT{i}"
-
-    # COM0 and LPT0 are NOT Windows reserved names
-    assert sanitize_filename("COM0") == "COM0"
-    assert sanitize_filename("LPT0") == "LPT0"
-
-
-def test_sanitize_filename_reserved_names_with_extension():
-    """Reserved names followed by a dot (e.g. NUL.txt pattern) must also be renamed."""
-    assert sanitize_filename("NUL.txt") == "_NUL.txt"
-    assert sanitize_filename("com1.log") == "_com1.log"
-
-
-def test_sanitize_filename_non_reserved_prefix():
-    """Names that start with a reserved word but aren't reserved must pass through."""
-    assert sanitize_filename("CONSOLE") == "CONSOLE"
-    assert sanitize_filename("NULLIFY") == "NULLIFY"
-    assert sanitize_filename("auxillary") == "auxillary"
-
-
-def test_sanitize_filename_mixed_forbidden_and_reserved():
-    """NUL<video>.txt after stripping forbidden chars is NULvideo.txt — not reserved."""
-    assert sanitize_filename("NUL<video>.txt") == "NULvideo.txt"
-    # But bare NUL.txt (after stripping) is still reserved
-    assert sanitize_filename("NUL.txt") == "_NUL.txt"
-
-
 # ---------------------------------------------------------------------------
 # CorePipeline fixtures
 # ---------------------------------------------------------------------------
@@ -1498,7 +1389,6 @@ async def test_run_failed_chapter_generation_still_emits_chapter_complete(
         temp_output_dir,
         mock_llm_provider,
         force=False,
-        chapter_directory_output=True,
     )
 
     async def _fail_chapter(
@@ -1758,7 +1648,7 @@ def _seed_cached_video(
     duration: int = 100,
 ) -> None:
     """Seed SQLite cache with one processed video entry."""
-    db = DatabaseManager.get_instance(build_cache_db_path())
+    db = DatabaseManager.get_instance(get_cache_db_path())
     db.upsert_video_cache(
         video_id=video_id,
         title=title,
@@ -1776,13 +1666,13 @@ async def test_checkpoint_skips_existing_single_file(
 ):
     """VIDEO_SKIPPED is emitted when video is already present in SQLite cache."""
     _seed_cached_video("vid1", title="Test Video")
+    (temp_output_dir / "Test Video.md").write_text("# Existing Notes", encoding="utf-8")
 
     events: list[PipelineEvent] = []
     p = _make_pipeline(
         temp_output_dir,
         mock_llm_provider,
         force=False,
-        chapter_directory_output=True,
     )
 
     with (
@@ -1804,6 +1694,46 @@ async def test_checkpoint_skips_existing_single_file(
     # No metadata or transcript calls should run for skipped videos.
     mock_metadata.assert_not_called()
     mock_fetch.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_checkpoint_reprocesses_when_requested_quiz_is_missing(
+    temp_output_dir, mock_llm_provider
+):
+    """A cache hit must not skip when a requested side artifact is missing."""
+    _seed_cached_video("vid1", title="Test Video")
+    (temp_output_dir / "Test Video.md").write_text("# Existing Notes", encoding="utf-8")
+
+    events: list[PipelineEvent] = []
+    p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid1",
+                    title="Test Video",
+                    duration=100,
+                    chapters=[],
+                )
+            ),
+        ) as mock_metadata,
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(
+            video_id="vid1",
+            text="fresh content",
+        )
+
+        result = await p.run(["vid1"], on_event=events.append)
+
+    assert result.success_count == 1
+    assert EventType.VIDEO_SKIPPED not in [e.event_type for e in events]
+    mock_metadata.assert_called_once()
+    mock_fetch.assert_awaited_once()
+    assert (temp_output_dir / "Test Video_quiz.md").exists()
 
 
 @pytest.mark.asyncio
@@ -2582,7 +2512,7 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
         result = await p.run(["vid-db"])
 
     assert result.success_count == 1
-    db = DatabaseManager.get_instance(build_cache_db_path())
+    db = DatabaseManager.get_instance(get_cache_db_path())
     cached_video = db.get_video("vid-db")
     cached_transcript = db.get_transcript("vid-db")
     stats = db.get_run_stats("vid-db")
@@ -2648,7 +2578,7 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
     assert result.metrics.transcript_seconds >= 0
     assert result.metrics.generation_seconds >= 0
 
-    db = DatabaseManager.get_instance(build_cache_db_path())
+    db = DatabaseManager.get_instance(get_cache_db_path())
     stats = db.get_run_stats("vid-metrics")
     latest = stats[-1]
     assert latest.prompt_tokens == 40

@@ -3,62 +3,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Protocol
+from typing import Any
+
+from aiolimiter import AsyncLimiter
 
 
-class LimiterProtocol(Protocol):
-    """Minimal async-context-manager interface used by the pipeline."""
-
-    async def __aenter__(self) -> Any: ...
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: Any,
-    ) -> None: ...
-
-
-class FallbackAsyncLimiter:
-    """Minimal fallback limiter used when aiolimiter is unavailable."""
-
-    def __init__(self, max_rate: int, time_period: float) -> None:
-        self.max_rate = max_rate
-        self.time_period = time_period
-
-    async def __aenter__(self) -> FallbackAsyncLimiter:
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc: BaseException | None,
-        tb: Any,
-    ) -> None:
-        return None
-
-
-def _create_limiter(
-    requests_per_minute: int,
-    *,
-    time_period: float,
-) -> LimiterProtocol:
-    """Create the best available limiter implementation for this runtime."""
-    try:
-        from aiolimiter import AsyncLimiter
-    except ModuleNotFoundError:
-        return FallbackAsyncLimiter(
-            max_rate=requests_per_minute,
-            time_period=time_period,
-        )
-
+def _create_limiter(requests_per_minute: int, *, time_period: float) -> AsyncLimiter:
+    """Create the declared runtime limiter implementation."""
     return AsyncLimiter(max_rate=requests_per_minute, time_period=time_period)
 
 
 _GLOBAL_YOUTUBE_LIMITERS: dict[tuple[int, int], Any] = {}
 
 
-def get_youtube_limiter(requests_per_minute: int) -> LimiterProtocol:
+def get_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
     """Return a shared AsyncLimiter for the current event loop and rate cap.
 
     Sharing by ``(loop_id, rate)`` lets concurrent Pipeline instances in the
