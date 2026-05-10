@@ -70,6 +70,35 @@ async def test_prepare_source_wraps_playlist_errors(tmp_path) -> None:
         await prepare_source(context, "https://youtube.com/playlist?list=pl123")
 
 
+@pytest.mark.asyncio
+async def test_prepare_source_wraps_playlist_metadata_errors(tmp_path) -> None:
+    """Playlist metadata failures should stay user-visible in batch preflight."""
+
+    async def _extract_playlist_videos(*_args, **_kwargs):
+        return ["video1"]
+
+    async def _get_playlist_info(*_args, **_kwargs):
+        raise PlaylistError("playlist metadata unavailable")
+
+    context = SimpleNamespace(
+        parse_youtube_url=lambda _url: SimpleNamespace(
+            url_type="playlist",
+            playlist_id="pl123",
+            video_id=None,
+        ),
+        extract_playlist_videos=_extract_playlist_videos,
+        get_playlist_info=_get_playlist_info,
+        selected_cookie_file=None,
+        selected_output=tmp_path,
+    )
+
+    with pytest.raises(UserVisibleCliError) as exc:
+        await prepare_source(context, "https://youtube.com/playlist?list=pl123")
+
+    assert exc.value.title == "Playlist Error"
+    assert exc.value.rows == [("pl123", "playlist metadata unavailable")]
+
+
 def test_failure_row_helpers_cover_default_and_playlist_labels() -> None:
     """Failure-row helpers should format fallback and playlist labels consistently."""
     prepared = ResolvedSource(

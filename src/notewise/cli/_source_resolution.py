@@ -49,16 +49,15 @@ async def prepare_source(
             parsed.playlist_id,
             cookie_file=context.selected_cookie_file,
         )
+        playlist_name, _ = await context.get_playlist_info(
+            parsed.playlist_id,
+            context.selected_cookie_file,
+        )
     except (PlaylistError, VideoUnavailableError) as error:
         raise UserVisibleCliError(
             "Playlist Error",
             [(parsed.playlist_id, str(error))],
         ) from error
-
-    playlist_name, _ = await context.get_playlist_info(
-        parsed.playlist_id,
-        context.selected_cookie_file,
-    )
     deduped_video_ids = dedupe_video_ids(video_ids)
     output_dir = context.selected_output / sanitize_filename(playlist_name)
 

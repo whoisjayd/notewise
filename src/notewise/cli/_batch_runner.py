@@ -9,7 +9,11 @@ from typing import cast
 import structlog
 from rich.markup import escape
 
-from notewise._constants import DASHBOARD_IDLE_MARKUP
+from notewise._constants import (
+    BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE,
+    BATCH_SOURCE_UNEXPECTED_ERROR_TITLE,
+    DASHBOARD_IDLE_MARKUP,
+)
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
     UI_STATUS_MAP,
@@ -219,6 +223,25 @@ async def run_batch_file(
                     prepared = await prepare_source(context, batch_url)
                 except UserVisibleCliError as error:
                     await resolved_sources.put((item_index, batch_url, None, error))
+                    return
+                except Exception:
+                    structlog.get_logger(__name__).exception("batch.source_failure")
+                    await resolved_sources.put(
+                        (
+                            item_index,
+                            batch_url,
+                            None,
+                            UserVisibleCliError(
+                                BATCH_SOURCE_UNEXPECTED_ERROR_TITLE,
+                                [
+                                    (
+                                        batch_url,
+                                        BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE,
+                                    )
+                                ],
+                            ),
+                        )
+                    )
                     return
                 await resolved_sources.put((item_index, batch_url, prepared, None))
 
