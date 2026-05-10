@@ -1,6 +1,4 @@
-const SITE_URL = "https://notewise.click";
-
-export const DOCS_URL = `${SITE_URL}/docs`;
+export { absoluteSiteUrl, DOCS_URL } from "@/lib/siteMeta";
 
 export const siteUrls = [
   { loc: "/", changefreq: "weekly", priority: "1.0" },
@@ -25,7 +23,3 @@ export const docsUrls = [
   { loc: "/docs/understand/development", title: "Development" },
   { loc: "/docs/understand/website-docs", title: "Website and docs" },
 ];
-
-export function absoluteSiteUrl(path: string) {
-  return `${SITE_URL}${path}`;
-}

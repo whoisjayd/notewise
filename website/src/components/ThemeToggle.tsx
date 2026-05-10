@@ -1,12 +1,23 @@
 import { useEffect, useState } from "react";
 
 function getSystemTheme() {
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  try {
+    return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+  } catch {
+    return "light";
+  }
 }
 
 function getPreferredTheme() {
-  const stored = localStorage.getItem("nw-theme");
-  return stored === "light" || stored === "dark" ? stored : getSystemTheme();
+  try {
+    const stored = localStorage.getItem("nw-theme");
+    if (stored === "light" || stored === "dark") {
+      return stored;
+    }
+  } catch {
+    // Fall back to the system theme when storage is blocked.
+  }
+  return getSystemTheme();
 }
 
 function applyTheme(next: "light" | "dark") {
@@ -25,11 +36,11 @@ export function ThemeToggle() {
     };
 
     syncTheme();
-    query.addEventListener("change", syncTheme);
+    query.addEventListener?.("change", syncTheme);
     window.addEventListener("storage", syncTheme);
 
     return () => {
-      query.removeEventListener("change", syncTheme);
+      query.removeEventListener?.("change", syncTheme);
       window.removeEventListener("storage", syncTheme);
     };
   }, []);

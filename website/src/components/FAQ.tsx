@@ -33,12 +33,8 @@ export function FAQ() {
     >
       <div className="mx-auto max-w-[920px] px-5 sm:px-6">
         <div className="text-center">
-          <>
-            <span className="t-eyebrow">No 06 · Notes in the margin</span>
-          </>
-          <>
-            <h2 className="mt-3 t-h2">Honest answers, before you install.</h2>
-          </>
+          <span className="t-eyebrow">No 06 · Notes in the margin</span>
+          <h2 className="mt-3 t-h2">Honest answers, before you install.</h2>
         </div>
 
         <ul className="mt-12 sm:mt-14 divide-y divide-[var(--rule)] border-y border-[var(--rule)]">
