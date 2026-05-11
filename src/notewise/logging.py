@@ -54,6 +54,16 @@ _SENSITIVE_KEY_NAMES = frozenset(
     }
     | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
+_SENSITIVE_KEY_SUFFIXES = (
+    "apikey",
+    "accesstoken",
+    "refreshtoken",
+    "sessiontoken",
+    "authorization",
+    "secret",
+    "password",
+    "cookie",
+)
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
     r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
     r"session_token|access_token|refresh_token)|"
@@ -79,7 +89,10 @@ def _normalize_sensitive_key(key: str) -> str:
 
 def _is_sensitive_key(key: str) -> bool:
     """Return whether a mapping key should be redacted."""
-    return _normalize_sensitive_key(key) in _SENSITIVE_KEY_NAMES
+    normalized = _normalize_sensitive_key(key)
+    return normalized in _SENSITIVE_KEY_NAMES or normalized.endswith(
+        _SENSITIVE_KEY_SUFFIXES
+    )
 
 
 def redact_sensitive_text(text: str) -> str:
@@ -254,6 +267,10 @@ def configure_logging(
             root.addHandler(file_handler)
             _SESSION_LOG_PATH = session_log
         except Exception:
+            logging.getLogger(__name__).warning(
+                "logging.session_log_initialization_failed",
+                exc_info=True,
+            )
             _SESSION_LOG_PATH = None
 
         structlog.configure(

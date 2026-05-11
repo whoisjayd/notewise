@@ -7,7 +7,11 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from notewise._constants import CLI_COST_DECIMAL_PLACES, CLI_SECONDS_DECIMAL_PLACES
+from notewise._constants import (
+    CLI_COST_DECIMAL_PLACES,
+    CLI_LOG_PATH_UNAVAILABLE_LABEL,
+    CLI_SECONDS_DECIMAL_PLACES,
+)
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.logging import get_session_log_path
 from notewise.utils import coerce_non_negative_float, coerce_non_negative_int
@@ -38,7 +42,9 @@ def print_failure_panel(
         renderables.append(Text(intro, style="bold"))
     renderables.append(failure_table)
     log_path = get_session_log_path()
-    renderables.append(Text(f"Current log: {log_path or 'unavailable'}", style="dim"))
+    renderables.append(
+        Text(f"Current log: {log_path or CLI_LOG_PATH_UNAVAILABLE_LABEL}", style="dim")
+    )
 
     console.print("\n")
     console.print(

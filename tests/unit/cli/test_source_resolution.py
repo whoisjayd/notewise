@@ -70,7 +70,6 @@ async def test_prepare_source_wraps_playlist_errors(tmp_path) -> None:
         await prepare_source(context, "https://youtube.com/playlist?list=pl123")
 
 
-@pytest.mark.asyncio
 async def test_prepare_source_wraps_playlist_metadata_errors(tmp_path) -> None:
     """Playlist metadata failures should stay user-visible in batch preflight."""
 

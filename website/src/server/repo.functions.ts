@@ -89,13 +89,16 @@ export const getRepoStats = createServerFn({ method: "GET" }).handler(
           readSettledJson(pypiResult),
         ]);
 
-        const releaseVersion = (release?.tag_name as string | undefined)?.replace(/^v/, "");
+        const releaseTagName = release?.tag_name;
+        const releaseVersion =
+          typeof releaseTagName === "string" ? releaseTagName.replace(/^v/, "") : undefined;
         const pypiInfo = asRecord(pypi?.info);
         const pypiVersion = typeof pypiInfo?.version === "string" ? pypiInfo.version : undefined;
         const version = releaseVersion ?? pypiVersion ?? fallback.version;
         const pypiReleases = asRecord(pypi?.releases);
-        const pypiReleaseFiles = Array.isArray(pypiReleases?.[version])
-          ? pypiReleases[version]
+        const pypiReleasesForVersion = pypiReleases?.[version];
+        const pypiReleaseFiles = Array.isArray(pypiReleasesForVersion)
+          ? pypiReleasesForVersion
           : [];
         const pypiReleaseFile = asRecord(pypiReleaseFiles[0]);
         const pypiUploadedAt =

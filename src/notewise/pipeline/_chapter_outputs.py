@@ -10,7 +10,11 @@ from typing import Any, cast
 
 import structlog
 
-from notewise._constants import DEFAULT_NOTES_OUTPUT_FORMAT
+from notewise._constants import (
+    CHAPTER_MARKDOWN_FILE_EXTENSION,
+    CHAPTER_TEMPORARY_DIRECTORY_PREFIX,
+    DEFAULT_NOTES_OUTPUT_FORMAT,
+)
 from notewise.config import settings as config
 from notewise.domain.events import EventType
 from notewise.pipeline._artifacts import prefix_chapter_heading_with_timestamp
@@ -95,7 +99,9 @@ async def prepare_chapter_output_targets(
     temporary_chapter_directory: TemporaryDirectory[str] | None = None
     temporary_chapter_dir: Path | None = None
     if rendered_output_targets and not chapter_directory_output:
-        temporary_chapter_directory = TemporaryDirectory(prefix="notewise-chapters-")
+        temporary_chapter_directory = TemporaryDirectory(
+            prefix=CHAPTER_TEMPORARY_DIRECTORY_PREFIX
+        )
         temporary_chapter_dir = Path(temporary_chapter_directory.name)
 
     return ChapterOutputTargets(
@@ -124,10 +130,13 @@ def build_chapter_generation_plan(
         chapter_file: Path | None = None
         safe_chapter = sanitize_filename(chap_title)
         if chapter_directory_output and output_target is not None:
-            chapter_file = output_target / f"{i:02d}_{safe_chapter}.md"
+            chapter_file = output_target / (
+                f"{i:02d}_{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            )
         elif temporary_chapter_dir is not None:
             chapter_file = temporary_chapter_dir / (
-                f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}.md"
+                f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}"
+                f"{CHAPTER_MARKDOWN_FILE_EXTENSION}"
             )
 
         if chapter_file is not None:

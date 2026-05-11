@@ -358,12 +358,12 @@ async def _write_optional_artifacts(
         return
 
     quiz_output_dir = (
-        outputs.output_target
+        outputs.transcript_output_dir
         if outputs.chapter_directory_output
         else pipeline.output_dir
     )
     quiz_name = (
-        outputs.output_target.name
+        outputs.transcript_output_dir.name
         if outputs.chapter_directory_output
         else outputs.output_target.stem
     )

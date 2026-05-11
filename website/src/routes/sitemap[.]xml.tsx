@@ -4,6 +4,13 @@ import { SitemapPage } from "@/components/SitemapPage";
 import { absoluteSiteUrl, docsUrls, siteUrls } from "@/components/sitemapData";
 
 const SITEMAP_CACHE_MAX_AGE_SECONDS = 3600;
+const DEFAULT_DOCS_CHANGEFREQ = "weekly";
+const DEFAULT_DOCS_PRIORITY = "0.7";
+
+type ParsedAccept = {
+  mediaType: string;
+  q: number;
+};
 
 function escapeXml(str: string): string {
   return str
@@ -23,8 +30,8 @@ function xmlSitemap() {
     })),
     ...docsUrls.map((url) => ({
       loc: absoluteSiteUrl(url.loc),
-      changefreq: "weekly",
-      priority: "0.7",
+      changefreq: url.changefreq ?? DEFAULT_DOCS_CHANGEFREQ,
+      priority: url.priority ?? DEFAULT_DOCS_PRIORITY,
     })),
   ];
 
@@ -39,16 +46,47 @@ ${urls
 </urlset>`;
 }
 
+function parseAcceptHeader(accept: string): ParsedAccept[] {
+  return accept
+    .split(",")
+    .map((entry) => {
+      const [mediaRange = "", ...parameters] = entry.trim().split(";");
+      const qParameter = parameters.find((parameter) => parameter.trim().startsWith("q="));
+      const parsedQ = qParameter ? Number.parseFloat(qParameter.trim().slice(2)) : 1;
+      const q = Number.isFinite(parsedQ) && parsedQ >= 0 ? Math.min(parsedQ, 1) : 0;
+
+      return { mediaType: mediaRange.toLowerCase(), q };
+    })
+    .filter((entry) => entry.mediaType.length > 0 && entry.q > 0);
+}
+
+function maxAcceptedQ(accepted: ParsedAccept[], mediaTypes: readonly string[]) {
+  return accepted.reduce((maxQ, entry) => {
+    if (mediaTypes.includes(entry.mediaType)) {
+      return Math.max(maxQ, entry.q);
+    }
+    return maxQ;
+  }, 0);
+}
+
 function wantsHtml(request?: Request) {
-  const accept = request?.headers.get("accept")?.toLowerCase() ?? "";
-  return accept.includes("text/html");
+  const accept = request?.headers.get("accept") ?? "";
+  if (!accept) {
+    return false;
+  }
+
+  const accepted = parseAcceptHeader(accept);
+  const htmlQ = maxAcceptedQ(accepted, ["text/html"]);
+  const xmlQ = maxAcceptedQ(accepted, ["application/xml", "text/xml", "application/*", "*/*"]);
+
+  return htmlQ > 0 && htmlQ >= xmlQ;
 }
 
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
       GET: ({ request, next }) => {
-        if (wantsHtml(request)) {
+        if (wantsHtml(request) && next) {
           return next();
         }
 

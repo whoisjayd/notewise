@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from notewise.domain.events import EventType
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 CACHE_DB_FILENAME = ".notewise_cache.db"
@@ -376,6 +378,7 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
 LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
     "chatgpt": ("gpt-5.1-codex",),
 }
+ALLOWED_SETUP_MODEL_MODES = frozenset({"chat", "completion", "responses"})
 STRIP_SAFE_PROVIDER_ALIASES = frozenset(
     {
         "gemini",
@@ -392,6 +395,7 @@ STRIP_SAFE_PROVIDER_ALIASES = frozenset(
         "vertex_ai",
     }
 )
+NATIVE_PROVIDER_PREFIXES = STRIP_SAFE_PROVIDER_ALIASES
 THIRD_PARTY_DIAGNOSTIC_LOGGERS = (
     "LiteLLM",
     "litellm",
@@ -435,6 +439,12 @@ DASHBOARD_PROGRESS_BAR_WIDTH = 40
 DASHBOARD_ACTIVE_PHASE = "Active"
 DASHBOARD_IDLE_STATUS = "Idle"
 DASHBOARD_IDLE_MARKUP = "[dim]Idle[/dim]"
+BATCH_CHAPTER_EVENT_TYPES = (
+    EventType.CHAPTER_GENERATING,
+    EventType.CHAPTER_CHUNK_GENERATING,
+    EventType.CHAPTER_COMBINING,
+    EventType.CHAPTER_COMPLETE,
+)
 BATCH_SOURCE_UNEXPECTED_ERROR_TITLE = "Could not resolve batch source"
 BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE = (
     "notewise hit an unexpected internal error while resolving this source. "
@@ -451,6 +461,7 @@ DASHBOARD_PROGRESS_TOTAL_MARKUP = "[bold white]{task.completed}/{task.total}"
 DASHBOARD_PROGRESS_SEPARATOR = "•"
 CLI_COST_DECIMAL_PLACES = 6
 CLI_SECONDS_DECIMAL_PLACES = 2
+CLI_LOG_PATH_UNAVAILABLE_LABEL = "unavailable"
 DASHBOARD_WORKER_LABEL_TEMPLATE = "{prefix} Worker {number}"
 DASHBOARD_WORKER_VIDEO_PREFIX = "W"
 DASHBOARD_WORKER_TABLE_HEADERS = ("ID", "Phase", "Video", "Detail", "Elapsed")
@@ -526,6 +537,8 @@ NOTES_OUTPUT_EXTENSIONS = {
     "pdf": ".pdf",
     "docx": ".docx",
 }
+CHAPTER_TEMPORARY_DIRECTORY_PREFIX = "notewise-chapters-"
+CHAPTER_MARKDOWN_FILE_EXTENSION = NOTES_OUTPUT_EXTENSIONS[DEFAULT_NOTES_OUTPUT_FORMAT]
 HTML_LANGUAGE_ALIASES = {
     "arabic": "ar",
     "bengali": "bn",
@@ -559,6 +572,15 @@ PDF_UNSUPPORTED_UNICODE_ERROR = (
 )
 MARKDOWN_RENDER_EXTENSIONS = ("extra", "sane_lists")
 CHAPTER_BUNDLE_SEPARATOR = "\n\n---\n\n"
+MARKDOWN_LIST_ITEM_PATTERN = r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)"
+RENDERED_CODE_BLOCK_PATTERN = (
+    r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>"
+)
+MARKDOWN_FENCED_CODE_START_PATTERN = r"^\s*(?P<fence>`+|~+)"
+LANGUAGE_CODE_PATTERN = r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
+RAW_HTML_TAG_PATTERN = r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^>\n]*)?/?>"
+MARKDOWN_INDENTED_CODE_PREFIXES = ("    ", "\t")
+MARKDOWN_LINE_SEPARATOR = "\n"
 DOCX_BODY_FONT_NAME = "Aptos"
 DOCX_HEADING_FONT_NAME = "Aptos Display"
 DOCX_BODY_FONT_SIZE_PT = 11

@@ -90,6 +90,14 @@ def test_markdown_to_html_preserves_fenced_code_angle_brackets() -> None:
     assert "&amp;lt;div&amp;gt;" not in html
 
 
+def test_markdown_to_html_closes_fence_only_with_matching_marker() -> None:
+    html = _markdown_to_html("````html\n~~~\n<div>hi</div>\n````\n<script>x</script>")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "<script>" not in html
+    assert "&lt;script&gt;x&lt;/script&gt;" in html
+
+
 def test_markdown_to_html_preserves_indented_code_angle_brackets() -> None:
     html = _markdown_to_html("    <div>hi</div>")
 

@@ -277,7 +277,7 @@ class TestConfig:
         def _raise_os_error(*_args, **_kwargs):  # noqa: ANN001
             raise OSError("cannot read")
 
-        monkeypatch.setattr(Path, "read_text", _raise_os_error)
+        mocker.patch.object(Path, "read_text", _raise_os_error)
 
         assert UserConfigSource(Config)() == {}
         warning.assert_called_once_with(
@@ -287,7 +287,7 @@ class TestConfig:
         )
 
     def test_user_config_source_does_not_hide_unexpected_parse_errors(
-        self, tmp_path, monkeypatch
+        self, tmp_path, monkeypatch, mocker
     ):
         """Unexpected parser/runtime errors should remain visible."""
         monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
@@ -298,7 +298,7 @@ class TestConfig:
         def _raise_runtime_error(*_args, **_kwargs):  # noqa: ANN001
             raise RuntimeError("bug")
 
-        monkeypatch.setattr(Path, "read_text", _raise_runtime_error)
+        mocker.patch.object(Path, "read_text", _raise_runtime_error)
 
         with pytest.raises(RuntimeError, match="bug"):
             UserConfigSource(Config)()

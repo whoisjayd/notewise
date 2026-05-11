@@ -41,10 +41,22 @@ export function InstallPage() {
           <a className="hover-underline" href="/">
             Website
           </a>
-          <a className="hover-underline" href={`${DOCS_URL}/start/install`}>
+          <a
+            className="hover-underline"
+            href={`${DOCS_URL}/start/install`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Full install docs (opens in a new tab)"
+          >
             Full install docs
           </a>
-          <a className="hover-underline" href={GITHUB_URL}>
+          <a
+            className="hover-underline"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository (opens in a new tab)"
+          >
             GitHub
           </a>
         </nav>
@@ -70,7 +82,7 @@ function InstallOptionGroup({
       </p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {commands.map((command) => (
-          <CommandCard key={command.command} command={command} />
+          <CommandCard key={command.id} command={command} />
         ))}
       </div>
     </section>

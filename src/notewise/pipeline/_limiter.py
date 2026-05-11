@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any
 
 from aiolimiter import AsyncLimiter
 
@@ -13,7 +12,7 @@ def _create_limiter(requests_per_minute: int, *, time_period: float) -> AsyncLim
     return AsyncLimiter(max_rate=requests_per_minute, time_period=time_period)
 
 
-_GLOBAL_YOUTUBE_LIMITERS: dict[tuple[int, int], Any] = {}
+_GLOBAL_YOUTUBE_LIMITERS: dict[tuple[int, int], AsyncLimiter] = {}
 
 
 def get_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:

@@ -6,17 +6,19 @@ import json
 from pathlib import Path
 from typing import Any
 
+import structlog
+
 from notewise._constants import (
+    ALLOWED_SETUP_MODEL_MODES,
     LITELLM_MODELS_SNAPSHOT_FILENAME,
     LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS,
     LITELLM_TEXT_MODEL_EXCLUDED_MARKERS,
+    NATIVE_PROVIDER_PREFIXES,
     PROVIDER_CONFIG,
-    STRIP_SAFE_PROVIDER_ALIASES,
 )
 
 
-ALLOWED_SETUP_MODEL_MODES = {"chat", "completion", "responses"}
-NATIVE_PROVIDER_PREFIXES = STRIP_SAFE_PROVIDER_ALIASES
+logger = structlog.get_logger(__name__)
 
 
 def bundled_model_snapshot_path() -> Path:
@@ -61,9 +63,22 @@ def load_model_snapshot(path: Path | None = None) -> dict[str, list[str]]:
         with snapshot_path.open(encoding="utf-8") as snapshot_file:
             snapshot = json.load(snapshot_file)
     except (OSError, json.JSONDecodeError):
+        logger.warning(
+            "model_catalog.snapshot_load_failed",
+            path=str(snapshot_path),
+            exc_info=True,
+        )
         return {}
 
-    return parse_model_snapshot(snapshot)
+    try:
+        return parse_model_snapshot(snapshot)
+    except Exception:
+        logger.warning(
+            "model_catalog.snapshot_parse_failed",
+            path=str(snapshot_path),
+            exc_info=True,
+        )
+        return {}
 
 
 def get_model_metadata(
@@ -111,7 +126,11 @@ def is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
         return False
 
     provider_prefix, separator, _ = model_lower.partition("/")
-    provider_key = provider_prefix if separator else classify_provider(metadata)
+    provider_key = (
+        provider_prefix
+        if separator and provider_prefix in LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS
+        else classify_provider(metadata)
+    )
     if provider_key is not None:
         provider_exclusions = LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS.get(
             provider_key,

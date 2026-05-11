@@ -60,7 +60,7 @@ LABEL org.opencontainers.image.title="NoteWise" \
       org.opencontainers.image.description="Convert YouTube videos and playlists into AI-powered study notes" \
       org.opencontainers.image.url="https://github.com/whoisjayd/notewise" \
       org.opencontainers.image.documentation="https://github.com/whoisjayd/notewise/tree/main/docs" \
-      org.opencontainers.image.licenses="MIT License with Attribution Requirement" \
+      org.opencontainers.image.licenses="MIT" \
       org.opencontainers.image.source="https://github.com/whoisjayd/notewise"
 
 # Copy only the virtual environment — source code stays in the builder

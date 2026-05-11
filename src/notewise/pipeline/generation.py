@@ -17,6 +17,7 @@ from notewise._constants import (
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_TEMPERATURE,
     DEFAULT_THROTTLE_SECONDS,
+    MIN_ESTIMATED_TOKENS,
     TOKEN_ESTIMATE_CHARS_PER_TOKEN,
 )
 from notewise.config import settings as config
@@ -306,15 +307,17 @@ class StudyMaterialGenerator:
 
     def _count_tokens(self, text: str) -> int:
         """Count tokens in text using model-specific tokenizer."""
+        fallback_count = (
+            max(MIN_ESTIMATED_TOKENS, len(text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN)
+            if text
+            else 0
+        )
         try:
             count = token_counter(model=self.provider.model, text=text)
-            return (
-                int(count)
-                if count is not None
-                else len(text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
-            )
+            return int(count) if count is not None else fallback_count
         except Exception:
-            return len(text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN
+            logger.warning("generation.token_count_failed", exc_info=True)
+            return fallback_count
 
     def count_tokens(self, text: str) -> int:
         """Public token-counting API used by pipeline stats and tests."""

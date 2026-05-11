@@ -14,6 +14,7 @@ from notewise.logging import (
     configure_logging,
     make_log_safe_text,
     prune_log_files,
+    redact_sensitive_data,
     redact_sensitive_text,
 )
 
@@ -45,6 +46,18 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
     assert openrouter_key not in redacted
     assert aws_secret not in redacted
     assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_data_masks_provider_key_suffixes():
+    redacted = redact_sensitive_data(
+        {
+            "x-goog-api-key": "test-gemini-secret",
+            "token_count": 123,
+        }
+    )
+
+    assert redacted["x-goog-api-key"] == "[REDACTED]"
+    assert redacted["token_count"] == 123
 
 
 def test_make_log_safe_text_escapes_unencodable_terminal_characters(monkeypatch):

@@ -27,23 +27,28 @@ from notewise._constants import (
     DOCX_SECTION_MARGIN_INCHES,
     DOCX_TITLE_FONT_SIZE_PT,
     HTML_LANGUAGE_ALIASES,
+    LANGUAGE_CODE_PATTERN,
+    MARKDOWN_FENCED_CODE_START_PATTERN,
+    MARKDOWN_INDENTED_CODE_PREFIXES,
+    MARKDOWN_LINE_SEPARATOR,
+    MARKDOWN_LIST_ITEM_PATTERN,
     MARKDOWN_RENDER_EXTENSIONS,
     NOTES_OUTPUT_EXTENSIONS,
     OUTPUT_FORMAT_SEPARATOR,
     PDF_UNSUPPORTED_UNICODE_ERROR,
+    RAW_HTML_TAG_PATTERN,
+    RENDERED_CODE_BLOCK_PATTERN,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 from notewise.errors import ValidationError
 
 
 DocumentRenderer = Callable[[str, str, Path, str | None], None]
-_LIST_ITEM_RE = re.compile(r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)")
-_CODE_BLOCK_RE = re.compile(
-    r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>", re.DOTALL
-)
-_FENCED_CODE_START_RE = re.compile(r"^\s*(```|~~~)")
-_LANGUAGE_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
-_RAW_HTML_TAG_RE = re.compile(r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^>\n]*)?/?>")
+_LIST_ITEM_RE = re.compile(MARKDOWN_LIST_ITEM_PATTERN)
+_CODE_BLOCK_RE = re.compile(RENDERED_CODE_BLOCK_PATTERN, re.DOTALL)
+_FENCED_CODE_START_RE = re.compile(MARKDOWN_FENCED_CODE_START_PATTERN)
+_LANGUAGE_CODE_RE = re.compile(LANGUAGE_CODE_PATTERN)
+_RAW_HTML_TAG_RE = re.compile(RAW_HTML_TAG_PATTERN)
 _PDF_CHARACTER_TRANSLATIONS = str.maketrans(
     {
         "\u2018": "'",
@@ -184,14 +189,23 @@ def _markdown_to_html(markdown_text: str) -> str:
 
 def _escape_raw_html(markdown_text: str) -> str:
     escaped_lines: list[str] = []
-    in_code_fence = False
+    open_fence_token: str | None = None
 
     for line in markdown_text.splitlines():
-        if _FENCED_CODE_START_RE.match(line):
-            in_code_fence = not in_code_fence
+        fence_match = _FENCED_CODE_START_RE.match(line)
+        if fence_match:
+            fence_token = fence_match.group("fence")
+            if open_fence_token is None:
+                open_fence_token = fence_token
+            elif fence_token[0] == open_fence_token[0] and len(fence_token) >= len(
+                open_fence_token
+            ):
+                open_fence_token = None
             escaped_lines.append(line)
             continue
-        if in_code_fence or line.startswith(("    ", "\t")):
+        if open_fence_token is not None or line.startswith(
+            MARKDOWN_INDENTED_CODE_PREFIXES
+        ):
             escaped_lines.append(line)
             continue
         escaped_lines.append(
@@ -201,7 +215,7 @@ def _escape_raw_html(markdown_text: str) -> str:
             )
         )
 
-    return "\n".join(escaped_lines)
+    return MARKDOWN_LINE_SEPARATOR.join(escaped_lines)
 
 
 def _normalize_rendered_html(body_html: str) -> str:

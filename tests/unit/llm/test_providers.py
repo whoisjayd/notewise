@@ -616,20 +616,25 @@ class TestLLMProvider:
 
     def test_suppress_litellm_noise_suppresses_response_usage_warning(self):
         """LiteLLM's Responses usage serializer warning should stay off the TTY."""
-        suppress_litellm_noise()
+        original_filters = warnings.filters[:]
+        try:
+            suppress_litellm_noise()
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.warn_explicit(
-                "Pydantic serializer warnings:\n"
-                "  PydanticSerializationUnexpectedValue(Expected `ResponseAPIUsage` "
-                "- serialized value may not be as expected)",
-                UserWarning,
-                filename="pydantic/main.py",
-                lineno=464,
-                module="pydantic.main",
-            )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.warn_explicit(
+                    "Pydantic serializer warnings:\n"
+                    "  PydanticSerializationUnexpectedValue("
+                    "Expected `ResponseAPIUsage` - serialized value may not be "
+                    "as expected)",
+                    UserWarning,
+                    filename="pydantic/main.py",
+                    lineno=464,
+                    module="pydantic.main",
+                )
 
-        assert caught == []
+            assert caught == []
+        finally:
+            warnings.filters[:] = original_filters
 
     def test_suppress_litellm_noise_sets_verbose_logger_level(self):
         """LiteLLM runtime should not attach terminal handlers."""

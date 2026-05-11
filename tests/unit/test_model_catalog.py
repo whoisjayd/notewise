@@ -129,3 +129,14 @@ def test_is_setup_safe_model_applies_provider_specific_exclusions():
             "supported_output_modalities": ["text"],
         },
     )
+
+
+def test_is_setup_safe_model_does_not_trust_gateway_prefix_for_exclusions():
+    assert not is_setup_safe_model(
+        "openrouter/chatgpt/gpt-5.1-codex",
+        {
+            "litellm_provider": "chatgpt",
+            "mode": "responses",
+            "supported_output_modalities": ["text"],
+        },
+    )

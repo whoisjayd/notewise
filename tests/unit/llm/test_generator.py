@@ -32,6 +32,14 @@ class TestStudyMaterialGenerator:
             count = generator._count_tokens("1234")
             assert count == 1  # 4 chars // 4 = 1
 
+    def test_count_tokens_fallback_handles_empty_and_short_text(self, generator):
+        """Fallback token estimates should stay useful for short non-empty text."""
+        with patch(
+            "notewise.pipeline.generation.token_counter", side_effect=Exception("Error")
+        ):
+            assert generator._count_tokens("") == 0
+            assert generator._count_tokens("abc") == 1
+
     def test_count_tokens_public_api(self, generator):
         """Public count_tokens API should use model token counter."""
         with patch("notewise.pipeline.generation.token_counter", return_value=123):

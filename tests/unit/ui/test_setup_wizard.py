@@ -75,11 +75,12 @@ class TestConfigIO:
         assert config["OUTPUT_DIR"] == "/tmp/notes"
         assert config["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
 
-    def test_load_config_read_failure_raises_configuration_error(self):
+    def test_load_config_read_failure_raises_configuration_error(self, mocker):
         """Config read failures should use the project error hierarchy."""
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.open", side_effect=OSError("denied"))
+
         with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch("pathlib.Path.open", side_effect=OSError("denied")),
             pytest.raises(
                 ConfigurationError,
                 match="Failed to read configuration",
@@ -87,13 +88,12 @@ class TestConfigIO:
         ):
             load_config()
 
-    def test_load_config_does_not_hide_unexpected_errors(self):
+    def test_load_config_does_not_hide_unexpected_errors(self, mocker):
         """Unexpected parser/runtime failures should remain visible."""
-        with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch("pathlib.Path.open", side_effect=RuntimeError("bug")),
-            pytest.raises(RuntimeError, match="bug"),
-        ):
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.open", side_effect=RuntimeError("bug"))
+
+        with pytest.raises(RuntimeError, match="bug"):
             load_config()
 
     def test_save_config(self):

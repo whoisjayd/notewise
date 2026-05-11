@@ -10,6 +10,8 @@ export async function copyText(text: string) {
   textarea.style.position = "fixed";
   textarea.style.opacity = "0";
   document.body.appendChild(textarea);
+  const previouslyFocused =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null;
   try {
     textarea.select();
     if (!document.execCommand("copy")) {
@@ -17,5 +19,12 @@ export async function copyText(text: string) {
     }
   } finally {
     textarea.remove();
+    try {
+      if (previouslyFocused?.isConnected) {
+        previouslyFocused.focus({ preventScroll: true });
+      }
+    } catch {
+      // Ignore focus restoration failures; the copy attempt has already completed.
+    }
   }
 }

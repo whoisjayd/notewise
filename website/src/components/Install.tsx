@@ -1,10 +1,26 @@
-import { binaryCommands, packageCommands } from "@/lib/installCommands";
+import { binaryCommands, packageCommands, type InstallCommandId } from "@/lib/installCommands";
 import { DOCS_URL } from "@/lib/siteMeta";
 import { Terminal } from "@/ui/Terminal";
 import { FineIcon } from "@/ui/FineIcon";
 
-const [uvToolCommand, uvxCommand, pipxCommand, pipCommand] = packageCommands;
-const [posixBinaryCommand, powershellBinaryCommand] = binaryCommands;
+const installCommandsById = new Map(
+  [...packageCommands, ...binaryCommands].map((command) => [command.id, command]),
+);
+
+function installCommand(id: InstallCommandId) {
+  const command = installCommandsById.get(id);
+  if (!command) {
+    throw new Error(`Missing install command: ${id}`);
+  }
+  return command;
+}
+
+const uvToolCommand = installCommand("uv-tool");
+const uvxCommand = installCommand("uvx");
+const pipxCommand = installCommand("pipx");
+const pipCommand = installCommand("pip");
+const posixBinaryCommand = installCommand("posix-binary");
+const powershellBinaryCommand = installCommand("powershell-binary");
 
 export function Install() {
   return (

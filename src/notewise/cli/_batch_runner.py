@@ -10,6 +10,7 @@ import structlog
 from rich.markup import escape
 
 from notewise._constants import (
+    BATCH_CHAPTER_EVENT_TYPES,
     BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE,
     BATCH_SOURCE_UNEXPECTED_ERROR_TITLE,
     DASHBOARD_IDLE_MARKUP,
@@ -41,14 +42,6 @@ from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineResult
 from notewise.errors import UserVisibleCliError
 from notewise.pipeline.core import PipelineSharedState
-
-
-_BATCH_CHAPTER_EVENT_TYPES = (
-    EventType.CHAPTER_GENERATING,
-    EventType.CHAPTER_CHUNK_GENERATING,
-    EventType.CHAPTER_COMBINING,
-    EventType.CHAPTER_COMPLETE,
-)
 
 
 def _set_dashboard_worker_idle(dashboard: object, worker_index: int) -> None:
@@ -137,7 +130,7 @@ async def run_batch_file(
                         "clear_chapter_workers",
                     ):
                         dashboard.clear_chapter_workers(_fallback_video_id)
-                    if event.event_type in _BATCH_CHAPTER_EVENT_TYPES:
+                    if event.event_type in BATCH_CHAPTER_EVENT_TYPES:
                         update_dashboard_chapter_slot(
                             dashboard,
                             escape((latest_title or _fallback_video_id)[:40]),
