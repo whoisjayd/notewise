@@ -195,10 +195,13 @@ def _escape_raw_html(markdown_text: str) -> str:
         fence_match = _FENCED_CODE_START_RE.match(line)
         if fence_match:
             fence_token = fence_match.group("fence")
+            fence_info = fence_match.group("info").strip()
             if open_fence_token is None:
                 open_fence_token = fence_token
-            elif fence_token[0] == open_fence_token[0] and len(fence_token) >= len(
-                open_fence_token
+            elif (
+                not fence_info
+                and fence_token[0] == open_fence_token[0]
+                and len(fence_token) >= len(open_fence_token)
             ):
                 open_fence_token = None
             escaped_lines.append(line)

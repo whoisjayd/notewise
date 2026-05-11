@@ -13,6 +13,7 @@ from notewise.cli._formatters import print_cost_summary
 from notewise.domain.results import PipelineMetrics
 from notewise.llm.provider import UsageTotals
 from notewise.pipeline._artifacts import export_transcript, generate_and_write_quiz
+from notewise.pipeline._execution import _usage_context
 from notewise.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
@@ -53,6 +54,17 @@ def test_usage_coercion_helpers_handle_non_numeric_values():
     assert totals.completion_tokens == 9
     assert totals.total_tokens == 4
     assert totals.cost_usd == 0.0025
+
+
+def test_usage_context_does_not_call_arbitrary_collect_usage_callable() -> None:
+    """Only the real provider collector should be invoked as a context factory."""
+    provider = MagicMock()
+    provider.collect_usage = MagicMock(side_effect=AssertionError("called"))
+
+    with _usage_context(provider) as usage:
+        assert isinstance(usage, UsageTotals)
+
+    provider.collect_usage.assert_not_called()
 
 
 def test_pipeline_metrics_bool_truth_table():

@@ -22,6 +22,7 @@ import structlog
 from notewise._constants import (
     LOGS_DIR_NAME,
     PROVIDER_SECRET_ENV_KEYS,
+    SENSITIVE_KEY_SUFFIXES,
     SESSION_LOG_PREFIX,
     THIRD_PARTY_DIAGNOSTIC_LOGGERS,
 )
@@ -54,16 +55,6 @@ _SENSITIVE_KEY_NAMES = frozenset(
     }
     | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
-_SENSITIVE_KEY_SUFFIXES = (
-    "apikey",
-    "accesstoken",
-    "refreshtoken",
-    "sessiontoken",
-    "authorization",
-    "secret",
-    "password",
-    "cookie",
-)
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
     r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
     r"session_token|access_token|refresh_token)|"
@@ -91,7 +82,7 @@ def _is_sensitive_key(key: str) -> bool:
     """Return whether a mapping key should be redacted."""
     normalized = _normalize_sensitive_key(key)
     return normalized in _SENSITIVE_KEY_NAMES or normalized.endswith(
-        _SENSITIVE_KEY_SUFFIXES
+        SENSITIVE_KEY_SUFFIXES
     )
 
 
@@ -153,6 +144,7 @@ def get_session_log_path() -> Path | None:
 def get_log_dir(state_dir: Path | None = None) -> Path:
     """Return the directory that stores notewise session logs."""
     if state_dir is None:
+        # Lazy import avoids a config -> logging import cycle during startup.
         from notewise.config import get_state_dir
 
         state_dir = get_state_dir()

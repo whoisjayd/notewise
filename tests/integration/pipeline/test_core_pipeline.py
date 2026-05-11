@@ -3,7 +3,6 @@
 import asyncio
 import json
 import zipfile
-from contextlib import contextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -2608,16 +2607,19 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
         chapter_directory_output=True,
     )
 
-    @contextmanager
-    def _collect_usage():
-        yield UsageTotals(
-            prompt_tokens=40,
-            completion_tokens=15,
-            total_tokens=55,
-            cost_usd=0.0055,
-        )
+    class _UsageContext:
+        def __enter__(self) -> UsageTotals:
+            return UsageTotals(
+                prompt_tokens=40,
+                completion_tokens=15,
+                total_tokens=55,
+                cost_usd=0.0055,
+            )
 
-    p.provider.collect_usage = _collect_usage
+        def __exit__(self, *_exc_info: object) -> None:
+            return None
+
+    p.provider.collect_usage = _UsageContext()
 
     with (
         patch(

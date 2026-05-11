@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from notewise.domain.events import EventType
-
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 CACHE_DB_FILENAME = ".notewise_cache.db"
@@ -112,6 +110,16 @@ PROVIDER_SECRET_ENV_KEYS = frozenset(PROVIDER_API_KEY_ENV_VAR_PROVIDERS) | froze
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
     }
+)
+SENSITIVE_KEY_SUFFIXES = (
+    "apikey",
+    "accesstoken",
+    "refreshtoken",
+    "sessiontoken",
+    "authorization",
+    "secret",
+    "password",
+    "cookie",
 )
 OAUTH_DEVICE_PROVIDER_PREFIXES = frozenset({"chatgpt", "github_copilot"})
 OAUTH_LOGIN_CODEX_ALIAS = "codex"
@@ -427,6 +435,8 @@ TOKEN_ESTIMATE_CHARS_PER_TOKEN = 4
 MIN_ESTIMATED_TOKENS = 1
 SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
+RUN_LOOP_SENTINEL = -1
+YOUTUBE_LIMIT_PERIOD_SECONDS = SECONDS_PER_MINUTE
 
 # ── Dashboard UI ───────────────────────────────────────────────────────────────
 DASHBOARD_RECENT_ACTIVITY_LIMIT = 5
@@ -439,12 +449,6 @@ DASHBOARD_PROGRESS_BAR_WIDTH = 40
 DASHBOARD_ACTIVE_PHASE = "Active"
 DASHBOARD_IDLE_STATUS = "Idle"
 DASHBOARD_IDLE_MARKUP = "[dim]Idle[/dim]"
-BATCH_CHAPTER_EVENT_TYPES = (
-    EventType.CHAPTER_GENERATING,
-    EventType.CHAPTER_CHUNK_GENERATING,
-    EventType.CHAPTER_COMBINING,
-    EventType.CHAPTER_COMPLETE,
-)
 BATCH_SOURCE_UNEXPECTED_ERROR_TITLE = "Could not resolve batch source"
 BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE = (
     "notewise hit an unexpected internal error while resolving this source. "
@@ -529,8 +533,11 @@ LITELLM_MODEL_METADATA_FIELDS = (
     "supports_system_messages",
 )
 DEFAULT_NOTES_OUTPUT_FORMAT = "md"
+PDF_NOTES_OUTPUT_FORMAT = "pdf"
 SUPPORTED_NOTES_OUTPUT_FORMATS = ("md", "html", "pdf", "docx")
 OUTPUT_FORMAT_SEPARATOR = ","
+TRANSCRIPT_JSON_OUTPUT_FORMAT = "json"
+TRANSCRIPT_TEXT_OUTPUT_FORMAT = "txt"
 NOTES_OUTPUT_EXTENSIONS = {
     "md": ".md",
     "html": ".html",
@@ -539,6 +546,7 @@ NOTES_OUTPUT_EXTENSIONS = {
 }
 CHAPTER_TEMPORARY_DIRECTORY_PREFIX = "notewise-chapters-"
 CHAPTER_MARKDOWN_FILE_EXTENSION = NOTES_OUTPUT_EXTENSIONS[DEFAULT_NOTES_OUTPUT_FORMAT]
+QUIZ_MARKDOWN_FILE_SUFFIX = f"_quiz{CHAPTER_MARKDOWN_FILE_EXTENSION}"
 HTML_LANGUAGE_ALIASES = {
     "arabic": "ar",
     "bengali": "bn",
@@ -576,7 +584,9 @@ MARKDOWN_LIST_ITEM_PATTERN = r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)"
 RENDERED_CODE_BLOCK_PATTERN = (
     r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>"
 )
-MARKDOWN_FENCED_CODE_START_PATTERN = r"^\s*(?P<fence>`+|~+)"
+MARKDOWN_FENCED_CODE_START_PATTERN = (
+    r"^(?P<indent> {0,3})(?P<fence>`{3,}|~{3,})(?P<info>.*)$"
+)
 LANGUAGE_CODE_PATTERN = r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$"
 RAW_HTML_TAG_PATTERN = r"</?[A-Za-z][A-Za-z0-9-]*(?:\s[^>\n]*)?/?>"
 MARKDOWN_INDENTED_CODE_PREFIXES = ("    ", "\t")

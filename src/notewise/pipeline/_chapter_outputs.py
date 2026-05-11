@@ -176,9 +176,10 @@ async def generate_missing_chapter_notes(
         chapter_title: index
         for index, (chapter_title, _) in enumerate(ordered_chapters, start=1)
     }
+    chapters_to_generate_titles = list(plan.chapters_to_generate)
 
     def _on_chapter_start(index: int, _total: int) -> None:
-        chapter_title = list(plan.chapters_to_generate.keys())[index - 1]
+        chapter_title = chapters_to_generate_titles[index - 1]
         emit(
             EventType.CHAPTER_GENERATING,
             video_id,
@@ -188,14 +189,6 @@ async def generate_missing_chapter_notes(
         )
 
     original_generate_single = pipeline.generator.generate_single_chapter_notes
-
-    def _write_completed_chapter(chapter_title: str, notes: str) -> None:
-        chapter_file = plan.chapter_output_files.get(chapter_title)
-        if chapter_file is None:
-            return
-        chapter_file.parent.mkdir(parents=True, exist_ok=True)
-        if not pipeline.timestamps:
-            chapter_file.write_text(notes, encoding="utf-8")
 
     async def _generate_single_chapter_notes_with_events(
         chapter_title: str,
@@ -257,7 +250,6 @@ async def generate_missing_chapter_notes(
         semaphore=pipeline._chapter_semaphore,
         video_title=title,
         on_chapter_start=_on_chapter_start,
-        on_chapter_complete=_write_completed_chapter,
         generate_single=_generate_single_chapter_notes_with_events,
     )
 

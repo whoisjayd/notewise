@@ -10,7 +10,6 @@ import structlog
 from rich.markup import escape
 
 from notewise._constants import (
-    BATCH_CHAPTER_EVENT_TYPES,
     BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE,
     BATCH_SOURCE_UNEXPECTED_ERROR_TITLE,
     DASHBOARD_IDLE_MARKUP,
@@ -42,6 +41,14 @@ from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineResult
 from notewise.errors import UserVisibleCliError
 from notewise.pipeline.core import PipelineSharedState
+
+
+BATCH_CHAPTER_EVENT_TYPES = (
+    EventType.CHAPTER_GENERATING,
+    EventType.CHAPTER_CHUNK_GENERATING,
+    EventType.CHAPTER_COMBINING,
+    EventType.CHAPTER_COMPLETE,
+)
 
 
 def _set_dashboard_worker_idle(dashboard: object, worker_index: int) -> None:

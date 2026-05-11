@@ -28,7 +28,10 @@ export function ThemeToggle() {
   const [theme, setTheme] = useState<"light" | "dark">("light");
 
   useEffect(() => {
-    const query = window.matchMedia("(prefers-color-scheme: dark)");
+    const query =
+      typeof window !== "undefined" && typeof window.matchMedia === "function"
+        ? window.matchMedia("(prefers-color-scheme: dark)")
+        : null;
     const syncTheme = () => {
       const next = getPreferredTheme();
       setTheme(next);
@@ -36,11 +39,11 @@ export function ThemeToggle() {
     };
 
     syncTheme();
-    query.addEventListener?.("change", syncTheme);
+    query?.addEventListener?.("change", syncTheme);
     window.addEventListener("storage", syncTheme);
 
     return () => {
-      query.removeEventListener?.("change", syncTheme);
+      query?.removeEventListener?.("change", syncTheme);
       window.removeEventListener("storage", syncTheme);
     };
   }, []);

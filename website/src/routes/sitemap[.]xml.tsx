@@ -77,6 +77,7 @@ function wantsHtml(request?: Request) {
 
   const accepted = parseAcceptHeader(accept);
   const htmlQ = maxAcceptedQ(accepted, ["text/html"]);
+  // Treat application/* and */* as XML preferences so CLI clients like curl get XML unless text/html is explicit.
   const xmlQ = maxAcceptedQ(accepted, ["application/xml", "text/xml", "application/*", "*/*"]);
 
   return htmlQ > 0 && htmlQ >= xmlQ;

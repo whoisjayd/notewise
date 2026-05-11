@@ -13,6 +13,14 @@ from typing import Any
 
 import structlog
 
+from notewise._constants import (
+    CHAPTER_MARKDOWN_FILE_EXTENSION,
+    DEFAULT_NOTES_OUTPUT_FORMAT,
+    PDF_NOTES_OUTPUT_FORMAT,
+    QUIZ_MARKDOWN_FILE_SUFFIX,
+    TRANSCRIPT_JSON_OUTPUT_FORMAT,
+    TRANSCRIPT_TEXT_OUTPUT_FORMAT,
+)
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.errors import (
@@ -20,7 +28,7 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
-from notewise.llm.provider import UsageTotals
+from notewise.llm.provider import LLMProvider, UsageTotals
 from notewise.logging import make_log_safe_text
 from notewise.pipeline._artifacts import generate_and_write_quiz
 from notewise.pipeline._chapter_outputs import generate_chapter_outputs
@@ -62,7 +70,10 @@ class _GeneratedOutputs:
 def _notes_artifact_exists(target: Path, output_format: str) -> bool:
     if target.exists():
         return True
-    return output_format == "pdf" and target.with_suffix(".md").exists()
+    return (
+        output_format == PDF_NOTES_OUTPUT_FORMAT
+        and target.with_suffix(CHAPTER_MARKDOWN_FILE_EXTENSION).exists()
+    )
 
 
 def _cached_video_has_requested_artifacts(
@@ -78,12 +89,15 @@ def _cached_video_has_requested_artifacts(
         chapter_dir = output_dir / safe_title
         if not pipeline._is_reusable_directory_output(chapter_dir, video_id):
             return False
-        if not any(chapter_dir.glob("*.md")):
+        if not any(chapter_dir.glob(f"*{CHAPTER_MARKDOWN_FILE_EXTENSION}")):
             return False
         transcript_dir = chapter_dir
 
     for output_format in pipeline.output_formats:
-        if pipeline.chapter_directory_output and output_format == "md":
+        if (
+            pipeline.chapter_directory_output
+            and output_format == DEFAULT_NOTES_OUTPUT_FORMAT
+        ):
             continue
         output_extension = get_output_extension(output_format)
         artifact = output_dir / f"{safe_title}{output_extension}"
@@ -92,7 +106,9 @@ def _cached_video_has_requested_artifacts(
 
     if pipeline.export_transcript_format:
         transcript_extension = (
-            "json" if pipeline.export_transcript_format == "json" else "txt"
+            TRANSCRIPT_JSON_OUTPUT_FORMAT
+            if pipeline.export_transcript_format == TRANSCRIPT_JSON_OUTPUT_FORMAT
+            else TRANSCRIPT_TEXT_OUTPUT_FORMAT
         )
         transcript_artifact = transcript_dir / (
             f"{safe_title}_transcript.{transcript_extension}"
@@ -103,7 +119,9 @@ def _cached_video_has_requested_artifacts(
     if pipeline.quiz:
         quiz_dir = transcript_dir if pipeline.chapter_directory_output else output_dir
         quiz_name = quiz_dir.name if pipeline.chapter_directory_output else safe_title
-        if not (quiz_dir / f"{sanitize_filename(quiz_name)}_quiz.md").exists():
+        if not (
+            quiz_dir / f"{sanitize_filename(quiz_name)}{QUIZ_MARKDOWN_FILE_SUFFIX}"
+        ).exists():
             return False
 
     return True
@@ -157,6 +175,16 @@ def _usage_context(provider: Any) -> Any:
     usage_context = nullcontext(UsageTotals())
     usage_collector = getattr(provider, "collect_usage", None)
     if not callable(usage_collector):
+        if hasattr(usage_collector, "__enter__") and hasattr(
+            usage_collector,
+            "__exit__",
+        ):
+            return usage_collector
+        return usage_context
+    if not (
+        isinstance(getattr(usage_collector, "__self__", None), LLMProvider)
+        and getattr(usage_collector, "__func__", None) is LLMProvider.collect_usage
+    ):
         return usage_context
 
     candidate = usage_collector()
