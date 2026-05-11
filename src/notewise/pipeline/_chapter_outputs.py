@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
@@ -89,6 +90,20 @@ class ChapterGenerationPlan:
     chapters_to_generate: dict[str, str]
     chapter_targets: list[tuple[str, int, Path | None]]
     chapter_output_files: dict[str, Path]
+
+
+def _chapter_file_has_timestamps(chapter_file: Path) -> bool:
+    """Check if an existing chapter file has timestamp prefixes in its heading."""
+    try:
+        content = chapter_file.read_text(encoding="utf-8")
+        # Look for timestamp pattern [HH:MM:SS] or [MM:SS] at the start of a heading
+        heading_pattern = re.compile(
+            r"^#{1,6}\s+\[(?:\d{2}:)?\d{2}:\d{2}\]", re.MULTILINE
+        )
+        return bool(heading_pattern.search(content))
+    except (OSError, UnicodeDecodeError):
+        # If we can't read the file, treat it as not having timestamps
+        return False
 
 
 def bundled_chapter_output_formats(
@@ -194,11 +209,19 @@ def build_chapter_generation_plan(
         chapter_targets.append((chap_title, chapter_data.start_seconds, chapter_file))
 
         if chapter_file is not None and not pipeline.force and chapter_file.exists():
+            # Only skip if the existing file's timestamp mode matches current setting
+            file_has_timestamps = _chapter_file_has_timestamps(chapter_file)
+            if file_has_timestamps == pipeline.timestamps:
+                logger.info(
+                    f"Skipping chapter {i}/{total_chapters}"
+                    f" '{chap_title[:40]}' (already exists)"
+                )
+                continue
+            # If timestamp modes don't match, regenerate the chapter
             logger.info(
-                f"Skipping chapter {i}/{total_chapters}"
-                f" '{chap_title[:40]}' (already exists)"
+                f"Regenerating chapter {i}/{total_chapters}"
+                f" '{chap_title[:40]}' (timestamp mode changed)"
             )
-            continue
 
         chapters_to_generate[chap_title] = chapter_data.text
 

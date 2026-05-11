@@ -86,9 +86,10 @@ function wantsHtml(request?: Request) {
 export const Route = createFileRoute("/sitemap.xml")({
   server: {
     handlers: {
-      GET: ({ request, next }) => {
-        if (wantsHtml(request) && next) {
-          return next();
+      GET: ({ request }) => {
+        if (wantsHtml(request)) {
+          // Return undefined to delegate to the component (SitemapPage)
+          return;
         }
 
         return new Response(xmlSitemap(), {

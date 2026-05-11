@@ -720,3 +720,34 @@ hr {
     margin: 1.5em 0;
 }
 """
+
+# ── Test Constants ────────────────────────────────────────────────────────────
+PLAYLIST_ERROR_TITLE = "Playlist Error"
+PLAYLIST_METADATA_UNAVAILABLE_MSG = "playlist metadata unavailable"
+TEST_PLAYLIST_ID = "pl123"
+TEST_PLAYLIST_URL = "https://youtube.com/playlist?list=pl123"
+
+# ── Dashboard Config Labels ───────────────────────────────────────────────────
+FILES_GROUP = "Files"
+AI_GROUP = "AI"
+RUNTIME_GROUP = "Runtime"
+EXTRAS_GROUP = "Extras"
+OUTPUT_LABEL = "Output"
+FORMATS_LABEL = "Formats"
+TRANSCRIPT_LABEL = "Transcript"
+CHAPTERS_LABEL = "Chapters"
+LANGUAGES_LABEL = "Languages"
+TARGET_LANG_LABEL = "Target language"
+TEMP_LABEL = "Temperature"
+TOKENS_LABEL = "Max tokens"
+VIDEOS_LABEL = "Video workers"
+CHAPTERS_WORKERS_LABEL = "Chapter workers"
+DELAY_LABEL = "Throttle"
+CACHE_LABEL = "Force"
+COOKIES_LABEL = "Cookies"
+API_LABEL = "API key"
+QUIZ_LABEL = "Quiz"
+TIMESTAMPS_LABEL = "Timestamps"
+EXPORT_TRANSCRIPT_LABEL = "Export transcript"
+CHAPTER_DIRECTORIES_LABEL = "Chapter directories"
+NOTES_LABEL = "Notes"

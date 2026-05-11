@@ -28,6 +28,13 @@ from rich.table import Table
 from rich.text import Text
 
 from notewise._constants import (
+    AI_GROUP,
+    API_LABEL,
+    CACHE_LABEL,
+    CHAPTERS_LABEL,
+    CHAPTERS_WORKERS_LABEL,
+    CHAPTER_DIRECTORIES_LABEL,
+    COOKIES_LABEL,
     DASHBOARD_ACTIVE_PHASE,
     DASHBOARD_ACTIVITY_TITLE_LIMIT,
     DASHBOARD_CONFIG_VALUE_LIMIT,
@@ -65,6 +72,22 @@ from notewise._constants import (
     DASHBOARD_WORKER_TABLE_HEADERS,
     DASHBOARD_WORKER_TITLE_LIMIT,
     DASHBOARD_WORKER_VIDEO_PREFIX,
+    DELAY_LABEL,
+    EXPORT_TRANSCRIPT_LABEL,
+    EXTRAS_GROUP,
+    FILES_GROUP,
+    FORMATS_LABEL,
+    LANGUAGES_LABEL,
+    NOTES_LABEL,
+    OUTPUT_LABEL,
+    QUIZ_LABEL,
+    RUNTIME_GROUP,
+    TARGET_LANG_LABEL,
+    TEMP_LABEL,
+    TIMESTAMPS_LABEL,
+    TOKENS_LABEL,
+    TRANSCRIPT_LABEL,
+    VIDEOS_LABEL,
 )
 
 
@@ -494,27 +517,27 @@ class PipelineDashboard:
         if not self.config_items:
             return None
         grouped_items = {
-            "Files": (
-                ("Output", "Output"),
-                ("Formats", "Formats"),
-                ("Transcript", "Export transcript"),
-                ("Chapters", "Chapter directories"),
+            FILES_GROUP: (
+                (OUTPUT_LABEL, OUTPUT_LABEL),
+                (FORMATS_LABEL, FORMATS_LABEL),
+                (TRANSCRIPT_LABEL, EXPORT_TRANSCRIPT_LABEL),
+                (CHAPTERS_LABEL, CHAPTER_DIRECTORIES_LABEL),
             ),
-            "AI": (
-                ("Transcript", "Languages"),
-                ("Notes", "Target language"),
-                ("Temp", "Temperature"),
-                ("Tokens", "Max tokens"),
+            AI_GROUP: (
+                (TRANSCRIPT_LABEL, LANGUAGES_LABEL),
+                (NOTES_LABEL, TARGET_LANG_LABEL),
+                (TEMP_LABEL, TEMP_LABEL),
+                (TOKENS_LABEL, TOKENS_LABEL),
             ),
-            "Runtime": (
-                ("Videos", "Video workers"),
-                ("Chapters", "Chapter workers"),
-                ("Delay", "Throttle"),
-                ("Cache", "Force"),
-                ("Cookies", "Cookies"),
-                ("API", "API key"),
+            RUNTIME_GROUP: (
+                (VIDEOS_LABEL, VIDEOS_LABEL),
+                (CHAPTERS_LABEL, CHAPTERS_WORKERS_LABEL),
+                (DELAY_LABEL, DELAY_LABEL),
+                (CACHE_LABEL, CACHE_LABEL),
+                (COOKIES_LABEL, COOKIES_LABEL),
+                (API_LABEL, API_LABEL),
             ),
-            "Extras": (("Quiz", "Quiz"), ("Timestamps", "Timestamps")),
+            EXTRAS_GROUP: ((QUIZ_LABEL, QUIZ_LABEL), (TIMESTAMPS_LABEL, TIMESTAMPS_LABEL)),
         }
         item_lookup = {item.label: item.value for item in self.config_items}
 
