@@ -13,6 +13,7 @@ from notewise._constants import (
     BATCH_SOURCE_UNEXPECTED_ERROR_MESSAGE,
     BATCH_SOURCE_UNEXPECTED_ERROR_TITLE,
     DASHBOARD_IDLE_MARKUP,
+    DASHBOARD_REFRESH_PER_SECOND,
 )
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
@@ -340,7 +341,7 @@ async def run_batch_file(
     if dashboard is not None:
         live = context.live_cls(
             dashboard,
-            refresh_per_second=10,
+            refresh_per_second=DASHBOARD_REFRESH_PER_SECOND,
             console=context.console,
             screen=False,
             transient=use_transient_live_display(),

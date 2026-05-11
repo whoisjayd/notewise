@@ -172,6 +172,23 @@ def test_render_html_document_uses_target_language_lang_attribute(
     assert '<html lang="hi">' in html
 
 
+def test_render_html_document_normalizes_underscore_locale_tag(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "notes.html"
+
+    render_notes_document(
+        "# Titulo",
+        "Portuguese Notes",
+        output_path,
+        "html",
+        target_language="pt_BR",
+    )
+
+    html = output_path.read_text(encoding="utf-8")
+    assert '<html lang="pt-BR">' in html
+
+
 def test_render_pdf_document_falls_back_to_markdown_for_non_latin_text(
     tmp_path: Path,
 ) -> None:

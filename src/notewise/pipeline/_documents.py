@@ -224,7 +224,8 @@ def _escape_raw_html(markdown_text: str) -> str:
 def _normalize_rendered_html(body_html: str) -> str:
     def _replace_code_block(match: re.Match[str]) -> str:
         code_html = match.group("code")
-        return f'<pre class="code-block"><code>{code_html}</code></pre>'
+        wrapped = f'<pre class="code-block"><code>{code_html}</code></pre>'
+        return wrapped
 
     return _CODE_BLOCK_RE.sub(_replace_code_block, body_html)
 

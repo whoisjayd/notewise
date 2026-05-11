@@ -286,9 +286,10 @@ def process(
             "--model",
             "-m",
             help=(
-                "LLM model (overrides config). Example: [green]gpt-4o[/green] "
-                "or [green]gemini/gemini-2.5-flash[/green]"
+                "AI model. Examples: [green]gpt-5.5[/green], "
+                "[green]gemini/gemini-3.1-pro-preview[/green]."
             ),
+            rich_help_panel="Common",
         ),
     ] = None,
     output: Annotated[
@@ -301,17 +302,20 @@ def process(
             file_okay=False,
             dir_okay=True,
             resolve_path=True,
+            rich_help_panel="Common",
         ),
     ] = None,
     output_format: Annotated[
         str,
         typer.Option(
             "--format",
+            "-r",
             help=(
-                "Notes output format. Pass one value or a comma-separated list, "
-                "for example [green]md,html[/green]. Supported values: "
+                "Output format(s), comma-separated. Example: [green]md,html[/green]. "
+                "Supported: "
                 f"[green]{', '.join(SUPPORTED_NOTES_OUTPUT_FORMATS)}[/green]."
             ),
+            rich_help_panel="Common",
         ),
     ] = DEFAULT_NOTES_OUTPUT_FORMAT,
     language: Annotated[
@@ -319,21 +323,20 @@ def process(
         typer.Option(
             "--language",
             "-l",
-            help=(
-                "Preferred transcript languages "
-                "(e.g., [green]en[/green], [green]hi[/green])."
-            ),
+            help=("Transcript languages, e.g. [green]en[/green], [green]hi[/green]."),
+            rich_help_panel="Common",
         ),
     ] = None,
     target_language: Annotated[
         str,
         typer.Option(
             "--target-language",
+            "-L",
             help=(
-                "Language for generated notes and translated headings "
-                "(for example [green]English[/green], [green]Hindi[/green], "
-                "or [green]pt-BR[/green])."
+                "Generated notes language, e.g. [green]English[/green], "
+                "[green]Hindi[/green], [green]pt-BR[/green]."
             ),
+            rich_help_panel="Common",
         ),
     ] = DEFAULT_TARGET_LANGUAGE,
     temperature: Annotated[
@@ -342,12 +345,12 @@ def process(
             "--temperature",
             "-t",
             help=(
-                "LLM response temperature (overrides config). "
-                f"Range: {MIN_TEMPERATURE:.1f} to {MAX_TEMPERATURE:.1f} "
-                f"(default = {DEFAULT_TEMPERATURE:.1f})"
+                f"LLM temperature, {MIN_TEMPERATURE:.1f}-{MAX_TEMPERATURE:.1f} "
+                f"(default {DEFAULT_TEMPERATURE:.1f})."
             ),
             min=MIN_TEMPERATURE,
             max=MAX_TEMPERATURE,
+            rich_help_panel="Advanced",
         ),
     ] = None,
     max_tokens: Annotated[
@@ -355,44 +358,38 @@ def process(
         typer.Option(
             "--max-tokens",
             "-k",
-            help=(
-                "Maximum tokens for LLM responses (overrides config). "
-                "Adjust based on model limits. (None for model default)"
-            ),
+            help=("Maximum LLM response tokens. Omit for the model default."),
             min=1,
+            rich_help_panel="Advanced",
         ),
     ] = None,
     throttle: Annotated[
         float,
         typer.Option(
             "--throttle",
-            help=(
-                "Delay repeated LLM generation calls by this many seconds. "
-                "Useful for pacing chunked or chapter-based runs on low-quota plans."
-            ),
+            "-w",
+            help=("Delay repeated LLM calls, useful for low-quota providers."),
             min=MIN_THROTTLE_SECONDS,
+            rich_help_panel="Advanced",
         ),
     ] = DEFAULT_THROTTLE_SECONDS,
     force: Annotated[
         bool,
         typer.Option(
             "--force",
+            "-f",
             "-F",
-            help=(
-                "Re-process videos even if output already exists. "
-                "By default already-processed videos are skipped."
-            ),
+            help=("Re-process videos even when cached outputs already exist."),
+            rich_help_panel="Advanced",
         ),
     ] = False,
     no_ui: Annotated[
         bool,
         typer.Option(
             "--no-ui",
-            help=(
-                "Disable the Rich live dashboard. "
-                "Outputs plain progress lines to stdout - "
-                "useful for CI, cron jobs, and log piping."
-            ),
+            "-n",
+            help=("Disable the Rich dashboard and print plain progress lines."),
+            rich_help_panel="Advanced",
         ),
     ] = False,
     verbose: Annotated[
@@ -401,44 +398,47 @@ def process(
             "--verbose",
             "-v",
             help="Write DEBUG-level diagnostics to the session log file.",
+            rich_help_panel="Advanced",
         ),
     ] = False,
     quiz: Annotated[
         bool,
         typer.Option(
             "--quiz",
-            help="Also generate a multiple-choice quiz file alongside the study notes.",
+            "-q",
+            help="Generate a multiple-choice quiz alongside the notes.",
+            rich_help_panel="Extras",
         ),
     ] = False,
     export_transcript: Annotated[
         str | None,
         typer.Option(
             "--export-transcript",
+            "-x",
             help=(
-                "Export raw transcript to a file. "
-                "Format: [green]txt[/green] (plain text) or "
-                "[green]json[/green] (with timestamps)."
+                "Export raw transcript as [green]txt[/green] or [green]json[/green]."
             ),
+            rich_help_panel="Extras",
         ),
     ] = None,
     timestamps: Annotated[
         bool,
         typer.Option(
             "--timestamps",
+            "-s",
             help=(
-                "Prefix generated chapter headers with their chapter start time, "
-                "for example [green]# [00:34] Chapter Title[/green]."
+                "Prefix chapter headings with start times, e.g. [green][00:34][/green]."
             ),
+            rich_help_panel="Extras",
         ),
     ] = False,
     chapter_directory_output: Annotated[
         bool,
         typer.Option(
             "--chapter-directory-output",
-            help=(
-                "Write per-chapter Markdown files into a video folder. By default, "
-                "chapter-aware generation is combined into a single final notes file."
-            ),
+            "-C",
+            help=("Write per-chapter Markdown files into a video folder."),
+            rich_help_panel="Extras",
         ),
     ] = False,
     cookie_file: Annotated[
@@ -446,13 +446,13 @@ def process(
         typer.Option(
             "--cookie-file",
             "--cookies",
-            help=(
-                "Path to Netscape-format cookies .txt file used for YouTube requests."
-            ),
+            "-c",
+            help=("Netscape-format cookies .txt file for YouTube requests."),
             exists=False,
             file_okay=True,
             dir_okay=False,
             resolve_path=True,
+            rich_help_panel="Advanced",
         ),
     ] = None,
 ) -> None:
@@ -468,7 +468,7 @@ def process(
     \b
     Examples:
       [cyan]notewise process "https://youtube.com/watch?v=VIDEO_ID"[/cyan]
-      [cyan]notewise process "URL" -m gpt-4o[/cyan]
+      [cyan]notewise process "URL" -m gpt-5.5 -f[/cyan]
       [cyan]notewise process batch_urls.txt -o ./course-notes[/cyan]
     """
     console = _get_console()
@@ -617,6 +617,7 @@ def setup(
         bool,
         typer.Option(
             "--show",
+            "-s",
             help="Show the current configuration without rewriting it.",
         ),
     ] = False,
@@ -710,14 +711,18 @@ def stats(
         str | None,
         typer.Option(
             "--model",
+            "-m",
             help="Filter aggregate stats to a single model.",
+            rich_help_panel="Filters",
         ),
     ] = None,
     since: Annotated[
         str | None,
         typer.Option(
             "--since",
+            "-s",
             help="Filter to the last N days. Examples: 7 or 30d.",
+            rich_help_panel="Filters",
         ),
     ] = None,
 ) -> None:
@@ -733,8 +738,10 @@ def history(
         int,
         typer.Option(
             "--limit",
+            "-n",
             min=1,
             help="Maximum number of recent videos to show.",
+            rich_help_panel="Display",
         ),
     ] = 10,
 ) -> None:
@@ -860,38 +867,48 @@ def cache(
         bool,
         typer.Option(
             "--info",
+            "-i",
             help="Show cache database metadata and entry counts.",
+            rich_help_panel="Actions",
         ),
     ] = False,
     show: Annotated[
         str | None,
         typer.Option(
             "--show",
+            "-s",
             metavar="VIDEO_ID",
             help="Show cached metadata for a specific video.",
+            rich_help_panel="Actions",
         ),
     ] = None,
     clear: Annotated[
         bool,
         typer.Option(
             "--clear",
+            "-c",
             help="Delete the local cache database.",
+            rich_help_panel="Actions",
         ),
     ] = False,
     prune: Annotated[
         int | None,
         typer.Option(
             "--prune",
+            "-p",
             min=0,
             metavar="DAYS",
             help="Prune stale cache entries older than this many days.",
+            rich_help_panel="Actions",
         ),
     ] = None,
     yes: Annotated[
         bool,
         typer.Option(
             "--yes",
+            "-y",
             help="Skip confirmation when used with --clear.",
+            rich_help_panel="Safety",
         ),
     ] = False,
 ) -> None:
@@ -940,6 +957,7 @@ def cache_clear(
         bool,
         typer.Option(
             "--yes",
+            "-y",
             help="Skip the confirmation prompt and clear the cache immediately.",
         ),
     ] = False,
@@ -960,6 +978,7 @@ def cache_prune(
         int,
         typer.Option(
             "--older-than",
+            "-o",
             min=0,
             help="Remove cache entries older than this many days.",
         ),
@@ -978,15 +997,19 @@ def logs(
         int | None,
         typer.Option(
             "--tail",
+            "-t",
             min=1,
             help="Tail the latest session log with the last N lines.",
+            rich_help_panel="Actions",
         ),
     ] = None,
     open: Annotated[
         bool,
         typer.Option(
             "--open",
+            "-o",
             help="Open the log directory in the system file manager.",
+            rich_help_panel="Actions",
         ),
     ] = False,
 ) -> None:
@@ -1004,15 +1027,19 @@ def logs_clean(
         bool,
         typer.Option(
             "--all",
+            "-a",
             help="Remove all inactive log files instead of only older ones.",
+            rich_help_panel="Scope",
         ),
     ] = False,
     older_than: Annotated[
         int,
         typer.Option(
             "--older-than",
+            "-o",
             min=0,
             help="Remove logs older than this many days.",
+            rich_help_panel="Scope",
         ),
     ] = 7,
 ) -> None:

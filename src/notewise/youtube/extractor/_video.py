@@ -25,6 +25,12 @@ from notewise.youtube.extractor._helpers import (
 )
 
 
+SubtitleMaps = tuple[
+    dict[str, list[dict[str, Any]]],
+    dict[str, list[dict[str, Any]]],
+]
+
+
 def _extract_video(client: Any, target: str) -> dict[str, Any]:
     video_id = _extract_video_id(target)
     webpage_url = YOUTUBE_WATCH_URL.format(video_id=video_id)
@@ -97,7 +103,7 @@ def _extract_video(client: Any, target: str) -> dict[str, Any]:
 
 def _build_subtitles(
     captions: dict[str, Any],
-) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+) -> SubtitleMaps:
     subs: dict[str, list[dict[str, Any]]] = {}
     autos: dict[str, list[dict[str, Any]]] = {}
     for track in captions.get("captionTracks", []):
@@ -178,7 +184,10 @@ def _extract_description_chapters(
     return out
 
 
-def _final_chapter_end(duration: int | None, final_start: float) -> float | None:
+def _final_chapter_end(
+    duration: int | None,
+    final_start: float,
+) -> float | None:
     if duration is None or duration <= final_start:
         return None
     return float(duration)
@@ -275,7 +284,7 @@ class _VideoMixin:
     def _build_subtitles(
         self,
         captions: dict[str, Any],
-    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+    ) -> SubtitleMaps:
         return _build_subtitles(captions)
 
     def _extract_chapters(

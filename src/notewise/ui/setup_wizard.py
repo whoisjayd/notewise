@@ -26,9 +26,6 @@ from notewise.model_catalog import (
     load_model_snapshot,
     normalize_available_models,
 )
-from notewise.model_catalog import (
-    iter_model_metadata_keys as catalog_model_metadata_keys,
-)
 from notewise.utils import mask_secret, parse_config_env_lines
 
 
@@ -231,11 +228,6 @@ def _get_model_metadata(
     return get_model_metadata(model, model_cost)
 
 
-def _iter_model_metadata_keys(model: str) -> list[str]:
-    """Build safe metadata lookup keys without normalizing gateway models."""
-    return catalog_model_metadata_keys(model)
-
-
 def _classify_provider(metadata: dict[str, Any]) -> str | None:
     """Map a model to one of the setup providers using LiteLLM provider metadata."""
     return classify_provider(metadata)
@@ -283,7 +275,7 @@ def select_provider(
     table.add_column("Models Available", style="dim")
 
     providers_list = []
-    for prov_key, _prov_config in PROVIDER_CONFIG.items():
+    for prov_key in PROVIDER_CONFIG:
         if prov_key in available_models:
             providers_list.append(prov_key)
 

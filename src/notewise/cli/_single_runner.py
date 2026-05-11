@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import cast
 
+from notewise._constants import DASHBOARD_REFRESH_PER_SECOND
 from notewise.cli._context import CliProcessContext
 from notewise.cli._display import (
     build_dashboard_config_items,
@@ -105,7 +106,7 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
 
     live = context.live_cls(
         dashboard,
-        refresh_per_second=10,
+        refresh_per_second=DASHBOARD_REFRESH_PER_SECOND,
         console=context.console,
         screen=False,
         transient=use_transient_live_display(),

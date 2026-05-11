@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import Any, cast
+from typing import Protocol
 
 import structlog
 
@@ -24,6 +24,55 @@ from notewise.utils import sanitize_filename
 
 
 logger = structlog.get_logger(__name__)
+
+
+class ChapterPayload(Protocol):
+    start_seconds: int
+    text: str
+
+
+class ChapterNotesGenerator(Protocol):
+    async def generate_single_chapter_notes(
+        self,
+        *,
+        chapter_title: str,
+        chapter_text: str,
+        on_chunk: Callable[[int, int], None] | None = None,
+        on_combine: Callable[[int], None] | None = None,
+    ) -> str: ...
+
+    def generate_chapter_notes_concurrent(
+        self,
+        chapters: dict[str, str],
+        *,
+        max_concurrent: int,
+        semaphore: object,
+        video_title: str,
+        on_chapter_start: Callable[[int, int], None] | None = None,
+        generate_single: Callable[..., Awaitable[str]] | None = None,
+    ) -> Awaitable[dict[str, str]]: ...
+
+
+class PipelineProtocol(Protocol):
+    output_formats: list[str]
+    output_format: str
+    output_dir: Path
+    force: bool
+    timestamps: bool
+    target_language: str
+    chapter_directory_output: bool
+    generator: ChapterNotesGenerator
+    _chapter_semaphore: object
+
+    async def _reserve_output_target(
+        self,
+        base: Path,
+        video_id: str,
+        *,
+        allow_existing_base: bool = False,
+    ) -> Path: ...
+
+    def _write_output_target_metadata(self, target: Path, video_id: str) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -56,10 +105,10 @@ def bundled_chapter_output_formats(
 
 
 async def prepare_chapter_output_targets(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     video_id: str,
     title: str,
-    current_cached_video: Any,
+    current_cached_video: object | None,
     reserved_targets: list[Path],
     chapter_directory_output: bool,
 ) -> ChapterOutputTargets:
@@ -114,9 +163,9 @@ async def prepare_chapter_output_targets(
 
 
 def build_chapter_generation_plan(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     title: str,
-    ordered_chapters: list[tuple[str, Any]],
+    ordered_chapters: list[tuple[str, ChapterPayload]],
     total_chapters: int,
     output_target: Path | None,
     temporary_chapter_dir: Path | None,
@@ -161,10 +210,10 @@ def build_chapter_generation_plan(
 
 
 async def generate_missing_chapter_notes(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     video_id: str,
     title: str,
-    ordered_chapters: list[tuple[str, Any]],
+    ordered_chapters: list[tuple[str, ChapterPayload]],
     total_chapters: int,
     plan: ChapterGenerationPlan,
     emit: Callable[..., None],
@@ -225,14 +274,11 @@ async def generate_missing_chapter_notes(
                 on_combine(total_parts)
 
         try:
-            return cast(
-                str,
-                await original_generate_single(
-                    chapter_title=chapter_title,
-                    chapter_text=chapter_text,
-                    on_chunk=_on_chapter_chunk,
-                    on_combine=_on_chapter_combine,
-                ),
+            return await original_generate_single(
+                chapter_title=chapter_title,
+                chapter_text=chapter_text,
+                on_chunk=_on_chapter_chunk,
+                on_combine=_on_chapter_combine,
             )
         finally:
             emit(
@@ -255,7 +301,7 @@ async def generate_missing_chapter_notes(
 
 
 def write_chapter_outputs_and_collect_bundle(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     plan: ChapterGenerationPlan,
     generated_chapter_notes: dict[str, str],
     rendered_output_targets: dict[str, Path],
@@ -288,7 +334,7 @@ def write_chapter_outputs_and_collect_bundle(
 
 
 def render_bundled_chapter_outputs(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     title: str,
     bundled_chapter_notes: list[str],
     rendered_output_targets: dict[str, Path],
@@ -327,11 +373,11 @@ def render_bundled_chapter_outputs(
 
 
 async def generate_chapter_outputs(
-    pipeline: Any,
+    pipeline: PipelineProtocol,
     video_id: str,
     title: str,
-    chapter_transcripts: dict[str, Any],
-    current_cached_video: Any,
+    chapter_transcripts: dict[str, ChapterPayload],
+    current_cached_video: object | None,
     reserved_targets: list[Path],
     emit: Callable[..., None],
 ) -> tuple[

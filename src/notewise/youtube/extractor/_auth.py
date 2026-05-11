@@ -10,10 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from notewise.errors import ExtractionError
-from notewise.youtube._constants import DEFAULT_ACCEPT_LANGUAGE
+from notewise.youtube._constants import DEFAULT_ACCEPT_LANGUAGE, DEFAULT_USER_AGENT
 
 
-def _load_cookie_jar(cookie_file: str | None) -> http.cookiejar.CookieJar:
+def _load_cookie_jar(
+    cookie_file: str | None,
+) -> http.cookiejar.CookieJar:
     jar = http.cookiejar.MozillaCookieJar()
     if cookie_file:
         path = Path(cookie_file)
@@ -167,10 +169,7 @@ def _generate_cookie_auth_headers(
 
 def _default_headers() -> dict[str, str]:
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": DEFAULT_USER_AGENT,
         "Accept-Language": DEFAULT_ACCEPT_LANGUAGE,
     }
 

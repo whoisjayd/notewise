@@ -20,6 +20,7 @@ from notewise.youtube._constants import (
     ANDROID_CLIENT_VERSION,
     ANDROID_USER_AGENT,
     DEFAULT_ACCEPT_LANGUAGE,
+    INNERTUBE_BASE_URL,
     INNERTUBE_CLIENT_NAME,
     INNERTUBE_CLIENT_VERSION,
     REQUEST_TIMEOUT_SECONDS,
@@ -239,7 +240,7 @@ def _call_innertube(
     payload.update(body)
     headers = client._generate_api_headers(ytcfg, context)
     headers["Content-Type"] = "application/json"
-    url = f"https://www.youtube.com/youtubei/v1/{endpoint}?key={api_key}&prettyPrint=false"
+    url = f"{INNERTUBE_BASE_URL}/{endpoint}?key={api_key}&prettyPrint=false"
     return cast(dict[str, Any], client._fetch_json(url, payload, headers))
 
 

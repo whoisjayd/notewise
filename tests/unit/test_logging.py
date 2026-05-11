@@ -51,11 +51,15 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
 def test_redact_sensitive_data_masks_provider_key_suffixes():
     redacted = redact_sensitive_data(
         {
+            "github_token": "github-secret",
+            "oauth_token": "oauth-secret",
             "x-goog-api-key": "test-gemini-secret",
             "token_count": 123,
         }
     )
 
+    assert redacted["github_token"] == "[REDACTED]"
+    assert redacted["oauth_token"] == "[REDACTED]"
     assert redacted["x-goog-api-key"] == "[REDACTED]"
     assert redacted["token_count"] == 123
 

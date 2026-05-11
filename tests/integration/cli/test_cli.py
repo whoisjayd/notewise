@@ -184,6 +184,31 @@ def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):  
     assert mock_cls.call_args.kwargs["output_formats"] == ["pdf"]
 
 
+def test_process_short_flags_are_forwarded(mock_config_exists, mock_pipeline):  # noqa: ARG001
+    """Short process aliases should cover common power-user flows."""
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    result = runner.invoke(
+        app,
+        [
+            "process",
+            _VIDEO_URL,
+            "-r",
+            "html",
+            "-w",
+            "2.5",
+            "-f",
+            "-n",
+        ],
+    )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs["output_formats"] == ["html"]
+    assert call_kwargs["throttle_seconds"] == 2.5
+    assert call_kwargs["force"] is True
+
+
 def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipeline):  # noqa: ARG001
     mock_cls, _pipeline_instance = mock_pipeline
 
@@ -1393,17 +1418,20 @@ def test_process_ui_shows_detailed_pipeline_states(
     ]
     rendered_statuses = "\n".join(worker_statuses)
     rendered_chapter_statuses = "\n".join(chapter_statuses)
-    assert "Transcript Ready" in rendered_statuses
-    assert "Chunk 1/3" in rendered_statuses
-    assert "Finalizing 3 note parts" in rendered_statuses
-    assert "Ch 2/5" in rendered_statuses
-    assert "Ch 2/5, Part 1/2" in rendered_chapter_statuses
-    assert "Ch 2/5, Finalizing 2 parts" in rendered_chapter_statuses
+    assert "Transcript ready" in rendered_statuses
+    assert "chunk 1/3" in rendered_statuses
+    assert "Finalizing" in rendered_statuses
+    assert "3 note parts" in rendered_statuses
+    assert "2/5" in rendered_statuses
+    assert "2/5, part 1/2" in rendered_chapter_statuses
+    assert "Finalizing chapter" in rendered_chapter_statuses
+    assert "2 parts" in rendered_chapter_statuses
     assert "Quiz" in rendered_statuses
-    assert "Quiz Part 1/2" in rendered_statuses
-    assert "Combining 2 quiz parts" in rendered_statuses
-    assert "Quiz Ready" in rendered_statuses
-    assert "Generated" in rendered_statuses
+    assert "part 1/2" in rendered_statuses
+    assert "Finalizing quiz" in rendered_statuses
+    assert "2 parts" in rendered_statuses
+    assert "Quiz ready" in rendered_statuses
+    assert "Notes ready" in rendered_statuses
 
 
 def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
@@ -1495,8 +1523,8 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
         call.args[1] for call in dashboard_instance.update_chapter_worker.call_args_list
     ]
     rendered_chapter_statuses = "\n".join(chapter_statuses)
-    assert "Ch 2/5" in rendered_chapter_statuses
-    assert "Part 1/2" in rendered_chapter_statuses
+    assert "2/5" in rendered_chapter_statuses
+    assert "part 1/2" in rendered_chapter_statuses
     assert "\\[red]Video One\\[/red]" in rendered_chapter_statuses
     assert "[red]Video One[/red]" not in rendered_chapter_statuses
 

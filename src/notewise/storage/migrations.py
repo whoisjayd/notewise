@@ -10,7 +10,6 @@ from sqlalchemy import inspect as sa_inspect
 
 
 Migration = Callable[[Connection], None]
-LATEST_SCHEMA_VERSION = 2
 
 _RUNSTATS_ADDITIVE_COLUMNS: dict[str, str] = {
     "prompt_tokens": (
