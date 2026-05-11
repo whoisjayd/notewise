@@ -188,25 +188,27 @@ def test_process_short_flags_are_forwarded(mock_config_exists, mock_pipeline):  
     """Short process aliases should cover common power-user flows."""
     mock_cls, _pipeline_instance = mock_pipeline
 
-    result = runner.invoke(
-        app,
-        [
-            "process",
-            _VIDEO_URL,
-            "-r",
-            "html",
-            "-w",
-            "2.5",
-            "-f",
-            "-n",
-        ],
-    )
+    with patch("notewise.cli.app.PipelineDashboard") as mock_dashboard_cls:
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                _VIDEO_URL,
+                "-r",
+                "html",
+                "-w",
+                "2.5",
+                "-f",
+                "-n",
+            ],
+        )
 
     assert result.exit_code == 0
     call_kwargs = mock_cls.call_args.kwargs
     assert call_kwargs["output_formats"] == ["html"]
     assert call_kwargs["throttle_seconds"] == 2.5
     assert call_kwargs["force"] is True
+    mock_dashboard_cls.assert_not_called()
 
 
 def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipeline):  # noqa: ARG001

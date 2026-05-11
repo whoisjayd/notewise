@@ -190,6 +190,7 @@ def _markdown_to_html(markdown_text: str) -> str:
 def _escape_raw_html(markdown_text: str) -> str:
     escaped_lines: list[str] = []
     open_fence_token: str | None = None
+    multiline_html_open = False
 
     for line in markdown_text.splitlines():
         fence_match = _FENCED_CODE_START_RE.match(line)
@@ -211,6 +212,26 @@ def _escape_raw_html(markdown_text: str) -> str:
         ):
             escaped_lines.append(line)
             continue
+
+        # Handle multiline HTML tags
+        if multiline_html_open:
+            escaped_lines.append(line)
+            if ">" in line:
+                multiline_html_open = False
+            continue
+
+        # Check if line starts an incomplete HTML tag
+        if _RAW_HTML_TAG_RE.search(line):
+            # Check if tag is complete on this line
+            tag_match = _RAW_HTML_TAG_RE.search(line)
+            if tag_match:
+                tag_text = tag_match.group(0)
+                # If tag doesn't end with >, it's multiline
+                if tag_text.count("<") > tag_text.count(">"):
+                    multiline_html_open = True
+                    escaped_lines.append(line)
+                    continue
+
         escaped_lines.append(
             _RAW_HTML_TAG_RE.sub(
                 lambda match: escape(match.group(0), quote=False),

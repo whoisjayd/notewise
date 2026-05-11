@@ -528,10 +528,12 @@ class PipelineDashboard:
             cell.add_column(ratio=1, no_wrap=True)
             cell.add_column(ratio=3, no_wrap=True)
             cell.add_row(f"[bold cyan]{group_label}[/bold cyan]", "")
+            has_values = False
             for display_label, label in item_labels:
                 value = item_lookup.get(label)
                 if value is None:
                     continue
+                has_values = True
                 cell.add_row(
                     f"[dim]{self._safe_cell(display_label)}[/dim]",
                     (
@@ -540,7 +542,8 @@ class PipelineDashboard:
                         "[/cyan]"
                     ),
                 )
-            cells.append(cell)
+            if has_values:
+                cells.append(cell)
         table.add_row(*cells)
         return table
 

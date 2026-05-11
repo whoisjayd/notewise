@@ -63,6 +63,8 @@ def _finish_dashboard_video(
 ) -> None:
     if hasattr(dashboard, "clear_chapter_workers"):
         cast(Any, dashboard).clear_chapter_workers(fallback_video_id)
+    if hasattr(dashboard, "clear_worker_state"):
+        cast(Any, dashboard).clear_worker_state(worker_index)
     _set_dashboard_worker_idle(dashboard, worker_index)
 
 
