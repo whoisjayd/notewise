@@ -9,10 +9,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 from time import monotonic
 
 from rich import box
-from rich.console import Group, RenderableType
+from rich.console import Console, Group, RenderableType
 from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import (
@@ -31,9 +32,9 @@ from notewise._constants import (
     AI_GROUP,
     API_LABEL,
     CACHE_LABEL,
+    CHAPTER_DIRECTORIES_LABEL,
     CHAPTERS_LABEL,
     CHAPTERS_WORKERS_LABEL,
-    CHAPTER_DIRECTORIES_LABEL,
     COOKIES_LABEL,
     DASHBOARD_ACTIVE_PHASE,
     DASHBOARD_ACTIVITY_TITLE_LIMIT,
@@ -112,6 +113,16 @@ class DashboardWorkerSnapshot:
     def is_active(self) -> bool:
         """Return whether this worker is processing a video."""
         return self.started_at is not None and self.phase != DASHBOARD_IDLE_STATUS
+
+
+@lru_cache(maxsize=1)
+def _dashboard_box() -> box.Box:
+    """Pick a richer border style when the terminal supports Unicode."""
+    console = Console()
+    encoding = (console.encoding or "").lower()
+    if encoding and "utf" in encoding and not console.is_dumb_terminal:
+        return box.ROUNDED
+    return box.ASCII
 
 
 class PipelineDashboard:
@@ -478,35 +489,35 @@ class PipelineDashboard:
                 f"[bold green]{self.completed_count}[/bold green]",
                 title=f"[green]{DASHBOARD_SUMMARY_COMPLETED_LABEL}[/green]",
                 border_style="green",
-                box=box.ASCII,
+                box=_dashboard_box(),
                 padding=(0, 1),
             ),
             Panel(
                 f"[bold yellow]{self.skipped_count}[/bold yellow]",
                 title=f"[yellow]{DASHBOARD_SUMMARY_SKIPPED_LABEL}[/yellow]",
                 border_style="yellow",
-                box=box.ASCII,
+                box=_dashboard_box(),
                 padding=(0, 1),
             ),
             Panel(
                 f"[bold red]{self.failed_count}[/bold red]",
                 title=f"[red]{DASHBOARD_SUMMARY_FAILED_LABEL}[/red]",
                 border_style="red",
-                box=box.ASCII,
+                box=_dashboard_box(),
                 padding=(0, 1),
             ),
             Panel(
                 f"[bold cyan]{running}[/bold cyan]",
                 title=f"[cyan]{DASHBOARD_SUMMARY_RUNNING_LABEL}[/cyan]",
                 border_style="cyan",
-                box=box.ASCII,
+                box=_dashboard_box(),
                 padding=(0, 1),
             ),
             Panel(
                 f"[bold blue]{queued}[/bold blue]",
                 title=f"[blue]{DASHBOARD_SUMMARY_QUEUED_LABEL}[/blue]",
                 border_style="blue",
-                box=box.ASCII,
+                box=_dashboard_box(),
                 padding=(0, 1),
             ),
         )
@@ -537,7 +548,10 @@ class PipelineDashboard:
                 (COOKIES_LABEL, COOKIES_LABEL),
                 (API_LABEL, API_LABEL),
             ),
-            EXTRAS_GROUP: ((QUIZ_LABEL, QUIZ_LABEL), (TIMESTAMPS_LABEL, TIMESTAMPS_LABEL)),
+            EXTRAS_GROUP: (
+                (QUIZ_LABEL, QUIZ_LABEL),
+                (TIMESTAMPS_LABEL, TIMESTAMPS_LABEL),
+            ),
         }
         item_lookup = {item.label: item.value for item in self.config_items}
 
@@ -574,7 +588,7 @@ class PipelineDashboard:
         """Render structured worker state."""
         table = Table(
             expand=True,
-            box=box.ASCII,
+            box=_dashboard_box(),
             show_edge=False,
             padding=(0, 1),
             header_style="bold cyan",
@@ -689,6 +703,6 @@ class PipelineDashboard:
             body,
             title=DASHBOARD_PANEL_TITLE_MARKUP,
             border_style="cyan",
-            box=box.ASCII,
+            box=_dashboard_box(),
             padding=(0, 1),
         )
