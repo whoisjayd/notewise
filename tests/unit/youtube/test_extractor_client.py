@@ -794,10 +794,11 @@ class TestDeeperExtractorBranches:
             client, "_generate_api_headers", lambda *_args, **_kwargs: {"X": "Y"}
         )
 
-        def _fake_fetch_json(url, payload, headers):
+        def _fake_fetch_json(url, payload, headers, sanitized_url=None):
             captured["url"] = url
             captured["payload"] = payload
             captured["headers"] = headers
+            captured["sanitized_url"] = sanitized_url
             return {"ok": True}
 
         monkeypatch.setattr(client, "_fetch_json", _fake_fetch_json)
@@ -808,6 +809,7 @@ class TestDeeperExtractorBranches:
         assert "player?key=api" in captured["url"]
         assert captured["payload"]["videoId"] == "v1"
         assert captured["headers"]["Content-Type"] == "application/json"
+        assert captured["sanitized_url"] == "https://www.youtube.com/youtubei/v1/player"
 
     def test_transcript_via_innertube_player_success(self, monkeypatch):
         client = ExtractorClient()
