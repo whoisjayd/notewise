@@ -7,8 +7,9 @@ ARG APP_GID=1001
 ARG APP_ROOT=/app
 ARG APP_HOME=/home/notewise
 ARG APP_OUTPUT_DIR=/output
+ARG UV_VERSION=0.11.7
 
-FROM ghcr.io/astral-sh/uv:latest AS uv
+FROM ghcr.io/astral-sh/uv:${UV_VERSION} AS uv
 
 # ---------------------------------------------------------------------------
 # Stage 1 — builder

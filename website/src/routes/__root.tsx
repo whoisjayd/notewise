@@ -2,19 +2,19 @@ import { createRootRoute } from "@tanstack/react-router";
 
 import { NotFound } from "@/components/NotFound";
 import { RootComponent, RootShell } from "@/components/RootDocument";
+import {
+  DOCS_URL,
+  GITHUB_URL,
+  OG_IMAGE,
+  PYPI_URL,
+  SITE_DESCRIPTION,
+  SITE_NAME,
+  SITE_TITLE,
+  SITE_URL,
+  X_PROFILE_URL,
+} from "@/lib/siteMeta";
 
 import appCss from "../styles.css?url";
-
-const SITE_URL = "https://notewise.click";
-const SITE_NAME = "NoteWise";
-const SITE_TITLE = "NoteWise — YouTube videos into study notes you actually keep";
-const SITE_DESCRIPTION =
-  "A terminal-native CLI that turns YouTube videos and playlists into hierarchical Markdown study notes, quizzes, transcripts, and PDF / DOCX / HTML exports — through the LLM provider you already pay for.";
-const OG_IMAGE = `${SITE_URL}/og-image.png`;
-const GITHUB_URL = "https://github.com/whoisjayd/notewise";
-const PYPI_URL = "https://pypi.org/project/notewise/";
-const DOCS_URL = `${SITE_URL}/docs`;
-const X_PROFILE_URL = "https://x.com/whynotjaydeep";
 
 const SOFTWARE_JSON_LD = {
   "@context": "https://schema.org",

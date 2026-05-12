@@ -1,15 +1,14 @@
 from __future__ import annotations
 
-from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.request import HTTPCookieProcessor, build_opener
 
 from notewise._constants import DEFAULT_LANGUAGES
 from notewise.errors import ExtractionError
 
 from ._auth import _AuthMixin
-from ._helpers import _HelperMixin
+from ._helpers import _looks_like_playlist_url, _select_simple_video_fields
 from ._parsers import (
     parse_transcript_payload,
     select_track,
@@ -17,6 +16,10 @@ from ._parsers import (
 from ._playlist import _PlaylistMixin
 from ._transport import _TransportMixin
 from ._video import _VideoMixin
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 @dataclass(frozen=True)
@@ -28,7 +31,6 @@ class YouTubeExtractorConfig:
 class YouTubeExtractorClient(
     _TransportMixin,
     _AuthMixin,
-    _HelperMixin,
     _VideoMixin,
     _PlaylistMixin,
 ):
@@ -38,7 +40,7 @@ class YouTubeExtractorClient(
         self._opener = build_opener(HTTPCookieProcessor(self._cookie_jar))
 
     def metadata(self, target: str) -> dict[str, Any]:
-        if self._looks_like_playlist_url(target):
+        if _looks_like_playlist_url(target):
             pl = self._extract_playlist(target, include_entries=False)
             return {
                 "command": "metadata",
@@ -77,7 +79,7 @@ class YouTubeExtractorClient(
             "chapters_count": len(video["chapters"]),
             "subtitle_languages": sorted(video["subtitles"].keys()),
             "automatic_caption_languages": sorted(video["automatic_captions"].keys()),
-            "data": self._select_simple_video_fields(video),
+            "data": _select_simple_video_fields(video),
         }
 
     def chapters(self, target: str) -> dict[str, Any]:

@@ -1,8 +1,8 @@
 # NoteWise full documentation for LLMs
 
-NoteWise is a Python CLI (`>=3.10`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
+NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-Current documented version: `1.4.0`.
+Current documented version: `1.4.1`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
@@ -43,7 +43,7 @@ What NoteWise produces:
 
 Source-backed defaults:
 
-- Python: `>=3.10`
+- Python: `>=3.11`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output directory: `./output`
 - Default output format: `md`
@@ -57,7 +57,7 @@ Source-backed defaults:
 
 ## Install NoteWise
 
-NoteWise requires Python `>=3.10` when installed from PyPI. The CLI entry point is `notewise`.
+NoteWise requires Python `>=3.11` when installed from PyPI. The CLI entry point is `notewise`.
 
 Install with `uv tool`:
 
@@ -186,9 +186,6 @@ Common process options:
 | `--timestamps` | false | Prefix generated chapter headers with start times. |
 | `--chapter-directory-output` | false | Write per-chapter Markdown files when YouTube chapters exist. |
 | `--cookie-file`, `--cookies` | `YOUTUBE_COOKIE_FILE` | Read restricted videos with a Netscape cookies file. |
-| `--use-combine-chunk` | false | Use deprecated legacy chunk-combine behavior. |
-
-`--use-combine-chunk` is legacy behavior. The default long-transcript path uses boundary stitching.
 
 ### Live dashboard
 
@@ -458,7 +455,7 @@ Process command example:
 notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
 ```
 
-Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file`, and `--use-combine-chunk`.
+Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, and `--cookie-file`.
 
 Setup and auth:
 

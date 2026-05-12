@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -24,20 +24,12 @@ def _text(console: Console) -> str:
 
 
 def test_helper_formatting_functions() -> None:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     naive_now = datetime(2026, 3, 22, 12, 0, 0)
 
-    assert admin._mask_secret(None) == "(not set)"
-    assert admin._mask_secret("short") == "***"
-    assert admin._mask_secret("abcdefghijklmnop") == "abcdef...mnop"
     assert admin._human_size(0) == "0 B"
     assert admin._human_size(2048) == "2.0 KB"
     assert admin._format_duration(3661) == "1h 1m 1s"
-    assert admin._coerce_int(None, default=4) == 4
-    assert admin._coerce_int(True) == 1
-    assert admin._coerce_int(2.8) == 2
-    assert admin._coerce_int("7") == 7
-    assert admin._coerce_int("bad", default=3) == 3
     assert admin._format_datetime(None) == "Never"
     assert admin._format_datetime(now)
     assert admin._format_datetime(naive_now)
@@ -240,7 +232,7 @@ def test_render_history_renders_rows(monkeypatch: pytest.MonkeyPatch) -> None:
                 title="Video One",
                 model="gemini/gemini-2.5-flash",
                 cost_usd=0.25,
-                last_run_at=datetime(2026, 3, 22, tzinfo=timezone.utc),
+                last_run_at=datetime(2026, 3, 22, tzinfo=UTC),
             )
         ]
 
@@ -323,7 +315,7 @@ async def test_render_source_info_renders_video(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     console = _console()
-    cached_video = SimpleNamespace(cached_at=datetime(2026, 3, 22, tzinfo=timezone.utc))
+    cached_video = SimpleNamespace(cached_at=datetime(2026, 3, 22, tzinfo=UTC))
 
     def _get_video(video_id: str):
         del video_id
@@ -430,8 +422,8 @@ def test_render_cache_info_and_entry(monkeypatch: pytest.MonkeyPatch) -> None:
         total_transcripts=2,
         total_runs=3,
         total_exports=1,
-        oldest_cached_at=datetime(2026, 3, 20, tzinfo=timezone.utc),
-        newest_cached_at=datetime(2026, 3, 22, tzinfo=timezone.utc),
+        oldest_cached_at=datetime(2026, 3, 20, tzinfo=UTC),
+        newest_cached_at=datetime(2026, 3, 22, tzinfo=UTC),
     )
     repository = SimpleNamespace(
         get_cache_summary=lambda: summary,
@@ -439,7 +431,7 @@ def test_render_cache_info_and_entry(monkeypatch: pytest.MonkeyPatch) -> None:
             id=video_id,
             title="Video One",
             duration=75,
-            cached_at=datetime(2026, 3, 22, tzinfo=timezone.utc),
+            cached_at=datetime(2026, 3, 22, tzinfo=UTC),
         ),
         get_transcript=lambda _video_id: object(),
         get_run_stats=lambda _video_id: [

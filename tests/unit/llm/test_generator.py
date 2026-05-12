@@ -8,7 +8,7 @@ import pytest
 from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
 from notewise.llm.prompts.quiz import get_quiz_combine_prompt, get_quiz_prompt
-from notewise.llm.prompts.study_notes import get_combine_prompt, get_stitch_prompt
+from notewise.llm.prompts.study_notes import get_stitch_prompt
 from notewise.pipeline.generation import (
     StudyMaterialGenerator,
     _normalize_stitched_document,
@@ -32,6 +32,14 @@ class TestStudyMaterialGenerator:
             count = generator._count_tokens("1234")
             assert count == 1  # 4 chars // 4 = 1
 
+    def test_count_tokens_fallback_handles_empty_and_short_text(self, generator):
+        """Fallback token estimates should stay useful for short non-empty text."""
+        with patch(
+            "notewise.pipeline.generation.token_counter", side_effect=Exception("Error")
+        ):
+            assert generator._count_tokens("") == 0
+            assert generator._count_tokens("abc") == 1
+
     def test_count_tokens_public_api(self, generator):
         """Public count_tokens API should use model token counter."""
         with patch("notewise.pipeline.generation.token_counter", return_value=123):
@@ -52,7 +60,7 @@ class TestStudyMaterialGenerator:
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
                 # 1 token per word, with the delimiter ". " adding extra tokens
-                def count_tokens(_model, text):  # noqa: ARG001
+                def count_tokens(_model, text):
                     return len(text.split())
 
                 mock_tc.side_effect = count_tokens
@@ -75,7 +83,7 @@ class TestStudyMaterialGenerator:
 
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
+                mock_tc.side_effect = lambda _model, text: len(text.split())
 
                 text = "Sentence one. Sentence two. Sentence three."
                 chunks = generator._chunk_transcript(text)
@@ -92,7 +100,7 @@ class TestStudyMaterialGenerator:
 
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda _model, text: len(text.split())  # noqa: ARG005
+                mock_tc.side_effect = lambda _model, text: len(text.split())
 
                 # No periods, just newlines
                 text = "Line one\nLine two\nLine three"
@@ -111,7 +119,7 @@ class TestStudyMaterialGenerator:
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
                 # Mock token counter to say everything is too big
-                mock_tc.side_effect = lambda _model, text: len(text)  # noqa: ARG005
+                mock_tc.side_effect = lambda _model, text: len(text)
 
                 # A single massive word without spaces/newlines
                 text = "A" * 100
@@ -313,34 +321,6 @@ class TestStudyMaterialGenerator:
         )
 
     @pytest.mark.asyncio
-    async def test_generate_study_notes_multiple_uses_legacy_combine_when_enabled(
-        self, mock_llm_provider
-    ):
-        """Legacy combine mode should bypass stitching when explicitly enabled."""
-        generator = StudyMaterialGenerator(mock_llm_provider, use_combine_chunk=True)
-        generator.provider.generate = AsyncMock(
-            side_effect=[
-                "# Section One\n\nChunk one detail",
-                "# Section One\n\nChunk two detail",
-                "# Combined\n\nMerged detail",
-            ]
-        )
-
-        with patch.object(generator, "_chunk_transcript", return_value=["A", "B"]):
-            result = await generator.generate_study_notes("Long text")
-
-        assert result == "# Combined\n\nMerged detail"
-        final_prompt = generator.provider.generate.await_args_list[-1].kwargs[
-            "user_prompt"
-        ]
-        assert final_prompt == get_combine_prompt(
-            [
-                "# Section One\n\nChunk one detail",
-                "# Section One\n\nChunk two detail",
-            ]
-        )
-
-    @pytest.mark.asyncio
     async def test_generate_study_notes_on_combine_callback(self, generator):
         """Chunked note generation should signal when combine begins."""
         chunks = ["Part 1", "Part 2"]
@@ -485,7 +465,7 @@ class TestStudyMaterialGenerator:
     ):
         """Concurrent chapter generation should return results in the original order."""
 
-        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+        async def _generate_single(chapter_title, chapter_text, **kwargs):
             del chapter_text, kwargs
             return f"notes for {chapter_title}"
 
@@ -509,7 +489,7 @@ class TestStudyMaterialGenerator:
         """The semaphore should cap simultaneous chapter generations."""
         state = {"active": 0, "peak": 0}
 
-        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+        async def _generate_single(chapter_title, chapter_text, **kwargs):
             del chapter_title, chapter_text, kwargs
             state["active"] += 1
             state["peak"] = max(state["peak"], state["active"])
@@ -540,7 +520,7 @@ class TestStudyMaterialGenerator:
         """A shared semaphore should cap chapter work across concurrent runs."""
         state = {"active": 0, "peak": 0}
 
-        async def _generate_single(chapter_title, chapter_text, **kwargs):  # noqa: ANN001
+        async def _generate_single(chapter_title, chapter_text, **kwargs):
             del chapter_title, chapter_text, kwargs
             state["active"] += 1
             state["peak"] = max(state["peak"], state["active"])

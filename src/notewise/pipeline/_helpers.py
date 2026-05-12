@@ -2,11 +2,19 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+from notewise._constants import MIN_ESTIMATED_TOKENS, TOKEN_ESTIMATE_CHARS_PER_TOKEN
 from notewise.llm.provider import UsageTotals
-from notewise.utils import sanitize_filename
+from notewise.utils import (
+    coerce_non_negative_float,
+    coerce_non_negative_int,
+    sanitize_filename,
+)
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def suffix_output_target(base: Path, video_id: str) -> Path:
@@ -19,32 +27,12 @@ def suffix_output_target(base: Path, video_id: str) -> Path:
 
 def coerce_usage_int(value: Any) -> int:
     """Convert usage values to non-negative ints without trusting mock objects."""
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return max(0, value)
-    if isinstance(value, float):
-        return max(0, int(value))
-    if isinstance(value, str):
-        try:
-            return max(0, int(value.strip()))
-        except ValueError:
-            return 0
-    return 0
+    return coerce_non_negative_int(value)
 
 
 def coerce_usage_float(value: Any) -> float:
     """Convert usage values to non-negative floats safely."""
-    if isinstance(value, bool):
-        return float(value)
-    if isinstance(value, (int, float)):
-        return max(0.0, float(value))
-    if isinstance(value, str):
-        try:
-            return max(0.0, float(value.strip()))
-        except ValueError:
-            return 0.0
-    return 0.0
+    return coerce_non_negative_float(value)
 
 
 def coerce_usage_totals(raw_usage: Any) -> UsageTotals:
@@ -61,4 +49,7 @@ def coerce_usage_totals(raw_usage: Any) -> UsageTotals:
 
 def estimate_tokens_used(transcript_text: str) -> int:
     """Fallback token estimate used when precise usage accounting is unavailable."""
-    return max(1, len(transcript_text) // 4)
+    return max(
+        MIN_ESTIMATED_TOKENS,
+        len(transcript_text) // TOKEN_ESTIMATE_CHARS_PER_TOKEN,
+    )

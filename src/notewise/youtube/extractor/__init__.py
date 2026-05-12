@@ -6,9 +6,9 @@ from .client import YouTubeExtractorClient, YouTubeExtractorConfig
 
 
 __all__ = [
+    "AsyncYouTubeExtractorClient",
     "YouTubeExtractorClient",
     "YouTubeExtractorConfig",
-    "AsyncYouTubeExtractorClient",
     "parse_transcript_payload",
     "select_track",
 ]

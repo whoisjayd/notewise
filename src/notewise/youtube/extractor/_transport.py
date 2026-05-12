@@ -20,6 +20,7 @@ from notewise.youtube._constants import (
     ANDROID_CLIENT_VERSION,
     ANDROID_USER_AGENT,
     DEFAULT_ACCEPT_LANGUAGE,
+    INNERTUBE_BASE_URL,
     INNERTUBE_CLIENT_NAME,
     INNERTUBE_CLIENT_VERSION,
     REQUEST_TIMEOUT_SECONDS,
@@ -118,6 +119,7 @@ def _fetch_json(
     url: str,
     payload: dict[str, Any],
     headers: dict[str, str],
+    sanitized_url: str | None = None,
 ) -> dict[str, Any]:
     req = Request(
         url=url,
@@ -125,20 +127,23 @@ def _fetch_json(
         headers=headers,
         method="POST",
     )
+    log_url = sanitized_url if sanitized_url is not None else url
     try:
         with _fetch_with_retry(
             lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
-            url=url,
+            url=log_url,
         ) as resp:
             body = resp.read().decode("utf-8", errors="replace")
         data = json.loads(body)
         if not isinstance(data, dict):
-            raise ExtractionError(f"Unexpected JSON response type for {url}")
+            raise ExtractionError(f"Unexpected JSON response type for {log_url}")
         return data
     except ExtractionError:
         raise
     except Exception as exc:
-        raise ExtractionError(f"Request failed for {url}: {exc}", url=url) from exc
+        raise ExtractionError(
+            f"Request failed for {log_url}: {exc}", url=log_url
+        ) from exc
 
 
 def _transcript_via_innertube_player(
@@ -214,7 +219,7 @@ def _player_response_from_innertube(
 ) -> dict[str, Any] | None:
     try:
         return cast(
-            dict[str, Any],
+            "dict[str, Any]",
             client._call_innertube(
                 endpoint="player",
                 api_key=api_key,
@@ -239,8 +244,11 @@ def _call_innertube(
     payload.update(body)
     headers = client._generate_api_headers(ytcfg, context)
     headers["Content-Type"] = "application/json"
-    url = f"https://www.youtube.com/youtubei/v1/{endpoint}?key={api_key}&prettyPrint=false"
-    return cast(dict[str, Any], client._fetch_json(url, payload, headers))
+    url = f"{INNERTUBE_BASE_URL}/{endpoint}?key={api_key}&prettyPrint=false"
+    sanitized_url = f"{INNERTUBE_BASE_URL}/{endpoint}"
+    return cast(
+        "dict[str, Any]", client._fetch_json(url, payload, headers, sanitized_url)
+    )
 
 
 def _extract_context(
@@ -313,8 +321,9 @@ class _TransportMixin:
         url: str,
         payload: dict[str, Any],
         headers: dict[str, str],
+        sanitized_url: str | None = None,
     ) -> dict[str, Any]:
-        return _fetch_json(self, url, payload, headers)
+        return _fetch_json(self, url, payload, headers, sanitized_url)
 
     def _transcript_via_innertube_player(
         self,
@@ -371,7 +380,3 @@ class _TransportMixin:
         context: dict[str, Any],
     ) -> dict[str, str]:
         return _generate_api_headers(self, ytcfg, context)
-
-    @staticmethod
-    def _fetch_with_retry(operation: Any, *, url: str) -> Any:
-        return _fetch_with_retry(operation, url=url)

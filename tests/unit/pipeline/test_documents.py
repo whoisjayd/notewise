@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
@@ -18,6 +18,10 @@ from notewise.pipeline._documents import (
     normalize_output_formats,
     render_notes_document,
 )
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 @pytest.mark.parametrize(
@@ -53,6 +57,64 @@ def test_markdown_to_html_normalizes_top_level_lists() -> None:
 
     assert "<ul>" in html
     assert "<li>item one</li>" in html
+
+
+def test_markdown_to_html_escapes_raw_html() -> None:
+    html = _markdown_to_html("# Notes\n\n<script>alert('x')</script>")
+
+    assert "<script>" not in html
+    assert "&lt;script&gt;alert('x')&lt;/script&gt;" in html
+
+
+def test_markdown_to_html_preserves_blockquotes() -> None:
+    html = _markdown_to_html("> Important idea")
+
+    assert "<blockquote>" in html
+    assert "Important idea" in html
+
+
+def test_markdown_to_html_escapes_raw_html_inside_blockquotes() -> None:
+    html = _markdown_to_html("> <script>alert(1)</script>")
+
+    assert "<blockquote>" in html
+    assert "<script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+
+
+def test_markdown_to_html_preserves_autolinks() -> None:
+    html = _markdown_to_html("See <https://example.com>")
+
+    assert '<a href="https://example.com">https://example.com</a>' in html
+
+
+def test_markdown_to_html_preserves_fenced_code_angle_brackets() -> None:
+    html = _markdown_to_html("```html\n<div>hi</div>\n```")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "&amp;lt;div&amp;gt;" not in html
+
+
+def test_markdown_to_html_does_not_treat_single_backtick_as_fence() -> None:
+    html = _markdown_to_html("`html\n<script>x</script>\n`")
+
+    assert '<pre class="code-block">' not in html
+    assert "<script>" not in html
+    assert "&amp;lt;script&amp;gt;x&amp;lt;/script&amp;gt;" in html
+
+
+def test_markdown_to_html_closes_fence_only_with_matching_marker() -> None:
+    html = _markdown_to_html("````html\n~~~\n<div>hi</div>\n````\n<script>x</script>")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "<script>" not in html
+    assert "&lt;script&gt;x&lt;/script&gt;" in html
+
+
+def test_markdown_to_html_preserves_indented_code_angle_brackets() -> None:
+    html = _markdown_to_html("    <div>hi</div>")
+
+    assert "&lt;div&gt;hi&lt;/div&gt;" in html
+    assert "&amp;lt;div&amp;gt;" not in html
 
 
 def test_normalize_rendered_html_promotes_code_blocks() -> None:
@@ -112,6 +174,23 @@ def test_render_html_document_uses_target_language_lang_attribute(
 
     html = output_path.read_text(encoding="utf-8")
     assert '<html lang="hi">' in html
+
+
+def test_render_html_document_normalizes_underscore_locale_tag(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "notes.html"
+
+    render_notes_document(
+        "# Titulo",
+        "Portuguese Notes",
+        output_path,
+        "html",
+        target_language="pt_BR",
+    )
+
+    html = output_path.read_text(encoding="utf-8")
+    assert '<html lang="pt-BR">' in html
 
 
 def test_render_pdf_document_falls_back_to_markdown_for_non_latin_text(

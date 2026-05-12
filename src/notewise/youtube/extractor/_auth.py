@@ -5,15 +5,20 @@ from __future__ import annotations
 import hashlib
 import http.cookiejar
 import time
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from notewise.errors import ExtractionError
-from notewise.youtube._constants import DEFAULT_ACCEPT_LANGUAGE
+from notewise.youtube._constants import DEFAULT_ACCEPT_LANGUAGE, DEFAULT_USER_AGENT
 
 
-def _load_cookie_jar(cookie_file: str | None) -> http.cookiejar.CookieJar:
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+def _load_cookie_jar(
+    cookie_file: str | None,
+) -> http.cookiejar.CookieJar:
     jar = http.cookiejar.MozillaCookieJar()
     if cookie_file:
         path = Path(cookie_file)
@@ -34,7 +39,7 @@ def _youtube_cookies(client: Any) -> dict[str, str]:
     out: dict[str, str] = {}
     for cookie in client._cookie_jar:
         domain = (cookie.domain or "").lstrip(".").lower()
-        if "youtube.com" not in domain:
+        if domain != "youtube.com" and not domain.endswith(".youtube.com"):
             continue
         if cookie.value is None:
             continue
@@ -80,7 +85,7 @@ def _get_sid_authorization_header(
 ) -> str | None:
     sapisid, one_p, three_p = _get_sid_cookies(client)
     additional = {"u": user_session_id} if user_session_id else None
-    out = []
+    out: list[str] = []
     for scheme, sid in (
         ("SAPISIDHASH", sapisid),
         ("SAPISID1PHASH", one_p),
@@ -105,7 +110,7 @@ def _extract_session_index(ytcfg: dict[str, Any]) -> int | None:
         if value is None:
             return None
         return int(str(value))
-    except Exception:
+    except ValueError:
         return None
 
 
@@ -167,10 +172,7 @@ def _generate_cookie_auth_headers(
 
 def _default_headers() -> dict[str, str]:
     return {
-        "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-            "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-        ),
+        "User-Agent": DEFAULT_USER_AGENT,
         "Accept-Language": DEFAULT_ACCEPT_LANGUAGE,
     }
 
@@ -215,9 +217,6 @@ class _AuthMixin:
     def _extract_session_index(self, ytcfg: dict[str, Any]) -> int | None:
         return _extract_session_index(ytcfg)
 
-    def _extract_data_sync_id(self, ytcfg: dict[str, Any]) -> str | None:
-        return _extract_data_sync_id(ytcfg)
-
     def _parse_data_sync_id(self, value: str | None) -> tuple[str | None, str | None]:
         return _parse_data_sync_id(value)
 
@@ -238,7 +237,3 @@ class _AuthMixin:
             origin,
             now=time.time,
         )
-
-    @staticmethod
-    def _default_headers() -> dict[str, str]:
-        return _default_headers()

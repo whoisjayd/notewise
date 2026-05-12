@@ -14,18 +14,21 @@ import sys
 import threading
 from collections.abc import Mapping, MutableMapping
 from datetime import datetime, timedelta
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from notewise._constants import (
     LOGS_DIR_NAME,
     PROVIDER_SECRET_ENV_KEYS,
+    SENSITIVE_KEY_SUFFIXES,
     SESSION_LOG_PREFIX,
-    STATE_DIR_NAME,
     THIRD_PARTY_DIAGNOSTIC_LOGGERS,
 )
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 _SESSION_LOG_PATH: Path | None = None
@@ -80,7 +83,10 @@ def _normalize_sensitive_key(key: str) -> str:
 
 def _is_sensitive_key(key: str) -> bool:
     """Return whether a mapping key should be redacted."""
-    return _normalize_sensitive_key(key) in _SENSITIVE_KEY_NAMES
+    normalized = _normalize_sensitive_key(key)
+    return normalized in _SENSITIVE_KEY_NAMES or normalized.endswith(
+        SENSITIVE_KEY_SUFFIXES
+    )
 
 
 def redact_sensitive_text(text: str) -> str:
@@ -140,7 +146,12 @@ def get_session_log_path() -> Path | None:
 
 def get_log_dir(state_dir: Path | None = None) -> Path:
     """Return the directory that stores notewise session logs."""
-    base = state_dir or (Path.home() / STATE_DIR_NAME)
+    if state_dir is None:
+        # Lazy import avoids a config -> logging import cycle during startup.
+        from notewise.config import get_state_dir
+
+        state_dir = get_state_dir()
+    base = state_dir
     return base / LOGS_DIR_NAME
 
 
@@ -241,8 +252,7 @@ def configure_logging(
 
         session_log: Path | None = None
         try:
-            base = state_dir or (Path.home() / STATE_DIR_NAME)
-            log_dir = base / LOGS_DIR_NAME
+            log_dir = get_log_dir(state_dir)
             log_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
@@ -252,6 +262,10 @@ def configure_logging(
             root.addHandler(file_handler)
             _SESSION_LOG_PATH = session_log
         except Exception:
+            logging.getLogger(__name__).warning(
+                "logging.session_log_initialization_failed",
+                exc_info=True,
+            )
             _SESSION_LOG_PATH = None
 
         structlog.configure(

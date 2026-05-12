@@ -86,26 +86,20 @@ export function Cookbook() {
   return (
     <section
       id="cookbook"
-      className="relative border-t border-[var(--rule)] bg-background py-20 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="max-w-2xl">
-          <>
-            <span className="t-eyebrow">No 05 · Cookbook</span>
-          </>
-          <>
-            <h2 className="mt-3 t-h2">
-              Four commands that cover
-              <br />
-              most of <em className="text-stamp">a semester</em>.
-            </h2>
-          </>
-          <>
-            <p className="mt-5 t-body max-w-xl">
-              Anything more elaborate is a flag away —{" "}
-              <code className="t-code text-foreground/85">notewise process --help</code>.
-            </p>
-          </>
+          <span className="t-eyebrow">No 05 · Cookbook</span>
+          <h2 className="mt-3 t-h2">
+            Four commands that cover
+            <br />
+            most of <em className="text-stamp">a semester</em>.
+          </h2>
+          <p className="mt-5 t-body max-w-xl">
+            Anything more elaborate is a flag away —{" "}
+            <code className="t-code text-foreground/85">notewise process --help</code>.
+          </p>
         </div>
 
         <div className="mt-12 sm:mt-14 grid gap-5 md:grid-cols-2">

@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from notewise.cli import _runtime
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def test_read_batch_file_urls_supports_utf16(tmp_path: Path) -> None:

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -66,7 +67,6 @@ def _make_context(
         force=False,
         no_ui=False,
         quiz=True,
-        use_combine_chunk=True,
         export_transcript=None,
         timestamps=True,
         chapter_directory_output=True,
@@ -126,3 +126,41 @@ async def test_run_batch_file_passes_safe_dashboard_context() -> None:
     assert "Video workers: 3" in rendered_config
     assert "Chapter workers: 4" in rendered_config
     assert "API key: present" in rendered_config
+
+
+async def test_run_batch_file_reports_unexpected_preflight_errors(mocker) -> None:
+    """Unexpected source-resolution errors should fail the row, not hang."""
+    context = _make_context([])
+    context.no_ui = True
+    context.print_failure_panel = MagicMock()
+
+    mocker.patch.object(
+        _batch_runner,
+        "prepare_source",
+        AsyncMock(side_effect=RuntimeError("resolver exploded")),
+    )
+    mocker.patch.object(
+        _batch_runner.structlog,
+        "get_logger",
+        return_value=SimpleNamespace(exception=lambda *_args, **_kwargs: None),
+    )
+
+    failed = await asyncio.wait_for(
+        _batch_runner.run_batch_file(
+            context,
+            Path("videos.txt"),
+            ["https://youtube.com/watch?v=abc123"],
+        ),
+        timeout=5,
+    )
+
+    assert failed is True
+    context.print_failure_panel.assert_called_once()
+    _, failure_rows = context.print_failure_panel.call_args.args[:2]
+    assert failure_rows == [
+        (
+            "https://youtube.com/watch?v=abc123",
+            "notewise hit an unexpected internal error while resolving this source. "
+            "Check the current log for details.",
+        )
+    ]

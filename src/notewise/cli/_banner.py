@@ -2,22 +2,23 @@
 
 from __future__ import annotations
 
-import time
-
-from rich.console import Console
+from rich import box
+from rich.console import Console, Group
+from rich.panel import Panel
 from rich.text import Text
 
 
-# Avatar-font ASCII art (patorjk.com/software/taag — Avatar, "Note Wise")
-_BANNER_LINES = [
-    r"$$\   $$\             $$\                     $$\      $$\ $$\                     ",
-    r"$$$\  $$ |            $$ |                    $$ | $\  $$ |\__|                    ",
-    r"$$$$\ $$ | $$$$$$\  $$$$$$\    $$$$$$\        $$ |$$$\ $$ |$$\  $$$$$$$\  $$$$$$\  ",
-    r"$$ $$\$$ |$$  __$$\ \_$$  _|  $$  __$$\       $$ $$ $$\$$ |$$ |$$  _____|$$  __$$\ ",
-    r"$$ \$$$$ |$$ /  $$ |  $$ |    $$$$$$$$ |      $$$$  _$$$$ |$$ |\$$$$$$\  $$$$$$$$ |",
-    r"$$ |\$$$ |$$ |  $$ |  $$ |$$\ $$   ____|      $$$  / \$$$ |$$ | \____$$\ $$   ____|",
-    r"$$ | \$$ |\$$$$$$  |  \$$$$  |\$$$$$$$\       $$  /   \$$ |$$ |$$$$$$$  |\$$$$$$$\ ",
-    r"\__|  \__| \______/    \____/  \_______|      \__/     \__|\__|\_______/  \_______|",
+_UNICODE_BANNER_LINES = [
+    "███╗   ██╗ ██████╗ ████████╗███████╗██╗    ██╗██╗███████╗███████╗",
+    "████╗  ██║██╔═══██╗╚══██╔══╝██╔════╝██║    ██║██║██╔════╝██╔════╝",
+    "██╔██╗ ██║██║   ██║   ██║   █████╗  ██║ █╗ ██║██║███████╗█████╗  ",
+    "██║╚██╗██║██║   ██║   ██║   ██╔══╝  ██║███╗██║██║╚════██║██╔══╝  ",
+    "██║ ╚████║╚██████╔╝   ██║   ███████╗╚███╔███╔╝██║███████║███████╗",
+    "╚═╝  ╚═══╝ ╚═════╝    ╚═╝   ╚══════╝ ╚══╝╚══╝ ╚═╝╚══════╝╚══════╝",
+]
+
+_ASCII_BANNER_LINES = [
+    "NOTEWISE",
 ]
 
 # Gradient: cyan-sky → deep-ocean, top to bottom
@@ -32,12 +33,7 @@ _LINE_COLORS = [
     "bold color(25)",  # deep blue
 ]
 
-_RULE_STYLE_TOP = "color(45)"
-_RULE_STYLE_BOT = "color(25)"
-_RULE_CHAR = "─"
-_ASCII_RULE_CHAR = "-"
-_RULE_WIDTH = 88
-_ANIM_DELAY = 0.045  # seconds between each banner line
+_REPO_URL = "github.com/whoisjayd/notewise"
 
 
 def _get_version() -> str:
@@ -49,11 +45,13 @@ def _get_version() -> str:
         return "dev"
 
 
-def _tagline(version: str) -> Text:
+def _tagline(version: str, *, use_unicode: bool = True) -> Text:
     t = Text("  ", style="color(240)")
     t.append("AI-powered YouTube study notes", style="bright_white")
-    t.append("   ", style="")
+    t.append("\n  ", style="")
     t.append(f"v{version}", style="bold color(87)")
+    t.append("  │  " if use_unicode else "  |  ", style="color(240)")
+    t.append(_REPO_URL, style="color(244)")
     return t
 
 
@@ -63,34 +61,39 @@ def _supports_unicode_output(console: Console) -> bool:
     return bool(encoding) and "utf" in encoding and not console.is_dumb_terminal
 
 
-def _print_rule(console: Console, *, style: str) -> None:
-    """Unicode box-drawing rule; falls back to dashes on legacy terminals."""
-    rule_char = _RULE_CHAR if _supports_unicode_output(console) else _ASCII_RULE_CHAR
-    console.print(rule_char * _RULE_WIDTH, style=style, highlight=False)
+def _banner_text(*, use_unicode: bool = True) -> Text:
+    banner = Text()
+    lines = _UNICODE_BANNER_LINES if use_unicode else _ASCII_BANNER_LINES
+    colors = _LINE_COLORS[: len(lines)]
+    for line, color in zip(lines, colors, strict=True):
+        if banner:
+            banner.append("\n")
+        banner.append(line, style=color)
+    return banner
 
 
-def _print_banner_lines(console: Console, *, animate: bool = True) -> None:
-    for line, color in zip(_BANNER_LINES, _LINE_COLORS, strict=True):
-        console.print(line, style=color, highlight=False)
-        if animate:
-            time.sleep(_ANIM_DELAY)
+def _banner_panel(console: Console) -> Panel:
+    use_unicode = _supports_unicode_output(console)
+    return Panel(
+        Group(
+            _banner_text(use_unicode=use_unicode),
+            Text(),
+            _tagline(_get_version(), use_unicode=use_unicode),
+        ),
+        border_style="cyan",
+        box=box.ROUNDED if use_unicode else box.ASCII,
+        padding=(1, 2),
+        expand=False,
+    )
 
 
-def print_banner(console: Console, *, animate: bool = True) -> None:
+def print_banner(console: Console) -> None:
     """Print the primary NoteWise banner.
 
     Args:
         console:  Rich Console instance.
-        animate:  When *True* each line is revealed with a short delay.
-                  Pass *False* for tests or redirected output.
     """
-    console.print()
-    _print_banner_lines(console, animate=animate)
-    console.print()
-    _print_rule(console, style=_RULE_STYLE_TOP)
-    console.print(_tagline(_get_version()))
-    _print_rule(console, style=_RULE_STYLE_BOT)
-    console.print()
+    console.print(_banner_panel(console), highlight=False)
 
 
 def print_help_banner(console: Console) -> None:

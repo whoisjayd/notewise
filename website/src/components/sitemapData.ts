@@ -1,14 +1,25 @@
-const SITE_URL = "https://notewise.click";
+export { absoluteSiteUrl, DOCS_URL } from "@/lib/siteMeta";
 
-export const DOCS_URL = `${SITE_URL}/docs`;
+type SitemapEntry = {
+  loc: string;
+  changefreq: string;
+  priority: string;
+};
 
-export const siteUrls = [
+type DocsSitemapEntry = {
+  loc: string;
+  title: string;
+  changefreq?: string;
+  priority?: string;
+};
+
+export const siteUrls: readonly SitemapEntry[] = [
   { loc: "/", changefreq: "weekly", priority: "1.0" },
   { loc: "/install", changefreq: "monthly", priority: "0.8" },
-];
+] as const;
 
-export const docsUrls = [
-  { loc: "/docs", title: "Docs home" },
+export const docsUrls: readonly DocsSitemapEntry[] = [
+  { loc: "/docs", title: "Docs home", changefreq: "weekly", priority: "0.8" },
   { loc: "/docs/start/install", title: "Install NoteWise" },
   { loc: "/docs/start/quickstart", title: "Quickstart" },
   { loc: "/docs/config/configuration", title: "Configuration" },
@@ -24,8 +35,4 @@ export const docsUrls = [
   { loc: "/docs/understand/storage-events", title: "Storage and events" },
   { loc: "/docs/understand/development", title: "Development" },
   { loc: "/docs/understand/website-docs", title: "Website and docs" },
-];
-
-export function absoluteSiteUrl(path: string) {
-  return `${SITE_URL}${path}`;
-}
+] as const;

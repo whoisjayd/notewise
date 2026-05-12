@@ -58,9 +58,11 @@ PRE_COMMIT := $(UV_RUN) pre-commit
 RUFF := $(UV_RUN) ruff
 TY := $(UV_RUN) ty
 PYTEST := $(UV) run --no-sync python -m pytest
+PYTEST_WATCH := $(UV_RUN) --with pytest-watch ptw
 PYTEST_PARALLEL_FLAGS := -n auto --dist=loadfile
 DEPTRY := $(UV_RUN) deptry
 BANDIT := $(UV_RUN) bandit
+TWINE := $(UV_RUN) --with twine twine
 HELP_SCRIPT := scripts/make_help.py
 
 # ==============================================================================
@@ -162,7 +164,7 @@ deps-check: ## Detect unused/missing dependencies
 	$(DEPTRY) $(SRC_DIR)
 
 security: ## Run security scan with bandit
-	$(BANDIT) -c pyproject.toml -r $(PKG_DIR) --severity-level high
+	$(BANDIT) -c pyproject.toml -r $(PKG_DIR) --severity-level medium --confidence-level medium
 
 # ==============================================================================
 # Code Quality - Bundles
@@ -217,7 +219,7 @@ coverage-open: test-cov ## Generate and open HTML coverage report
 	@$(OPEN) $(HTMLCOV_DIR)/index.html 2>$(DEVNULL) || echo "Open $(HTMLCOV_DIR)/index.html manually"
 
 test-watch: ## Run tests in watch mode
-	$(UV_RUN) ptw $(TEST_DIR) -v
+	$(PYTEST_WATCH) $(TEST_DIR) -v
 
 test-failed: ## Re-run only failed tests
 	$(PYTEST_ALL) --lf -v
@@ -233,13 +235,11 @@ build: clean-build ## Build wheel and source distribution
 	$(UV) build
 
 publish: build ## Publish to PyPI
-	$(PIP) install twine
-	$(UV_RUN) twine check $(DIST_DIR)/*
-	$(UV_RUN) twine upload $(DIST_DIR)/*
+	$(TWINE) check $(DIST_DIR)/*
+	$(TWINE) upload $(DIST_DIR)/*
 
 publish-test: build ## Publish to TestPyPI
-	$(PIP) install twine
-	$(UV_RUN) twine upload --repository testpypi $(DIST_DIR)/*
+	$(TWINE) upload --repository testpypi $(DIST_DIR)/*
 
 # ==============================================================================
 # Dependency Management

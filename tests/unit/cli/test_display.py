@@ -114,7 +114,7 @@ def test_build_ui_event_handler_updates_structured_worker_state() -> None:
         )
     )
     assert dashboard.worker_snapshots[0].phase == "Idle"
-    assert dashboard.worker_snapshots[0].title == "—"
+    assert dashboard.worker_snapshots[0].title == "-"
 
 
 def test_update_dashboard_worker_for_event_uses_safe_display_title() -> None:
@@ -147,7 +147,6 @@ def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
         selected_throttle_seconds=1.25,
         force=True,
         quiz=True,
-        use_combine_chunk=False,
         export_transcript="srt",
         timestamps=True,
         chapter_directory_output=True,
@@ -171,9 +170,45 @@ def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
     assert "Max tokens: 8192" in rendered
     assert "Video workers: 3" in rendered
     assert "Chapter workers: 4" in rendered
+    assert "Force: on" in rendered
+    assert "Quiz: on" in rendered
+    assert "Timestamps: on" in rendered
+    assert "Export transcript: srt" in rendered
+    assert "Chapter directories: on" in rendered
+    assert "Throttle: 1.25s" in rendered
     assert "Cookies: configured: youtube-cookies.txt" in rendered
     assert "API key: present" in rendered
     assert "sk-secret-cookie-dir" not in rendered
+
+
+def test_build_dashboard_config_items_shows_effective_gpt5_temperature() -> None:
+    """Dashboard settings should show provider-normalized GPT-5 temperature."""
+    context = SimpleNamespace(
+        selected_model="chatgpt/gpt-5.2",
+        selected_output_formats=["md"],
+        selected_languages=["en"],
+        selected_target_language="English",
+        selected_temperature=0.7,
+        selected_max_tokens=None,
+        selected_throttle_seconds=0,
+        force=False,
+        quiz=False,
+        export_transcript=None,
+        timestamps=False,
+        chapter_directory_output=False,
+        selected_cookie_file=None,
+        api_key_checked=True,
+    )
+
+    items = build_dashboard_config_items(
+        context,
+        output_dir=Path("output"),
+        video_workers=1,
+        chapter_workers=3,
+    )
+    rendered = "\n".join(f"{item.label}: {item.value}" for item in items)
+
+    assert "Temperature: 1 (provider fixed)" in rendered
 
 
 def test_build_ui_event_handler_escapes_worker_titles() -> None:
@@ -311,7 +346,7 @@ def test_build_ui_event_handler_uses_stitching_status_for_generation_finalizatio
 
     dashboard.update_worker.assert_called_once_with(
         0,
-        "[cyan]* Video… (Stitching 3 note parts)[/cyan]",
+        "[cyan]Stitching[/cyan] · Video · 3 note parts",
     )
 
 

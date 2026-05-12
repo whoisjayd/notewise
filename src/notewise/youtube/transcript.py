@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
-from typing import Any
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
@@ -27,7 +27,18 @@ from .extractor.async_client import AsyncYouTubeExtractorClient
 from .extractor.client import YouTubeExtractorConfig
 
 
+if TYPE_CHECKING:
+    from collections.abc import Awaitable, Callable
+
+
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class _TranscriptMeta:
+    language: str
+    language_code: str
+    is_generated: bool
 
 
 def _extract_error_reason(error: Exception) -> str:
@@ -125,7 +136,7 @@ async def _fetch_async(
     client: AsyncYouTubeExtractorClient,
     video_id: str,
     languages: list[str],
-) -> tuple[Any, Any, str]:
+) -> tuple[Any, _TranscriptMeta, str]:
     """Async helper to interact with the async extractor client."""
     try:
         payload = await client.transcript(
@@ -144,15 +155,11 @@ async def _fetch_async(
     language_code = str(payload.get("language_code") or "")
     track = payload.get("track") or {}
     language_name = str(track.get("name") or language_code or "Unknown")
-    transcript_meta = type(
-        "NativeTranscriptMeta",
-        (),
-        {
-            "language": language_name,
-            "language_code": language_code,
-            "is_generated": bool(payload.get("is_generated")),
-        },
-    )()
+    transcript_meta = _TranscriptMeta(
+        language=language_name,
+        language_code=language_code,
+        is_generated=bool(payload.get("is_generated")),
+    )
     found_msg = f"Using native transcript: {language_name}"
     return raw_transcript, transcript_meta, found_msg
 

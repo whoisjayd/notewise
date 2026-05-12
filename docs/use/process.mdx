@@ -31,25 +31,20 @@ notewise process "https://youtu.be/VIDEO_ID"
 | ---------------------------- | ------------------------- | ------------------------------------------------------------- |
 | `--model`, `-m`              | `gemini/gemini-2.5-flash` | Override the LiteLLM model for one run.                       |
 | `--output`, `-o`             | `./output`                | Write files to a specific folder.                             |
-| `--format`                   | `md`                      | Write `md`, `html`, `pdf`, `docx`, or a comma-separated list. |
+| `--format`, `-r`             | `md`                      | Write `md`, `html`, `pdf`, `docx`, or a comma-separated list. |
 | `--language`, `-l`           | `en`                      | Specifies the transcript language; this option can be repeated. |
-| `--target-language`          | `English`                 | Generate notes in another language.                           |
+| `--target-language`, `-L`    | `English`                 | Generate notes in another language.                           |
 | `--temperature`, `-t`        | `0.7`                     | Change LLM temperature, range `0.0` to `1.0`.                 |
 | `--max-tokens`, `-k`         | provider default          | Cap LLM output tokens.                                        |
-| `--force`, `-F`              | false                     | Ignore cache and regenerate.                                  |
-| `--no-ui`                    | false                     | Disable the Rich live dashboard.                              |
+| `--throttle`, `-w`           | `0`                       | Add a delay between repeated LLM calls.                       |
+| `--force`, `-f`, `-F`        | false                     | Ignore cache and regenerate.                                  |
+| `--no-ui`, `-n`              | false                     | Disable the Rich live dashboard.                              |
 | `--verbose`, `-v`            | false                     | Write DEBUG diagnostics to the session log.                   |
-| `--quiz`                     | false                     | Generate a quiz Markdown file.                                |
-| `--export-transcript`        | none                      | Export transcript as `txt` or `json`.                         |
-| `--timestamps`               | false                     | Prefix generated chapter headers with start times.            |
-| `--chapter-directory-output` | false                     | Write per-chapter Markdown files when YouTube chapters exist. |
-| `--cookie-file`, `--cookies` | `YOUTUBE_COOKIE_FILE`     | Read restricted videos with a Netscape cookies file.          |
-| `--use-combine-chunk`        | false                     | Use deprecated legacy chunk-combine behavior.                 |
-
-<Warning>
-  `--use-combine-chunk` is legacy behavior. The default long-transcript path
-  uses boundary stitching.
-</Warning>
+| `--quiz`, `-q`               | false                     | Generate a quiz Markdown file.                                |
+| `--export-transcript`, `-x`  | none                      | Export transcript as `txt` or `json`.                         |
+| `--timestamps`, `-s`         | false                     | Prefix generated chapter headers with start times.            |
+| `--chapter-directory-output`, `-C` | false              | Write per-chapter Markdown files when YouTube chapters exist. |
+| `--cookie-file`, `--cookies`, `-c` | `YOUTUBE_COOKIE_FILE` | Read restricted videos with a Netscape cookies file.        |
 
 ## Live dashboard
 

@@ -34,7 +34,7 @@ Transcript:
 </transcript>
 
 Requirements:
-1. Generate **10–15 questions** that span the full source material and focus on
+1. Generate **10-15 questions** that span the full source material and focus on
    the highest-value concepts.
 2. The learner should not need to open the transcript; each question should
    include enough context to answer it.
@@ -72,7 +72,7 @@ D) Option four
 
 ---
 ## Answer Key
-Q1 – B
+Q1 - B
 """
 
 
@@ -105,7 +105,7 @@ Partial quiz sections:
 {quiz_sections}
 
 Requirements:
-1. Select the **10–15 best questions** that together span the full video content.
+1. Select the **10-15 best questions** that together span the full video content.
 2. Prefer questions that test understanding, application, comparison,
    and common mistakes.
    The learner should not need to open the transcript to understand questions,

@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { GITHUB_URL } from "@/lib/siteMeta";
 import { cn } from "@/lib/utils";
 import { ThemeToggle } from "./ThemeToggle";
 import { FineIcon } from "@/ui/FineIcon";
@@ -27,14 +28,27 @@ export function Nav({ version }: { version: string }) {
 
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => {
+    const closeMenu = () => {
+      setOpen(false);
+      toggleRef.current?.focus();
+    };
+    const onPointerDown = (e: PointerEvent) => {
       const target = e.target as Node;
       if (!panelRef.current?.contains(target) && !toggleRef.current?.contains(target)) {
-        setOpen(false);
+        closeMenu();
       }
     };
-    document.addEventListener("mousedown", onClick);
-    return () => document.removeEventListener("mousedown", onClick);
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        closeMenu();
+      }
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
   }, [open]);
 
   return (
@@ -69,7 +83,7 @@ export function Nav({ version }: { version: string }) {
 
         <div className="flex items-center gap-1.5 sm:gap-2">
           <a
-            href="https://github.com/whoisjayd/notewise"
+            href={GITHUB_URL}
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Open the NoteWise GitHub repository"
@@ -134,7 +148,7 @@ export function Nav({ version }: { version: string }) {
             ))}
             <li>
               <a
-                href="https://github.com/whoisjayd/notewise"
+                href={GITHUB_URL}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setOpen(false)}

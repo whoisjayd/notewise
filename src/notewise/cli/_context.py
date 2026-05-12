@@ -4,15 +4,19 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
-from pathlib import Path
-from typing import Any
-
-from rich.console import Console
+from typing import TYPE_CHECKING, Any
 
 from notewise._constants import CONFIG_FILENAME, DEFAULT_TARGET_LANGUAGE
 from notewise.cli._formatters import print_failure_panel, print_single_failure
 from notewise.config import get_state_dir
-from notewise.pipeline.core import PipelineSharedState
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from rich.console import Console
+
+    from notewise.pipeline.core import PipelineSharedState
 
 
 @dataclass
@@ -37,7 +41,6 @@ class CliProcessContext:
     force: bool
     no_ui: bool
     quiz: bool
-    use_combine_chunk: bool
     export_transcript: str | None
     timestamps: bool
     chapter_directory_output: bool
@@ -164,7 +167,6 @@ class CliProcessContext:
             throttle_seconds=self.selected_throttle_seconds,
             force=self.force,
             quiz=self.quiz,
-            use_combine_chunk=self.use_combine_chunk,
             export_transcript=self.export_transcript,
             timestamps=self.timestamps,
             chapter_directory_output=self.chapter_directory_output,

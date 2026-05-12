@@ -14,6 +14,7 @@ from notewise.logging import (
     configure_logging,
     make_log_safe_text,
     prune_log_files,
+    redact_sensitive_data,
     redact_sensitive_text,
 )
 
@@ -45,6 +46,22 @@ def test_redact_sensitive_text_masks_common_secret_shapes():
     assert openrouter_key not in redacted
     assert aws_secret not in redacted
     assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_data_masks_provider_key_suffixes():
+    redacted = redact_sensitive_data(
+        {
+            "github_token": "github-secret",
+            "oauth_token": "oauth-secret",
+            "x-goog-api-key": "test-gemini-secret",
+            "token_count": 123,
+        }
+    )
+
+    assert redacted["github_token"] == "[REDACTED]"
+    assert redacted["oauth_token"] == "[REDACTED]"
+    assert redacted["x-goog-api-key"] == "[REDACTED]"
+    assert redacted["token_count"] == 123
 
 
 def test_make_log_safe_text_escapes_unencodable_terminal_characters(monkeypatch):
@@ -108,6 +125,19 @@ def test_configure_logging_is_idempotent(tmp_path):
     assert second == first
     assert logging_module.get_session_log_path() == first
     assert len(list((tmp_path / "logs").glob("*.log"))) == 1
+
+
+def test_configure_logging_defaults_to_notewise_home(tmp_path, monkeypatch):
+    """Default session logs should follow the configured state directory."""
+    _reset_logging_state()
+    state_dir = tmp_path / "custom-state"
+    monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+
+    log_path = configure_logging()
+
+    assert log_path is not None
+    assert log_path.parent == state_dir / "logs"
+    assert logging_module.get_log_dir() == state_dir / "logs"
 
 
 def test_configure_logging_keeps_third_party_debug_off_by_default(tmp_path):

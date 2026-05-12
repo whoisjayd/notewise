@@ -8,6 +8,22 @@ from urllib.error import HTTPError
 import pytest
 
 from notewise.errors import ExtractionError as ExtractorError
+from notewise.youtube.extractor._helpers import (
+    _availability,
+    _best_thumbnail,
+    _date_to_yyyymmdd,
+    _extract_playlist_id,
+    _extract_video_id,
+    _find_key,
+    _first_key,
+    _get_text,
+    _iso_to_unix,
+    _looks_like_playlist_url,
+    _parse_count,
+    _parse_duration,
+    _to_int,
+    _with_fmt_json3,
+)
 from notewise.youtube.extractor.async_client import (
     AsyncYouTubeExtractorClient,
 )
@@ -68,6 +84,7 @@ class TestCookieHandling:
         client = ExtractorClient()
         jar = http.cookiejar.MozillaCookieJar()
         jar.set_cookie(_make_cookie("SAPISID", "yt", domain=".youtube.com"))
+        jar.set_cookie(_make_cookie("SAPISID", "evil", domain=".evil-youtube.com"))
         jar.set_cookie(_make_cookie("OTHER", "ignore", domain=".google.com"))
         client._cookie_jar = jar
 
@@ -129,13 +146,11 @@ class TestUrlParsing:
         ],
     )
     def test_extract_video_id_variants(self, target, video_id):
-        assert ExtractorClient._extract_video_id(target) == video_id
+        assert _extract_video_id(target) == video_id
 
     def test_extract_video_id_invalid_url_raises(self):
         with pytest.raises(ExtractorError, match="Unable to determine video id"):
-            ExtractorClient._extract_video_id(
-                "https://www.youtube.com/watch?list=PL123"
-            )
+            _extract_video_id("https://www.youtube.com/watch?list=PL123")
 
     @pytest.mark.parametrize(
         ("target", "expected"),
@@ -148,7 +163,7 @@ class TestUrlParsing:
         ],
     )
     def test_looks_like_playlist_url(self, target, expected):
-        assert ExtractorClient._looks_like_playlist_url(target) is expected
+        assert _looks_like_playlist_url(target) is expected
 
 
 class TestPlaylistAndParsingHelpers:
@@ -228,6 +243,17 @@ class TestPlaylistAndParsingHelpers:
         assert chapters[0]["start_time"] == 0.0
         assert chapters[-1]["end_time"] == 240.0
 
+    def test_description_chapters_keep_final_chapter_open_for_unknown_duration(
+        self,
+    ):
+        client = ExtractorClient()
+        description = "00:00 Intro\n01:30 Middle\n03:00 End"
+
+        chapters = client._extract_description_chapters(description, duration=0)
+
+        assert chapters[-1]["start_time"] == 180.0
+        assert chapters[-1]["end_time"] is None
+
 
 class TestAvailability:
     @pytest.mark.parametrize(
@@ -250,13 +276,12 @@ class TestAvailability:
         ],
     )
     def test_availability_mapping(self, playability, expected):
-        assert ExtractorClient._availability(playability) == expected
+        assert _availability(playability) == expected
 
 
 class TestHighLevelClientCommands:
     def test_metadata_for_video_payload_shape(self, monkeypatch):
         client = ExtractorClient()
-        monkeypatch.setattr(client, "_looks_like_playlist_url", lambda _: False)
         monkeypatch.setattr(
             client,
             "_extract_video",
@@ -280,7 +305,6 @@ class TestHighLevelClientCommands:
 
     def test_metadata_for_playlist_payload_shape(self, monkeypatch):
         client = ExtractorClient()
-        monkeypatch.setattr(client, "_looks_like_playlist_url", lambda _: True)
         monkeypatch.setattr(
             client,
             "_extract_playlist",
@@ -529,19 +553,16 @@ class TestLowLevelHelpers:
         assert client._get_sid_cookies() == ("threep", "onep", "threep")
 
     def test_scalar_helpers(self):
+        assert _with_fmt_json3("https://x/sub?v=1") == "https://x/sub?v=1&fmt=json3"
+        assert _to_int("12") == 12
+        assert _to_int("not-int") is None
+        assert _parse_duration("1:02:03") == 3723
+        assert _parse_duration("2:03") == 123
+        assert _parse_duration("45") == 45
+        assert _parse_duration("x:y") is None
+        assert _best_thumbnail([]) is None
         assert (
-            ExtractorClient._with_fmt_json3("https://x/sub?v=1")
-            == "https://x/sub?v=1&fmt=json3"
-        )
-        assert ExtractorClient._to_int("12") == 12
-        assert ExtractorClient._to_int("not-int") is None
-        assert ExtractorClient._parse_duration("1:02:03") == 3723
-        assert ExtractorClient._parse_duration("2:03") == 123
-        assert ExtractorClient._parse_duration("45") == 45
-        assert ExtractorClient._parse_duration("x:y") is None
-        assert ExtractorClient._best_thumbnail([]) is None
-        assert (
-            ExtractorClient._best_thumbnail(
+            _best_thumbnail(
                 [
                     {"url": "a", "width": 100, "height": 100},
                     {"url": "b", "width": 200, "height": 90},
@@ -549,41 +570,38 @@ class TestLowLevelHelpers:
             )
             == "b"
         )
+        assert _best_thumbnail([{"url": "bad", "width": "wide"}]) == "bad"
 
     def test_text_and_date_helpers(self):
-        assert ExtractorClient._get_text("hello") == "hello"
-        assert ExtractorClient._get_text({"simpleText": "x"}) == "x"
-        assert (
-            ExtractorClient._get_text({"runs": [{"text": "a"}, {"text": "b"}]}) == "ab"
-        )
-        assert ExtractorClient._get_text({"text": "z"}) == "z"
-        assert ExtractorClient._get_text({"other": 1}) is None
+        assert _get_text("hello") == "hello"
+        assert _get_text({"simpleText": "x"}) == "x"
+        assert _get_text({"runs": [{"text": "a"}, {"text": "b"}]}) == "ab"
+        assert _get_text({"text": "z"}) == "z"
+        assert _get_text({"other": 1}) is None
 
-        assert ExtractorClient._date_to_yyyymmdd("2025-01-02") == "20250102"
-        assert ExtractorClient._date_to_yyyymmdd("bad") is None
-        assert ExtractorClient._iso_to_unix("2025-01-02") is not None
-        assert ExtractorClient._iso_to_unix("bad") is None
+        assert _date_to_yyyymmdd("2025-01-02") == "20250102"
+        assert _date_to_yyyymmdd("bad") is None
+        assert _iso_to_unix("2025-01-02") is not None
+        assert _iso_to_unix("bad") is None
 
     def test_parse_count_and_key_helpers(self):
-        assert ExtractorClient._parse_count("1,234 views") == 1234
-        assert ExtractorClient._parse_count("none") is None
+        assert _parse_count("1,234 views") == 1234
+        assert _parse_count("none") is None
 
         node = {"a": {"target": 1}, "b": [{"target": 2}, {"x": {"target": 3}}]}
-        found = ExtractorClient._find_key(node, "target")
+        found = _find_key(node, "target")
         assert len(found) == 3
-        assert ExtractorClient._first_key(node, "target") in {1, 2, 3}
+        assert _first_key(node, "target") in {1, 2, 3}
 
 
 class TestDeeperExtractorBranches:
     def test_extract_playlist_id_and_error(self):
         assert (
-            ExtractorClient._extract_playlist_id(
-                "https://www.youtube.com/playlist?list=PL123"
-            )
+            _extract_playlist_id("https://www.youtube.com/playlist?list=PL123")
             == "PL123"
         )
         with pytest.raises(ExtractorError, match="Unable to determine playlist id"):
-            ExtractorClient._extract_playlist_id("https://www.youtube.com/playlist")
+            _extract_playlist_id("https://www.youtube.com/playlist")
 
     def test_extract_playlist_entries_paginated_without_api_key(self):
         client = ExtractorClient()
@@ -674,6 +692,24 @@ class TestDeeperExtractorBranches:
         assert chapters[0]["title"] == "Intro"
         assert chapters[1]["start_time"] == 60.0
 
+    def test_extracted_chapters_keep_final_chapter_open_for_unknown_duration(self):
+        client = ExtractorClient()
+        data = {
+            "chapterRenderer": {
+                "timeRangeStartMillis": 0,
+                "title": {"simpleText": "Intro"},
+            },
+            "macroMarkersListItemRenderer": {
+                "timeDescription": {"simpleText": "01:00"},
+                "title": {"simpleText": "Deep"},
+            },
+        }
+
+        chapters = client._extract_chapters(data, duration=None)
+
+        assert chapters[-1]["start_time"] == 60.0
+        assert chapters[-1]["end_time"] is None
+
     def test_extract_chapters_returns_empty_for_single_marker(self):
         client = ExtractorClient()
         chapters = client._extract_chapters(
@@ -758,10 +794,11 @@ class TestDeeperExtractorBranches:
             client, "_generate_api_headers", lambda *_args, **_kwargs: {"X": "Y"}
         )
 
-        def _fake_fetch_json(url, payload, headers):
+        def _fake_fetch_json(url, payload, headers, sanitized_url=None):
             captured["url"] = url
             captured["payload"] = payload
             captured["headers"] = headers
+            captured["sanitized_url"] = sanitized_url
             return {"ok": True}
 
         monkeypatch.setattr(client, "_fetch_json", _fake_fetch_json)
@@ -772,6 +809,7 @@ class TestDeeperExtractorBranches:
         assert "player?key=api" in captured["url"]
         assert captured["payload"]["videoId"] == "v1"
         assert captured["headers"]["Content-Type"] == "application/json"
+        assert captured["sanitized_url"] == "https://www.youtube.com/youtubei/v1/player"
 
     def test_transcript_via_innertube_player_success(self, monkeypatch):
         client = ExtractorClient()
@@ -891,7 +929,10 @@ class TestDeeperExtractorBranches:
             }
         }
 
-        monkeypatch.setattr(client, "_extract_video_id", lambda _target: "vid1")
+        monkeypatch.setattr(
+            "notewise.youtube.extractor._video._extract_video_id",
+            lambda _target: "vid1",
+        )
         monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
         monkeypatch.setattr(
             client,
@@ -933,7 +974,10 @@ class TestDeeperExtractorBranches:
             },
         }
 
-        monkeypatch.setattr(client, "_extract_playlist_id", lambda _target: "pl1")
+        monkeypatch.setattr(
+            "notewise.youtube.extractor._playlist._extract_playlist_id",
+            lambda _target: "pl1",
+        )
         monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
         monkeypatch.setattr(client, "_extract_ytcfg", lambda _html: {})
         monkeypatch.setattr(
@@ -975,7 +1019,10 @@ class TestDeeperExtractorBranches:
             ],
         }
 
-        monkeypatch.setattr(client, "_extract_playlist_id", lambda _target: "pl1")
+        monkeypatch.setattr(
+            "notewise.youtube.extractor._playlist._extract_playlist_id",
+            lambda _target: "pl1",
+        )
         monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
         monkeypatch.setattr(client, "_extract_ytcfg", lambda _html: {})
         monkeypatch.setattr(
@@ -995,7 +1042,10 @@ class TestDeeperExtractorBranches:
             "playlistSidebarSecondaryInfoRenderer": {},
         }
 
-        monkeypatch.setattr(client, "_extract_playlist_id", lambda _target: "pl1")
+        monkeypatch.setattr(
+            "notewise.youtube.extractor._playlist._extract_playlist_id",
+            lambda _target: "pl1",
+        )
         monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
         monkeypatch.setattr(client, "_extract_ytcfg", lambda _html: {})
         monkeypatch.setattr(

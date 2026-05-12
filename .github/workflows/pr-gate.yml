@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   pull_request:
     types: [opened, synchronize, reopened]
-    branches: [dev]
+    branches: [dev, main]
 
 permissions:
   contents: read
@@ -28,16 +28,21 @@ jobs:
       app_changed: ${{ steps.classify.outputs.app_changed }}
       workflow_changed: ${{ steps.classify.outputs.workflow_changed }}
       packaging_changed: ${{ steps.classify.outputs.packaging_changed }}
+      version_changed: ${{ steps.classify.outputs.version_changed }}
+      docker_changed: ${{ steps.classify.outputs.docker_changed }}
       tooling_changed: ${{ steps.classify.outputs.tooling_changed }}
       hook_changed: ${{ steps.classify.outputs.hook_changed }}
+      uncategorized_changed: ${{ steps.classify.outputs.uncategorized_changed }}
       run_quality: ${{ steps.classify.outputs.run_quality }}
       run_tests: ${{ steps.classify.outputs.run_tests }}
       run_package_build: ${{ steps.classify.outputs.run_package_build }}
+      run_docker: ${{ steps.classify.outputs.run_docker }}
       run_website: ${{ steps.classify.outputs.run_website }}
       run_docs: ${{ steps.classify.outputs.run_docs }}
       run_hook_parity: ${{ steps.classify.outputs.run_hook_parity }}
       run_version_sync: ${{ steps.classify.outputs.run_version_sync }}
       run_workflow_hygiene: ${{ steps.classify.outputs.run_workflow_hygiene }}
+      run_matrix: ${{ steps.classify.outputs.run_matrix }}
     steps:
       - name: Detect changed paths
         id: filter
@@ -66,6 +71,20 @@ jobs:
               - 'src/notewise/__init__.py'
               - 'scripts/install.sh'
               - 'scripts/install.ps1'
+            version_changed:
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'src/notewise/__init__.py'
+              - 'website/src/lib/version.ts'
+              - 'docs/index.mdx'
+              - 'docs/llms.txt'
+              - 'docs/llms-full.txt'
+              - 'docs/skill.md'
+              - 'tests/unit/cli/test_updater.py'
+              - 'scripts/check_version_sync.py'
+            docker_changed:
+              - 'Dockerfile'
+              - '.dockerignore'
             tooling_changed:
               - 'Makefile'
               - 'scripts/**/*.py'
@@ -76,13 +95,28 @@ jobs:
       - name: Classify validation scope
         id: classify
         shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_REF: ${{ github.event.pull_request.base.ref }}
+          PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          REPOSITORY: ${{ github.repository }}
+          REPOSITORY_OWNER: ${{ github.repository_owner }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
+          owner_sync=false
+          if [ "$EVENT_NAME" = "pull_request" ] && [ "$PR_BASE_REF" = "main" ] && [ "$PR_HEAD_REF" = "dev" ] && [ "$PR_HEAD_REPO" = "$REPOSITORY" ] && [ "$PR_AUTHOR" = "$REPOSITORY_OWNER" ]; then
+            owner_sync=true
+          fi
+
+          if [ "$EVENT_NAME" = "pull_request" ]; then
             docs_changed="${{ steps.filter.outputs.docs_changed }}"
             website_changed="${{ steps.filter.outputs.website_changed }}"
             workflow_changed="${{ steps.filter.outputs.workflow_changed }}"
             app_changed="${{ steps.filter.outputs.app_changed }}"
             packaging_changed="${{ steps.filter.outputs.packaging_changed }}"
+            version_changed="${{ steps.filter.outputs.version_changed }}"
+            docker_changed="${{ steps.filter.outputs.docker_changed }}"
             tooling_changed="${{ steps.filter.outputs.tooling_changed }}"
             hook_changed="${{ steps.filter.outputs.hook_changed }}"
           else
@@ -91,28 +125,59 @@ jobs:
             workflow_changed=true
             app_changed=true
             packaging_changed=true
+            version_changed=true
+            docker_changed=true
+            tooling_changed=true
+            hook_changed=true
+          fi
+
+          if [ "$owner_sync" = true ]; then
+            docs_changed=true
+            website_changed=true
+            workflow_changed=true
+            app_changed=true
+            packaging_changed=true
+            version_changed=true
+            docker_changed=true
             tooling_changed=true
             hook_changed=true
           fi
 
           docs_only=false
-          if [ "$docs_changed" = true ] && [ "$website_changed" != true ] && [ "$workflow_changed" != true ] && [ "$app_changed" != true ] && [ "$packaging_changed" != true ] && [ "$tooling_changed" != true ] && [ "$hook_changed" != true ]; then
+          if [ "$docs_changed" = true ] && [ "$website_changed" != true ] && [ "$workflow_changed" != true ] && [ "$app_changed" != true ] && [ "$packaging_changed" != true ] && [ "$docker_changed" != true ] && [ "$tooling_changed" != true ] && [ "$hook_changed" != true ]; then
             docs_only=true
           fi
 
           run_quality=false
           run_tests=false
           run_package_build=false
+          run_docker=false
           run_website=false
           run_docs=false
           run_hook_parity=false
           run_workflow_hygiene=false
           run_version_sync=false
+          run_matrix=false
+
+          categorized_changed=false
+          if [ "$docs_changed" = true ] || [ "$website_changed" = true ] || [ "$workflow_changed" = true ] || [ "$app_changed" = true ] || [ "$packaging_changed" = true ] || [ "$version_changed" = true ] || [ "$docker_changed" = true ] || [ "$tooling_changed" = true ] || [ "$hook_changed" = true ]; then
+            categorized_changed=true
+          fi
+
+          uncategorized_changed=false
+          if [ "$categorized_changed" != true ]; then
+            uncategorized_changed=true
+          fi
 
           if [ "$app_changed" = true ] || [ "$packaging_changed" = true ]; then
             run_quality=true
             run_tests=true
             run_package_build=true
+            run_matrix=true
+          fi
+
+          if [ "$docker_changed" = true ] || [ "$packaging_changed" = true ]; then
+            run_docker=true
           fi
 
           if [ "$website_changed" = true ]; then
@@ -123,7 +188,11 @@ jobs:
             run_docs=true
           fi
 
-          if [ "$tooling_changed" = true ] || [ "$hook_changed" = true ]; then
+          if [ "$tooling_changed" = true ]; then
+            run_quality=true
+          fi
+
+          if [ "$workflow_changed" = true ] || [ "$hook_changed" = true ]; then
             run_hook_parity=true
           fi
 
@@ -131,8 +200,14 @@ jobs:
             run_workflow_hygiene=true
           fi
 
-          if [ "$packaging_changed" = true ] || [ "$tooling_changed" = true ]; then
+          if [ "$packaging_changed" = true ] || [ "$tooling_changed" = true ] || [ "$version_changed" = true ]; then
             run_version_sync=true
+          fi
+
+          if [ "$uncategorized_changed" = true ]; then
+            run_quality=true
+            run_tests=true
+            run_matrix=true
           fi
 
           {
@@ -142,16 +217,21 @@ jobs:
             echo "app_changed=$app_changed"
             echo "workflow_changed=$workflow_changed"
             echo "packaging_changed=$packaging_changed"
+            echo "version_changed=$version_changed"
+            echo "docker_changed=$docker_changed"
             echo "tooling_changed=$tooling_changed"
             echo "hook_changed=$hook_changed"
+            echo "uncategorized_changed=$uncategorized_changed"
             echo "run_quality=$run_quality"
             echo "run_tests=$run_tests"
             echo "run_package_build=$run_package_build"
+            echo "run_docker=$run_docker"
             echo "run_website=$run_website"
             echo "run_docs=$run_docs"
             echo "run_hook_parity=$run_hook_parity"
             echo "run_workflow_hygiene=$run_workflow_hygiene"
             echo "run_version_sync=$run_version_sync"
+            echo "run_matrix=$run_matrix"
           } >> "$GITHUB_OUTPUT"
 
   docs-only:
@@ -188,15 +268,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Enforce formatting
-        run: uv run ruff format --check src/notewise tests
+        run: uv run ruff format --check src/notewise tests scripts
       - name: Run linter
-        run: uv run ruff check src/notewise tests
+        run: uv run ruff check src/notewise tests scripts
       - name: Run ty
         run: uv run ty check src/notewise
       - name: Check dependencies with deptry
         run: uv run deptry src
       - name: Run Bandit
-        run: uv run bandit -c pyproject.toml -r src/notewise --severity-level high
+        run: uv run bandit -c pyproject.toml -r src/notewise --severity-level medium --confidence-level medium
       - name: Ensure version command starts successfully
         run: uv run notewise version
 
@@ -208,18 +288,11 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
-      - uses: astral-sh/setup-uv@v7
-        with:
-          enable-cache: true
-          cache-dependency-glob: uv.lock
-          python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
       - name: Verify package version metadata stays aligned
-        run: uv run python scripts/check_version_sync.py
+        run: python scripts/check_version_sync.py
 
   tests:
-    name: Unit Tests
+    name: Unit + Integration Tests (coverage)
     needs: changes
     if: needs.changes.outputs.run_tests == 'true'
     runs-on: ubuntu-latest
@@ -233,8 +306,42 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
-      - name: Run tests
-        run: uv run python -m pytest -q -n auto --dist=loadfile
+      - name: Run tests with coverage
+        run: uv run python -m pytest -q tests/unit tests/integration -n auto --dist=loadfile --cov=src/notewise --cov-fail-under=90 --cov-report=xml
+      - name: Upload coverage reports to Codecov
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: whoisjayd/notewise
+
+  matrix-tests:
+    name: Unit Compatibility Matrix
+    needs: changes
+    if: needs.changes.outputs.run_matrix == 'true'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      max-parallel: 6
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.12", "3.13", "3.14"]
+        exclude:
+          - os: ubuntu-latest
+            python: "3.12"
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+          python-version: ${{ matrix.python }}
+      - name: Install dependencies
+        run: uv sync --all-extras --dev --frozen
+      - name: Run unit compatibility tests
+        run: uv run python -m pytest -q tests/unit -n auto --dist=loadfile
 
   package-build:
     name: Package Build
@@ -249,10 +356,26 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
           python-version: "3.12"
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
       - name: Build source and wheel distributions
         run: uv build
+
+  docker-build:
+    name: Docker Build
+    needs: changes
+    if: needs.changes.outputs.run_docker == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v6
+      - uses: docker/setup-buildx-action@v3
+      - name: Build Docker image without pushing
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          tags: notewise:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   website-validation:
     name: Website Validation
@@ -295,7 +418,7 @@ jobs:
         run: node --check docs/umami.js
 
   hook-parity:
-    name: Hook Parity
+    name: Hook Config Validation
     needs: changes
     if: needs.changes.outputs.run_hook_parity == 'true'
     runs-on: ubuntu-latest
@@ -307,13 +430,8 @@ jobs:
           enable-cache: true
           cache-dependency-glob: uv.lock
           python-version: "3.12"
-      - uses: oven-sh/setup-bun@v2
-      - name: Install dependencies
-        run: uv sync --all-extras --dev --frozen
-      - name: Run pre-commit hook parity checks
-        run: uv run pre-commit run --all-files
-      - name: Run pre-push hook parity checks
-        run: uv run pre-commit run --hook-stage pre-push --files README.md
+      - name: Validate pre-commit config
+        run: uvx pre-commit validate-config
 
   ci-required:
     name: PR Gate Required
@@ -325,9 +443,11 @@ jobs:
       - version-sync
       - tests
       - package-build
+      - docker-build
       - website-validation
       - docs-validation
       - hook-parity
+      - matrix-tests
     if: always()
     runs-on: ubuntu-latest
     steps:

@@ -1,36 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 
 import { InstallPage } from "@/components/InstallPage";
-
-const RAW_INSTALL_SH =
-  "https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.sh";
-const RAW_INSTALL_PS1 =
-  "https://raw.githubusercontent.com/whoisjayd/notewise/main/scripts/install.ps1";
-
-const POSIX_INSTALLER = `#!/usr/bin/env sh
-set -eu
-
-INSTALLER_URL="${RAW_INSTALL_SH}"
-
-if command -v curl >/dev/null 2>&1; then
-  curl -fsSL "$INSTALLER_URL" | sh
-  exit $?
-fi
-
-if command -v wget >/dev/null 2>&1; then
-  wget -qO- "$INSTALLER_URL" | sh
-  exit $?
-fi
-
-echo "error: curl or wget is required to install NoteWise" >&2
-exit 1
-`;
-
-const POWERSHELL_INSTALLER = `$ErrorActionPreference = "Stop"
-$installerUrl = "${RAW_INSTALL_PS1}"
-$script = Invoke-RestMethod -Uri $installerUrl
-Invoke-Expression $script
-`;
+import posixInstaller from "../../../scripts/install.sh?raw";
+import powershellInstaller from "../../../scripts/install.ps1?raw";
 
 function wantsPowerShell(request?: Request) {
   const userAgent = request?.headers.get("user-agent")?.toLowerCase() ?? "";
@@ -87,14 +59,14 @@ export const Route = createFileRoute("/install")({
     handlers: {
       GET: ({ request, next }) => {
         if (wantsPowerShell(request)) {
-          return scriptResponse(POWERSHELL_INSTALLER, "powershell");
+          return scriptResponse(powershellInstaller, "powershell");
         }
 
         if (wantsHtml(request)) {
           return next();
         }
 
-        return scriptResponse(POSIX_INSTALLER, "sh");
+        return scriptResponse(posixInstaller, "sh");
       },
     },
   },

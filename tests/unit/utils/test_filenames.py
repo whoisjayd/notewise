@@ -2,6 +2,7 @@
 
 import pytest
 
+from notewise._constants import MAX_FILENAME_LENGTH, SANITIZED_FILENAME_FALLBACK
 from notewise.utils import safe_output_path, sanitize_filename
 
 
@@ -18,18 +19,18 @@ from notewise.utils import safe_output_path, sanitize_filename
         ("com1.log", "_com1.log"),
         ("COM0", "COM0"),  # COM0 is NOT reserved
         ("LPT0", "LPT0"),  # LPT0 is NOT reserved
-        ("", "untitled"),
-        ("   ", "untitled"),
-        ("...", "untitled"),
-        (".", "untitled"),
-        ("..", "untitled"),
+        ("", SANITIZED_FILENAME_FALLBACK),
+        ("   ", SANITIZED_FILENAME_FALLBACK),
+        ("...", SANITIZED_FILENAME_FALLBACK),
+        (".", SANITIZED_FILENAME_FALLBACK),
+        ("..", SANITIZED_FILENAME_FALLBACK),
         ("filename.", "filename"),
         ("filename...", "filename"),
         (".env", ".env"),  # leading dot preserved
         (".gitignore", ".gitignore"),
         ("filename   ", "filename"),
         ("Title  With  Spaces", "Title With Spaces"),
-        ("a" * 200, "a" * 100),  # truncated to 100
+        ("a" * (MAX_FILENAME_LENGTH * 2), "a" * MAX_FILENAME_LENGTH),
         ("foo\x00bar", "foobar"),
         ("foo\x1fbar", "foobar"),
         ("foo\x7fbar", "foobar"),
@@ -55,25 +56,25 @@ def test_sanitize_com_lpt_range():
 
 def test_sanitize_truncation_no_trailing_space():
     """Truncation must not leave a trailing space."""
-    raw = "a" * 99 + " " + "b" * 10
+    raw = "a" * (MAX_FILENAME_LENGTH - 1) + " " + "b" * 10
     result = sanitize_filename(raw)
-    assert len(result) <= 100
+    assert len(result) <= MAX_FILENAME_LENGTH
     assert not result.endswith(" ")
 
 
-def test_sanitize_reserved_at_100_chars():
-    """Reserved names near the 100-char limit stay within 100 chars after prefixing."""
-    long_nul = "NUL." + "a" * 96
+def test_sanitize_reserved_at_max_chars():
+    """Reserved names near the filename limit stay within bounds after prefixing."""
+    long_nul = "NUL." + "a" * (MAX_FILENAME_LENGTH - len("NUL."))
     result = sanitize_filename(long_nul)
-    assert len(result) <= 100
+    assert len(result) <= MAX_FILENAME_LENGTH
     assert result.startswith("_")
 
 
 def test_sanitize_reserved_prefix_happens_before_truncation():
-    """Reserved-name protection should survive truncation at the 100-char boundary."""
-    raw = "NUL." + ("a" * 120)
+    """Reserved-name protection should survive truncation at the boundary."""
+    raw = "NUL." + ("a" * (MAX_FILENAME_LENGTH + 20))
     result = sanitize_filename(raw)
-    assert len(result) <= 100
+    assert len(result) <= MAX_FILENAME_LENGTH
     assert result.startswith("_")
 
 

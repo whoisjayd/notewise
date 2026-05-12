@@ -5,23 +5,31 @@ from __future__ import annotations
 import os
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from rich.markup import escape
 
-from notewise._constants import DASHBOARD_IDLE_MARKUP, DASHBOARD_SKIPPED_SUFFIX
-from notewise.cli._context import CliProcessContext
-from notewise.cli._formatters import print_cost_summary, print_run_summary
-from notewise.cli._types import (
-    _BatchJobResult,
-    _OrderedBatchFailure,
-    _WorkerSlotManager,
+from notewise._constants import (
+    DASHBOARD_IDLE_MARKUP,
+    DASHBOARD_SKIPPED_SUFFIX,
+    GPT5_MODEL_MARKER,
+    GPT5_REQUIRED_TEMPERATURE,
 )
+from notewise.cli._formatters import print_cost_summary, print_run_summary
 from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.logging import get_session_log_path
 from notewise.ui.dashboard import DashboardConfigItem
+
+
+if TYPE_CHECKING:
+    from notewise.cli._context import CliProcessContext
+    from notewise.cli._types import (
+        _BatchJobResult,
+        _OrderedBatchFailure,
+        _WorkerSlotManager,
+    )
 
 
 _DashboardStatusFn = Callable[[str, PipelineEvent], str]
@@ -55,48 +63,49 @@ def _phase_label(event: PipelineEvent, default: str) -> str:
 
 
 UI_STATUS_MAP: dict[EventType, _DashboardStatusFn] = {
-    EventType.METADATA_START: lambda title, _: f"[yellow]{title}… (Metadata)[/yellow]",
-    EventType.METADATA_FETCHED: lambda title, _: f"[cyan]{title}… (Fetched)[/cyan]",
+    EventType.METADATA_START: lambda title, _: f"[yellow]Metadata[/yellow] · {title}",
+    EventType.METADATA_FETCHED: lambda title, _: (
+        f"[cyan]Metadata ready[/cyan] · {title}"
+    ),
     EventType.TRANSCRIPT_FETCHING: lambda title, _: (
-        f"[cyan]> {title}… (Transcript)[/cyan]"
+        f"[cyan]Transcript[/cyan] · {title}"
     ),
     EventType.TRANSCRIPT_FETCHED: lambda title, _: (
-        f"[green]OK {title}… (Transcript Ready)[/green]"
+        f"[green]Transcript ready[/green] · {title}"
     ),
-    EventType.GENERATION_START: lambda title, _: (
-        f"[cyan]* {title}… (Generating)[/cyan]"
-    ),
+    EventType.GENERATION_START: lambda title, _: f"[cyan]Generating[/cyan] · {title}",
     EventType.CHUNK_GENERATING: lambda title, event: (
-        f"[cyan]* {title}… (Chunk {event.chunk_number}/{event.total_chunks})[/cyan]"
+        f"[cyan]Generating[/cyan] · {title} · chunk "
+        f"{event.chunk_number}/{event.total_chunks}"
     ),
     EventType.GENERATION_COMBINING: lambda title, event: (
-        f"[cyan]* {title}… ({_phase_label(event, 'Finalizing')} "
-        f"{event.total_chunks} note parts)[/cyan]"
+        f"[cyan]{_phase_label(event, 'Finalizing')}[/cyan] · {title} · "
+        f"{event.total_chunks} note parts"
     ),
     EventType.CHAPTER_GENERATING: lambda title, event: (
-        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters})[/cyan]"
+        f"[cyan]Chapter[/cyan] · {title} · "
+        f"{event.chapter_number}/{event.total_chapters}"
     ),
     EventType.CHAPTER_CHUNK_GENERATING: lambda title, event: (
-        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters},"
-        f" Part {event.chunk_number}/{event.total_chunks})[/cyan]"
+        f"[cyan]Chapter[/cyan] · {title} · "
+        f"{event.chapter_number}/{event.total_chapters}, "
+        f"part {event.chunk_number}/{event.total_chunks}"
     ),
     EventType.CHAPTER_COMBINING: lambda title, event: (
-        f"[cyan]* {title}… (Ch {event.chapter_number}/{event.total_chapters},"
-        f" {_phase_label(event, 'Finalizing')} {event.total_chunks} parts)[/cyan]"
+        f"[cyan]{_phase_label(event, 'Finalizing')} chapter[/cyan] · {title} · "
+        f"{event.total_chunks} parts"
     ),
-    EventType.QUIZ_GENERATING: lambda title, _: f"[magenta]* {title}… (Quiz)[/magenta]",
+    EventType.QUIZ_GENERATING: lambda title, _: f"[magenta]Quiz[/magenta] · {title}",
     EventType.QUIZ_CHUNK_GENERATING: lambda title, event: (
-        "[magenta]* "
-        f"{title}… (Quiz Part {event.chunk_number}/{event.total_chunks})[/magenta]"
+        f"[magenta]Quiz[/magenta] · {title} · part "
+        f"{event.chunk_number}/{event.total_chunks}"
     ),
     EventType.QUIZ_COMBINING: lambda title, event: (
-        f"[magenta]* {title}… (Combining {event.total_chunks} quiz parts)[/magenta]"
+        f"[magenta]Finalizing quiz[/magenta] · {title} · {event.total_chunks} parts"
     ),
-    EventType.QUIZ_COMPLETE: lambda title, _: (
-        f"[green]OK {title}… (Quiz Ready)[/green]"
-    ),
+    EventType.QUIZ_COMPLETE: lambda title, _: f"[green]Quiz ready[/green] · {title}",
     EventType.GENERATION_COMPLETE: lambda title, _: (
-        f"[green]OK {title}… (Generated)[/green]"
+        f"[green]Notes ready[/green] · {title}"
     ),
 }
 
@@ -128,6 +137,13 @@ def _format_cookie_status(cookie_file: str | None) -> str:
     return f"configured: {basename}" if basename else "configured"
 
 
+def _format_effective_temperature(model: str, temperature: float) -> str:
+    """Return the temperature that will be sent to the provider."""
+    if GPT5_MODEL_MARKER in model.strip().lower():
+        return f"{GPT5_REQUIRED_TEMPERATURE:g} (provider fixed)"
+    return f"{temperature:g}"
+
+
 def build_dashboard_config_items(
     context: CliProcessContext,
     *,
@@ -136,8 +152,6 @@ def build_dashboard_config_items(
     chapter_workers: int,
 ) -> tuple[DashboardConfigItem, ...]:
     """Build safe runtime config rows for the Rich dashboard."""
-    max_tokens = context.selected_max_tokens
-    max_tokens_label = "provider default" if max_tokens is None else str(max_tokens)
     export_transcript = context.export_transcript or "off"
     return (
         DashboardConfigItem("Output", str(output_dir)),
@@ -150,8 +164,19 @@ def build_dashboard_config_items(
             ", ".join(str(item) for item in context.selected_languages),
         ),
         DashboardConfigItem("Target language", str(context.selected_target_language)),
-        DashboardConfigItem("Temperature", str(context.selected_temperature)),
-        DashboardConfigItem("Max tokens", max_tokens_label),
+        DashboardConfigItem(
+            "Temperature",
+            _format_effective_temperature(
+                getattr(context, "selected_model", ""),
+                context.selected_temperature,
+            ),
+        ),
+        DashboardConfigItem(
+            "Max tokens",
+            "provider default"
+            if context.selected_max_tokens is None
+            else str(context.selected_max_tokens),
+        ),
         DashboardConfigItem("Video workers", str(video_workers)),
         DashboardConfigItem("Chapter workers", str(chapter_workers)),
         DashboardConfigItem("Throttle", f"{context.selected_throttle_seconds:g}s"),
@@ -162,10 +187,6 @@ def build_dashboard_config_items(
         DashboardConfigItem(
             "Chapter directories",
             _format_bool(bool(context.chapter_directory_output)),
-        ),
-        DashboardConfigItem(
-            "Combine chunks",
-            _format_bool(bool(context.use_combine_chunk)),
         ),
         DashboardConfigItem(
             "Cookies",

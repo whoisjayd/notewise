@@ -4,9 +4,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass, field
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 from notewise.utils import dedupe_ordered
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def dedupe_video_ids(video_ids: list[str]) -> list[str]:

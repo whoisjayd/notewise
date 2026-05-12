@@ -6,28 +6,22 @@ import os
 import sqlite3
 import subprocess
 import sys
-from collections.abc import Callable
 from contextlib import closing
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from notewise._constants import CONFIG_FILENAME
+from notewise._constants import CONFIG_FILENAME, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.config import get_cache_db_path, get_state_dir
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
+from notewise.utils import coerce_int as _coerce_int
 
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
+
     from rich.console import Console
-
-
-def _mask_secret(value: str | None) -> str:
-    if not value:
-        return "(not set)"
-    if len(value) <= 8:
-        return "***"
-    return f"{value[:6]}...{value[-4:]}"
 
 
 def _human_size(num_bytes: int) -> str:
@@ -42,8 +36,8 @@ def _human_size(num_bytes: int) -> str:
 
 def _format_duration(seconds: float) -> str:
     total = max(0, int(seconds))
-    hours, remainder = divmod(total, 3600)
-    minutes, secs = divmod(remainder, 60)
+    hours, remainder = divmod(total, SECONDS_PER_HOUR)
+    minutes, secs = divmod(remainder, SECONDS_PER_MINUTE)
     parts: list[str] = []
     if hours:
         parts.append(f"{hours}h")
@@ -53,31 +47,11 @@ def _format_duration(seconds: float) -> str:
     return " ".join(parts)
 
 
-def _coerce_int(value: object | None, *, default: int = 0) -> int:
-    if value is None:
-        return default
-    if isinstance(value, bool):
-        return int(value)
-    if isinstance(value, int):
-        return value
-    if isinstance(value, float):
-        return int(value)
-    if isinstance(value, (str, bytes, bytearray)):
-        try:
-            return int(value)
-        except ValueError:
-            return default
-    try:
-        return int(str(value))
-    except (TypeError, ValueError):
-        return default
-
-
 def _format_datetime(value: datetime | None) -> str:
     if value is None:
         return "Never"
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
+        value = value.replace(tzinfo=UTC)
     local_value = value.astimezone()
     return local_value.strftime("%Y-%m-%d %H:%M:%S %Z")
 
@@ -85,10 +59,10 @@ def _format_datetime(value: datetime | None) -> str:
 def _format_age(value: datetime | None) -> str:
     if value is None:
         return "Never"
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if value.tzinfo is None:
-        value = value.replace(tzinfo=timezone.utc)
-    delta = now - value.astimezone(timezone.utc)
+        value = value.replace(tzinfo=UTC)
+    delta = now - value.astimezone(UTC)
     days = max(delta.days, 0)
     if days == 0:
         return "today"

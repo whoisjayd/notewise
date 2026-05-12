@@ -21,7 +21,6 @@ from notewise.youtube.metadata import (
     _check_video_availability as _raise_if_video_data_requires_public_access,
 )
 from notewise.youtube.metadata import (
-    _coerce_int,
     _coerce_raw_chapters,
     _map_video_chapters,
     get_playlist_info,
@@ -256,12 +255,6 @@ class TestPlaylistMetadata:
 
 
 class TestMetadataAccessHelpers:
-    def test_coerce_int_handles_mixed_values(self):
-        assert _coerce_int(True) == 1
-        assert _coerce_int(4.8) == 4
-        assert _coerce_int("7") == 7
-        assert _coerce_int("bad", default=9) == 9
-
     def test_coerce_raw_chapters_filters_invalid_items(self):
         chapters = _coerce_raw_chapters(
             [

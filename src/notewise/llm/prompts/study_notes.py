@@ -1,4 +1,4 @@
-"""Prompt templates for study material generation and chunk combining."""
+"""Prompt templates for study material generation and chunk stitching."""
 
 from __future__ import annotations
 
@@ -74,37 +74,6 @@ Requirements:
 10. **No chunk labels**: Do not title the output as "Part 1", "Part 2",
     "Chunk 1", or similar chunk-local labels.
 11. **Language**: Write everything in {target_language}."""
-
-# Deprecated legacy prompt for combining multiple chunk notes into one final pass.
-COMBINE_CHUNKS_PROMPT = """
-You have generated study notes for multiple segments of the same video. Now
-combine these segments into a single, coherent study document.
-
-Segment notes:
-{chunk_notes}
-
-Requirements:
-1. Merge all segments into one polished study document. The learner should not
-   need to open the transcript or video.
-2. **Preserve all useful content**: Do not summarize, condense, or delete
-   explanations, examples, code blocks, definitions, caveats, or practical tips.
-3. **Remove only noise**: Delete duplicated overlap, repeated transition text,
-   chunk labels, filler, and source-referential phrasing.
-4. **Improve flow**: Connect adjacent ideas smoothly, normalize terminology, and
-   keep the original teaching order unless a small reorder clearly improves
-   understanding.
-5. **Maintain detail**: The final document must be at least as informative as
-   the combined input notes.
-6. **Use useful structure**: Keep consistent Markdown hierarchy, but use headings
-   only when they improve navigation. Do not create a new heading for every
-   sentence or minor point.
-7. Do NOT add a table of contents, generic introduction, or generic conclusion.
-8. Do not mention the transcript, source segment, speaker, or video as a source.
-   Avoid phrases such as "as stated in the transcript", "as mentioned in the video",
-   "the transcript says", "the video explains", or "the speaker explains".
-9. **Language**: Write everything in {target_language}.
-
-Return only the final Markdown study guide."""
 
 # Prompt for stitching two adjacent chunk-note fragments into one boundary-safe fragment
 STITCH_CHUNKS_PROMPT = """
@@ -203,20 +172,6 @@ def get_chunk_prompt(
     """Generate prompt for a transcript chunk."""
     return CHUNK_GENERATION_PROMPT.format(
         transcript_chunk=transcript_chunk,
-        target_language=target_language,
-    )
-
-
-def get_combine_prompt(
-    chunk_notes: list[str],
-    target_language: str = DEFAULT_TARGET_LANGUAGE,
-) -> str:
-    """Generate deprecated legacy prompt for combining chunk notes."""
-    combined = "\n\n---\n\n".join(
-        [f"## Segment {i + 1}\n\n{note}" for i, note in enumerate(chunk_notes)]
-    )
-    return COMBINE_CHUNKS_PROMPT.format(
-        chunk_notes=combined,
         target_language=target_language,
     )
 

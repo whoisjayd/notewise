@@ -28,6 +28,7 @@ from notewise._constants import (
 from notewise.config import settings as config
 from notewise.errors import LLMGenerationError as _LLMGenerationError
 from notewise.logging import make_log_safe_text, redact_sensitive_text
+from notewise.utils import coerce_non_negative_int
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
@@ -40,7 +41,7 @@ _ERROR_SUMMARY_LIMIT = 500
 
 def suppress_litellm_noise() -> None:
     """Keep LiteLLM retry/info chatter out of the user-facing terminal."""
-    runtime = cast(Any, litellm)
+    runtime = cast("Any", litellm)
     runtime.set_verbose = False
     runtime.suppress_debug_info = True
     verbose_logger = getattr(runtime, "verbose_logger", None)
@@ -55,11 +56,6 @@ def suppress_litellm_noise() -> None:
         category=UserWarning,
         module=r"pydantic\..*",
     )
-
-
-def _configure_litellm_runtime() -> None:
-    """Backward-compatible wrapper for LiteLLM runtime noise suppression."""
-    suppress_litellm_noise()
 
 
 def _summarize_error(error: Exception) -> str:
@@ -379,15 +375,9 @@ class LLMProvider:
             )
             total_raw = getattr(usage, "total_tokens", None)
 
-        def _to_non_negative_int(value: Any) -> int:
-            try:
-                return max(0, int(value or 0))
-            except (TypeError, ValueError):
-                return 0
-
-        prompt_tokens = _to_non_negative_int(prompt_raw)
-        completion_tokens = _to_non_negative_int(completion_raw)
-        total_tokens = _to_non_negative_int(
+        prompt_tokens = coerce_non_negative_int(prompt_raw)
+        completion_tokens = coerce_non_negative_int(completion_raw)
+        total_tokens = coerce_non_negative_int(
             total_raw or (prompt_tokens + completion_tokens)
         )
         return (prompt_tokens, completion_tokens, total_tokens)
@@ -460,22 +450,24 @@ class LLMProvider:
         content = self._normalize_markdown_fences(content)
         fences = ("```", "~~~")
         if content.startswith(fences):
-            lines = content.splitlines()
-            # Need at least fence start, content, fence end
-            if len(lines) >= 2 and lines[0].strip().startswith(fences):
-                # If the first line is just a fence (with optional language), remove it
-                # Check if the last line is also a fence
-                if lines[-1].strip() in fences:
-                    return "\n".join(lines[1:-1]).strip()
-                # Sometimes LLMs stop abruptly or formatting is weird;
-                # if it starts with fence, we strip the first line.
-                # If it ends with fence, strip that too.
-                cleaned = "\n".join(lines[1:]).strip()
-                for fence in fences:
-                    cleaned = cleaned.removesuffix(fence).strip()
-                return cleaned
+            return self._strip_wrapping_fence_lines(content, fences)
 
         return content
+
+    @staticmethod
+    def _strip_wrapping_fence_lines(content: str, fences: tuple[str, ...]) -> str:
+        """Drop whole-response Markdown fences while preserving inner fences."""
+        lines = content.splitlines()
+        if len(lines) < 2 or not lines[0].strip().startswith(fences):
+            return content
+
+        if lines[-1].strip() in fences:
+            return "\n".join(lines[1:-1]).strip()
+
+        cleaned = "\n".join(lines[1:]).strip()
+        for fence in fences:
+            cleaned = cleaned.removesuffix(fence).strip()
+        return cleaned
 
     def _normalize_markdown_fences(self, content: str) -> str:
         """Normalize fence-only lines so Markdown previews close code blocks."""

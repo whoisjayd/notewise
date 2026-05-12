@@ -4,16 +4,21 @@ from __future__ import annotations
 
 import json
 import re
-from collections.abc import Callable
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
+from notewise._constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.domain.events import EventType
-from notewise.domain.youtube import VideoTranscript
 from notewise.utils import sanitize_filename
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    from notewise.domain.youtube import VideoTranscript
 
 
 logger = structlog.get_logger(__name__)
@@ -21,8 +26,8 @@ logger = structlog.get_logger(__name__)
 
 def _format_timestamp(seconds: int) -> str:
     total = max(0, int(seconds))
-    hours, rem = divmod(total, 3600)
-    minutes, secs = divmod(rem, 60)
+    hours, rem = divmod(total, SECONDS_PER_HOUR)
+    minutes, secs = divmod(rem, SECONDS_PER_MINUTE)
     if hours:
         return f"{hours:02d}:{minutes:02d}:{secs:02d}"
     return f"{minutes:02d}:{secs:02d}"
@@ -39,7 +44,7 @@ def _heading_matches_chapter_title(heading_text: str, chapter_title: str) -> boo
     normalized_title = _normalize_heading_for_timestamp_match(chapter_title)
     if normalized_heading == normalized_title:
         return True
-    for separator in (":", " - ", " — ", " – "):
+    for separator in (":", " - ", " \u2014 ", " \u2013 "):
         if normalized_heading.startswith(f"{normalized_title}{separator}"):
             return True
     return False
