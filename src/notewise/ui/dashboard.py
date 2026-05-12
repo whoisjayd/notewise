@@ -9,9 +9,11 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from functools import lru_cache
 from time import monotonic
 
-from rich.console import Group, RenderableType
+from rich import box
+from rich.console import Console, Group, RenderableType
 from rich.markup import escape
 from rich.panel import Panel
 from rich.progress import (
@@ -27,6 +29,13 @@ from rich.table import Table
 from rich.text import Text
 
 from notewise._constants import (
+    AI_GROUP,
+    API_LABEL,
+    CACHE_LABEL,
+    CHAPTER_DIRECTORIES_LABEL,
+    CHAPTERS_LABEL,
+    CHAPTERS_WORKERS_LABEL,
+    COOKIES_LABEL,
     DASHBOARD_ACTIVE_PHASE,
     DASHBOARD_ACTIVITY_TITLE_LIMIT,
     DASHBOARD_CONFIG_VALUE_LIMIT,
@@ -37,6 +46,9 @@ from notewise._constants import (
     DASHBOARD_IDLE_MARKUP,
     DASHBOARD_IDLE_STATUS,
     DASHBOARD_PANEL_TITLE_MARKUP,
+    DASHBOARD_PROGRESS_BAR_COMPLETE_STYLE,
+    DASHBOARD_PROGRESS_BAR_FINISHED_STYLE,
+    DASHBOARD_PROGRESS_BAR_STYLE,
     DASHBOARD_PROGRESS_BAR_WIDTH,
     DASHBOARD_PROGRESS_LABEL_MARKUP,
     DASHBOARD_PROGRESS_PERCENT_MARKUP,
@@ -44,7 +56,6 @@ from notewise._constants import (
     DASHBOARD_PROGRESS_TOTAL_MARKUP,
     DASHBOARD_RECENT_ACTIVITY_LIMIT,
     DASHBOARD_RECENT_EMPTY_MARKUP,
-    DASHBOARD_SECTION_ACTIVE_TASKS_HEADING,
     DASHBOARD_SECTION_CHAPTER_TASKS_HEADING,
     DASHBOARD_SECTION_FLAGS_CONFIG_HEADING,
     DASHBOARD_SECTION_RECENT_ACTIVITY_HEADING,
@@ -62,6 +73,22 @@ from notewise._constants import (
     DASHBOARD_WORKER_TABLE_HEADERS,
     DASHBOARD_WORKER_TITLE_LIMIT,
     DASHBOARD_WORKER_VIDEO_PREFIX,
+    DELAY_LABEL,
+    EXPORT_TRANSCRIPT_LABEL,
+    EXTRAS_GROUP,
+    FILES_GROUP,
+    FORMATS_LABEL,
+    LANGUAGES_LABEL,
+    NOTES_LABEL,
+    OUTPUT_LABEL,
+    QUIZ_LABEL,
+    RUNTIME_GROUP,
+    TARGET_LANG_LABEL,
+    TEMP_LABEL,
+    TIMESTAMPS_LABEL,
+    TOKENS_LABEL,
+    TRANSCRIPT_LABEL,
+    VIDEOS_LABEL,
 )
 
 
@@ -86,6 +113,16 @@ class DashboardWorkerSnapshot:
     def is_active(self) -> bool:
         """Return whether this worker is processing a video."""
         return self.started_at is not None and self.phase != DASHBOARD_IDLE_STATUS
+
+
+@lru_cache(maxsize=1)
+def _dashboard_box() -> box.Box:
+    """Pick a richer border style when the terminal supports Unicode."""
+    console = Console()
+    encoding = (console.encoding or "").lower()
+    if encoding and "utf" in encoding and not console.is_dumb_terminal:
+        return box.ROUNDED
+    return box.ASCII
 
 
 class PipelineDashboard:
@@ -152,16 +189,16 @@ class PipelineDashboard:
             TextColumn(DASHBOARD_PROGRESS_LABEL_MARKUP),
             BarColumn(
                 bar_width=DASHBOARD_PROGRESS_BAR_WIDTH,
-                style="black",
-                complete_style="green",
-                finished_style="green",
+                style=DASHBOARD_PROGRESS_BAR_STYLE,
+                complete_style=DASHBOARD_PROGRESS_BAR_COMPLETE_STYLE,
+                finished_style=DASHBOARD_PROGRESS_BAR_FINISHED_STYLE,
             ),
             TextColumn(DASHBOARD_PROGRESS_PERCENT_MARKUP),
             TextColumn(DASHBOARD_PROGRESS_SEPARATOR),
             TextColumn(DASHBOARD_PROGRESS_TOTAL_MARKUP),
             TextColumn(DASHBOARD_PROGRESS_SEPARATOR),
             TimeElapsedColumn(),
-            expand=True,
+            expand=False,
         )
         self.overall_task = self.overall_progress.add_task("", total=total_videos)
 
@@ -175,7 +212,7 @@ class PipelineDashboard:
 
         self.worker_tasks: list[TaskID] = []
         for i in range(concurrency):
-            prefix = "└──" if i == concurrency - 1 else "├──"
+            prefix = "`--" if i == concurrency - 1 else "|--"
             tid = self.worker_progress.add_task(
                 DASHBOARD_IDLE_MARKUP,
                 label=DASHBOARD_WORKER_LABEL_TEMPLATE.format(
@@ -197,7 +234,7 @@ class PipelineDashboard:
         self._chapter_slot_keys: list[str | None] = []
         self._chapter_slot_video_ids: list[str | None] = []
         for chapter_index in range(self.chapter_concurrency):
-            prefix = "└──" if chapter_index == self.chapter_concurrency - 1 else "├──"
+            prefix = "`--" if chapter_index == self.chapter_concurrency - 1 else "|--"
             task_id = self.chapter_progress.add_task(
                 DASHBOARD_IDLE_MARKUP,
                 label=DASHBOARD_WORKER_LABEL_TEMPLATE.format(
@@ -438,24 +475,51 @@ class PipelineDashboard:
         return header
 
     def _render_progress_summary(self) -> Table:
-        """Render high-level run counters."""
+        """Render high-level run counters as compact dashboard cards."""
         total = int(self.overall_progress.tasks[self.overall_task].total or 0)
         processed = self.completed_count + self.skipped_count + self.failed_count
         running = sum(1 for snapshot in self.worker_snapshots if snapshot.is_active)
         queued = max(0, total - processed - running)
 
         table = Table.grid(expand=True, padding=(0, 1))
-        table.add_column(style="green")
-        table.add_column(style="yellow")
-        table.add_column(style="red")
-        table.add_column(style="cyan")
-        table.add_column(style="blue")
+        for _ in range(5):
+            table.add_column(ratio=1)
         table.add_row(
-            f"{DASHBOARD_SUMMARY_COMPLETED_LABEL}: {self.completed_count}",
-            f"{DASHBOARD_SUMMARY_SKIPPED_LABEL}: {self.skipped_count}",
-            f"{DASHBOARD_SUMMARY_FAILED_LABEL}: {self.failed_count}",
-            f"{DASHBOARD_SUMMARY_RUNNING_LABEL}: {running}",
-            f"{DASHBOARD_SUMMARY_QUEUED_LABEL}: {queued}",
+            Panel(
+                f"[bold green]{self.completed_count}[/bold green]",
+                title=f"[green]{DASHBOARD_SUMMARY_COMPLETED_LABEL}[/green]",
+                border_style="green",
+                box=_dashboard_box(),
+                padding=(0, 1),
+            ),
+            Panel(
+                f"[bold yellow]{self.skipped_count}[/bold yellow]",
+                title=f"[yellow]{DASHBOARD_SUMMARY_SKIPPED_LABEL}[/yellow]",
+                border_style="yellow",
+                box=_dashboard_box(),
+                padding=(0, 1),
+            ),
+            Panel(
+                f"[bold red]{self.failed_count}[/bold red]",
+                title=f"[red]{DASHBOARD_SUMMARY_FAILED_LABEL}[/red]",
+                border_style="red",
+                box=_dashboard_box(),
+                padding=(0, 1),
+            ),
+            Panel(
+                f"[bold cyan]{running}[/bold cyan]",
+                title=f"[cyan]{DASHBOARD_SUMMARY_RUNNING_LABEL}[/cyan]",
+                border_style="cyan",
+                box=_dashboard_box(),
+                padding=(0, 1),
+            ),
+            Panel(
+                f"[bold blue]{queued}[/bold blue]",
+                title=f"[blue]{DASHBOARD_SUMMARY_QUEUED_LABEL}[/blue]",
+                border_style="blue",
+                box=_dashboard_box(),
+                padding=(0, 1),
+            ),
         )
         return table
 
@@ -463,38 +527,77 @@ class PipelineDashboard:
         """Render safe dashboard configuration items."""
         if not self.config_items:
             return None
-        table = Table.grid(expand=True, padding=(0, 1))
-        table.add_column(style="bold white", ratio=1)
-        table.add_column(style="cyan", ratio=2)
-        table.add_column(style="bold white", ratio=1)
-        table.add_column(style="cyan", ratio=2)
+        grouped_items = {
+            FILES_GROUP: (
+                (OUTPUT_LABEL, OUTPUT_LABEL),
+                (FORMATS_LABEL, FORMATS_LABEL),
+                (TRANSCRIPT_LABEL, EXPORT_TRANSCRIPT_LABEL),
+                (CHAPTERS_LABEL, CHAPTER_DIRECTORIES_LABEL),
+            ),
+            AI_GROUP: (
+                (TRANSCRIPT_LABEL, LANGUAGES_LABEL),
+                (NOTES_LABEL, TARGET_LANG_LABEL),
+                (TEMP_LABEL, TEMP_LABEL),
+                (TOKENS_LABEL, TOKENS_LABEL),
+            ),
+            RUNTIME_GROUP: (
+                (VIDEOS_LABEL, VIDEOS_LABEL),
+                (CHAPTERS_LABEL, CHAPTERS_WORKERS_LABEL),
+                (DELAY_LABEL, DELAY_LABEL),
+                (CACHE_LABEL, CACHE_LABEL),
+                (COOKIES_LABEL, COOKIES_LABEL),
+                (API_LABEL, API_LABEL),
+            ),
+            EXTRAS_GROUP: (
+                (QUIZ_LABEL, QUIZ_LABEL),
+                (TIMESTAMPS_LABEL, TIMESTAMPS_LABEL),
+            ),
+        }
+        item_lookup = {item.label: item.value for item in self.config_items}
 
-        row: list[str] = []
-        for item in self.config_items:
-            row.extend(
-                [
-                    self._safe_cell(item.label),
-                    self._safe_cell(item.value, limit=DASHBOARD_CONFIG_VALUE_LIMIT),
-                ]
-            )
-            if len(row) == 4:
-                table.add_row(*row)
-                row = []
-        if row:
-            while len(row) < 4:
-                row.append("")
-            table.add_row(*row)
+        table = Table.grid(expand=True, padding=(0, 2))
+        for _ in grouped_items:
+            table.add_column(ratio=1)
+
+        cells: list[Table] = []
+        for group_label, item_labels in grouped_items.items():
+            cell = Table.grid(expand=True)
+            cell.add_column(ratio=1, no_wrap=True)
+            cell.add_column(ratio=3, no_wrap=True)
+            cell.add_row(f"[bold cyan]{group_label}[/bold cyan]", "")
+            has_values = False
+            for display_label, label in item_labels:
+                value = item_lookup.get(label)
+                if value is None:
+                    continue
+                has_values = True
+                cell.add_row(
+                    f"[dim]{self._safe_cell(display_label)}[/dim]",
+                    (
+                        "[cyan]"
+                        f"{self._safe_cell(value, limit=DASHBOARD_CONFIG_VALUE_LIMIT)}"
+                        "[/cyan]"
+                    ),
+                )
+            if has_values:
+                cells.append(cell)
+        table.add_row(*cells)
         return table
 
     def _render_worker_table(self) -> Table:
         """Render structured worker state."""
-        table = Table.grid(expand=True, padding=(0, 1))
-        table.add_column(style="bold cyan", ratio=1)
-        table.add_column(style="white", ratio=2)
-        table.add_column(style="white", ratio=4)
-        table.add_column(style="magenta", ratio=3)
-        table.add_column(style="dim", ratio=1)
-        table.add_row(*DASHBOARD_WORKER_TABLE_HEADERS)
+        table = Table(
+            expand=True,
+            box=_dashboard_box(),
+            show_edge=False,
+            padding=(0, 1),
+            header_style="bold cyan",
+        )
+        table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[0], style="bold cyan", ratio=1)
+        table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[1], style="white", ratio=2)
+        table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[2], style="white", ratio=5)
+        table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[3], style="magenta", ratio=3)
+        table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[4], style="dim", ratio=1)
         for index, snapshot in enumerate(self.worker_snapshots, start=1):
             table.add_row(
                 f"{DASHBOARD_WORKER_VIDEO_PREFIX}{index}",
@@ -519,7 +622,7 @@ class PipelineDashboard:
                     limit=DASHBOARD_ACTIVITY_TITLE_LIMIT,
                 )
                 safe_title = escape(display_title)
-                completed_table.add_row(f"[red]✗[/red] [dim]{safe_title}[/]")
+                completed_table.add_row(f"[red]x[/red] [dim]{safe_title}[/]")
 
         if self.recent_completions:
             has_activity = True
@@ -530,7 +633,7 @@ class PipelineDashboard:
                 )
                 safe_title = escape(display_title)
                 is_skipped = title.endswith(DASHBOARD_SKIPPED_SUFFIX)
-                icon = "↷" if is_skipped else "✓"
+                icon = "skip" if is_skipped else "ok"
                 color = "yellow" if is_skipped else "green"
                 completed_table.add_row(
                     f"[{color}]{icon}[/{color}] [dim]{safe_title}[/]"
@@ -572,9 +675,6 @@ class PipelineDashboard:
                     Text(DASHBOARD_SECTION_WORKERS_HEADING, style="bold white"),
                     self._render_worker_table(),
                     Rule(style="dim"),
-                    Text(DASHBOARD_SECTION_ACTIVE_TASKS_HEADING, style="bold white"),
-                    self.worker_progress,
-                    Rule(style="dim"),
                 ]
             )
 
@@ -603,5 +703,6 @@ class PipelineDashboard:
             body,
             title=DASHBOARD_PANEL_TITLE_MARKUP,
             border_style="cyan",
+            box=_dashboard_box(),
             padding=(0, 1),
         )

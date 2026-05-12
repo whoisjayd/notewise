@@ -21,6 +21,7 @@ from notewise._constants import (
     UPDATE_HTTP_TIMEOUT_SECONDS,
     UPDATE_INSTALL_SOURCE_BINARY,
     UPDATE_INSTALL_SOURCE_PYTHON,
+    UPDATE_METADATA_PARSE_ERROR,
     UPDATER_USER_AGENT,
 )
 from notewise.errors import UpdateError
@@ -71,7 +72,7 @@ def _request_json(url: str) -> dict[str, object]:
         },
     )
     try:
-        with urlopen(request, timeout=UPDATE_HTTP_TIMEOUT_SECONDS) as response:
+        with urlopen(request, timeout=UPDATE_HTTP_TIMEOUT_SECONDS) as response:  # nosec B310
             payload = json.loads(response.read().decode("utf-8"))
     except HTTPError as error:
         raise UpdateError(
@@ -81,6 +82,8 @@ def _request_json(url: str) -> dict[str, object]:
         raise UpdateError(
             "Could not reach GitHub Releases while checking for updates."
         ) from error
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise UpdateError(UPDATE_METADATA_PARSE_ERROR) from error
 
     if not isinstance(payload, dict):
         raise UpdateError("Latest release metadata was not returned as an object.")

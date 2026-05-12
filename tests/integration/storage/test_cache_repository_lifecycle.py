@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import closing
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import pytest
 
@@ -93,7 +93,7 @@ def test_cached_at_is_set_and_refreshed_on_upsert(tmp_path):
     assert first is not None
     assert first.cached_at is not None
 
-    stale_time = datetime.now(timezone.utc) - timedelta(days=10)
+    stale_time = datetime.now(UTC) - timedelta(days=10)
     with closing(sqlite3.connect(tmp_path / "cache.db")) as connection:
         connection.execute(
             "UPDATE video SET cached_at = ? WHERE id = ?",
@@ -113,7 +113,7 @@ def test_cached_at_is_set_and_refreshed_on_upsert(tmp_path):
     second = db.get_video("video-1")
     assert second is not None
     assert second.cached_at is not None
-    assert second.cached_at.replace(tzinfo=timezone.utc) > stale_time
+    assert second.cached_at.replace(tzinfo=UTC) > stale_time
 
 
 def test_get_recent_videos_returns_latest_runs_first(tmp_path):
@@ -232,8 +232,8 @@ def test_prune_old_entries_removes_only_stale_cache_rows(tmp_path):
             model="model-a",
         )
 
-    old_time = datetime.now(timezone.utc) - timedelta(days=45)
-    new_time = datetime.now(timezone.utc) - timedelta(days=2)
+    old_time = datetime.now(UTC) - timedelta(days=45)
+    new_time = datetime.now(UTC) - timedelta(days=2)
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute(
             "UPDATE video SET cached_at = ? WHERE id = ?",
@@ -282,8 +282,8 @@ def test_get_cache_summary_reports_counts_and_bounds(tmp_path):
         output_path=str(tmp_path / "video-1.txt"),
     )
 
-    older = datetime.now(timezone.utc) - timedelta(days=10)
-    newer = datetime.now(timezone.utc) - timedelta(days=1)
+    older = datetime.now(UTC) - timedelta(days=10)
+    newer = datetime.now(UTC) - timedelta(days=1)
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute(
             "UPDATE video SET cached_at = ? WHERE id = ?",

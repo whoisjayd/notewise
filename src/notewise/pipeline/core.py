@@ -10,9 +10,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Callable
-from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
@@ -22,7 +20,6 @@ from notewise._constants import (
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
-    DEFAULT_USE_COMBINE_CHUNK,
     OUTPUT_METADATA_FILENAME,
     OUTPUT_METADATA_VIDEO_ID_KEY,
 )
@@ -51,36 +48,41 @@ from notewise.pipeline._helpers import (
     estimate_tokens_used,
     suffix_output_target,
 )
-from notewise.pipeline._limiter import LimiterProtocol, get_youtube_limiter
+from notewise.pipeline._limiter import get_youtube_limiter
 from notewise.pipeline._state import PipelineSharedState, dedupe_video_ids
 from notewise.storage import DatabaseRepository, VideoSchema
 from notewise.utils import sanitize_filename
-from notewise.youtube.metadata import get_video_metadata  # noqa: F401
+from notewise.youtube.metadata import get_video_metadata
 from notewise.youtube.transcript import (
-    fetch_transcript,  # noqa: F401
-    split_transcript_by_chapters,  # noqa: F401
-    split_transcript_by_chapters_with_metadata,  # noqa: F401
+    fetch_transcript,
+    split_transcript_by_chapters,
+    split_transcript_by_chapters_with_metadata,
 )
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+    from pathlib import Path
+
+    from aiolimiter import AsyncLimiter
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 __all__ = [
     "CorePipeline",
+    "PipelineSharedState",
     "UsageTotals",
+    "build_chapter_bundle",
     "coerce_usage_float",
     "coerce_usage_int",
     "coerce_usage_totals",
+    "dedupe_video_ids",
     "export_transcript",
     "fetch_transcript",
     "generate_and_write_quiz",
-    "get_video_metadata",
-    "PipelineSharedState",
-    "dedupe_video_ids",
-    "build_chapter_bundle",
     "get_output_extension",
-    "split_transcript_by_chapters",
-    "split_transcript_by_chapters_with_metadata",
+    "get_video_metadata",
     "normalize_output_format",
     "normalize_output_formats",
     "prefix_chapter_heading_with_timestamp",
@@ -88,6 +90,8 @@ __all__ = [
     "render_notes_documents",
     "run_pipeline",
     "sanitize_filename",
+    "split_transcript_by_chapters",
+    "split_transcript_by_chapters_with_metadata",
 ]
 
 
@@ -107,7 +111,6 @@ class CorePipeline:
         throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
         force: bool = False,
         quiz: bool = False,
-        use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
         export_transcript: str | None = None,
         timestamps: bool = False,
         chapter_directory_output: bool = False,
@@ -135,13 +138,11 @@ class CorePipeline:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
             throttle_seconds=throttle_seconds,
-            use_combine_chunk=use_combine_chunk,
             target_language=self.target_language,
         )
         self.throttle_seconds = self.generator.throttle_seconds
         self.force = force
         self.quiz = quiz
-        self.use_combine_chunk = use_combine_chunk
         self.export_transcript_format = export_transcript
         self.timestamps = timestamps
         self.chapter_directory_output = chapter_directory_output
@@ -168,7 +169,7 @@ class CorePipeline:
             self._reserved_output_targets = shared_state.reserved_output_targets
         self.db = DatabaseRepository.get_instance(self._cache_db_path())
 
-    def _get_youtube_request_limiter(self) -> LimiterProtocol:
+    def _get_youtube_request_limiter(self) -> AsyncLimiter:
         return get_youtube_limiter(self.youtube_requests_per_minute)
 
     async def _acquire_youtube_request_slot(self) -> None:
@@ -254,17 +255,6 @@ class CorePipeline:
     async def _record_metrics(self, metrics: PipelineMetrics) -> None:
         async with self._metrics_lock:
             self._run_metrics.add_from(metrics)
-
-    @staticmethod
-    def _coerce_usage_int(value: Any) -> int:
-        return coerce_usage_int(value)
-
-    @staticmethod
-    def _coerce_usage_float(value: Any) -> float:
-        return coerce_usage_float(value)
-
-    def _coerce_usage_totals(self, raw_usage: Any) -> UsageTotals:
-        return coerce_usage_totals(raw_usage)
 
     def _estimate_tokens_used(self, transcript_text: str) -> int:
         try:
@@ -405,7 +395,6 @@ async def run_pipeline(
     output_formats: list[str] | None = None,
     target_language: str = DEFAULT_TARGET_LANGUAGE,
     throttle_seconds: float = DEFAULT_THROTTLE_SECONDS,
-    use_combine_chunk: bool = DEFAULT_USE_COMBINE_CHUNK,
     on_event: Callable[[PipelineEvent], None] | None = None,
 ) -> PipelineResult:
     pipeline_kwargs: dict[str, Any] = {
@@ -414,7 +403,6 @@ async def run_pipeline(
         "output_format": output_format,
         "target_language": target_language,
         "throttle_seconds": throttle_seconds,
-        "use_combine_chunk": use_combine_chunk,
     }
     if output_formats is not None:
         pipeline_kwargs["output_formats"] = output_formats

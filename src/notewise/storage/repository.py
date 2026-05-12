@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import threading
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
-from typing import ClassVar
+from datetime import UTC, datetime, timedelta
+from typing import TYPE_CHECKING, ClassVar
 
 from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
@@ -24,6 +23,10 @@ from .schemas import (
     TranscriptSchema,
     VideoSchema,
 )
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 class DatabaseRepository:
@@ -159,7 +162,7 @@ class DatabaseRepository:
         """Return aggregate processing statistics with a per-model breakdown."""
         filters = []
         if since_days is not None:
-            cutoff = datetime.now(timezone.utc) - timedelta(days=since_days)
+            cutoff = datetime.now(UTC) - timedelta(days=since_days)
             filters.append(RunStatsRecord.timestamp >= cutoff)
         if model is not None:
             filters.append(RunStatsRecord.model == model)
@@ -267,7 +270,7 @@ class DatabaseRepository:
 
     def prune_old_entries(self, older_than_days: int = 30) -> int:
         """Delete cached videos older than the provided age threshold."""
-        cutoff = datetime.now(timezone.utc) - timedelta(days=max(older_than_days, 0))
+        cutoff = datetime.now(UTC) - timedelta(days=max(older_than_days, 0))
         with self._write_lock, Session(self._engine) as session:
             stale_videos = (
                 session.execute(
@@ -298,7 +301,7 @@ class DatabaseRepository:
                     video_id=video_id,
                     format=format,
                     output_path=output_path,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
             )
             session.commit()
@@ -321,7 +324,7 @@ class DatabaseRepository:
     ) -> None:
         """Persist metadata, transcript, and run stats in one transaction."""
         with self._write_lock, Session(self._engine) as session:
-            cached_at = datetime.now(timezone.utc)
+            cached_at = datetime.now(UTC)
             video = session.get(VideoRecord, video_id)
             if video is None:
                 video = VideoRecord(
@@ -361,7 +364,7 @@ class DatabaseRepository:
                     model=model,
                     transcript_seconds=transcript_seconds,
                     generation_seconds=generation_seconds,
-                    timestamp=datetime.now(timezone.utc),
+                    timestamp=datetime.now(UTC),
                 )
             )
             session.commit()

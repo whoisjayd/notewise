@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import sqlite3
-from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 
@@ -17,49 +16,6 @@ def repo(tmp_path):
     r = DatabaseRepository.get_instance(path)
     yield r
     DatabaseRepository.close_instance(path)
-
-
-class TestSingleton:
-    def test_same_path_returns_same_instance(self, tmp_path):
-        path = tmp_path / "cache.db"
-        r1 = DatabaseRepository.get_instance(path)
-        r2 = DatabaseRepository.get_instance(path)
-        assert r1 is r2
-        DatabaseRepository.close_instance(path)
-
-    def test_different_paths_return_different_instances(self, tmp_path):
-        r1 = DatabaseRepository.get_instance(tmp_path / "one.db")
-        r2 = DatabaseRepository.get_instance(tmp_path / "two.db")
-        assert r1 is not r2
-        DatabaseRepository.close_all_instances()
-
-    def test_singleton_normalizes_equivalent_paths(self, tmp_path):
-        normalized = tmp_path / "cache.db"
-        alternate = tmp_path / "subdir" / ".." / "cache.db"
-        r1 = DatabaseRepository.get_instance(normalized)
-        r2 = DatabaseRepository.get_instance(alternate)
-        assert r1 is r2
-        DatabaseRepository.close_instance(normalized)
-
-    def test_thread_safe_concurrent_get(self, tmp_path):
-        path = tmp_path / "threadsafe.db"
-
-        def get_repo(_):
-            return DatabaseRepository.get_instance(path)
-
-        with ThreadPoolExecutor(max_workers=8) as ex:
-            repos = list(ex.map(get_repo, range(24)))
-        first = repos[0]
-        assert all(r is first for r in repos)
-        DatabaseRepository.close_instance(path)
-
-    def test_close_instance_allows_new_creation(self, tmp_path):
-        path = tmp_path / "close_test.db"
-        r1 = DatabaseRepository.get_instance(path)
-        DatabaseRepository.close_instance(path)
-        r2 = DatabaseRepository.get_instance(path)
-        assert r1 is not r2
-        DatabaseRepository.close_instance(path)
 
 
 class TestReadWrite:

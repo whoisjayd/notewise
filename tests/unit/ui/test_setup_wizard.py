@@ -2,8 +2,10 @@
 
 from unittest.mock import MagicMock, mock_open, patch
 
+import pytest
+
+from notewise.errors import ConfigurationError
 from notewise.ui.setup_wizard import (
-    _strip_wrapped_quotes,
     get_api_key,
     get_available_models,
     get_config_path,
@@ -14,6 +16,7 @@ from notewise.ui.setup_wizard import (
     select_provider,
     show_current_config,
 )
+from notewise.utils import strip_wrapped_quotes
 
 
 # Mock config content
@@ -71,6 +74,27 @@ class TestConfigIO:
         assert config["GEMINI_API_KEY"] == "quoted-key"
         assert config["OUTPUT_DIR"] == "/tmp/notes"
         assert config["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
+
+    def test_load_config_read_failure_raises_configuration_error(self, mocker):
+        """Config read failures should use the project error hierarchy."""
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.open", side_effect=OSError("denied"))
+
+        with (
+            pytest.raises(
+                ConfigurationError,
+                match="Failed to read configuration",
+            ),
+        ):
+            load_config()
+
+    def test_load_config_does_not_hide_unexpected_errors(self, mocker):
+        """Unexpected parser/runtime failures should remain visible."""
+        mocker.patch("pathlib.Path.exists", return_value=True)
+        mocker.patch("pathlib.Path.open", side_effect=RuntimeError("bug"))
+
+        with pytest.raises(RuntimeError, match="bug"):
+            load_config()
 
     def test_save_config(self):
         """Test saving configuration merges with existing."""
@@ -167,7 +191,7 @@ class TestConfigIO:
 
     def test_strip_wrapped_quotes_handles_python_raw_string_prefix(self):
         """Displayed config values should normalize r\"...\" path literals."""
-        assert _strip_wrapped_quotes('r"D:\\tmp\\out"') == "D:\\tmp\\out"
+        assert strip_wrapped_quotes('r"D:\\tmp\\out"') == "D:\\tmp\\out"
 
     def test_setup_wizard_can_run_oauth_login_for_oauth_provider(self):
         """OAuth providers should offer the same login flow during setup."""
@@ -229,7 +253,7 @@ class TestConfigIO:
         console = MagicMock()
         with patch(
             "notewise.ui.setup_wizard.load_config",
-            side_effect=RuntimeError("Failed to read configuration"),
+            side_effect=ConfigurationError("Failed to read configuration"),
         ):
             current = show_current_config(console=console)
 

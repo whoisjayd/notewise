@@ -2,13 +2,24 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 from rich.console import Console, Group, RenderableType
 from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from notewise.domain.results import PipelineMetrics, PipelineResult
+from notewise._constants import (
+    CLI_COST_DECIMAL_PLACES,
+    CLI_LOG_PATH_UNAVAILABLE_LABEL,
+    CLI_SECONDS_DECIMAL_PLACES,
+)
 from notewise.logging import get_session_log_path
+from notewise.utils import coerce_non_negative_float, coerce_non_negative_int
+
+
+if TYPE_CHECKING:
+    from notewise.domain.results import PipelineMetrics, PipelineResult
 
 
 def print_failure_panel(
@@ -36,8 +47,9 @@ def print_failure_panel(
         renderables.append(Text(intro, style="bold"))
     renderables.append(failure_table)
     log_path = get_session_log_path()
-    if log_path:
-        renderables.append(Text(f"Current log: {log_path}", style="dim"))
+    renderables.append(
+        Text(f"Current log: {log_path or CLI_LOG_PATH_UNAVAILABLE_LABEL}", style="dim")
+    )
 
     console.print("\n")
     console.print(
@@ -67,18 +79,6 @@ def print_cost_summary(console: Console, metrics: PipelineMetrics) -> None:
     if not metrics:
         return
 
-    def _safe_int(v: object) -> int:
-        try:
-            return max(0, int(float(str(v))))
-        except (TypeError, ValueError):
-            return 0
-
-    def _safe_float(v: object) -> float:
-        try:
-            return max(0.0, float(str(v)))
-        except (TypeError, ValueError):
-            return 0.0
-
     cost_table = Table(
         title="Cost Summary",
         border_style="green",
@@ -88,24 +88,38 @@ def print_cost_summary(console: Console, metrics: PipelineMetrics) -> None:
     cost_table.add_column("Metric", style="cyan")
     cost_table.add_column("Value", justify="right")
     cost_table.add_row(
-        "Prompt Tokens", f"{_safe_int(getattr(metrics, 'prompt_tokens', 0)):,}"
+        "Prompt Tokens",
+        f"{coerce_non_negative_int(getattr(metrics, 'prompt_tokens', 0)):,}",
     )
     cost_table.add_row(
-        "Completion Tokens", f"{_safe_int(getattr(metrics, 'completion_tokens', 0)):,}"
+        "Completion Tokens",
+        f"{coerce_non_negative_int(getattr(metrics, 'completion_tokens', 0)):,}",
     )
     cost_table.add_row(
-        "Total Tokens", f"{_safe_int(getattr(metrics, 'total_tokens', 0)):,}"
+        "Total Tokens",
+        f"{coerce_non_negative_int(getattr(metrics, 'total_tokens', 0)):,}",
     )
     cost_table.add_row(
-        "Estimated Cost (USD)", f"${_safe_float(getattr(metrics, 'cost_usd', 0.0)):.6f}"
+        "Estimated Cost (USD)",
+        "$"
+        + format(
+            coerce_non_negative_float(getattr(metrics, "cost_usd", 0.0)),
+            f".{CLI_COST_DECIMAL_PLACES}f",
+        ),
     )
     cost_table.add_row(
         "Transcript Time (s)",
-        f"{_safe_float(getattr(metrics, 'transcript_seconds', 0.0)):.2f}",
+        format(
+            coerce_non_negative_float(getattr(metrics, "transcript_seconds", 0.0)),
+            f".{CLI_SECONDS_DECIMAL_PLACES}f",
+        ),
     )
     cost_table.add_row(
         "Generation Time (s)",
-        f"{_safe_float(getattr(metrics, 'generation_seconds', 0.0)):.2f}",
+        format(
+            coerce_non_negative_float(getattr(metrics, "generation_seconds", 0.0)),
+            f".{CLI_SECONDS_DECIMAL_PLACES}f",
+        ),
     )
     console.print("\n")
     console.print(cost_table)

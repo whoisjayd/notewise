@@ -9,11 +9,11 @@ Pipeline = CorePipeline
 
 
 __all__ = [
-    "Pipeline",
     "CorePipeline",
+    "Pipeline",
     "PipelineSharedState",
-    "run_pipeline",
     "StudyMaterialGenerator",
     "clear_youtube_limiters",
     "dedupe_video_ids",
+    "run_pipeline",
 ]

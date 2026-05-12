@@ -154,7 +154,7 @@ def mock_pipeline(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_process_passes_timestamps_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_passes_timestamps_flag(mock_config_exists, mock_pipeline):
     mock_cls, _pipeline_instance = mock_pipeline
 
     result = runner.invoke(app, ["process", _VIDEO_URL, "--timestamps"])
@@ -175,7 +175,7 @@ def test_process_passes_chapter_directory_output_flag(
     assert mock_cls.call_args.kwargs["chapter_directory_output"] is True
 
 
-def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):
     mock_cls, _pipeline_instance = mock_pipeline
 
     result = runner.invoke(app, ["process", _VIDEO_URL, "--format", "pdf"])
@@ -184,7 +184,34 @@ def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):  
     assert mock_cls.call_args.kwargs["output_formats"] == ["pdf"]
 
 
-def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_short_flags_are_forwarded(mock_config_exists, mock_pipeline):
+    """Short process aliases should cover common power-user flows."""
+    mock_cls, _pipeline_instance = mock_pipeline
+
+    with patch("notewise.cli.app.PipelineDashboard") as mock_dashboard_cls:
+        result = runner.invoke(
+            app,
+            [
+                "process",
+                _VIDEO_URL,
+                "-r",
+                "html",
+                "-w",
+                "2.5",
+                "-f",
+                "-n",
+            ],
+        )
+
+    assert result.exit_code == 0
+    call_kwargs = mock_cls.call_args.kwargs
+    assert call_kwargs["output_formats"] == ["html"]
+    assert call_kwargs["throttle_seconds"] == 2.5
+    assert call_kwargs["force"] is True
+    mock_dashboard_cls.assert_not_called()
+
+
+def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipeline):
     mock_cls, _pipeline_instance = mock_pipeline
 
     result = runner.invoke(app, ["process", _VIDEO_URL, "--format", "md,html,pdf"])
@@ -193,7 +220,7 @@ def test_process_passes_multiple_output_formats(mock_config_exists, mock_pipelin
     assert mock_cls.call_args.kwargs["output_formats"] == ["md", "html", "pdf"]
 
 
-def test_process_verbose_enables_debug_file_logging(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_verbose_enables_debug_file_logging(mock_config_exists, mock_pipeline):
     """The verbose flag should request DEBUG diagnostics in the session log."""
 
     with patch("notewise.logging.configure_logging") as mock_configure_logging:
@@ -280,7 +307,7 @@ def test_version():
     assert "version" in result.stdout
 
 
-def test_config_path_exists(mock_config_exists):  # noqa: ARG001
+def test_config_path_exists(mock_config_exists):
     """Test config-path command when config exists."""
     with patch("pathlib.Path.exists", return_value=True):
         result = runner.invoke(app, ["config-path"])
@@ -403,7 +430,7 @@ def test_cache_show_shortcut_requires_video_id():
 # ---------------------------------------------------------------------------
 
 
-def test_process_url_success(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_url_success(mock_config_exists, mock_pipeline):
     """Test processing a single video URL succeeds."""
     _, pipeline_instance = mock_pipeline
     result = runner.invoke(app, ["process", _VIDEO_URL])
@@ -412,7 +439,7 @@ def test_process_url_success(mock_config_exists, mock_pipeline):  # noqa: ARG001
     pipeline_instance.run.assert_awaited_once()
 
 
-def test_process_bare_video_id_success(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_bare_video_id_success(mock_config_exists, mock_pipeline):
     """Bare video IDs should work anywhere a single video URL works."""
     _, pipeline_instance = mock_pipeline
 
@@ -422,7 +449,7 @@ def test_process_bare_video_id_success(mock_config_exists, mock_pipeline):  # no
     pipeline_instance.run.assert_awaited_once()
 
 
-def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
+def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):
     """Test processing a batch file calls pipeline once per URL."""
     _, pipeline_instance = mock_pipeline
     batch_file = tmp_path / "urls.txt"
@@ -479,7 +506,7 @@ def test_info_invalid_bare_id_shows_clean_error():
 
 
 def test_process_batch_file_success_prints_summary(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     mock_pipeline,
     tmp_path,
 ):
@@ -498,7 +525,7 @@ def test_process_batch_file_success_prints_summary(
 
 @pytest.mark.parametrize("encoding", ["utf-8-sig", "utf-16"])
 def test_process_batch_file_reads_common_windows_encodings(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     mock_pipeline,
     tmp_path,
     encoding,
@@ -524,7 +551,7 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
     first_started = None
     second_started = None
 
-    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+    async def _run(video_ids, on_event=None):
         nonlocal first_started, second_started
         if first_started is None or second_started is None:
             first_started = asyncio.Event()
@@ -547,7 +574,7 @@ def test_process_batch_file_runs_items_concurrently(tmp_path):
             metrics=PipelineMetrics(),
         )
 
-    def _parse(url):  # noqa: ANN001
+    def _parse(url):
         return _make_parsed_video(url.rsplit("=", 1)[-1])
 
     pipeline_instance = MagicMock()
@@ -594,7 +621,7 @@ def test_process_batch_preflight_feeds_workers_before_all_sources_finish(tmp_pat
     slow_started = None
     allow_slow_finish = None
 
-    async def _prepare_source(_context, batch_url):  # noqa: ANN001
+    async def _prepare_source(_context, batch_url):
         nonlocal slow_started, allow_slow_finish
         if slow_started is None or allow_slow_finish is None:
             slow_started = asyncio.Event()
@@ -616,7 +643,7 @@ def test_process_batch_preflight_feeds_workers_before_all_sources_finish(tmp_pat
         await asyncio.wait_for(slow_started.wait(), timeout=0.2)
         return prepared
 
-    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+    async def _run(video_ids, on_event=None):
         assert allow_slow_finish is not None
         allow_slow_finish.set()
         return PipelineResult(
@@ -666,12 +693,12 @@ def test_process_batch_file_expands_playlist_into_shared_video_jobs(tmp_path):
         )
     )
 
-    def _parse(url):  # noqa: ANN001
+    def _parse(url):
         if "playlist" in url:
             return _make_parsed_playlist("PL_BATCH")
         return _make_parsed_video(url.rsplit("=", 1)[-1])
 
-    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+    async def _run(video_ids, on_event=None):
         return PipelineResult(
             success_count=1,
             failure_count=0,
@@ -736,12 +763,12 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
         )
     )
 
-    def _parse(url):  # noqa: ANN001
+    def _parse(url):
         if "playlist" in url:
             return _make_parsed_playlist("PL_PRIVATE")
         return _make_parsed_video(url.rsplit("=", 1)[-1])
 
-    async def _run(video_ids, on_event=None):  # noqa: ANN001, ARG001
+    async def _run(video_ids, on_event=None):
         video_id = video_ids[0]
         if video_id == "private123":
             return PipelineResult(
@@ -810,7 +837,7 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
     mock_playlist_info.assert_not_called()
 
 
-def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
+def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path):
     """Test processing an empty batch file prints a warning."""
     _, pipeline_instance = mock_pipeline
     batch_file = tmp_path / "empty.txt"
@@ -823,7 +850,7 @@ def test_process_batch_file_empty(mock_config_exists, mock_pipeline, tmp_path): 
     pipeline_instance.run.assert_not_awaited()
 
 
-def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
+def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path):
     """Test error reading batch file prints an error message."""
     batch_file = tmp_path / "restricted.txt"
     batch_file.touch()
@@ -835,7 +862,7 @@ def test_process_batch_file_error(mock_config_exists, mock_pipeline, tmp_path): 
     assert "Could not read the batch file" in result.stdout
 
 
-def test_process_with_temperature_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_with_temperature_flag(mock_config_exists, mock_pipeline):
     """Test --temperature flag is forwarded to CorePipeline."""
     mock_cls, pipeline_instance = mock_pipeline
     result = runner.invoke(app, ["process", _VIDEO_URL, "--temperature", "0.5"])
@@ -846,7 +873,7 @@ def test_process_with_temperature_flag(mock_config_exists, mock_pipeline):  # no
     pipeline_instance.run.assert_awaited_once()
 
 
-def test_process_with_max_tokens_flag(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_with_max_tokens_flag(mock_config_exists, mock_pipeline):
     """Test --max-tokens flag is forwarded to CorePipeline."""
     mock_cls, pipeline_instance = mock_pipeline
     result = runner.invoke(app, ["process", _VIDEO_URL, "--max-tokens", "2000"])
@@ -857,7 +884,7 @@ def test_process_with_max_tokens_flag(mock_config_exists, mock_pipeline):  # noq
     pipeline_instance.run.assert_awaited_once()
 
 
-def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_with_temperature_and_max_tokens(mock_config_exists, mock_pipeline):
     """Test both --temperature and --max-tokens flags together."""
     mock_cls, pipeline_instance = mock_pipeline
     result = runner.invoke(
@@ -917,7 +944,7 @@ def test_process_missing_config_reports_setup_instructions(monkeypatch, tmp_path
     mock_setup.assert_not_called()
 
 
-def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):
     """Test KeyboardInterrupt is caught and exits with code 1."""
     _, pipeline_instance = mock_pipeline
     pipeline_instance.run.side_effect = KeyboardInterrupt()
@@ -929,7 +956,7 @@ def test_process_keyboard_interrupt(mock_config_exists, mock_pipeline):  # noqa:
     assert "interrupted before it finished" in result.stdout
 
 
-def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: ARG001
+def test_process_general_exception(mock_config_exists, mock_pipeline):
     """Test unhandled exceptions are caught and exit with code 1."""
     _, pipeline_instance = mock_pipeline
     pipeline_instance.run.side_effect = Exception("Boom")
@@ -942,7 +969,7 @@ def test_process_general_exception(mock_config_exists, mock_pipeline):  # noqa: 
     assert "Current log:" in result.stdout
 
 
-def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):  # noqa: ARG001
+def test_process_invalid_url(mock_config_exists, mock_pipeline, tmp_path):
     """Invalid URLs should fail the command for shell automation."""
     with patch(
         "notewise.cli.app.parse_youtube_url",
@@ -1012,7 +1039,7 @@ def test_process_missing_explicit_relative_batch_file_reports_file_error():
 
 
 def test_process_no_ui_flag_runs_without_dashboard(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     mock_pipeline,
 ):
     """--no-ui skips PipelineDashboard and still runs the pipeline."""
@@ -1026,7 +1053,7 @@ def test_process_no_ui_flag_runs_without_dashboard(
 
 
 def test_process_no_ui_prints_done_summary(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """--no-ui prints a plain 'Done: N/N succeeded.' summary line."""
@@ -1077,7 +1104,7 @@ def test_process_no_ui_prints_done_summary(
 
 
 def test_process_no_ui_cost_summary_handles_string_metrics(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Cost summary should tolerate string metrics without crashing."""
@@ -1130,7 +1157,7 @@ def test_process_no_ui_cost_summary_handles_string_metrics(
 
 
 def test_process_ui_event_bridge_and_cost_summary_coercion(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """UI path should exercise worker slot updates and robust metric coercion."""
@@ -1143,7 +1170,7 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
         transcript_seconds = "bad-float"
         generation_seconds = True
 
-    async def _run_with_events(_video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_events(_video_ids, on_event=None):
         if on_event:
             on_event(
                 PipelineEvent(
@@ -1239,12 +1266,12 @@ def test_process_ui_event_bridge_and_cost_summary_coercion(
 
 
 def test_process_ui_shows_detailed_pipeline_states(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Rich UI should show detailed internal pipeline phases."""
 
-    async def _run_with_generation_events(_video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_generation_events(_video_ids, on_event=None):
         if on_event:
             on_event(
                 PipelineEvent(
@@ -1393,17 +1420,20 @@ def test_process_ui_shows_detailed_pipeline_states(
     ]
     rendered_statuses = "\n".join(worker_statuses)
     rendered_chapter_statuses = "\n".join(chapter_statuses)
-    assert "Transcript Ready" in rendered_statuses
-    assert "Chunk 1/3" in rendered_statuses
-    assert "Finalizing 3 note parts" in rendered_statuses
-    assert "Ch 2/5" in rendered_statuses
-    assert "Ch 2/5, Part 1/2" in rendered_chapter_statuses
-    assert "Ch 2/5, Finalizing 2 parts" in rendered_chapter_statuses
+    assert "Transcript ready" in rendered_statuses
+    assert "chunk 1/3" in rendered_statuses
+    assert "Finalizing" in rendered_statuses
+    assert "3 note parts" in rendered_statuses
+    assert "2/5" in rendered_statuses
+    assert "2/5, part 1/2" in rendered_chapter_statuses
+    assert "Finalizing chapter" in rendered_chapter_statuses
+    assert "2 parts" in rendered_chapter_statuses
     assert "Quiz" in rendered_statuses
-    assert "Quiz Part 1/2" in rendered_statuses
-    assert "Combining 2 quiz parts" in rendered_statuses
-    assert "Quiz Ready" in rendered_statuses
-    assert "Generated" in rendered_statuses
+    assert "part 1/2" in rendered_statuses
+    assert "Finalizing quiz" in rendered_statuses
+    assert "2 parts" in rendered_statuses
+    assert "Quiz ready" in rendered_statuses
+    assert "Notes ready" in rendered_statuses
 
 
 def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
@@ -1413,7 +1443,7 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
 
     malicious_title = "[red]Video One[/red]"
 
-    async def _run_with_chapter_events(video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_chapter_events(video_ids, on_event=None):
         if on_event:
             on_event(
                 PipelineEvent(
@@ -1495,14 +1525,14 @@ def test_process_batch_file_ui_shows_chapter_worker_states(tmp_path):
         call.args[1] for call in dashboard_instance.update_chapter_worker.call_args_list
     ]
     rendered_chapter_statuses = "\n".join(chapter_statuses)
-    assert "Ch 2/5" in rendered_chapter_statuses
-    assert "Part 1/2" in rendered_chapter_statuses
+    assert "2/5" in rendered_chapter_statuses
+    assert "part 1/2" in rendered_chapter_statuses
     assert "\\[red]Video One\\[/red]" in rendered_chapter_statuses
     assert "[red]Video One[/red]" not in rendered_chapter_statuses
 
 
 def test_process_no_ui_failure_exits_nonzero(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Headless runs should return a failing exit code when any video fails."""
@@ -1554,7 +1584,7 @@ def test_process_batch_file_no_ui_emits_headless_progress(tmp_path):
     batch_file = tmp_path / "urls.txt"
     batch_file.write_text(_VIDEO_URL)
 
-    async def _run_with_events(video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_events(video_ids, on_event=None):
         if on_event is not None:
             on_event(
                 PipelineEvent(
@@ -1618,7 +1648,7 @@ def test_process_batch_file_no_ui_emits_headless_progress(tmp_path):
 def test_process_no_ui_shows_pdf_fallback_reason(tmp_path):
     """Headless mode should surface PDF fallback reasons on generation completion."""
 
-    async def _run_with_events(video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_events(video_ids, on_event=None):
         if on_event is not None:
             on_event(
                 PipelineEvent(
@@ -1815,11 +1845,11 @@ def test_process_playlist_failure_does_not_create_output_dir(tmp_path):
 
 
 def test_process_quiz_flag_passed_to_pipeline(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     mock_pipeline,
 ):
     """--quiz is forwarded to CorePipeline as quiz=True."""
-    mock_cls, pipeline_instance = mock_pipeline
+    mock_cls, _pipeline_instance = mock_pipeline
     result = runner.invoke(app, ["process", _VIDEO_URL, "--quiz"])
 
     assert result.exit_code == 0
@@ -1827,21 +1857,19 @@ def test_process_quiz_flag_passed_to_pipeline(
     assert call_kwargs.get("quiz") is True
 
 
-def test_process_use_combine_chunk_flag_passed_to_pipeline(
-    mock_config_exists,  # noqa: ARG001
+def test_process_use_combine_chunk_flag_is_removed(
+    mock_config_exists,
     mock_pipeline,
 ):
-    """--use-combine-chunk is forwarded to CorePipeline."""
-    mock_cls, _pipeline_instance = mock_pipeline
+    """--use-combine-chunk should no longer be accepted."""
     result = runner.invoke(app, ["process", _VIDEO_URL, "--use-combine-chunk"])
 
-    assert result.exit_code == 0
-    call_kwargs = mock_cls.call_args.kwargs
-    assert call_kwargs.get("use_combine_chunk") is True
+    assert result.exit_code != 0
+    assert "No such option" in result.output
 
 
 def test_process_throttle_flag_passed_to_pipeline(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     mock_pipeline,
 ):
     """--throttle is forwarded to CorePipeline as throttle_seconds."""
@@ -1875,7 +1903,7 @@ def test_process_rejects_removed_youtube_auth_flags(args):
 
 
 def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Skipped single-video runs should clear the live dashboard before summary."""
@@ -1888,7 +1916,7 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
             *_args,
             transient=False,
             **_kwargs,
-        ):  # noqa: ANN002, ANN003
+        ):
             self.transient = transient
             self.stopped = False
             self.__class__.instances.append(self)
@@ -1896,13 +1924,13 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+        def __exit__(self, exc_type, exc, tb):
             return False
 
         def stop(self) -> None:
             self.stopped = True
 
-    async def _run_with_skip(video_ids, on_event=None):  # noqa: ARG001
+    async def _run_with_skip(video_ids, on_event=None):
         if on_event is not None:
             on_event(PipelineEvent(event_type=EventType.PIPELINE_START, video_id=""))
             on_event(
@@ -1938,7 +1966,7 @@ def test_process_rich_ui_formats_skipped_videos_without_markup_leak(
         skipped_count=0,
     )
 
-    def _record_skipped(title):  # noqa: ANN001
+    def _record_skipped(title):
         dashboard_instance.skipped_count += 1
         dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
@@ -1985,20 +2013,20 @@ def test_process_playlist_all_skipped_clears_live_dashboard(tmp_path):
             *_args,
             transient=False,
             **_kwargs,
-        ):  # noqa: ANN002, ANN003
+        ):
             self.transient = transient
             self.__class__.instances.append(self)
 
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+        def __exit__(self, exc_type, exc, tb):
             return False
 
         def stop(self) -> None:
             return None
 
-    async def _run_playlist_skip(video_ids, on_event=None):  # noqa: ANN001
+    async def _run_playlist_skip(video_ids, on_event=None):
         if on_event is not None:
             for video_id, title in zip(
                 video_ids,
@@ -2037,7 +2065,7 @@ def test_process_playlist_all_skipped_clears_live_dashboard(tmp_path):
         skipped_count=0,
     )
 
-    def _record_playlist_skipped(title):  # noqa: ANN001
+    def _record_playlist_skipped(title):
         dashboard_instance.skipped_count += 1
         dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
@@ -2093,14 +2121,14 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
             *_args,
             transient=False,
             **_kwargs,
-        ):  # noqa: ANN002, ANN003
+        ):
             self.transient = transient
             self.__class__.instances.append(self)
 
         def __enter__(self):
             return self
 
-        def __exit__(self, exc_type, exc, tb):  # noqa: ANN001
+        def __exit__(self, exc_type, exc, tb):
             return False
 
         def stop(self) -> None:
@@ -2109,7 +2137,7 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
     batch_file = tmp_path / "urls.txt"
     batch_file.write_text(_VIDEO_URL, encoding="utf-8")
 
-    async def _run_with_skip(video_ids, on_event=None):  # noqa: ANN001
+    async def _run_with_skip(video_ids, on_event=None):
         if on_event is not None:
             on_event(
                 PipelineEvent(
@@ -2143,7 +2171,7 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
         skipped_count=0,
     )
 
-    def _record_skipped(title):  # noqa: ANN001
+    def _record_skipped(title):
         dashboard_instance.skipped_count += 1
         dashboard_instance.recent_completions.append(f"{title} (skipped)")
 
@@ -2178,7 +2206,7 @@ def test_process_batch_file_all_skipped_clears_live_dashboard(tmp_path):
 
 
 def test_process_playlist_deduplicates_video_ids_before_pipeline(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Playlist duplicates should be removed before dashboard sizing and run."""
@@ -2233,7 +2261,7 @@ def test_process_playlist_deduplicates_video_ids_before_pipeline(
 
 
 def test_process_private_playlist_shows_clean_error(
-    mock_config_exists,  # noqa: ARG001
+    mock_config_exists,
     tmp_path,
 ):
     """Private playlists should fail cleanly instead of falling into Fatal Error."""

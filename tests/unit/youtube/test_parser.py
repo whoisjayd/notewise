@@ -66,19 +66,9 @@ class TestPlaylistIDExtraction:
         url = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
         assert extract_playlist_id(url) is None
 
-    def test_extract_playlist_id_handles_parse_errors_gracefully(self, monkeypatch):
-        """Test that extract_playlist_id handles parse errors gracefully."""
-
-        def _boom(_: str):
-            raise RuntimeError("bad")
-
-        monkeypatch.setattr(
-            "notewise.youtube.parser._parse_supported_youtube_url",
-            _boom,
-        )
-        assert (
-            extract_playlist_id("https://www.youtube.com/playlist?list=PL123") is None
-        )
+    def test_extract_playlist_id_rejects_unsupported_urls(self):
+        """Unsupported URLs should be a normal no-match, not an exception."""
+        assert extract_playlist_id("https://example.com/playlist?list=PL123") is None
 
 
 class TestURLParsing:

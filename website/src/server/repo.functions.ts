@@ -16,6 +16,24 @@ const SUCCESS_TTL = 1000 * 60 * 30; // 30 min
 const FAILURE_TTL = 1000 * 60; // 1 min
 const FETCH_TIMEOUT_MS = 5000;
 
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" ? (value as Record<string, unknown>) : null;
+}
+
+async function readSettledJson(
+  result: PromiseSettledResult<Response>,
+): Promise<Record<string, unknown> | null> {
+  if (result.status !== "fulfilled" || !result.value.ok) {
+    return null;
+  }
+
+  try {
+    return asRecord(await result.value.json());
+  } catch {
+    return null;
+  }
+}
+
 async function fetchWithTimeout(
   url: string,
   options: RequestInit = {},
@@ -53,7 +71,7 @@ export const getRepoStats = createServerFn({ method: "GET" }).handler(
           "User-Agent": "notewise-landing",
           Accept: "application/vnd.github+json",
         };
-        const [ghRes, releaseRes, pypiRes] = await Promise.all([
+        const [ghResult, releaseResult, pypiResult] = await Promise.allSettled([
           fetchWithTimeout("https://api.github.com/repos/whoisjayd/notewise", {
             headers: ghHeaders,
           }),
@@ -65,24 +83,45 @@ export const getRepoStats = createServerFn({ method: "GET" }).handler(
           }),
         ]);
 
-        const gh = ghRes.ok ? await ghRes.json() : null;
-        const release = releaseRes.ok ? await releaseRes.json() : null;
-        const pypi = pypiRes.ok ? await pypiRes.json() : null;
+        const [gh, release, pypi] = await Promise.all([
+          readSettledJson(ghResult),
+          readSettledJson(releaseResult),
+          readSettledJson(pypiResult),
+        ]);
 
-        const releaseVersion = (release?.tag_name as string | undefined)?.replace(/^v/, "");
-        const version = releaseVersion ?? pypi?.info?.version ?? fallback.version;
-        const pypiUploadedAt = pypi?.releases?.[version]?.[0]?.upload_time_iso_8601;
+        const releaseTagName = release?.tag_name;
+        const releaseVersion =
+          typeof releaseTagName === "string" ? releaseTagName.replace(/^v/, "") : undefined;
+        const pypiInfo = asRecord(pypi?.info);
+        const pypiVersion = typeof pypiInfo?.version === "string" ? pypiInfo.version : undefined;
+        const version = releaseVersion ?? pypiVersion ?? fallback.version;
+        const pypiReleases = asRecord(pypi?.releases);
+        const pypiReleasesForVersion = pypiReleases?.[version];
+        const pypiReleaseFiles = Array.isArray(pypiReleasesForVersion)
+          ? pypiReleasesForVersion
+          : [];
+        const pypiReleaseFile = asRecord(pypiReleaseFiles[0]);
+        const pypiUploadedAt =
+          typeof pypiReleaseFile?.upload_time_iso_8601 === "string"
+            ? pypiReleaseFile.upload_time_iso_8601
+            : undefined;
+        const ghLicense = asRecord(gh?.license);
+        const ghLicenseId = ghLicense?.spdx_id;
         const resolvedLicense =
-          typeof gh?.license?.spdx_id === "string" && gh.license.spdx_id !== "NOASSERTION"
-            ? gh.license.spdx_id
+          typeof ghLicenseId === "string" && ghLicenseId !== "NOASSERTION"
+            ? ghLicenseId
             : fallback.license;
+        const stars = typeof gh?.stargazers_count === "number" ? gh.stargazers_count : 0;
+        const forks = typeof gh?.forks_count === "number" ? gh.forks_count : 0;
+        const releasePublishedAt =
+          typeof release?.published_at === "string" ? release.published_at : undefined;
 
         const data: RepoStats = {
           version,
-          stars: gh?.stargazers_count ?? 0,
-          forks: gh?.forks_count ?? 0,
+          stars,
+          forks,
           // Release date (not last edited / pushed_at)
-          pushedAt: release?.published_at ?? pypiUploadedAt ?? fallback.pushedAt,
+          pushedAt: releasePublishedAt ?? pypiUploadedAt ?? fallback.pushedAt,
           license: resolvedLicense,
           fetchedAt: new Date().toISOString(),
         };

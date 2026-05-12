@@ -27,21 +27,28 @@ from notewise._constants import (
     DOCX_SECTION_MARGIN_INCHES,
     DOCX_TITLE_FONT_SIZE_PT,
     HTML_LANGUAGE_ALIASES,
+    LANGUAGE_CODE_PATTERN,
+    MARKDOWN_FENCED_CODE_START_PATTERN,
+    MARKDOWN_INDENTED_CODE_PREFIXES,
+    MARKDOWN_LINE_SEPARATOR,
+    MARKDOWN_LIST_ITEM_PATTERN,
     MARKDOWN_RENDER_EXTENSIONS,
     NOTES_OUTPUT_EXTENSIONS,
     OUTPUT_FORMAT_SEPARATOR,
     PDF_UNSUPPORTED_UNICODE_ERROR,
+    RAW_HTML_TAG_PATTERN,
+    RENDERED_CODE_BLOCK_PATTERN,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 from notewise.errors import ValidationError
 
 
 DocumentRenderer = Callable[[str, str, Path, str | None], None]
-_LIST_ITEM_RE = re.compile(r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)")
-_CODE_BLOCK_RE = re.compile(
-    r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>", re.DOTALL
-)
-_LANGUAGE_CODE_RE = re.compile(r"^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{2,8})*$")
+_LIST_ITEM_RE = re.compile(MARKDOWN_LIST_ITEM_PATTERN)
+_CODE_BLOCK_RE = re.compile(RENDERED_CODE_BLOCK_PATTERN, re.DOTALL)
+_FENCED_CODE_START_RE = re.compile(MARKDOWN_FENCED_CODE_START_PATTERN)
+_LANGUAGE_CODE_RE = re.compile(LANGUAGE_CODE_PATTERN)
+_RAW_HTML_TAG_RE = re.compile(RAW_HTML_TAG_PATTERN)
 _PDF_CHARACTER_TRANSLATIONS = str.maketrans(
     {
         "\u2018": "'",
@@ -172,17 +179,74 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
 def _markdown_to_html(markdown_text: str) -> str:
     import markdown as markdown_lib
 
+    safe_markdown = _escape_raw_html(_normalize_markdown_blocks(markdown_text))
     rendered_html = markdown_lib.markdown(
-        _normalize_markdown_blocks(markdown_text),
+        safe_markdown,
         extensions=list(MARKDOWN_RENDER_EXTENSIONS),
     )
     return _normalize_rendered_html(rendered_html)
 
 
+def _escape_raw_html(markdown_text: str) -> str:
+    escaped_lines: list[str] = []
+    open_fence_token: str | None = None
+    multiline_html_open = False
+
+    for line in markdown_text.splitlines():
+        fence_match = _FENCED_CODE_START_RE.match(line)
+        if fence_match:
+            fence_token = fence_match.group("fence")
+            fence_info = fence_match.group("info").strip()
+            if open_fence_token is None:
+                open_fence_token = fence_token
+            elif (
+                not fence_info
+                and fence_token[0] == open_fence_token[0]
+                and len(fence_token) >= len(open_fence_token)
+            ):
+                open_fence_token = None
+            escaped_lines.append(line)
+            continue
+        if open_fence_token is not None or line.startswith(
+            MARKDOWN_INDENTED_CODE_PREFIXES
+        ):
+            escaped_lines.append(line)
+            continue
+
+        # Handle multiline HTML tags
+        if multiline_html_open:
+            escaped_lines.append(line)
+            if ">" in line:
+                multiline_html_open = False
+            continue
+
+        # Check if line starts an incomplete HTML tag
+        if _RAW_HTML_TAG_RE.search(line):
+            # Check if tag is complete on this line
+            tag_match = _RAW_HTML_TAG_RE.search(line)
+            if tag_match:
+                tag_text = tag_match.group(0)
+                # If tag doesn't end with >, it's multiline
+                if tag_text.count("<") > tag_text.count(">"):
+                    multiline_html_open = True
+                    escaped_lines.append(line)
+                    continue
+
+        escaped_lines.append(
+            _RAW_HTML_TAG_RE.sub(
+                lambda match: escape(match.group(0), quote=False),
+                line,
+            )
+        )
+
+    return MARKDOWN_LINE_SEPARATOR.join(escaped_lines)
+
+
 def _normalize_rendered_html(body_html: str) -> str:
     def _replace_code_block(match: re.Match[str]) -> str:
         code_html = match.group("code")
-        return f'<pre class="code-block"><code>{code_html}</code></pre>'
+        wrapped = f'<pre class="code-block"><code>{code_html}</code></pre>'
+        return wrapped
 
     return _CODE_BLOCK_RE.sub(_replace_code_block, body_html)
 

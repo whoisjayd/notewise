@@ -112,7 +112,7 @@ def test_print_run_summary_handles_failures_and_zero_total(monkeypatch) -> None:
 
 
 def test_print_failure_panel_without_intro_or_log(monkeypatch) -> None:
-    """Failure panels should still render when intro and log path are absent."""
+    """Failure panels should still render log status when a path is unavailable."""
     console = _console()
     monkeypatch.setattr(_formatters, "get_session_log_path", lambda: None)
 
@@ -120,7 +120,7 @@ def test_print_failure_panel_without_intro_or_log(monkeypatch) -> None:
 
     output = _text(console)
     assert "Oops" in output
-    assert "Current log:" not in output
+    assert "Current log: unavailable" in output
 
 
 def test_print_run_summary_success_path(monkeypatch) -> None:

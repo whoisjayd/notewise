@@ -18,7 +18,8 @@ jobs:
         with:
           script: |
             const pr = context.payload.pull_request;
-            if (!pr || pr.base.ref !== 'main' || pr.head.ref === 'dev') {
+            const sameRepo = pr?.head?.repo?.full_name === `${context.repo.owner}/${context.repo.repo}`;
+            if (!pr || pr.base.ref !== 'main' || (sameRepo && pr.head.ref === 'dev')) {
               core.info('No branch policy action required.');
               return;
             }
@@ -27,7 +28,7 @@ jobs:
               'Closing this PR because the base branch policy was not followed.',
               '',
               '- Normal contribution PRs must target `dev`.',
-              '- Only maintainer-managed release PRs may target `main`, and those must come from `dev`.',
+              '- Only maintainer-managed release PRs may target `main`, and those must come from this repository\'s `dev` branch.',
               '',
               'Please retarget this work to `dev` and reopen from the correct base branch.',
               'See `CONTRIBUTING.md` for the full contribution workflow.',

@@ -2,7 +2,7 @@
 name: notewise
 description: Source-truth guide for helping users install, configure, operate, troubleshoot, and develop NoteWise, the YouTube-to-notes CLI using LiteLLM providers.
 license: MIT
-compatibility: Python 3.10+. Works on Linux, macOS, Windows, and Docker.
+compatibility: Python 3.11+. Works on Linux, macOS, Windows, and Docker.
 metadata:
   author: whoisjayd
   version: "3.0"
@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.4.0`.
+Use this when answering questions about NoteWise `1.4.1`.
 
 Canonical public docs base: `https://notewise.click/docs`.
 
@@ -37,8 +37,8 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Defaults
 
-- Version: `1.4.0`
-- Python: `>=3.10`
+- Version: `1.4.1`
+- Python: `>=3.11`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output: `./output`
 - Output formats: `md`, `html`, `pdf`, `docx`; default `md`
@@ -52,7 +52,7 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `stats`, `history`, `info`, `doctor`, `edit-config`, `auth login`, `cache`, `logs`.
 
-`process` flags: `--model/-m`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--use-combine-chunk`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
+`process` flags: `--model/-m`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
 
 ## Config
 

@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from notewise.cli._batch_runner import run_batch_file
 from notewise.cli._context import CliProcessContext
 from notewise.cli._single_runner import run_single_url
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 _BATCH_FILE_ENCODINGS = ("utf-8", "utf-8-sig", "utf-16")

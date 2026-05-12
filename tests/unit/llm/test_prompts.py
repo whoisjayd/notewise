@@ -75,6 +75,17 @@ def test_representative_study_prompt_full_render_is_stable():
     )
 
 
+def test_representative_stitch_prompt_full_render_is_stable():
+    """Stitch prompt renders should stay byte-for-byte stable."""
+    assert study_notes.get_stitch_prompt("Alpha notes", "Beta notes") == (
+        study_notes.STITCH_CHUNKS_PROMPT.format(
+            previous_chunk_notes="Alpha notes",
+            next_chunk_notes="Beta notes",
+            target_language="English",
+        )
+    )
+
+
 def test_representative_chapter_prompt_full_render_is_stable():
     """Chapter prompt renders should stay byte-for-byte stable."""
     assert chapter_notes.get_chapter_prompt("Intro", "Beta transcript") == (

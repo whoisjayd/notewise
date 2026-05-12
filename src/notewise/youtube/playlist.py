@@ -79,7 +79,7 @@ async def extract_playlist_videos(
     logger.error(
         f"Failed to extract playlist videos after {max_retries} attempts: {last_error}"
     )
-    raise PlaylistError(f"Could not access playlist {playlist_id}: {str(last_error)}")
+    raise PlaylistError(f"Could not access playlist {playlist_id}: {last_error!s}")
 
 
 async def _extract_async(

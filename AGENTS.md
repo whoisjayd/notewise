@@ -13,7 +13,7 @@ The repository also includes the public website under `website/` and docs source
 - **Entry point:** `notewise/__main__.py` → `main()` → Typer app in `cli/app.py`
 - **Core pipeline:** `pipeline/core.py` → `CorePipeline`
 - **Version:** `src/notewise/__init__.py` (`__version__`)
-- **Python:** 3.10+ (no walrus operators in type annotations, `match` is okay)
+- **Python:** 3.11+ (`match` is okay)
 
 ---
 

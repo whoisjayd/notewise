@@ -1,3 +1,4 @@
+import { DOCS_URL, GITHUB_URL, PYPI_URL } from "@/lib/siteMeta";
 import { FineIcon } from "@/ui/FineIcon";
 import type { RepoStats } from "@/server/repo.functions";
 
@@ -37,20 +38,16 @@ export function Footer({ stats }: { stats: RepoStats }) {
           </div>
 
           <FooterCol title="Project">
-            <FooterLink href="https://github.com/whoisjayd/notewise" label="GitHub" external />
-            <FooterLink href="https://pypi.org/project/notewise/" label="PyPI" external />
+            <FooterLink href={GITHUB_URL} label="GitHub" external />
+            <FooterLink href={PYPI_URL} label="PyPI" external />
             <FooterLink href="https://ghcr.io/whoisjayd/notewise" label="Docker image" external />
           </FooterCol>
 
           <FooterCol title="Read">
-            <FooterLink href="https://notewise.click/docs" label="Docs" external />
+            <FooterLink href={DOCS_URL} label="Docs" external />
+            <FooterLink href={`${GITHUB_URL}#-quick-start`} label="Quick start" external />
             <FooterLink
-              href="https://github.com/whoisjayd/notewise#-quick-start"
-              label="Quick start"
-              external
-            />
-            <FooterLink
-              href="https://github.com/whoisjayd/notewise/blob/main/CONTRIBUTING.md"
+              href={`${GITHUB_URL}/blob/main/CONTRIBUTING.md`}
               label="Contributing"
               external
             />
@@ -79,7 +76,7 @@ export function Footer({ stats }: { stats: RepoStats }) {
             Made with care ·{" "}
             <a
               className="underline-ink"
-              href="https://github.com/whoisjayd/notewise"
+              href={GITHUB_URL}
               target="_blank"
               rel="noopener noreferrer"
             >

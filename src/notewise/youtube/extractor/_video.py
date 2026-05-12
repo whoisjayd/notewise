@@ -11,10 +11,28 @@ from notewise.youtube._constants import (
     YOUTUBE_CHANNEL_URL,
     YOUTUBE_WATCH_URL,
 )
+from notewise.youtube.extractor._helpers import (
+    _availability,
+    _best_thumbnail,
+    _date_to_yyyymmdd,
+    _extract_video_id,
+    _find_key,
+    _get_text,
+    _iso_to_unix,
+    _parse_duration,
+    _to_int,
+    _with_fmt_json3,
+)
+
+
+SubtitleMaps = tuple[
+    dict[str, list[dict[str, Any]]],
+    dict[str, list[dict[str, Any]]],
+]
 
 
 def _extract_video(client: Any, target: str) -> dict[str, Any]:
-    video_id = client._extract_video_id(target)
+    video_id = _extract_video_id(target)
     webpage_url = YOUTUBE_WATCH_URL.format(video_id=video_id)
     html = client._fetch_text(webpage_url)
     ytcfg = client._extract_ytcfg(html) or {}
@@ -35,11 +53,9 @@ def _extract_video(client: Any, target: str) -> dict[str, Any]:
                 "playerCaptionsTracklistRenderer"
             ) or {}
             subtitles, automatic = client._build_subtitles(api_captions)
-    duration = client._to_int(details.get("lengthSeconds"))
+    duration = _to_int(details.get("lengthSeconds"))
     description = (
-        details.get("shortDescription")
-        or client._get_text(micro.get("description"))
-        or ""
+        details.get("shortDescription") or _get_text(micro.get("description")) or ""
     )
 
     chapters = client._extract_chapters(
@@ -51,10 +67,10 @@ def _extract_video(client: Any, target: str) -> dict[str, Any]:
         "title": details.get("title") or "",
         "description": description,
         "duration": duration,
-        "upload_date": client._date_to_yyyymmdd(micro.get("uploadDate")),
-        "timestamp": client._iso_to_unix(micro.get("uploadDate")),
-        "release_date": client._date_to_yyyymmdd(micro.get("publishDate")),
-        "view_count": client._to_int(details.get("viewCount")),
+        "upload_date": _date_to_yyyymmdd(micro.get("uploadDate")),
+        "timestamp": _iso_to_unix(micro.get("uploadDate")),
+        "release_date": _date_to_yyyymmdd(micro.get("publishDate")),
+        "view_count": _to_int(details.get("viewCount")),
         "like_count": None,
         "comment_count": None,
         "uploader": details.get("author"),
@@ -67,16 +83,14 @@ def _extract_video(client: Any, target: str) -> dict[str, Any]:
             if details.get("channelId")
             else None
         ),
-        "availability": client._availability(player.get("playabilityStatus") or {}),
+        "availability": _availability(player.get("playabilityStatus") or {}),
         "age_limit": 0,
         "is_live": bool(details.get("isLive")),
         "live_status": "is_live" if details.get("isLive") else "not_live",
         "language": "en",
         "tags": details.get("keywords") or [],
         "categories": [micro.get("category")] if micro.get("category") else [],
-        "thumbnail": client._best_thumbnail(
-            details.get("thumbnail", {}).get("thumbnails")
-        ),
+        "thumbnail": _best_thumbnail(details.get("thumbnail", {}).get("thumbnails")),
         "thumbnails": details.get("thumbnail", {}).get("thumbnails") or [],
         "webpage_url": webpage_url,
         "chapters": chapters,
@@ -88,9 +102,8 @@ def _extract_video(client: Any, target: str) -> dict[str, Any]:
 
 
 def _build_subtitles(
-    client: Any,
     captions: dict[str, Any],
-) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
+) -> SubtitleMaps:
     subs: dict[str, list[dict[str, Any]]] = {}
     autos: dict[str, list[dict[str, Any]]] = {}
     for track in captions.get("captionTracks", []):
@@ -100,11 +113,11 @@ def _build_subtitles(
         base = track.get("baseUrl")
         if not lang or not base:
             continue
-        url = client._with_fmt_json3(base)
+        url = _with_fmt_json3(base)
         item = {
             "ext": "json3",
             "url": url,
-            "name": client._get_text(track.get("name")) or lang,
+            "name": _get_text(track.get("name")) or lang,
         }
         if track.get("kind") == "asr":
             autos.setdefault(lang, []).append(item)
@@ -114,44 +127,38 @@ def _build_subtitles(
 
 
 def _extract_chapters(
-    client: Any,
     data: dict[str, Any] | None,
     duration: int | None,
 ) -> list[dict[str, Any]]:
     if not data:
         return []
     chapters: list[tuple[float, str]] = []
-    for obj in client._find_key(data, "chapterRenderer"):
+    for obj in _find_key(data, "chapterRenderer"):
         ch = obj["chapterRenderer"]
         start_ms = ch.get("timeRangeStartMillis")
         if start_ms is None:
             continue
         chapters.append(
-            (float(start_ms) / 1000.0, client._get_text(ch.get("title")) or "Chapter")
+            (float(start_ms) / 1000.0, _get_text(ch.get("title")) or "Chapter")
         )
-    for obj in client._find_key(data, "macroMarkersListItemRenderer"):
+    for obj in _find_key(data, "macroMarkersListItemRenderer"):
         ch = obj["macroMarkersListItemRenderer"]
-        parsed_start = client._parse_duration(
-            client._get_text(ch.get("timeDescription"))
-        )
+        parsed_start = _parse_duration(_get_text(ch.get("timeDescription")))
         if parsed_start is None:
             continue
-        chapters.append(
-            (float(parsed_start), client._get_text(ch.get("title")) or "Chapter")
-        )
-    unique = sorted({s: t for s, t in chapters}.items(), key=lambda x: x[0])
+        chapters.append((float(parsed_start), _get_text(ch.get("title")) or "Chapter"))
+    unique = sorted(dict(chapters).items(), key=lambda x: x[0])
     if len(unique) < 2:
         return []
-    total = float(duration or int(unique[-1][0]))
+    final_end = _final_chapter_end(duration, unique[-1][0])
     out: list[dict[str, Any]] = []
     for i, (start, title) in enumerate(unique):
-        end = total if i + 1 >= len(unique) else float(unique[i + 1][0])
+        end = final_end if i + 1 >= len(unique) else float(unique[i + 1][0])
         out.append({"start_time": start, "end_time": end, "title": title})
     return out
 
 
 def _extract_description_chapters(
-    client: Any,
     description: str,
     duration: int | None,
 ) -> list[dict[str, Any]]:
@@ -161,30 +168,39 @@ def _extract_description_chapters(
         if not m:
             continue
         ts = m.group(0)
-        sec = client._parse_duration(ts)
+        sec = _parse_duration(ts)
         if sec is None:
             continue
         title = line.replace(ts, "", 1).strip(" -\t")
         found.append((float(sec), title or "Chapter"))
-    found = sorted({s: t for s, t in found}.items(), key=lambda x: x[0])
+    found = sorted(dict(found).items(), key=lambda x: x[0])
     if len(found) < 2:
         return []
-    total = float(duration or int(found[-1][0]))
-    out = []
+    final_end = _final_chapter_end(duration, found[-1][0])
+    out: list[dict[str, Any]] = []
     for i, (start, title) in enumerate(found):
-        end = total if i + 1 >= len(found) else float(found[i + 1][0])
+        end = final_end if i + 1 >= len(found) else float(found[i + 1][0])
         out.append({"start_time": start, "end_time": end, "title": title})
     return out
 
 
-def _extract_initial_data(_client: Any, html: str) -> dict[str, Any] | None:
+def _final_chapter_end(
+    duration: int | None,
+    final_start: float,
+) -> float | None:
+    if duration is None or duration <= final_start:
+        return None
+    return float(duration)
+
+
+def _extract_initial_data(html: str) -> dict[str, Any] | None:
     return _extract_json_by_markers(
         html,
         ("var ytInitialData = ", "ytInitialData = "),
     )
 
 
-def _extract_player_response(_client: Any, html: str) -> dict[str, Any]:
+def _extract_player_response(html: str) -> dict[str, Any]:
     data = _extract_json_by_markers(
         html,
         ("var ytInitialPlayerResponse = ", "ytInitialPlayerResponse = "),
@@ -194,12 +210,11 @@ def _extract_player_response(_client: Any, html: str) -> dict[str, Any]:
     return data
 
 
-def _extract_ytcfg(_client: Any, html: str) -> dict[str, Any] | None:
+def _extract_ytcfg(html: str) -> dict[str, Any] | None:
     return _extract_json_by_markers(html, ("ytcfg.set(",))
 
 
 def _extract_innertube_api_key(
-    _client: Any,
     html: str,
     ytcfg: dict[str, Any] | None,
 ) -> str | None:
@@ -229,7 +244,7 @@ def _extract_json_by_markers(
             continue
         try:
             obj = json.loads(raw)
-        except Exception:
+        except json.JSONDecodeError:
             continue
         if isinstance(obj, dict):
             return obj
@@ -269,38 +284,38 @@ class _VideoMixin:
     def _build_subtitles(
         self,
         captions: dict[str, Any],
-    ) -> tuple[dict[str, list[dict[str, Any]]], dict[str, list[dict[str, Any]]]]:
-        return _build_subtitles(self, captions)
+    ) -> SubtitleMaps:
+        return _build_subtitles(captions)
 
     def _extract_chapters(
         self,
         data: dict[str, Any] | None,
         duration: int | None,
     ) -> list[dict[str, Any]]:
-        return _extract_chapters(self, data, duration)
+        return _extract_chapters(data, duration)
 
     def _extract_description_chapters(
         self,
         description: str,
         duration: int | None,
     ) -> list[dict[str, Any]]:
-        return _extract_description_chapters(self, description, duration)
+        return _extract_description_chapters(description, duration)
 
     def _extract_initial_data(self, html: str) -> dict[str, Any] | None:
-        return _extract_initial_data(self, html)
+        return _extract_initial_data(html)
 
     def _extract_player_response(self, html: str) -> dict[str, Any]:
-        return _extract_player_response(self, html)
+        return _extract_player_response(html)
 
     def _extract_ytcfg(self, html: str) -> dict[str, Any] | None:
-        return _extract_ytcfg(self, html)
+        return _extract_ytcfg(html)
 
     def _extract_innertube_api_key(
         self,
         html: str,
         ytcfg: dict[str, Any] | None,
     ) -> str | None:
-        return _extract_innertube_api_key(self, html, ytcfg)
+        return _extract_innertube_api_key(html, ytcfg)
 
     def _extract_json_by_markers(
         self,

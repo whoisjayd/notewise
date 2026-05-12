@@ -1,48 +1,7 @@
-import { useEffect, useRef, useState } from "react";
-
+import { binaryCommands, type InstallCommand, packageCommands } from "@/lib/installCommands";
+import { DOCS_URL, GITHUB_URL } from "@/lib/siteMeta";
+import { useCopyFeedback } from "@/lib/useCopyFeedback";
 import { FineIcon } from "@/ui/FineIcon";
-
-const SITE_URL = "https://notewise.click";
-
-type InstallCommand = {
-  label: string;
-  command: string;
-  recommended?: boolean;
-};
-
-const packageCommands: InstallCommand[] = [
-  { label: "Recommended · uv tool", command: "uv tool install notewise", recommended: true },
-  { label: "Try without installing · uvx", command: "uvx notewise --help" },
-  { label: "Isolated CLI · pipx", command: "pipx install notewise" },
-  { label: "Plain pip", command: "python -m pip install notewise" },
-];
-
-const binaryCommands: InstallCommand[] = [
-  { label: "macOS / Linux", command: `curl -fsSL ${SITE_URL}/install | sh` },
-  { label: "Windows PowerShell", command: `irm ${SITE_URL}/install | iex` },
-];
-
-async function copyCommand(command: string) {
-  if (navigator.clipboard && window.isSecureContext) {
-    await navigator.clipboard.writeText(command);
-    return;
-  }
-
-  const textarea = document.createElement("textarea");
-  textarea.value = command;
-  textarea.setAttribute("readonly", "");
-  textarea.style.position = "fixed";
-  textarea.style.opacity = "0";
-  document.body.appendChild(textarea);
-  try {
-    textarea.select();
-    if (!document.execCommand("copy")) {
-      throw new Error("Copy command was rejected");
-    }
-  } finally {
-    textarea.remove();
-  }
-}
 
 export function InstallPage() {
   return (
@@ -82,10 +41,22 @@ export function InstallPage() {
           <a className="hover-underline" href="/">
             Website
           </a>
-          <a className="hover-underline" href="https://notewise.click/docs/start/install">
+          <a
+            className="hover-underline"
+            href={`${DOCS_URL}/start/install`}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="Full install docs (opens in a new tab)"
+          >
             Full install docs
           </a>
-          <a className="hover-underline" href="https://github.com/whoisjayd/notewise">
+          <a
+            className="hover-underline"
+            href={GITHUB_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="GitHub repository (opens in a new tab)"
+          >
             GitHub
           </a>
         </nav>
@@ -101,7 +72,7 @@ function InstallOptionGroup({
 }: {
   title: string;
   copy: string;
-  commands: InstallCommand[];
+  commands: readonly InstallCommand[];
 }) {
   return (
     <section>
@@ -111,7 +82,7 @@ function InstallOptionGroup({
       </p>
       <div className="mt-4 grid gap-4 md:grid-cols-2">
         {commands.map((command) => (
-          <CommandCard key={command.command} command={command} />
+          <CommandCard key={command.id} command={command} />
         ))}
       </div>
     </section>
@@ -119,33 +90,10 @@ function InstallOptionGroup({
 }
 
 function CommandCard({ command }: { command: InstallCommand }) {
-  const [copyState, setCopyState] = useState<"idle" | "copied" | "failed">("idle");
-  const resetTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (resetTimerRef.current !== null) {
-        window.clearTimeout(resetTimerRef.current);
-      }
-    };
-  }, []);
+  const { copy, copyState } = useCopyFeedback();
 
   const handleCopy = async () => {
-    if (resetTimerRef.current !== null) {
-      window.clearTimeout(resetTimerRef.current);
-    }
-
-    try {
-      await copyCommand(command.command);
-      setCopyState("copied");
-    } catch {
-      setCopyState("failed");
-    }
-
-    resetTimerRef.current = window.setTimeout(() => {
-      setCopyState("idle");
-      resetTimerRef.current = null;
-    }, 1400);
+    await copy(command.command);
   };
 
   return (

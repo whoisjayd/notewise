@@ -6,8 +6,9 @@
 
 <br />
 
-<img src="https://img.shields.io/pypi/v/notewise?style=flat-square&label=version" alt="version" /> <img src="https://img.shields.io/badge/status-beta-f59e0b?style=flat-square" alt="status" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.10%20|%203.11%20|%203.12%20|%203.13-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" />
-
+<img src="https://img.shields.io/pypi/v/notewise?style=flat-square&label=version" alt="version" /> <img src="https://img.shields.io/badge/status-stable-10b981?style=flat-square" alt="stable" /> <img src="https://img.shields.io/badge/license-MIT--Attribution-10b981?style=flat-square" alt="license" /> <img src="https://img.shields.io/badge/python-3.11%20|%203.12%20|%203.13%20|%203.14-3776AB?style=flat-square&logo=python&logoColor=white" alt="python versions" /> <img src="https://img.shields.io/github/actions/workflow/status/whoisjayd/notewise/ci-main.yml?branch=main&style=flat-square&label=CI&logo=github" alt="CI" /> <img src="https://img.shields.io/badge/LiteLLM-powered-ff6b35?style=flat-square" alt="litellm" /> <a href="https://codecov.io/gh/whoisjayd/notewise" >
+<img src="https://codecov.io/gh/whoisjayd/notewise/branch/main/graph/badge.svg?token=BY08LAOBWV"/>
+</a>
 <br /><br />
 
 [Website](https://notewise.click) · [Docs](https://notewise.click/docs) · [Install](https://notewise.click/install) · [Quickstart](https://notewise.click/docs/start/quickstart) · [Contributing](CONTRIBUTING.md)

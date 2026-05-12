@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from notewise.cli._context import CliProcessContext
+from typing import TYPE_CHECKING
+
 from notewise.cli._types import ResolvedSource, _BatchVideoJob, _OrderedBatchFailure
 from notewise.errors import (
     PlaylistError,
@@ -12,6 +13,10 @@ from notewise.errors import (
 )
 from notewise.pipeline.core import dedupe_video_ids
 from notewise.utils import sanitize_filename
+
+
+if TYPE_CHECKING:
+    from notewise.cli._context import CliProcessContext
 
 
 async def prepare_source(
@@ -49,16 +54,15 @@ async def prepare_source(
             parsed.playlist_id,
             cookie_file=context.selected_cookie_file,
         )
+        playlist_name, _ = await context.get_playlist_info(
+            parsed.playlist_id,
+            context.selected_cookie_file,
+        )
     except (PlaylistError, VideoUnavailableError) as error:
         raise UserVisibleCliError(
             "Playlist Error",
             [(parsed.playlist_id, str(error))],
         ) from error
-
-    playlist_name, _ = await context.get_playlist_info(
-        parsed.playlist_id,
-        context.selected_cookie_file,
-    )
     deduped_video_ids = dedupe_video_ids(video_ids)
     output_dir = context.selected_output / sanitize_filename(playlist_name)
 

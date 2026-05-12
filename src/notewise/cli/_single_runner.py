@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
-from notewise.cli._context import CliProcessContext
+from notewise._constants import DASHBOARD_REFRESH_PER_SECOND
 from notewise.cli._display import (
     build_dashboard_config_items,
     build_ui_event_handler,
@@ -17,9 +17,13 @@ from notewise.cli._display import (
 from notewise.cli._formatters import print_cost_summary
 from notewise.cli._source_resolution import failure_rows_for_result, prepare_source
 from notewise.cli._types import _WorkerSlotManager
-from notewise.domain.results import PipelineResult
 from notewise.errors import UserVisibleCliError
 from notewise.logging import get_session_log_path
+
+
+if TYPE_CHECKING:
+    from notewise.cli._context import CliProcessContext
+    from notewise.domain.results import PipelineResult
 
 
 async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
@@ -45,7 +49,7 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
 
     if context.no_ui:
         result = cast(
-            PipelineResult,
+            "PipelineResult",
             await pipeline.run(
                 prepared.video_ids,
                 on_event=lambda event: emit_headless_event(context, event),
@@ -105,7 +109,7 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
 
     live = context.live_cls(
         dashboard,
-        refresh_per_second=10,
+        refresh_per_second=DASHBOARD_REFRESH_PER_SECOND,
         console=context.console,
         screen=False,
         transient=use_transient_live_display(),
@@ -113,7 +117,7 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
     try:
         with live:
             result = cast(
-                PipelineResult,
+                "PipelineResult",
                 await pipeline.run(prepared.video_ids, on_event=on_event),
             )
             if should_clear_dashboard_after_run(dashboard, result):

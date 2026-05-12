@@ -8,12 +8,15 @@ themselves — this is the single async boundary for YouTube I/O.
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Iterable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import structlog
 
 from .client import YouTubeExtractorClient, YouTubeExtractorConfig
+
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)

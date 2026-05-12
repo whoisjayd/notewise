@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -12,17 +11,22 @@ from notewise._constants import (
     CONFIG_FILENAME,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
-    LITELLM_MODELS_SNAPSHOT_FILENAME,
-    LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS,
-    LITELLM_TEXT_MODEL_EXCLUDED_MARKERS,
     OAUTH_SETUP_RUN_PROMPT,
     PROVIDER_CONFIG,
-    STRIP_SAFE_PROVIDER_ALIASES,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
 )
 from notewise.config import get_state_dir
+from notewise.errors import ConfigurationError
+from notewise.model_catalog import (
+    classify_provider,
+    get_model_metadata,
+    is_setup_safe_model,
+    load_model_snapshot,
+    normalize_available_models,
+)
+from notewise.utils import mask_secret, parse_config_env_lines
 
 
 if TYPE_CHECKING:
@@ -49,10 +53,6 @@ def _load_oauth_dependencies() -> None:
         run_oauth_login = _run_oauth_login
 
 
-_ALLOWED_SETUP_MODEL_MODES = {"chat", "completion", "responses"}
-_NATIVE_PROVIDER_PREFIXES = STRIP_SAFE_PROVIDER_ALIASES
-
-
 def _resolve_console(console: Console | None) -> Console:
     """Return the provided console or create a fresh one for this flow."""
     from rich.console import Console
@@ -64,51 +64,12 @@ def _normalize_available_models(
     provider_models: dict[str, list[str]],
 ) -> dict[str, list[str]]:
     """Normalize provider model lists from the LiteLLM catalog snapshot."""
-    return {
-        provider: sorted({model for model in models if model})
-        for provider, models in provider_models.items()
-        if provider in PROVIDER_CONFIG
-    }
+    return normalize_available_models(provider_models)
 
 
 def _load_bundled_model_snapshot() -> dict[str, list[str]]:
     """Load the packaged LiteLLM model catalog when it is available."""
-    snapshot_path = Path(__file__).with_name(LITELLM_MODELS_SNAPSHOT_FILENAME)
-    if not snapshot_path.exists():
-        return {}
-
-    try:
-        with snapshot_path.open(encoding="utf-8") as snapshot_file:
-            snapshot = json.load(snapshot_file)
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-    if not isinstance(snapshot, dict):
-        return {}
-
-    provider_models: dict[str, list[str]] = {}
-    for provider, models in snapshot.items():
-        if not isinstance(provider, str) or not isinstance(models, list):
-            continue
-        provider_models[provider] = [
-            model for model in models if isinstance(model, str) and model
-        ]
-
-    return _normalize_available_models(provider_models)
-
-
-def _strip_wrapped_quotes(value: str) -> str:
-    """Remove one layer of matching quotes from config values."""
-    if (
-        len(value) >= 3
-        and value[0] in {"r", "R"}
-        and value[1] == value[-1]
-        and value[1] in {'"', "'"}
-    ):
-        return value[2:-1]
-    if len(value) >= 2 and value[0] == value[-1] and value[0] in {'"', "'"}:
-        return value[1:-1]
-    return value
+    return load_model_snapshot()
 
 
 def get_config_path() -> Path:
@@ -126,30 +87,15 @@ def load_config(*, suppress_errors: bool = False) -> dict[str, str]:
     if config_path.exists():
         try:
             with config_path.open(encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        key, value = line.split("=", 1)
-                        loaded_config[key.strip()] = _strip_wrapped_quotes(
-                            value.strip()
-                        )
-        except Exception as error:
+                loaded_config.update(parse_config_env_lines(f))
+        except (OSError, UnicodeError) as error:
             if suppress_errors:
                 return {}
-            raise RuntimeError(
+            raise ConfigurationError(
                 f"Failed to read configuration from {config_path}: {error}"
             ) from error
 
     return loaded_config
-
-
-def _mask_secret(value: str | None) -> str:
-    """Return a partially masked secret for read-only config display."""
-    if not value:
-        return "(not set)"
-    if len(value) <= 8:
-        return "***"
-    return f"{value[:6]}...{value[-4:]} (set)"
 
 
 def save_config(
@@ -205,7 +151,7 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
     config_path = get_config_path()
     try:
         current_config = load_config()
-    except RuntimeError as error:
+    except ConfigurationError as error:
         active_console.print(f"[red]{error}[/red]")
         return {}
 
@@ -222,7 +168,7 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
     for key in sorted(current_config):
         value = current_config[key]
         if "KEY" in key or "TOKEN" in key or "SECRET" in key:
-            value = _mask_secret(value)
+            value = mask_secret(value, suffix=" (set)")
         table.add_row(key, value)
 
     active_console.print(f"[dim]Config:[/dim] {config_path}")
@@ -279,68 +225,17 @@ def _get_model_metadata(
     model_cost: dict[str, dict[str, Any]],
 ) -> dict[str, Any]:
     """Return normalized LiteLLM metadata for a model when available."""
-    for candidate in _iter_model_metadata_keys(model):
-        metadata = model_cost.get(candidate)
-        if isinstance(metadata, dict):
-            return metadata
-    return {}
-
-
-def _iter_model_metadata_keys(model: str) -> list[str]:
-    """Build safe metadata lookup keys without normalizing gateway models."""
-    candidates = [model]
-    provider_prefix, separator, remainder = model.partition("/")
-    if separator and provider_prefix in _NATIVE_PROVIDER_PREFIXES and remainder:
-        candidates.append(remainder)
-    return candidates
+    return get_model_metadata(model, model_cost)
 
 
 def _classify_provider(metadata: dict[str, Any]) -> str | None:
     """Map a model to one of the setup providers using LiteLLM provider metadata."""
-    litellm_provider = metadata.get("litellm_provider")
-    if not isinstance(litellm_provider, str):
-        return None
-
-    for provider_key, provider_config in PROVIDER_CONFIG.items():
-        if litellm_provider in provider_config.get("litellm_providers", []):
-            return provider_key
-    return None
+    return classify_provider(metadata)
 
 
 def _is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
     """Return True when a model is safe to show in setup."""
-    if not metadata:
-        return False
-    if metadata.get("deprecation_date"):
-        return False
-
-    model_lower = model.lower()
-    if any(marker in model_lower for marker in LITELLM_TEXT_MODEL_EXCLUDED_MARKERS):
-        return False
-
-    provider_prefix, separator, _ = model_lower.partition("/")
-    provider_key = provider_prefix if separator else _classify_provider(metadata)
-    if provider_key is not None:
-        provider_exclusions = LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS.get(
-            provider_key,
-            (),
-        )
-        if any(marker in model_lower for marker in provider_exclusions):
-            return False
-
-    mode = metadata.get("mode")
-    if not isinstance(mode, str) or mode not in _ALLOWED_SETUP_MODEL_MODES:
-        return False
-
-    output_modalities = metadata.get("supported_output_modalities")
-    if isinstance(output_modalities, list):
-        normalized_modalities = {
-            str(modality).lower() for modality in output_modalities
-        }
-        if normalized_modalities != {"text"}:
-            return False
-
-    return True
+    return is_setup_safe_model(model, metadata)
 
 
 def _prompt_positive_int(
@@ -380,7 +275,7 @@ def select_provider(
     table.add_column("Models Available", style="dim")
 
     providers_list = []
-    for prov_key, _prov_config in PROVIDER_CONFIG.items():
+    for prov_key in PROVIDER_CONFIG:
         if prov_key in available_models:
             providers_list.append(prov_key)
 

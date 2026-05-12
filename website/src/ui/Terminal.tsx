@@ -1,4 +1,5 @@
-import { type ReactNode, useEffect, useRef, useState, Children, isValidElement } from "react";
+import { type ReactNode, Children, isValidElement } from "react";
+import { useCopyFeedback } from "@/lib/useCopyFeedback";
 import { cn } from "@/lib/utils";
 import { FineIcon } from "./FineIcon";
 
@@ -28,43 +29,16 @@ export function Terminal({
   caption?: ReactNode;
   copyable?: boolean;
 }) {
-  const [copied, setCopied] = useState(false);
-  const [copyFailed, setCopyFailed] = useState(false);
-  const resetTimerRef = useRef<number | null>(null);
-
-  useEffect(() => {
-    return () => {
-      if (resetTimerRef.current !== null) {
-        window.clearTimeout(resetTimerRef.current);
-      }
-    };
-  }, []);
-
-  const scheduleReset = (callback: () => void, delay: number) => {
-    if (resetTimerRef.current !== null) {
-      window.clearTimeout(resetTimerRef.current);
-    }
-    resetTimerRef.current = window.setTimeout(() => {
-      callback();
-      resetTimerRef.current = null;
-    }, delay);
-  };
+  const { copy, copyState } = useCopyFeedback();
+  const copied = copyState === "copied";
+  const copyFailed = copyState === "failed";
 
   const handleCopy = async () => {
     const text = lines
       .filter((l) => l.kind === "prompt" || l.kind === undefined)
       .map((l) => nodeToText(l.text))
       .join("\n");
-    try {
-      await navigator.clipboard.writeText(text);
-      setCopied(true);
-      setCopyFailed(false);
-      scheduleReset(() => setCopied(false), 1400);
-    } catch {
-      setCopied(false);
-      setCopyFailed(true);
-      scheduleReset(() => setCopyFailed(false), 1800);
-    }
+    await copy(text);
   };
 
   return (

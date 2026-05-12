@@ -250,7 +250,7 @@ class TestConfig:
         read_calls = 0
         original_read_text = Path.read_text
 
-        def _counting_read_text(path: Path, *args, **kwargs):  # noqa: ANN001
+        def _counting_read_text(path: Path, *args, **kwargs):
             nonlocal read_calls
             read_calls += 1
             return original_read_text(path, *args, **kwargs)
@@ -263,6 +263,45 @@ class TestConfig:
         source()
 
         assert read_calls == 1
+
+    def test_user_config_source_ignores_expected_read_failures(
+        self, tmp_path, monkeypatch, mocker
+    ):
+        """Expected config read failures should warn and fall back to empty config."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir()
+        (config_dir / "config.env").write_text("DEFAULT_MODEL=unused", encoding="utf-8")
+        warning = mocker.patch.object(config_module.logger, "warning")
+
+        def _raise_os_error(*_args, **_kwargs):
+            raise OSError("cannot read")
+
+        mocker.patch.object(Path, "read_text", _raise_os_error)
+
+        assert UserConfigSource(Config)() == {}
+        warning.assert_called_once_with(
+            "UserConfigSource ignored unreadable user config file",
+            config_path=str(config_dir / "config.env"),
+            exc_info=True,
+        )
+
+    def test_user_config_source_does_not_hide_unexpected_parse_errors(
+        self, tmp_path, monkeypatch, mocker
+    ):
+        """Unexpected parser/runtime errors should remain visible."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir()
+        (config_dir / "config.env").write_text("DEFAULT_MODEL=unused", encoding="utf-8")
+
+        def _raise_runtime_error(*_args, **_kwargs):
+            raise RuntimeError("bug")
+
+        mocker.patch.object(Path, "read_text", _raise_runtime_error)
+
+        with pytest.raises(RuntimeError, match="bug"):
+            UserConfigSource(Config)()
 
 
 class TestGetApiKeyNameForModel:

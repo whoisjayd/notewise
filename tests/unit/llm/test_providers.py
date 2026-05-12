@@ -12,9 +12,9 @@ from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
     LLMProvider,
     UsageTotals,
-    _configure_litellm_runtime,
     _summarize_error,
     get_provider,
+    suppress_litellm_noise,
 )
 
 
@@ -37,7 +37,7 @@ class AsyncChunks:
 class TestLLMProvider:
     """Test LLMProvider class."""
 
-    def test_init_validation(self, mock_config):  # noqa: ARG002
+    def test_init_validation(self, mock_config):
         """Test initialization validates config."""
         # Should verify key existence (via logging or just passing)
         # Config fixture sets dummy keys, so this should pass
@@ -62,7 +62,7 @@ class TestLLMProvider:
             mock_acompletion.assert_called_once()
 
             # Verify args passed to litellm
-            args, kwargs = mock_acompletion.call_args
+            _args, kwargs = mock_acompletion.call_args
             assert kwargs["model"] == "gpt-4o"
             assert kwargs["messages"] == [
                 {"role": "system", "content": "sys"},
@@ -603,42 +603,47 @@ class TestLLMProvider:
 - Next bullet"""
         )
 
-    def test_configure_litellm_runtime_handles_missing_verbose_logger(self):
+    def test_suppress_litellm_noise_handles_missing_verbose_logger(self):
         """LiteLLM runtime setup should tolerate missing verbose logger objects."""
         runtime = MagicMock()
         runtime.verbose_logger = None
 
         with patch("notewise.llm.provider.litellm", runtime):
-            _configure_litellm_runtime()
+            suppress_litellm_noise()
 
         assert runtime.set_verbose is False
         assert runtime.suppress_debug_info is True
 
-    def test_configure_litellm_runtime_suppresses_response_usage_warning(self):
+    def test_suppress_litellm_noise_suppresses_response_usage_warning(self):
         """LiteLLM's Responses usage serializer warning should stay off the TTY."""
-        _configure_litellm_runtime()
+        original_filters = warnings.filters[:]
+        try:
+            suppress_litellm_noise()
 
-        with warnings.catch_warnings(record=True) as caught:
-            warnings.warn_explicit(
-                "Pydantic serializer warnings:\n"
-                "  PydanticSerializationUnexpectedValue(Expected `ResponseAPIUsage` "
-                "- serialized value may not be as expected)",
-                UserWarning,
-                filename="pydantic/main.py",
-                lineno=464,
-                module="pydantic.main",
-            )
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.warn_explicit(
+                    "Pydantic serializer warnings:\n"
+                    "  PydanticSerializationUnexpectedValue("
+                    "Expected `ResponseAPIUsage` - serialized value may not be "
+                    "as expected)",
+                    UserWarning,
+                    filename="pydantic/main.py",
+                    lineno=464,
+                    module="pydantic.main",
+                )
 
-        assert caught == []
+            assert caught == []
+        finally:
+            warnings.filters[:] = original_filters
 
-    def test_configure_litellm_runtime_sets_verbose_logger_level(self):
+    def test_suppress_litellm_noise_sets_verbose_logger_level(self):
         """LiteLLM runtime should not attach terminal handlers."""
         runtime = MagicMock()
         runtime.verbose_logger = MagicMock()
         runtime.verbose_logger.handlers = [MagicMock()]
 
         with patch("notewise.llm.provider.litellm", runtime):
-            _configure_litellm_runtime()
+            suppress_litellm_noise()
 
         runtime.verbose_logger.setLevel.assert_called_once_with(logging.WARNING)
         assert runtime.verbose_logger.propagate is False

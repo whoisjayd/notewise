@@ -7,6 +7,12 @@ from types import SimpleNamespace
 
 import pytest
 
+from notewise._constants import (
+    PLAYLIST_ERROR_TITLE,
+    PLAYLIST_METADATA_UNAVAILABLE_MSG,
+    TEST_PLAYLIST_ID,
+    TEST_PLAYLIST_URL,
+)
 from notewise.cli._source_resolution import (
     batch_failure_label,
     failure_rows_for_result,
@@ -49,25 +55,53 @@ async def test_prepare_source_rejects_missing_video_id(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_prepare_source_wraps_playlist_errors(tmp_path) -> None:
+async def test_prepare_source_wraps_playlist_errors(tmp_path, mocker) -> None:
     """Playlist extraction failures should normalize to a playlist error panel."""
 
-    async def _extract_playlist_videos(*_args, **_kwargs):
-        raise PlaylistError("private")
+    mock_extract_playlist_videos = mocker.AsyncMock(
+        side_effect=PlaylistError("private")
+    )
 
     context = SimpleNamespace(
         parse_youtube_url=lambda _url: SimpleNamespace(
             url_type="playlist",
-            playlist_id="pl123",
+            playlist_id=TEST_PLAYLIST_ID,
             video_id=None,
         ),
-        extract_playlist_videos=_extract_playlist_videos,
+        extract_playlist_videos=mock_extract_playlist_videos,
         selected_cookie_file=None,
         selected_output=tmp_path,
     )
 
-    with pytest.raises(UserVisibleCliError, match="Playlist Error"):
-        await prepare_source(context, "https://youtube.com/playlist?list=pl123")
+    with pytest.raises(UserVisibleCliError, match=PLAYLIST_ERROR_TITLE):
+        await prepare_source(context, TEST_PLAYLIST_URL)
+
+
+async def test_prepare_source_wraps_playlist_metadata_errors(tmp_path, mocker) -> None:
+    """Playlist metadata failures should stay user-visible in batch preflight."""
+
+    mock_extract_playlist_videos = mocker.AsyncMock(return_value=["video1"])
+    mock_get_playlist_info = mocker.AsyncMock(
+        side_effect=PlaylistError(PLAYLIST_METADATA_UNAVAILABLE_MSG)
+    )
+
+    context = SimpleNamespace(
+        parse_youtube_url=lambda _url: SimpleNamespace(
+            url_type="playlist",
+            playlist_id=TEST_PLAYLIST_ID,
+            video_id=None,
+        ),
+        extract_playlist_videos=mock_extract_playlist_videos,
+        get_playlist_info=mock_get_playlist_info,
+        selected_cookie_file=None,
+        selected_output=tmp_path,
+    )
+
+    with pytest.raises(UserVisibleCliError) as exc:
+        await prepare_source(context, TEST_PLAYLIST_URL)
+
+    assert exc.value.title == PLAYLIST_ERROR_TITLE
+    assert exc.value.rows == [(TEST_PLAYLIST_ID, PLAYLIST_METADATA_UNAVAILABLE_MSG)]
 
 
 def test_failure_row_helpers_cover_default_and_playlist_labels() -> None:

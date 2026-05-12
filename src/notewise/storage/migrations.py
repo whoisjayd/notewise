@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import Connection
 from sqlalchemy import inspect as sa_inspect
 
 
 Migration = Callable[[Connection], None]
-LATEST_SCHEMA_VERSION = 2
 
 _RUNSTATS_ADDITIVE_COLUMNS: dict[str, str] = {
     "prompt_tokens": (
@@ -91,7 +90,7 @@ def migration_2_add_video_cached_at(connection: Connection) -> None:
     if "cached_at" in existing:
         return
 
-    default_timestamp = datetime.now(timezone.utc).replace(microsecond=0)
+    default_timestamp = datetime.now(UTC).replace(microsecond=0)
     default_literal = default_timestamp.isoformat(sep=" ")
     connection.exec_driver_sql(
         "ALTER TABLE video ADD COLUMN cached_at DATETIME "

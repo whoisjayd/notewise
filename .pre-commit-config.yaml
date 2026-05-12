@@ -1,24 +1,45 @@
+# Run `pre-commit install` after cloning.
+# commit-msg hooks are installed automatically via default_install_hook_types.
+# Run all hooks at once: pre-commit run --all-files
+# Update all revs:       pre-commit autoupdate
+
 default_stages: [pre-commit]
+default_install_hook_types: [pre-commit, commit-msg] # installs commit-msg stage without a separate --hook-type flag
 
 repos:
+  - repo: https://github.com/asottile/yesqa
+    rev: v1.5.0
+    hooks:
+      - id: yesqa
+  # ---------------------------------------------------------------------------
+  # General file hygiene
+  # ---------------------------------------------------------------------------
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:
       - id: check-yaml
       - id: check-toml
       - id: check-json
-        exclude: ^website/tsconfig\.json$
+        exclude: ^website/tsconfig\.json$ # tsconfig allows JSON-with-comments
+      - id: check-ast # fast Python syntax check before linters run
+      - id: check-case-conflict # catches foo.py / FOO.py on case-insensitive FS
       - id: check-merge-conflict
-      - id: debug-statements
+      - id: check-symlinks # broken symlinks are usually accidents
+      - id: check-executables-have-shebangs # scripts without shebangs fail silently
+      - id: check-shebang-scripts-are-executable # inverse: shebang ⟹ must be +x
       - id: check-added-large-files
+      - id: debug-statements
       - id: detect-private-key
       - id: end-of-file-fixer
       - id: trailing-whitespace
       - id: mixed-line-ending
         args: ["--fix=lf"]
 
+  # ---------------------------------------------------------------------------
+  # Python — lint + format (rev must match ruff version in pyproject.toml)
+  # ---------------------------------------------------------------------------
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.15.0
+    rev: v0.15.12
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes"]
@@ -26,75 +47,119 @@ repos:
       - id: ruff-format
         files: ^(src|tests|scripts)/.*\.py$
 
-  - repo: https://github.com/compilerla/conventional-pre-commit
-    rev: v4.3.0
-    hooks:
-      - id: conventional-pre-commit
-        stages: [commit-msg]
-
+  # ---------------------------------------------------------------------------
+  # Python — security
+  # ---------------------------------------------------------------------------
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.9.3
+    rev: 1.9.4
     hooks:
       - id: bandit
-        args: ["-c", "pyproject.toml", "--severity-level", "high"]
+        args:
+          [
+            "-c",
+            "pyproject.toml",
+            "--severity-level",
+            "medium",
+            "--confidence-level",
+            "medium",
+          ]
         additional_dependencies: ["bandit[toml]"]
         types: [python]
         exclude: ^(tests/|scripts/)
 
+  # ---------------------------------------------------------------------------
+  # Commit message conventions
+  # ---------------------------------------------------------------------------
+  - repo: https://github.com/compilerla/conventional-pre-commit
+    rev: v4.4.0
+    hooks:
+      - id: conventional-pre-commit
+        stages: [commit-msg]
+
+  # ---------------------------------------------------------------------------
+  # Local hooks
+  # ---------------------------------------------------------------------------
   - repo: local
     hooks:
+      # ── commit message shape ───────────────────────────────────────────────
       - id: single-line-commit
         name: single-line commit message
         entry: scripts/hooks/check-single-line-commit.sh
         language: script
         stages: [commit-msg]
+
+      # ── version alignment ──────────────────────────────────────────────────
+      - id: version-sync
+        name: version sync (package/docs/website/test metadata)
+        entry: python scripts/check_version_sync.py
+        language: system
+        pass_filenames: false
+        # Runs whenever canonical package or user-facing version sources change.
+        files: ^(pyproject\.toml|src/notewise/__init__\.py|uv\.lock|website/src/lib/version\.ts|docs/(index\.mdx|llms(?:-full)?\.txt|skill\.md)|tests/unit/cli/test_updater\.py|scripts/check_version_sync\.py)$
+
+      # ── type checking ──────────────────────────────────────────────────────
       - id: ty
         name: ty (src/notewise)
         entry: uv run ty check src/notewise
         language: system
         pass_filenames: false
         files: ^(src/notewise/.*\.py|pyproject\.toml|uv\.lock)$
+
+      # ── dependency hygiene ─────────────────────────────────────────────────
       - id: deptry
         name: deptry (unused/missing dependencies)
         entry: uv run deptry src
         language: system
         pass_filenames: false
         files: ^(src/.*\.py|pyproject\.toml|uv\.lock)$
+
+      # ── website ────────────────────────────────────────────────────────────
       - id: website-lock
         name: website lockfile check
         entry: bun install --cwd website --frozen-lockfile
         language: system
         pass_filenames: false
         files: ^website/(package\.json|bun\.lock)$
+
       - id: website-lint
         name: website lint
         entry: bun run --cwd website lint
         language: system
         pass_filenames: false
         files: ^website/
+
       - id: website-typecheck
         name: website typecheck
         entry: bun --cwd website tsc --noEmit
         language: system
         pass_filenames: false
         files: ^website/
+
       - id: prettier
         name: prettier (website/root only)
         entry: python scripts/hooks/run-prettier.py
         language: system
+        # docs/ is skipped internally by run-prettier.py, but excluding it here
+        # avoids spinning up the hook at all when only docs files change.
+        exclude: ^docs/
         files: ^(website/.*\.(css|html|js|jsx|json|jsonc|md|mdx|ts|tsx|ya?ml)|README\.md|CONTRIBUTING\.md|AGENTS\.md|SECURITY\.md|\.github/workflows/.*\.ya?ml|\.pre-commit-config\.yaml)$
+
+      # ── docs ───────────────────────────────────────────────────────────────
       - id: docs-json
         name: docs JSON parse
         entry: python -m json.tool docs/docs.json
         language: system
         pass_filenames: false
         files: ^docs/docs\.json$
+
       - id: docs-js-syntax
         name: docs JavaScript syntax
         entry: node --check docs/umami.js
         language: system
         pass_filenames: false
         files: ^docs/.*\.js$
+
+      # ── pre-push (slower checks) ───────────────────────────────────────────
       - id: pytest-fast
         name: pytest fast (pre-push)
         entry: uv run --no-sync python -m pytest tests -q -n auto --dist=loadfile
@@ -102,6 +167,7 @@ repos:
         pass_filenames: false
         files: ^(src/.*\.py|tests/.*\.py)$
         stages: [pre-push]
+
       - id: website-build
         name: website build (pre-push)
         entry: bun run --cwd website build

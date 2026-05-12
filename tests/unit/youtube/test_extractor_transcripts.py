@@ -62,7 +62,7 @@ class TestSelectTrack:
         subtitles = {"fr": [{"ext": "json3", "url": "https://x/sub?fmt=json3"}]}
         warning_calls: list[tuple[tuple[object, ...], dict[str, object]]] = []
 
-        def _warning(*args, **kwargs):  # noqa: ANN002, ANN003
+        def _warning(*args, **kwargs):
             warning_calls.append((args, kwargs))
 
         monkeypatch.setattr(tx.logger, "warning", _warning)
@@ -151,6 +151,10 @@ class TestParsePayload:
 
     def test_parse_transcript_payload_returns_empty_when_unparseable(self):
         segments = tx.parse_transcript_payload("not-json-or-xml", "unknown")
+        assert segments == []
+
+    def test_parse_transcript_payload_ignores_wrong_json_shape(self):
+        segments = tx.parse_transcript_payload("[]", "unknown")
         assert segments == []
 
 

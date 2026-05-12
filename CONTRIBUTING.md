@@ -51,7 +51,7 @@ If you plan to work on something large, **open an issue first** so we can discus
 
 ### Prerequisites
 
-- Python **3.10** or newer
+- Python **3.11** or newer
 - [uv](https://github.com/astral-sh/uv) — the project's package manager
 - [Bun](https://bun.sh/) **1.3.6** for the website in `website/`
 
@@ -250,7 +250,7 @@ uv run deptry .
 ### Style Rules
 
 - Line length: **88** characters (Ruff default)
-- Target: **Python 3.10** syntax
+- Target: **Python 3.11** syntax
 - Quote style: **double quotes**
 - Isort: first-party imports in a separate section
 - No unused arguments (ARG rule) — prefix intentionally unused params with `_`

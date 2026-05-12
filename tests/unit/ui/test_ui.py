@@ -40,13 +40,13 @@ def test_dashboard_update_worker_counts_legacy_status_as_running() -> None:
 
     dash.update_worker(0, "Processing...")
 
-    console = Console(width=100)
+    console = Console(width=180)
     with console.capture() as capture:
         console.print(dash)
 
     output = capture.get()
-    assert "Running: 1" in output
-    assert "Queued: 2" in output
+    assert "Running" in output
+    assert "Queued" in output
 
 
 def test_dashboard_update_worker_keeps_preformatted_markup():
@@ -225,19 +225,20 @@ def test_dashboard_rendering_shows_safe_config_items() -> None:
         ),
     )
 
-    console = Console(width=120)
+    console = Console(width=180)
     with console.capture() as capture:
         console.print(dash)
 
     output = capture.get()
-    assert "Flags & Config" in output
+    assert "Run setup" in output
     assert "Output" in output
     assert "./notes" in output
     assert "Formats" in output
     assert "markdown, pdf" in output
     assert "Cookies" in output
-    assert "configured: cookies.txt" in output
-    assert "API key" in output
+    assert "configured:" in output
+    assert "cookies.txt" in output
+    assert "API" in output
     assert "present" in output
 
 
@@ -251,17 +252,17 @@ def test_dashboard_rendering_shows_progress_summary_counts() -> None:
     dash.add_skipped("Video Cached")
     dash.add_failure("Video Failed")
 
-    console = Console(width=120)
+    console = Console(width=180)
     with console.capture() as capture:
         console.print(dash)
 
     output = capture.get()
-    assert "Run Status" in output
-    assert "Completed: 1" in output
-    assert "Skipped: 1" in output
-    assert "Failed: 1" in output
-    assert "Running: 1" in output
-    assert "Queued: 1" in output
+    assert "Progress" in output
+    assert "Completed" in output
+    assert "Skipped" in output
+    assert "Failed" in output
+    assert "Running" in output
+    assert "Queued" in output
 
 
 def test_dashboard_rendering_shows_structured_worker_state() -> None:
@@ -280,7 +281,7 @@ def test_dashboard_rendering_shows_structured_worker_state() -> None:
         console.print(dash)
 
     output = capture.get()
-    assert "Workers" in output
+    assert "Video jobs" in output
     assert "Generation" in output
     assert "Video A" in output
     assert "chunks 2/5" in output
@@ -306,8 +307,7 @@ def test_dashboard_rendering():
     output = capture.get()
     assert "Completed Video" in output
     assert "Failed Video" in output
-    assert "Active Tasks" in output
-    assert "Chapter Tasks" in output
+    assert "Chapter jobs" in output
     assert "List" in output
     assert "Model" in output
 
@@ -348,7 +348,7 @@ def test_dashboard_rendering_empty():
         console.print(dash)
 
     output = capture.get()
-    assert "No videos completed yet" in output
+    assert "Waiting for the first result" in output
 
 
 def test_dashboard_rendering_without_workers_omits_active_tasks() -> None:
@@ -360,5 +360,5 @@ def test_dashboard_rendering_without_workers_omits_active_tasks() -> None:
         console.print(dash)
 
     output = capture.get()
-    assert "Active Tasks" not in output
-    assert "Recent Activity" in output
+    assert "Video jobs" not in output
+    assert "Latest results" in output

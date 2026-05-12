@@ -13,6 +13,7 @@ from notewise.cli._formatters import print_cost_summary
 from notewise.domain.results import PipelineMetrics
 from notewise.llm.provider import UsageTotals
 from notewise.pipeline._artifacts import export_transcript, generate_and_write_quiz
+from notewise.pipeline._execution import _usage_context
 from notewise.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
@@ -53,6 +54,17 @@ def test_usage_coercion_helpers_handle_non_numeric_values():
     assert totals.completion_tokens == 9
     assert totals.total_tokens == 4
     assert totals.cost_usd == 0.0025
+
+
+def test_usage_context_does_not_call_arbitrary_collect_usage_callable() -> None:
+    """Only the real provider collector should be invoked as a context factory."""
+    provider = MagicMock()
+    provider.collect_usage = MagicMock(side_effect=AssertionError("called"))
+
+    with _usage_context(provider) as usage:
+        assert isinstance(usage, UsageTotals)
+
+    provider.collect_usage.assert_not_called()
 
 
 def test_pipeline_metrics_bool_truth_table():
@@ -107,21 +119,6 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
     assert pipeline._chapter_semaphore is shared_state.chapter_semaphore
     assert pipeline._output_lock is shared_state.output_lock
     assert pipeline._reserved_output_targets is shared_state.reserved_output_targets
-
-
-def test_pipeline_configures_generator_for_legacy_chunk_combine(
-    temp_output_dir, mock_llm_provider
-):
-    """CorePipeline should pass the legacy combine flag into the generator."""
-    with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
-        pipeline = CorePipeline(
-            model="mock-model",
-            output_dir=temp_output_dir,
-            use_combine_chunk=True,
-        )
-
-    assert pipeline.use_combine_chunk is True
-    assert pipeline.generator.use_combine_chunk is True
 
 
 def test_pipeline_passes_throttle_seconds_into_generator(
@@ -224,7 +221,6 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
             output_format="html",
             target_language="Spanish",
             throttle_seconds=3.0,
-            use_combine_chunk=True,
             on_event=None,
         )
 
@@ -235,7 +231,6 @@ async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_d
         output_format="html",
         target_language="Spanish",
         throttle_seconds=3.0,
-        use_combine_chunk=True,
     )
     pipeline_instance.run.assert_awaited_once_with(["vid1"], on_event=None)
 
