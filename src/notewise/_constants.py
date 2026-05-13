@@ -751,3 +751,5 @@ TIMESTAMPS_LABEL = "Timestamps"
 EXPORT_TRANSCRIPT_LABEL = "Export transcript"
 CHAPTER_DIRECTORIES_LABEL = "Chapter directories"
 NOTES_LABEL = "Notes"
+
+<!-- Issue #99: OAuth login prints raw provider exception text without payload suppression -->
