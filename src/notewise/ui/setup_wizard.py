@@ -460,6 +460,15 @@ def run_setup_wizard(
 
     active_console.print("\n[cyan]Loading available models...[/cyan]")
     available_models = get_available_models(console=active_console)
+    if not available_models:
+        active_console.print(
+            "[red]No setup-safe model catalog is available right now.[/red]"
+        )
+        active_console.print(
+            "[yellow]Reinstall notewise or retry with network access, "
+            "then run setup again.[/yellow]"
+        )
+        return current_config
     active_console.print(
         f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
         f"models across {len(available_models)} providers[/green]"
