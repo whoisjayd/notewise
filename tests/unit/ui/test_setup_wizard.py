@@ -607,6 +607,25 @@ class TestWizardOrchestration:
 
             mock_save.assert_called_once()
 
+    def test_run_setup_wizard_stops_when_model_catalog_empty(self):
+        """Wizard should stop before provider prompts when no models are available."""
+        console = MagicMock()
+        current_config = {"DEFAULT_MODEL": "gemini/gemini-pro"}
+
+        with (
+            patch("notewise.ui.setup_wizard.load_config", return_value=current_config),
+            patch("notewise.ui.setup_wizard.get_available_models", return_value={}),
+            patch("notewise.ui.setup_wizard.select_provider") as mock_provider,
+            patch("notewise.ui.setup_wizard.save_config") as mock_save,
+        ):
+            result = run_setup_wizard(force=True, console=console)
+
+        assert result == current_config
+        mock_provider.assert_not_called()
+        mock_save.assert_not_called()
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "No setup-safe model catalog is available right now." in rendered
+
     def test_run_setup_wizard_skips_api_key_for_oauth_provider(self):
         """OAuth/device-flow providers should not prompt for static API keys."""
         with (
