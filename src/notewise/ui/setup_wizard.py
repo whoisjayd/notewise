@@ -543,3 +543,5 @@ def run_setup_wizard(
     for key in LEGACY_CONFIG_KEYS:
         current_config.pop(key, None)
     return current_config
+
+<!-- Issue #109: Setup config path creation fails for nested NOTEWISE_HOME parents -->
