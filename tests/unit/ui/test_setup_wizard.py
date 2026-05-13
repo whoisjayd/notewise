@@ -96,6 +96,31 @@ class TestConfigIO:
         with pytest.raises(RuntimeError, match="bug"):
             load_config()
 
+    def test_get_config_path_creates_nested_notewise_home(self, monkeypatch, tmp_path):
+        """Setup should create all parent directories for a nested NOTEWISE_HOME."""
+        nested_path = tmp_path / "new" / "parent" / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(nested_path))
+
+        # Directory chain does not exist yet
+        assert not nested_path.exists()
+
+        config_path = get_config_path()
+
+        # All parents and the leaf config directory should be created
+        assert nested_path.is_dir()
+        assert config_path.parent == nested_path
+        assert config_path.name == "config.env"
+
+    def test_get_config_path_works_with_existing_dir(self, monkeypatch, tmp_path):
+        """Should not fail when NOTEWISE_HOME already exists."""
+        existing = tmp_path / "existing" / ".notewise"
+        existing.mkdir(parents=True)
+        monkeypatch.setenv("NOTEWISE_HOME", str(existing))
+
+        config_path = get_config_path()
+        assert config_path.parent == existing
+        assert config_path.name == "config.env"
+
     def test_save_config(self):
         """Test saving configuration merges with existing."""
         from pathlib import Path
