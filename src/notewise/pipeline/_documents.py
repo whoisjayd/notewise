@@ -176,6 +176,54 @@ def _normalize_markdown_blocks(markdown_text: str) -> str:
     return "\n".join(normalized_lines)
 
 
+# Dangerous URL schemes that should never appear in href/src attributes.
+_DANGEROUS_URL_SCHEME_RE = re.compile(
+    r"""(?xi)
+    (
+        javascript
+        | vbscript
+        | data
+    )\s*:"""
+)
+
+
+def _sanitize_html_links(html: str) -> str:
+    """Strip dangerous URL schemes from href and src attributes.
+
+    Runs *after* Markdown-to-HTML conversion so that schemes embedded in
+    Markdown link/image syntax (e.g. ``[click](javascript:alert(1))``) are
+    also caught.
+
+    Safe schemes (``http``, ``https``, ``mailto``, ``ftp``, relative paths)
+    are preserved as-is.
+    """
+
+    def _neutralize(match: re.Match[str]) -> str:
+        attr, quote, value, end_quote = (
+            match.group(1),
+            match.group(2),
+            match.group(3),
+            match.group(4),
+        )
+        if _DANGEROUS_URL_SCHEME_RE.match(value.lstrip()):
+            # Replace the entire attribute value with an empty string so the
+            # element remains in place but the link is inert.
+            return f"{attr}={quote}{end_quote}"
+        return match.group(0)
+
+    # Match href="..." / href='...' / src="..." / src='...' (case-insensitive).
+    _ATTR_RE = re.compile(
+        r"""(?xi)
+        (href|src)          # group 1: attribute name
+        \s*=\s*
+        ([\"'])             # group 2: opening quote
+        ([^\"']*)           # group 3: attribute value
+        ([\"'])             # group 4: closing quote
+        """
+    )
+    return _ATTR_RE.sub(_neutralize, html)
+
+
 def _markdown_to_html(markdown_text: str) -> str:
     import markdown as markdown_lib
 
@@ -184,7 +232,8 @@ def _markdown_to_html(markdown_text: str) -> str:
         safe_markdown,
         extensions=list(MARKDOWN_RENDER_EXTENSIONS),
     )
-    return _normalize_rendered_html(rendered_html)
+    sanitized_html = _sanitize_html_links(rendered_html)
+    return _normalize_rendered_html(sanitized_html)
 
 
 def _escape_raw_html(markdown_text: str) -> str:
