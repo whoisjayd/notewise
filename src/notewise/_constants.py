@@ -295,6 +295,12 @@ OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE = (
 )
 OAUTH_UNSUPPORTED_PROVIDER_ERROR = "Unsupported OAuth provider: {provider}."
 OAUTH_SETUP_RUN_PROMPT = "Run OAuth login now?"
+SETUP_EMPTY_MODEL_CATALOG_MESSAGE = (
+    "No setup-safe model catalog is available right now."
+)
+SETUP_EMPTY_MODEL_CATALOG_RETRY_MESSAGE = (
+    "Reinstall notewise or retry with network access, then run setup again."
+)
 OAUTH_FALLBACK_MESSAGE = (
     "OAuth login failed or was cancelled. "
     "Run `notewise auth login` for your provider and try again."
