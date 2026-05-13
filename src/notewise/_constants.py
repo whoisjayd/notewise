@@ -751,3 +751,5 @@ TIMESTAMPS_LABEL = "Timestamps"
 EXPORT_TRANSCRIPT_LABEL = "Export transcript"
 CHAPTER_DIRECTORIES_LABEL = "Chapter directories"
 NOTES_LABEL = "Notes"
+
+<!-- Issue #110: Unsupported-model messaging uses OAuth-only provider labels -->
