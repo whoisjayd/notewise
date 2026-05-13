@@ -75,7 +75,7 @@ def _load_bundled_model_snapshot() -> dict[str, list[str]]:
 def get_config_path() -> Path:
     """Get path to user config file."""
     config_dir = get_state_dir()
-    config_dir.mkdir(exist_ok=True)
+    config_dir.mkdir(exist_ok=True, parents=True)
     return config_dir / CONFIG_FILENAME
 
 
