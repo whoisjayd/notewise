@@ -13,6 +13,8 @@ from notewise._constants import (
     DEFAULT_OUTPUT_DIR,
     OAUTH_SETUP_RUN_PROMPT,
     PROVIDER_CONFIG,
+    SETUP_EMPTY_MODEL_CATALOG_MESSAGE,
+    SETUP_EMPTY_MODEL_CATALOG_RETRY_MESSAGE,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -460,6 +462,12 @@ def run_setup_wizard(
 
     active_console.print("\n[cyan]Loading available models...[/cyan]")
     available_models = get_available_models(console=active_console)
+    if not available_models:
+        active_console.print(f"[red]{SETUP_EMPTY_MODEL_CATALOG_MESSAGE}[/red]")
+        active_console.print(
+            f"[yellow]{SETUP_EMPTY_MODEL_CATALOG_RETRY_MESSAGE}[/yellow]"
+        )
+        return current_config
     active_console.print(
         f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
         f"models across {len(available_models)} providers[/green]"
