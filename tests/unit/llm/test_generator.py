@@ -123,7 +123,7 @@ class TestStudyMaterialGenerator:
 
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda _model, text: len(text.split())
+                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"].split())
 
                 # No periods, just newlines
                 text = "Line one\nLine two\nLine three"

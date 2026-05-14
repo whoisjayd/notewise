@@ -11,16 +11,38 @@ from notewise.youtube.extractor.client import YouTubeExtractorClient
 
 def test_youtube_caption_fetch_replays_from_sanitized_cassette() -> None:
     cassette = Path(__file__).with_name("cassettes") / "caption_fetch.yaml"
-    url = "http://youtube.test/api/timedtext?v=VIDEO_ID&lang=en"
+    caption_url = "http://youtube.test/api/timedtext?v=VIDEO_ID&lang=en"
+    video = {
+        "id": "VIDEO_ID",
+        "title": "Replay Video",
+        "webpage_url": "https://www.youtube.com/watch?v=VIDEO_ID",
+        "subtitles": {
+            "en": [
+                {
+                    "ext": "xml",
+                    "url": caption_url,
+                    "name": "English",
+                }
+            ]
+        },
+        "automatic_captions": {},
+        "_innertube_api_key": None,
+        "_ytcfg": {},
+    }
 
     with vcr.use_cassette(
         str(cassette),
         filter_headers=["authorization", "cookie", "host", "set-cookie"],
         record_mode="none",
     ):
-        payload = YouTubeExtractorClient()._fetch_text(url)
+        payload = YouTubeExtractorClient().transcript_from_video_data(
+            "https://www.youtube.com/watch?v=VIDEO_ID",
+            video,
+            languages=["en"],
+        )
 
-    assert "Replay safe transcript" in payload
+    assert payload["source"] == "subtitles"
+    assert payload["segments"][0]["text"] == "Replay safe transcript"
 
 
 def test_youtube_transcript_parser_replays_json3_caption_cassette() -> None:

@@ -201,7 +201,9 @@ def split_transcript_by_chapters_with_metadata(
 
     segment_cursor = 0
 
-    for chapter in chapters:
+    chapters_sorted = sorted(chapters, key=lambda chapter: chapter.start_seconds)
+
+    for chapter in chapters_sorted:
         chapter_segments: list[str] = []
 
         while (

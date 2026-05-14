@@ -7,6 +7,7 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 from typer.testing import CliRunner
 
+from notewise.cli import app as cli_app_module
 from notewise.cli.app import app
 from notewise.errors import VideoUnavailableError as PublicAccessRequiredError
 from notewise.pipeline.core import (
@@ -51,6 +52,44 @@ def _make_pipeline_result(total: int = 1, success: int = 1) -> PipelineResult:
             generation_seconds=2.3,
         ),
     )
+
+
+def test_config_validation_error_masks_sensitive_invalid_values() -> None:
+    """Sensitive config keys should identify the setting without echoing secrets."""
+
+    class FakeValidationError:
+        def errors(self):
+            return [
+                {
+                    "loc": ("OPENAI_API_KEY",),
+                    "msg": "Input should be a valid string",
+                    "input": "sk-secret-review-token",
+                }
+            ]
+
+    message = cli_app_module._format_config_validation_error(FakeValidationError())
+
+    assert "OPENAI_API_KEY" in message
+    assert "<redacted>" in message
+    assert "sk-secret-review-token" not in message
+
+
+def test_config_validation_error_keeps_non_sensitive_invalid_values() -> None:
+    """Non-secret config values should remain actionable for users."""
+
+    class FakeValidationError:
+        def errors(self):
+            return [
+                {
+                    "loc": ("TEMPERATURE",),
+                    "msg": "Input should be a valid number",
+                    "input": "hot",
+                }
+            ]
+
+    message = cli_app_module._format_config_validation_error(FakeValidationError())
+
+    assert "TEMPERATURE='hot'" in message
 
 
 def _make_parsed_playlist(playlist_id: str = "PL123"):

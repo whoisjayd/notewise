@@ -24,6 +24,8 @@ from notewise._constants import (
     OAUTH_LOGIN_PROVIDER_LABELS,
     OAUTH_LOGIN_PROVIDER_PROMPT,
     OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE,
+    PROVIDER_SECRET_ENV_KEYS,
+    SENSITIVE_KEY_SUFFIXES,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 from notewise.errors import ConfigurationError
@@ -110,11 +112,21 @@ def _format_config_validation_error(error: Any) -> str:
         value = item.get("input")
         if value is None:
             messages.append(f"{name}: {message}")
+        elif _is_sensitive_config_key(name):
+            messages.append(f"{name}=<redacted>: {message}")
         else:
             messages.append(f"{name}={value!r}: {message}")
 
     details = "; ".join(messages) if messages else str(error)
     return f"{details}. Invalid configuration value."
+
+
+def _is_sensitive_config_key(name: str) -> bool:
+    """Return whether a config key should never echo its value."""
+    normalized = "".join(character for character in name.casefold() if character != "_")
+    return name in PROVIDER_SECRET_ENV_KEYS or normalized.endswith(
+        SENSITIVE_KEY_SUFFIXES
+    )
 
 
 def _print_configuration_error(error: Exception) -> None:

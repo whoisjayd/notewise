@@ -351,6 +351,34 @@ class TestSplitTranscriptByChapters:
         ]
         assert segments.access_count <= len(segments) + len(chapters)
 
+    def test_split_transcript_by_chapters_with_metadata_sorts_unsorted_chapters(self):
+        """Unsorted chapter inputs should still use deterministic time windows."""
+        transcript = VideoTranscript(
+            video_id="vid",
+            segments=[
+                TranscriptSegment("intro", 10.0, 5.0),
+                TranscriptSegment("middle", 70.0, 5.0),
+                TranscriptSegment("end", 130.0, 5.0),
+            ],
+            language="English",
+            language_code="en",
+            is_generated=False,
+        )
+        chapters = [
+            VideoChapter(title="End", start_seconds=120, end_seconds=None),
+            VideoChapter(title="Intro", start_seconds=0, end_seconds=60),
+            VideoChapter(title="Middle", start_seconds=60, end_seconds=120),
+        ]
+
+        chapter_map = split_transcript_by_chapters_with_metadata(transcript, chapters)
+
+        assert list(chapter_map) == ["Intro", "Middle", "End"]
+        assert [chapter.text for chapter in chapter_map.values()] == [
+            "intro",
+            "middle",
+            "end",
+        ]
+
     def test_split_transcript_by_chapters_skips_empty_windows(self):
         transcript = VideoTranscript(
             video_id="vid",
