@@ -25,6 +25,8 @@ from pydantic_settings import (
 from notewise._constants import (
     AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
+    CONFIG_API_KEY_ENV_KEYS,
+    CONFIG_ENV_SYNC_KEYS,
     CONFIG_FILENAME,
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
@@ -65,10 +67,6 @@ if TYPE_CHECKING:
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 _OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
 _LEGACY_IGNORED_KEYS: frozenset[str] = LEGACY_CONFIG_KEYS
-_API_KEY_CONFIG_KEYS = frozenset(
-    env_var for env_vars in PROVIDER_API_KEY_ENV_VARS.values() for env_var in env_vars
-)
-_CONFIG_ENV_SYNC_KEYS = _API_KEY_CONFIG_KEYS | PROVIDER_AUTH_ENV_KEYS
 _MODEL_SNAPSHOT_CACHE: dict[str, tuple[str, ...]] | None = None
 _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES: dict[str, str] = {}
 
@@ -82,7 +80,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         "MAX_TOKENS",
         "YOUTUBE_COOKIE_FILE",
     }
-    | _API_KEY_CONFIG_KEYS
+    | CONFIG_API_KEY_ENV_KEYS
     | PROVIDER_AUTH_ENV_KEYS
     | frozenset(OAUTH_TOKEN_DIR_ENV_VARS.values())
 )
@@ -195,7 +193,7 @@ class UserConfigSource(PydanticBaseSettingsSource):
                 if key in _LEGACY_IGNORED_KEYS:
                     continue
                 if key in _ALLOWED_KEYS:
-                    if key in _CONFIG_ENV_SYNC_KEYS and key not in os.environ:
+                    if key in CONFIG_ENV_SYNC_KEYS and key not in os.environ:
                         os.environ[key] = value
                     result[key.lower()] = value
         except (OSError, UnicodeError):

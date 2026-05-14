@@ -218,6 +218,16 @@ The website is a TanStack/Vite app in `website/`.
 - **Coverage** — CI fails below 90%. Check: `uv run pytest --cov=src/notewise --cov-fail-under=90`.
 - **Provider/OAuth tests** — mock LiteLLM calls and token flows; never depend on live credentials, browser login, or real provider quota.
 
+### Review-Fix Discipline
+
+- **Verify every bot review against the current branch before editing.** Treat AI review comments as suggestions to validate, not instructions to apply blindly.
+- **Use TDD for behavioral/security review fixes.** Add or update a focused failing regression test first, confirm it fails for the expected reason, then change production code.
+- **Keep review fixes scoped to the exact affected lines.** Avoid broad regex replacements across whole files unless the review explicitly asks for a file-wide migration; broad edits can create noisy diffs and mask unrelated history.
+- **Do not use denied/destructive git shortcuts to revert mistakes.** Prefer `git restore -- <path>` for safe file restoration; never use `git checkout -- <path>` or reset-style commands in agent sessions.
+- **Do not run the full test suite repeatedly while iterating.** Run focused tests for the files/behaviors you changed after each review-fix cluster. Save `uv run pytest` for the final verification gate once the diff is stable, unless a full-suite failure itself is being debugged.
+- **Run final verification once before pushing.** For Python changes, include affected tests, `uv run ruff format --check src tests scripts`, `uv run ruff check src tests scripts`, `uv run ty check src/notewise`, and one final `uv run pytest` when feasible.
+- **Before pushing, search for the reviewed anti-patterns.** Examples: `@pytest.mark.asyncio`, API-key-shaped test literals, constants left outside `_constants.py`, path joins from untrusted metadata, and repo-wide ignore rules such as `*.db`.
+
 ---
 
 ## Running CI Locally
@@ -257,6 +267,7 @@ make fix          # auto-fix formatting and lint issues
 | `make build`            | Build wheel and sdist            |
 
 <!-- BEGIN BEADS INTEGRATION v:1 profile:minimal hash:7510c1e2 -->
+
 ## Beads Issue Tracker
 
 This project uses **bd (beads)** for issue tracking. Run `bd prime` to see full workflow context and commands.
@@ -288,16 +299,19 @@ bd close <id>         # Complete work
 2. **Run quality gates** (if code changed) - Tests, linters, builds
 3. **Update issue status** - Close finished work, update in-progress items
 4. **PUSH TO REMOTE** - This is MANDATORY:
+
    ```bash
    git pull --rebase
    git push
    git status  # MUST show "up to date with origin"
    ```
+
 5. **Clean up** - Clear stashes, prune remote branches
 6. **Verify** - All changes committed AND pushed
 7. **Hand off** - Provide context for next session
 
 **CRITICAL RULES:**
+
 - Work is NOT complete until `git push` succeeds
 - NEVER stop before pushing - that leaves work stranded locally
 - NEVER say "ready to push when you are" - YOU must push

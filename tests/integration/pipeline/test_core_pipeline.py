@@ -750,7 +750,6 @@ async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provid
     assert fetch_kwargs["on_request"] is not None
 
 
-@pytest.mark.asyncio
 async def test_uncached_video_reuses_full_metadata_for_transcript_extraction(
     temp_output_dir,
     mock_llm_provider,
@@ -786,7 +785,6 @@ async def test_uncached_video_reuses_full_metadata_for_transcript_extraction(
     transcript_client.transcript_from_video_data.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_uncached_video_uses_details_path_without_metadata_identity_branch(
     pipeline,
 ) -> None:
@@ -899,7 +897,6 @@ async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
     mock_fetch.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_run_rejects_whitespace_transcript_before_generation_and_cache(
     pipeline,
     temp_output_dir,
@@ -1627,7 +1624,6 @@ async def test_concurrent_chapter_videos_keep_event_wrappers_isolated(
     ) == "# System Design Setup\n\nbeta"
 
 
-@pytest.mark.asyncio
 async def test_run_failed_chapter_generation_does_not_emit_chapter_complete(
     temp_output_dir, mock_llm_provider
 ) -> None:
@@ -1983,7 +1979,6 @@ async def test_checkpoint_reprocesses_when_requested_quiz_is_missing(
     assert (temp_output_dir / "Test Video_quiz.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_reprocesses_incomplete_cached_chapter_directory(
     temp_output_dir, mock_llm_provider
 ) -> None:

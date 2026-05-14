@@ -14,7 +14,10 @@ from notewise.cli._formatters import print_cost_summary
 from notewise.domain.results import PipelineMetrics
 from notewise.llm.provider import UsageTotals
 from notewise.pipeline._artifacts import export_transcript, generate_and_write_quiz
-from notewise.pipeline._execution import _usage_context
+from notewise.pipeline._execution import (
+    _chapter_directory_has_complete_manifest,
+    _usage_context,
+)
 from notewise.pipeline._helpers import (
     coerce_usage_float,
     coerce_usage_int,
@@ -66,6 +69,27 @@ def test_usage_context_does_not_call_arbitrary_collect_usage_callable() -> None:
         assert isinstance(usage, UsageTotals)
 
     provider.collect_usage.assert_not_called()
+
+
+def test_chapter_manifest_rejects_path_components(tmp_path):
+    """Chapter manifests should only accept files inside the chapter directory."""
+    chapter_dir = tmp_path / "chapters"
+    chapter_dir.mkdir()
+    outside_file = tmp_path / "outside.md"
+    outside_file.write_text("# Outside", encoding="utf-8")
+    pipeline = MagicMock()
+    pipeline._read_output_target_metadata.return_value = {
+        "chapter_files": ["../outside.md"],
+    }
+
+    assert (
+        _chapter_directory_has_complete_manifest(
+            pipeline,
+            chapter_dir,
+            "vid-path-traversal",
+        )
+        is False
+    )
 
 
 def test_pipeline_metrics_bool_truth_table():
@@ -165,7 +189,6 @@ def test_pipeline_normalizes_blank_target_language(temp_output_dir, mock_llm_pro
     assert pipeline.generator.target_language == "English"
 
 
-@pytest.mark.asyncio
 async def test_get_cached_video_returns_none_on_sqlalchemy_error(
     temp_output_dir,
     mock_llm_provider,
@@ -177,7 +200,6 @@ async def test_get_cached_video_returns_none_on_sqlalchemy_error(
     assert await pipeline._get_cached_video("vid-cache-fail") is None
 
 
-@pytest.mark.asyncio
 async def test_persist_video_cache_swallows_sqlalchemy_error(
     temp_output_dir,
     mock_llm_provider,
@@ -198,7 +220,6 @@ async def test_persist_video_cache_swallows_sqlalchemy_error(
     pipeline.db.upsert_video_cache.assert_called_once()
 
 
-@pytest.mark.asyncio
 async def test_run_pipeline_convenience_wrapper_forwards_arguments(temp_output_dir):
     """run_pipeline should construct CorePipeline and delegate to run()."""
     expected = PipelineResult(
@@ -249,10 +270,10 @@ def test_emit_event_swallows_event_handler_errors(temp_output_dir, mock_llm_prov
     mock_warning.assert_called_once()
 
 
-@pytest.mark.asyncio
 async def test_run_bounds_video_scheduling_to_configured_concurrency(
     temp_output_dir,
     mock_llm_provider,
+    mocker,
 ):
     """Pipeline run should not start every video processor up front."""
     pipeline = _make_pipeline(temp_output_dir, mock_llm_provider)
@@ -273,30 +294,28 @@ async def test_run_bounds_video_scheduling_to_configured_concurrency(
         await release_first_batch.wait()
         return True
 
-    with (
-        patch.object(pipeline, "_check_api_key", return_value=True),
-        patch(
-            "notewise.pipeline._execution.process_single_video",
-            side_effect=_process,
-        ),
-    ):
-        run_task = asyncio.create_task(pipeline.run(["v1", "v2", "v3", "v4"]))
-        await asyncio.wait_for(first_batch_started.wait(), timeout=1)
-        await asyncio.sleep(0)
+    mocker.patch.object(pipeline, "_check_api_key", return_value=True)
+    mocker.patch(
+        "notewise.pipeline._execution.process_single_video",
+        side_effect=_process,
+    )
+    run_task = asyncio.create_task(pipeline.run(["v1", "v2", "v3", "v4"]))
+    await asyncio.wait_for(first_batch_started.wait(), timeout=1)
+    await asyncio.sleep(0)
 
-        assert started == ["v1", "v2"]
+    assert started == ["v1", "v2"]
 
-        release_first_batch.set()
-        result = await run_task
+    release_first_batch.set()
+    result = await run_task
 
     assert result.success_count == 4
     assert result.video_ids == ["v1", "v2", "v3", "v4"]
 
 
-@pytest.mark.asyncio
 async def test_run_propagates_video_worker_cancellation(
     temp_output_dir,
     mock_llm_provider,
+    mocker,
 ) -> None:
     """Pipeline cancellation should not be converted into a video failure."""
     pipeline = _make_pipeline(temp_output_dir, mock_llm_provider)
@@ -309,20 +328,17 @@ async def test_run_propagates_video_worker_cancellation(
         del _pipeline, video_id, on_event
         raise asyncio.CancelledError
 
-    with (
-        patch.object(pipeline, "_check_api_key", return_value=True),
-        patch(
-            "notewise.pipeline._execution.process_single_video",
-            side_effect=_cancel,
-        ),
-        pytest.raises(asyncio.CancelledError),
-    ):
+    mocker.patch.object(pipeline, "_check_api_key", return_value=True)
+    mocker.patch(
+        "notewise.pipeline._execution.process_single_video",
+        side_effect=_cancel,
+    )
+    with pytest.raises(asyncio.CancelledError):
         await pipeline.run(["v1"])
 
     assert pipeline.errors == {}
 
 
-@pytest.mark.asyncio
 async def test_generate_and_write_quiz_creates_output_directory(tmp_path):
     """Quiz writing should create the destination directory before writing."""
     generator = MagicMock()
