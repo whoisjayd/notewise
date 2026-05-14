@@ -6,6 +6,7 @@ import asyncio
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
@@ -14,6 +15,7 @@ from notewise._constants import (
     CHAPTER_MARKDOWN_FILE_EXTENSION,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     EMPTY_TRANSCRIPT_ERROR,
+    MIN_VIDEO_WORKER_COUNT,
     OUTPUT_METADATA_CHAPTER_FILES_KEY,
     PDF_NOTES_OUTPUT_FORMAT,
     QUIZ_MARKDOWN_FILE_SUFFIX,
@@ -49,7 +51,6 @@ from notewise.youtube.transcript import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from pathlib import Path
     from tempfile import TemporaryDirectory
 
 
@@ -157,7 +158,9 @@ def _chapter_directory_has_complete_manifest(
         return False
 
     return all(
-        isinstance(filename, str) and (chapter_dir / filename).is_file()
+        isinstance(filename, str)
+        and Path(filename).name == filename
+        and (chapter_dir / filename).is_file()
         for filename in chapter_files
     )
 
@@ -609,7 +612,10 @@ async def run_pipeline(
     next_video_index = 0
     worker_count = min(
         len(video_ids),
-        max(1, int(getattr(pipeline, "max_concurrent_videos", 1))),
+        max(
+            MIN_VIDEO_WORKER_COUNT,
+            int(getattr(pipeline, "max_concurrent_videos", MIN_VIDEO_WORKER_COUNT)),
+        ),
     )
 
     async def _worker() -> None:

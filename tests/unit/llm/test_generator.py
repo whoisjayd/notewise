@@ -93,7 +93,11 @@ class TestStudyMaterialGenerator:
         finally:
             config.chunk_size = orig_size
 
-    def test_chunk_transcript_overlap_rollover_respects_chunk_size(self, generator):
+    def test_chunk_transcript_overlap_rollover_respects_chunk_size(
+        self,
+        generator,
+        mocker,
+    ):
         """Overlap rollover should not emit chunks above the token budget."""
         orig_size = config.chunk_size
         orig_overlap = config.chunk_overlap
@@ -101,17 +105,16 @@ class TestStudyMaterialGenerator:
         config.chunk_overlap = 4
 
         try:
-            with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"].split())
+            mock_tc = mocker.patch("notewise.pipeline.generation.token_counter")
+            mock_tc.side_effect = lambda **kwargs: len(kwargs["text"].split())
 
-                text = "aa bb. cc dd. ee ff gg."
-                chunks = generator._chunk_transcript(text)
+            text = "aa bb. cc dd. ee ff gg."
+            chunks = generator._chunk_transcript(text)
 
-                assert len(chunks) > 1
-                assert all(
-                    generator._count_tokens(chunk) <= config.chunk_size
-                    for chunk in chunks
-                )
+            assert len(chunks) > 1
+            assert all(
+                generator._count_tokens(chunk) <= config.chunk_size for chunk in chunks
+            )
         finally:
             config.chunk_size = orig_size
             config.chunk_overlap = orig_overlap
@@ -155,23 +158,26 @@ class TestStudyMaterialGenerator:
         finally:
             config.chunk_size = orig_size
 
-    def test_chunk_transcript_hard_split_chunks_respect_chunk_size(self, generator):
+    def test_chunk_transcript_hard_split_chunks_respect_chunk_size(
+        self,
+        generator,
+        mocker,
+    ):
         """Hard-split chunks should be revalidated against the token budget."""
         orig_size = config.chunk_size
         config.chunk_size = 5
 
         try:
-            with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"])
+            mock_tc = mocker.patch("notewise.pipeline.generation.token_counter")
+            mock_tc.side_effect = lambda **kwargs: len(kwargs["text"])
 
-                text = "A" * 16
-                chunks = generator._chunk_transcript(text)
+            text = "A" * 16
+            chunks = generator._chunk_transcript(text)
 
-                assert "".join(chunks) == text
-                assert all(
-                    generator._count_tokens(chunk) <= config.chunk_size
-                    for chunk in chunks
-                )
+            assert "".join(chunks) == text
+            assert all(
+                generator._count_tokens(chunk) <= config.chunk_size for chunk in chunks
+            )
         finally:
             config.chunk_size = orig_size
 

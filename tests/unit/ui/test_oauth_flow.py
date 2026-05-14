@@ -88,7 +88,7 @@ def test_run_oauth_login_suppresses_payload_shaped_failure_text(mocker):
     """OAuth login failures should not print provider request payload details."""
     console = MagicMock()
     secret_prompt = "SECRET_PROMPT_TEXT"
-    secret_token = "sk-secret-token"
+    secret_token = "TEST_TOKEN_PLACEHOLDER"
     payload_error = "complete_input_dict=" + repr(
         {
             "messages": [{"role": "user", "content": secret_prompt}],
