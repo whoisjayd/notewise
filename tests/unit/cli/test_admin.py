@@ -7,7 +7,7 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import pytest
 from rich.console import Console
@@ -276,7 +276,7 @@ async def test_render_source_info_renders_playlist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     console = _console()
-    repository = SimpleNamespace(has_video=lambda video_id: video_id == "a")
+    repository = SimpleNamespace(get_cached_video_ids=lambda _video_ids: {"a"})
     monkeypatch.setattr(
         admin, "_load_repository", lambda: (repository, Path("cache.db"))
     )
@@ -308,6 +308,45 @@ async def test_render_source_info_renders_playlist(
     assert "Playlist Info" in output
     assert "Resolvable videos" in output
     assert "1/2 processed" in output
+
+
+@pytest.mark.asyncio
+async def test_render_source_info_uses_bulk_cache_lookup_for_playlist(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    console = _console()
+    bulk_lookup = Mock(return_value={"a", "c"})
+    repository = SimpleNamespace(
+        get_cached_video_ids=bulk_lookup,
+        has_video=Mock(side_effect=AssertionError("has_video should not be called")),
+    )
+    monkeypatch.setattr(
+        admin, "_load_repository", lambda: (repository, Path("cache.db"))
+    )
+
+    await admin.render_source_info(
+        console,
+        url="PL123",
+        parse_youtube_url=lambda _url: SimpleNamespace(
+            url_type="playlist",
+            playlist_id="PL123",
+            video_id=None,
+        ),
+        get_video_details=AsyncMock(),
+        get_source_metadata=AsyncMock(
+            return_value={
+                "title": "Playlist Title",
+                "data": {"playlist_count": 4},
+            }
+        ),
+        get_playlist_info=AsyncMock(),
+        extract_playlist_videos=AsyncMock(return_value=["a", "a", "b", "c"]),
+        cookie_file=None,
+    )
+
+    bulk_lookup.assert_called_once_with(["a", "b", "c"])
+    repository.has_video.assert_not_called()
+    assert "2/3 processed" in _text(console)
 
 
 @pytest.mark.asyncio

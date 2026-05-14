@@ -60,6 +60,22 @@ class AsyncYouTubeExtractorClient:
             include_automatic,
         )
 
+    async def transcript_from_video_data(
+        self,
+        target: str,
+        video: dict[str, Any],
+        languages: Iterable[str] | None = None,
+        include_automatic: bool = True,
+    ) -> dict[str, Any]:
+        """Fetch transcript using an already-extracted raw video payload."""
+        return await asyncio.to_thread(
+            self._sync.transcript_from_video_data,
+            target,
+            video,
+            languages,
+            include_automatic,
+        )
+
     async def video_metadata_full(self, target: str) -> dict[str, Any]:
         """Fetch the full raw video payload for a video id or URL (async).
 

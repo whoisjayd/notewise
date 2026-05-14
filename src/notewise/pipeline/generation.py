@@ -387,9 +387,26 @@ class StudyMaterialGenerator:
 
                 # Hard split by character (conservative 3 chars/token)
                 char_limit = config.chunk_size * 3
-                for i in range(0, len(sentence), char_limit):
-                    sub_part = sentence[i : i + char_limit]
+                start = 0
+                while start < len(sentence):
+                    end = min(len(sentence), start + char_limit)
+                    if self._count_tokens(sentence[start:end]) > config.chunk_size:
+                        low = start + 1
+                        high = end
+                        while low < high:
+                            mid = (low + high + 1) // 2
+                            if (
+                                self._count_tokens(sentence[start:mid])
+                                <= config.chunk_size
+                            ):
+                                low = mid
+                            else:
+                                high = mid - 1
+                        end = low
+
+                    sub_part = sentence[start:end]
                     chunks.append(sub_part)
+                    start = end
                 continue
 
             if current_tokens + term_tokens > config.chunk_size:
@@ -409,6 +426,13 @@ class StudyMaterialGenerator:
                             break
 
                     current_chunk = [*overlap_chunk, sentence]
+                    while (
+                        overlap_chunk
+                        and self._count_tokens(" ".join(current_chunk))
+                        > config.chunk_size
+                    ):
+                        overlap_chunk.pop(0)
+                        current_chunk = [*overlap_chunk, sentence]
                     current_tokens = self._count_tokens(" ".join(current_chunk))
                 else:
                     # Should be unreachable due to check above, but safe fallback

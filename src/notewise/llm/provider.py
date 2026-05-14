@@ -58,7 +58,7 @@ def suppress_litellm_noise() -> None:
     )
 
 
-def _summarize_error(error: Exception) -> str:
+def summarize_provider_error(error: Exception) -> str:
     """Collapse exception text into one redacted, log-friendly summary line."""
     summary = redact_sensitive_text(" ".join(str(error).split()))
     summary = make_log_safe_text(summary)
@@ -229,7 +229,7 @@ class LLMProvider:
         except LLMGenerationError:
             raise
         except Exception as e:
-            error_summary = _summarize_error(e)
+            error_summary = summarize_provider_error(e)
             logger.error(
                 "llm.generation_failed",
                 model=self.model,

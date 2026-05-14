@@ -33,6 +33,17 @@ async def get_video_metadata(
 ) -> VideoMetadata:
     """Fetch title, duration, and chapters for one video in a single call."""
     video_data = await get_video_details(video_id, cookie_file)
+    return video_metadata_from_details(video_id, video_data)
+
+
+def video_metadata_from_details(
+    video_id: str,
+    video_data: dict[str, object] | VideoMetadata,
+) -> VideoMetadata:
+    """Map a full extractor payload into video metadata."""
+    if isinstance(video_data, VideoMetadata):
+        return video_data
+
     title = str(video_data.get("title") or video_id)
     duration = _coerce_int(video_data.get("duration"))
     chapters = _map_video_chapters(_coerce_raw_chapters(video_data.get("chapters")))

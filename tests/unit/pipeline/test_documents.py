@@ -87,6 +87,43 @@ def test_markdown_to_html_preserves_autolinks() -> None:
     assert '<a href="https://example.com">https://example.com</a>' in html
 
 
+@pytest.mark.parametrize(
+    "markdown_text",
+    [
+        "[unsafe](javascript:alert(1))",
+        "[unsafe](JaVaScRiPt:alert(1))",
+        "[unsafe](data:text/html,<script>alert(1)</script>)",
+        "[unsafe](\x01javascript:alert(1))",
+    ],
+)
+def test_markdown_to_html_removes_unsafe_link_hrefs(markdown_text: str) -> None:
+    html = _markdown_to_html(markdown_text)
+
+    assert "unsafe" in html
+    assert "href=" not in html
+    assert "javascript:" not in html.casefold()
+    assert "data:" not in html.casefold()
+
+
+@pytest.mark.parametrize(
+    ("markdown_text", "expected_href"),
+    [
+        ("[safe](http://example.com)", 'href="http://example.com"'),
+        ("[safe](https://example.com/path)", 'href="https://example.com/path"'),
+        ("[safe](  HtTpS://Example.com  )", 'href="HtTpS://Example.com"'),
+        ("[safe](mailto:learner@example.com)", 'href="mailto:learner@example.com"'),
+        ("[safe](#chapter-1)", 'href="#chapter-1"'),
+    ],
+)
+def test_markdown_to_html_preserves_safe_link_hrefs(
+    markdown_text: str,
+    expected_href: str,
+) -> None:
+    html = _markdown_to_html(markdown_text)
+
+    assert expected_href in html
+
+
 def test_markdown_to_html_preserves_fenced_code_angle_brackets() -> None:
     html = _markdown_to_html("```html\n<div>hi</div>\n```")
 

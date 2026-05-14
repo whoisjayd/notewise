@@ -131,6 +131,20 @@ class YouTubeExtractorClient(
         include_automatic: bool = True,
     ) -> dict[str, Any]:
         video = self._extract_video(target)
+        return self.transcript_from_video_data(
+            target,
+            video,
+            languages,
+            include_automatic,
+        )
+
+    def transcript_from_video_data(
+        self,
+        target: str,
+        video: dict[str, Any],
+        languages: Iterable[str] | None = None,
+        include_automatic: bool = True,
+    ) -> dict[str, Any]:
         language_list = [lang for lang in (languages or DEFAULT_LANGUAGES) if lang]
         selection = select_track(
             subtitles=video["subtitles"],

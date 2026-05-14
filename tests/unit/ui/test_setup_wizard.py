@@ -45,6 +45,27 @@ class TestConfigIO:
             config = load_config()
             assert config == {}
 
+    def test_config_path_creates_nested_notewise_home_parents(
+        self, tmp_path, monkeypatch
+    ):
+        """Nested NOTEWISE_HOME paths should be created before writing config."""
+        nested_home = tmp_path / "missing" / "nested" / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(nested_home))
+
+        config_path = get_config_path()
+
+        assert config_path == nested_home / "config.env"
+        assert nested_home.is_dir()
+
+    def test_config_path_preserves_mkdir_os_errors(self, tmp_path, monkeypatch, mocker):
+        """Real directory creation failures should still surface to callers."""
+        nested_home = tmp_path / "missing" / "nested" / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(nested_home))
+        mocker.patch("pathlib.Path.mkdir", side_effect=OSError("denied"))
+
+        with pytest.raises(OSError, match="denied"):
+            get_config_path()
+
     def test_load_config_corrupted(self):
         """Test loading corrupted config file."""
         with (
