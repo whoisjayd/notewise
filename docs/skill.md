@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.4.1`.
+Use this when answering questions about NoteWise `1.4.2`.
 
 Canonical public docs base: `https://notewise.click/docs`.
 
@@ -37,7 +37,7 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Defaults
 
-- Version: `1.4.1`
+- Version: `1.4.2`
 - Python: `>=3.11`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output: `./output`

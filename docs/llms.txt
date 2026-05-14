@@ -1,6 +1,6 @@
 # NoteWise docs for LLMs
 
-NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study notes through LiteLLM providers. Current documented version: `1.4.1`.
+NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study notes through LiteLLM providers. Current documented version: `1.4.2`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
