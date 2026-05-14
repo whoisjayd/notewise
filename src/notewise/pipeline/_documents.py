@@ -5,9 +5,10 @@ from __future__ import annotations
 import re
 import unicodedata
 from collections.abc import Callable
-from html import escape
+from html import escape, unescape
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import unquote
 
 from notewise._constants import (
     CHAPTER_BUNDLE_SEPARATOR,
@@ -26,7 +27,12 @@ from notewise._constants import (
     DOCX_HEADING_TWO_FONT_SIZE_PT,
     DOCX_SECTION_MARGIN_INCHES,
     DOCX_TITLE_FONT_SIZE_PT,
+    HTML_HREF_ATTRIBUTE_PATTERN,
     HTML_LANGUAGE_ALIASES,
+    HTML_LINK_CONTROL_CODEPOINTS,
+    HTML_LINK_SCHEME_SEPARATOR,
+    HTML_LOCAL_ANCHOR_PREFIX,
+    HTML_SAFE_LINK_SCHEMES,
     LANGUAGE_CODE_PATTERN,
     MARKDOWN_FENCED_CODE_START_PATTERN,
     MARKDOWN_INDENTED_CODE_PREFIXES,
@@ -49,6 +55,7 @@ _CODE_BLOCK_RE = re.compile(RENDERED_CODE_BLOCK_PATTERN, re.DOTALL)
 _FENCED_CODE_START_RE = re.compile(MARKDOWN_FENCED_CODE_START_PATTERN)
 _LANGUAGE_CODE_RE = re.compile(LANGUAGE_CODE_PATTERN)
 _RAW_HTML_TAG_RE = re.compile(RAW_HTML_TAG_PATTERN)
+_HTML_HREF_ATTRIBUTE_RE = re.compile(HTML_HREF_ATTRIBUTE_PATTERN, re.IGNORECASE)
 _PDF_CHARACTER_TRANSLATIONS = str.maketrans(
     {
         "\u2018": "'",
@@ -184,7 +191,35 @@ def _markdown_to_html(markdown_text: str) -> str:
         safe_markdown,
         extensions=list(MARKDOWN_RENDER_EXTENSIONS),
     )
-    return _normalize_rendered_html(rendered_html)
+    return _sanitize_link_hrefs(_normalize_rendered_html(rendered_html))
+
+
+def _sanitize_link_hrefs(body_html: str) -> str:
+    def _replace_href(match: re.Match[str]) -> str:
+        href = match.group("href")
+        if _is_safe_href(href):
+            return match.group(0)
+        return ""
+
+    return _HTML_HREF_ATTRIBUTE_RE.sub(_replace_href, body_html)
+
+
+def _is_safe_href(href: str) -> bool:
+    decoded_href = unquote(unescape(href))
+    normalized_href = "".join(
+        character
+        for character in decoded_href
+        if ord(character) not in HTML_LINK_CONTROL_CODEPOINTS
+    ).casefold()
+    if not normalized_href:
+        return False
+    if normalized_href.startswith(HTML_LOCAL_ANCHOR_PREFIX):
+        return True
+
+    scheme, separator, _rest = normalized_href.partition(HTML_LINK_SCHEME_SEPARATOR)
+    if not separator:
+        return True
+    return scheme in HTML_SAFE_LINK_SCHEMES
 
 
 def _escape_raw_html(markdown_text: str) -> str:

@@ -83,6 +83,23 @@ class TestConfig:
         with pytest.raises(ValidationError):
             Config()
 
+    def test_invalid_user_config_value_does_not_leak_to_environment(
+        self,
+        tmp_path,
+        monkeypatch,
+    ):
+        """Rejected config.env values should not pollute later settings loads."""
+        monkeypatch.delenv("TEMPERATURE", raising=False)
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir()
+        (config_dir / "config.env").write_text("TEMPERATURE=hot\n", encoding="utf-8")
+
+        with pytest.raises(ValidationError):
+            Config()
+
+        assert "TEMPERATURE" not in os.environ
+
     def test_max_tokens_negative(self, monkeypatch):
         """Negative max_tokens raises ValidationError."""
         monkeypatch.setenv("MAX_TOKENS", "-1")
@@ -439,6 +456,33 @@ class TestGetApiKeyNameForModel:
         assert "openrouter/unknown-model" in message
         assert "not currently supported" in message
         assert "notewise setup --force" in message
+
+    def test_unsupported_model_message_uses_provider_display_name(self, mocker):
+        """Non-OAuth providers should use the shared friendly provider label."""
+        mocker.patch.object(
+            config_module,
+            "_load_bundled_model_snapshot",
+            return_value={"gemini": ("gemini/gemini-2.5-flash",)},
+        )
+
+        message = self.cfg.get_unsupported_model_message("gemini/unknown-model")
+
+        assert message is not None
+        assert "for Google Gemini" in message
+        assert "for gemini" not in message
+
+    def test_unsupported_model_message_preserves_oauth_provider_label(self, mocker):
+        """OAuth providers should keep their subscription-oriented labels."""
+        mocker.patch.object(
+            config_module,
+            "_load_bundled_model_snapshot",
+            return_value={"chatgpt": ("chatgpt/gpt-5.2",)},
+        )
+
+        message = self.cfg.get_unsupported_model_message("chatgpt/unknown-model")
+
+        assert message is not None
+        assert "for ChatGPT Subscription" in message
 
     def test_supported_snapshot_model_has_no_unsupported_message(self):
         snapshot = config_module._load_bundled_model_snapshot()

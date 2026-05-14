@@ -12,6 +12,7 @@ LOGS_DIR_NAME = "logs"
 CONFIG_FILENAME = "config.env"
 SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
+OUTPUT_METADATA_CHAPTER_FILES_KEY = "chapter_files"
 OUTPUT_METADATA_VIDEO_ID_KEY = "video_id"
 MASKED_SECRET_MIN_VISIBLE_LENGTH = 8
 MASKED_SECRET_PREFIX_LENGTH = 6
@@ -544,6 +545,12 @@ SUPPORTED_NOTES_OUTPUT_FORMATS = ("md", "html", "pdf", "docx")
 OUTPUT_FORMAT_SEPARATOR = ","
 TRANSCRIPT_JSON_OUTPUT_FORMAT = "json"
 TRANSCRIPT_TEXT_OUTPUT_FORMAT = "txt"
+SUPPORTED_TRANSCRIPT_OUTPUT_FORMATS = (
+    TRANSCRIPT_TEXT_OUTPUT_FORMAT,
+    TRANSCRIPT_JSON_OUTPUT_FORMAT,
+)
+EMPTY_TRANSCRIPT_ERROR = "No usable transcript text was returned for this video."
+TRANSCRIPT_EXPORT_FORMAT_ERROR = "--export-transcript must be one of: txt, json"
 NOTES_OUTPUT_EXTENSIONS = {
     "md": ".md",
     "html": ".html",
@@ -587,6 +594,11 @@ PDF_UNSUPPORTED_UNICODE_ERROR = (
 MARKDOWN_RENDER_EXTENSIONS = ("extra", "sane_lists")
 CHAPTER_BUNDLE_SEPARATOR = "\n\n---\n\n"
 MARKDOWN_LIST_ITEM_PATTERN = r"^(?P<indent>\s*)(?:[-*+]\s+|\d+\.\s+)"
+HTML_HREF_ATTRIBUTE_PATTERN = r"\s+href=(?P<quote>[\"'])(?P<href>.*?)(?P=quote)"
+HTML_LINK_CONTROL_CODEPOINTS = frozenset(range(33)) | {127}
+HTML_LINK_SCHEME_SEPARATOR = ":"
+HTML_LOCAL_ANCHOR_PREFIX = "#"
+HTML_SAFE_LINK_SCHEMES = frozenset({"http", "https", "mailto"})
 RENDERED_CODE_BLOCK_PATTERN = (
     r"<pre><code(?:\s+class=\"[^\"]*\")?>(?P<code>.*?)</code></pre>"
 )

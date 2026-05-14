@@ -1,0 +1,23 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept-Language:
+      - en-US,en;q=0.9
+      Connection:
+      - close
+      User-Agent:
+      - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+        Gecko) Chrome/124.0.0.0 Safari/537.36
+    method: GET
+    uri: http://youtube.test/api/timedtext?v=VIDEO_ID&lang=en
+  response:
+    body:
+      string: <transcript><text start="0" dur="1.5">Replay safe transcript</text></transcript>
+    headers:
+      Content-Type:
+      - application/xml; charset=utf-8
+    status:
+      code: 200
+      message: OK
+version: 1

@@ -45,6 +45,7 @@ from notewise._constants import (
     OAUTH_TOKEN_DIR_PARENT,
     PROVIDER_API_KEY_ENV_VARS,
     PROVIDER_AUTH_ENV_KEYS,
+    PROVIDER_CONFIG,
     PROVIDER_REQUIRED_ENV_VARS,
     STATE_DIR_NAME,
     UNSUPPORTED_MODEL_LIST_LIMIT,
@@ -67,6 +68,7 @@ _LEGACY_IGNORED_KEYS: frozenset[str] = LEGACY_CONFIG_KEYS
 _API_KEY_CONFIG_KEYS = frozenset(
     env_var for env_vars in PROVIDER_API_KEY_ENV_VARS.values() for env_var in env_vars
 )
+_CONFIG_ENV_SYNC_KEYS = _API_KEY_CONFIG_KEYS | PROVIDER_AUTH_ENV_KEYS
 _MODEL_SNAPSHOT_CACHE: dict[str, tuple[str, ...]] | None = None
 _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES: dict[str, str] = {}
 
@@ -193,7 +195,7 @@ class UserConfigSource(PydanticBaseSettingsSource):
                 if key in _LEGACY_IGNORED_KEYS:
                     continue
                 if key in _ALLOWED_KEYS:
-                    if key not in os.environ:
+                    if key in _CONFIG_ENV_SYNC_KEYS and key not in os.environ:
                         os.environ[key] = value
                     result[key.lower()] = value
         except (OSError, UnicodeError):
@@ -403,13 +405,21 @@ class AppSettings(BaseSettings):
         if len(supported_models) > UNSUPPORTED_MODEL_LIST_LIMIT:
             listed_models = f"{listed_models}, ..."
 
-        provider_config = OAUTH_PROVIDER_CONFIGS.get(provider, {})
-        provider_label = provider_config.get("label", provider)
+        provider_label = self._get_provider_display_label(provider)
         return UNSUPPORTED_MODEL_MESSAGE.format(
             model=model,
             provider_label=provider_label,
             supported_models=listed_models,
         )
+
+    def _get_provider_display_label(self, provider: str) -> str:
+        oauth_config = OAUTH_PROVIDER_CONFIGS.get(provider, {})
+        oauth_label = oauth_config.get("label")
+        if oauth_label:
+            return oauth_label
+        provider_config = PROVIDER_CONFIG.get(provider, {})
+        provider_name = provider_config.get("name")
+        return provider_name if isinstance(provider_name, str) else provider
 
     def _get_snapshot_provider_for_model(
         self,

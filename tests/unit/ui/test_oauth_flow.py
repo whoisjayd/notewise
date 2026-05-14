@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from unittest.mock import MagicMock
 
+from notewise._constants import LLM_PAYLOAD_ERROR_SUMMARY
 from notewise.ui.oauth_flow import run_oauth_login
 
 
@@ -81,6 +82,39 @@ def test_run_oauth_login_reports_failure_without_raising(mocker):
     rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
     assert "OAuth login failed" in rendered
     assert "device auth failed" in rendered
+
+
+def test_run_oauth_login_suppresses_payload_shaped_failure_text(mocker):
+    """OAuth login failures should not print provider request payload details."""
+    console = MagicMock()
+    secret_prompt = "SECRET_PROMPT_TEXT"
+    secret_token = "sk-secret-token"
+    payload_error = "complete_input_dict=" + repr(
+        {
+            "messages": [{"role": "user", "content": secret_prompt}],
+            "input": "raw input",
+            "api_key": secret_token,
+        }
+    )
+    completion = mocker.patch(
+        "litellm.acompletion",
+        new_callable=mocker.AsyncMock,
+        side_effect=RuntimeError(payload_error),
+    )
+    responses = mocker.patch("litellm.aresponses", new_callable=mocker.AsyncMock)
+
+    assert run_oauth_login("github_copilot", console=console) is False
+
+    completion.assert_awaited_once()
+    responses.assert_not_awaited()
+    rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+    assert "OAuth login failed" in rendered
+    assert LLM_PAYLOAD_ERROR_SUMMARY in rendered
+    assert "complete_input_dict" not in rendered
+    assert "messages" not in rendered
+    assert "input" not in rendered
+    assert secret_prompt not in rendered
+    assert secret_token not in rendered
 
 
 def test_run_oauth_login_reports_unsupported_provider_without_raising(mocker):

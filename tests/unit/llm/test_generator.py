@@ -83,7 +83,7 @@ class TestStudyMaterialGenerator:
 
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
-                mock_tc.side_effect = lambda _model, text: len(text.split())
+                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"].split())
 
                 text = "Sentence one. Sentence two. Sentence three."
                 chunks = generator._chunk_transcript(text)
@@ -92,6 +92,29 @@ class TestStudyMaterialGenerator:
                 assert all(chunk.endswith(".") for chunk in chunks)
         finally:
             config.chunk_size = orig_size
+
+    def test_chunk_transcript_overlap_rollover_respects_chunk_size(self, generator):
+        """Overlap rollover should not emit chunks above the token budget."""
+        orig_size = config.chunk_size
+        orig_overlap = config.chunk_overlap
+        config.chunk_size = 5
+        config.chunk_overlap = 4
+
+        try:
+            with patch("notewise.pipeline.generation.token_counter") as mock_tc:
+                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"].split())
+
+                text = "aa bb. cc dd. ee ff gg."
+                chunks = generator._chunk_transcript(text)
+
+                assert len(chunks) > 1
+                assert all(
+                    generator._count_tokens(chunk) <= config.chunk_size
+                    for chunk in chunks
+                )
+        finally:
+            config.chunk_size = orig_size
+            config.chunk_overlap = orig_overlap
 
     def test_chunk_transcript_newlines(self, generator):
         """Test splitting by newlines when sentences fail."""
@@ -119,7 +142,7 @@ class TestStudyMaterialGenerator:
         try:
             with patch("notewise.pipeline.generation.token_counter") as mock_tc:
                 # Mock token counter to say everything is too big
-                mock_tc.side_effect = lambda _model, text: len(text)
+                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"])
 
                 # A single massive word without spaces/newlines
                 text = "A" * 100
@@ -129,6 +152,26 @@ class TestStudyMaterialGenerator:
                 # Should be split by character limit logic
                 assert len(chunks) > 1
                 assert len(chunks[0]) > 0
+        finally:
+            config.chunk_size = orig_size
+
+    def test_chunk_transcript_hard_split_chunks_respect_chunk_size(self, generator):
+        """Hard-split chunks should be revalidated against the token budget."""
+        orig_size = config.chunk_size
+        config.chunk_size = 5
+
+        try:
+            with patch("notewise.pipeline.generation.token_counter") as mock_tc:
+                mock_tc.side_effect = lambda **kwargs: len(kwargs["text"])
+
+                text = "A" * 16
+                chunks = generator._chunk_transcript(text)
+
+                assert "".join(chunks) == text
+                assert all(
+                    generator._count_tokens(chunk) <= config.chunk_size
+                    for chunk in chunks
+                )
         finally:
             config.chunk_size = orig_size
 

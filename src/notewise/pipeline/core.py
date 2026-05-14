@@ -20,6 +20,7 @@ from notewise._constants import (
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_THROTTLE_SECONDS,
+    OUTPUT_METADATA_CHAPTER_FILES_KEY,
     OUTPUT_METADATA_FILENAME,
     OUTPUT_METADATA_VIDEO_ID_KEY,
 )
@@ -31,6 +32,7 @@ from notewise.llm.provider import UsageTotals, get_provider
 from notewise.pipeline._artifacts import (
     export_transcript,
     generate_and_write_quiz,
+    normalize_transcript_export_format,
     prefix_chapter_heading_with_timestamp,
 )
 from notewise.pipeline._documents import (
@@ -143,7 +145,9 @@ class CorePipeline:
         self.throttle_seconds = self.generator.throttle_seconds
         self.force = force
         self.quiz = quiz
-        self.export_transcript_format = export_transcript
+        self.export_transcript_format = normalize_transcript_export_format(
+            export_transcript
+        )
         self.timestamps = timestamps
         self.chapter_directory_output = chapter_directory_output
         self.youtube_cookie_file = youtube_cookie_file or config.youtube_cookie_file
@@ -152,13 +156,15 @@ class CorePipeline:
         self._metrics_lock = asyncio.Lock()
         self._run_metrics = PipelineMetrics()
         if shared_state is None:
-            self.semaphore = asyncio.Semaphore(config.max_concurrent_videos)
+            self.max_concurrent_videos = max(1, int(config.max_concurrent_videos))
+            self.semaphore = asyncio.Semaphore(self.max_concurrent_videos)
             self._chapter_semaphore = asyncio.Semaphore(
                 max(1, int(config.max_concurrent_chapters))
             )
             self._output_lock = asyncio.Lock()
             self._reserved_output_targets: set[Path] = set()
         else:
+            self.max_concurrent_videos = max(1, int(config.max_concurrent_videos))
             self.semaphore = shared_state.semaphore
             if shared_state.chapter_semaphore is None:
                 shared_state.chapter_semaphore = asyncio.Semaphore(
@@ -284,9 +290,21 @@ class CorePipeline:
         if not target.is_dir():
             return False
 
+        metadata = self._read_output_target_metadata(target, video_id)
+        return metadata.get(OUTPUT_METADATA_VIDEO_ID_KEY) == video_id
+
+    def _read_output_target_metadata(
+        self,
+        target: Path,
+        video_id: str,
+    ) -> dict[str, Any]:
+        """Read lightweight output ownership metadata for chapter directories."""
+        if not target.is_dir():
+            return {}
+
         metadata_path = target / OUTPUT_METADATA_FILENAME
         if not metadata_path.exists():
-            return False
+            return {}
 
         try:
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -297,17 +315,28 @@ class CorePipeline:
                 video_id=video_id,
                 exc_info=True,
             )
-            return False
+            return {}
 
-        return metadata.get(OUTPUT_METADATA_VIDEO_ID_KEY) == video_id
+        if isinstance(metadata, dict):
+            return metadata
+        return {}
 
-    def _write_output_target_metadata(self, target: Path, video_id: str) -> None:
+    def _write_output_target_metadata(
+        self,
+        target: Path,
+        video_id: str,
+        chapter_files: list[Path] | None = None,
+    ) -> None:
         """Write lightweight output ownership metadata for chapter directories."""
         if not target.is_dir():
             return
 
         metadata_path = target / OUTPUT_METADATA_FILENAME
-        metadata = {OUTPUT_METADATA_VIDEO_ID_KEY: video_id}
+        metadata: dict[str, object] = {OUTPUT_METADATA_VIDEO_ID_KEY: video_id}
+        if chapter_files is not None:
+            metadata[OUTPUT_METADATA_CHAPTER_FILES_KEY] = [
+                path.name for path in chapter_files
+            ]
         metadata_path.write_text(json.dumps(metadata, sort_keys=True), encoding="utf-8")
 
     async def _release_output_target(self, target: Path | None) -> None:

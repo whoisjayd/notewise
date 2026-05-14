@@ -26,6 +26,7 @@ from notewise._constants import (
     OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
+from notewise.errors import ConfigurationError
 
 
 if TYPE_CHECKING:
@@ -99,11 +100,48 @@ def _get_config_file_path() -> Path:
     return get_state_dir() / CONFIG_FILENAME
 
 
+def _format_config_validation_error(error: Any) -> str:
+    """Return a user-facing summary for settings validation failures."""
+    messages: list[str] = []
+    for item in error.errors():
+        location = item.get("loc") or ("configuration",)
+        name = str(location[0]).upper()
+        message = str(item.get("msg") or "Invalid value")
+        value = item.get("input")
+        if value is None:
+            messages.append(f"{name}: {message}")
+        else:
+            messages.append(f"{name}={value!r}: {message}")
+
+    details = "; ".join(messages) if messages else str(error)
+    return f"{details}. Invalid configuration value."
+
+
+def _print_configuration_error(error: Exception) -> None:
+    """Render expected configuration failures without a traceback."""
+    from notewise.cli._formatters import print_single_failure
+
+    print_single_failure(
+        _get_console(),
+        "Configuration Error",
+        str(error),
+        item_label="Config",
+    )
+
+
 def _get_config() -> Any:
     """Load shared settings lazily for fast commands."""
     global config
     if config is None:
+        from pydantic import ValidationError as PydanticValidationError
+
         from notewise.config import settings as _config
+        from notewise.errors import ConfigurationError
+
+        try:
+            _config._get_instance()
+        except PydanticValidationError as error:
+            raise ConfigurationError(_format_config_validation_error(error)) from error
 
         config = _config
     return config
@@ -540,6 +578,9 @@ def process(
         else:
             console.print("\n[red]Processing stopped before it finished.[/red]\n")
         raise typer.Exit(code=1) from None
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
     except typer.Exit:
         raise
     except Exception:
@@ -629,6 +670,11 @@ def setup(
     """
     _load_setup_dependencies()
     if show:
+        try:
+            _get_config()
+        except ConfigurationError as error:
+            _print_configuration_error(error)
+            raise typer.Exit(code=1) from None
         show_current_config(console=_get_console())
         return
     run_setup_wizard(force=force)
@@ -638,6 +684,11 @@ def setup(
 def show_config_command() -> None:
     """Show the current resolved configuration with secrets masked."""
     _load_setup_dependencies()
+    try:
+        _get_config()
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
     show_current_config(console=_get_console())
 
 
@@ -764,18 +815,25 @@ def info(
     """Show runtime info or inspect a YouTube source without processing it."""
     console = _get_console()
     if url is None:
+        try:
+            _get_config()
+        except ConfigurationError as error:
+            _print_configuration_error(error)
+            raise typer.Exit(code=1) from None
+
         from notewise.cli._admin import render_runtime_info
 
         render_runtime_info(console)
         return
 
-    _load_process_dependencies()
-    settings = _get_config()
-    from notewise.cli._admin import render_source_info
     from notewise.cli._formatters import print_single_failure
     from notewise.errors import PlaylistError, ValidationError, VideoUnavailableError
 
     try:
+        _load_process_dependencies()
+        settings = _get_config()
+        from notewise.cli._admin import render_source_info
+
         with console.status("Inspecting source..."):
             asyncio.run(
                 render_source_info(
@@ -789,6 +847,9 @@ def info(
                     cookie_file=settings.youtube_cookie_file,
                 )
             )
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
     except (ValidationError, ValueError) as error:
         print_single_failure(
             console,
@@ -822,6 +883,12 @@ def info(
 @app.command()
 def doctor() -> None:
     """Run a non-destructive health check for config, cache, and logs."""
+    try:
+        _get_config()
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
+
     from notewise.cli._admin import render_doctor
 
     render_doctor(_get_console())

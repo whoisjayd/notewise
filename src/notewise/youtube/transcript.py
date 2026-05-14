@@ -54,6 +54,7 @@ async def fetch_transcript(
     languages: list[str] | None = None,
     on_request: Callable[[], Awaitable[None]] | None = None,
     cookie_file: str | None = None,
+    video_data: dict[str, Any] | None = None,
 ) -> VideoTranscript:
     """Fetch transcript for a YouTube video with language fallback and retries."""
     if languages is None:
@@ -72,6 +73,7 @@ async def fetch_transcript(
                 client,
                 video_id,
                 languages,
+                video_data=video_data,
             )
 
             logger.info(log_msg)
@@ -136,14 +138,23 @@ async def _fetch_async(
     client: AsyncYouTubeExtractorClient,
     video_id: str,
     languages: list[str],
+    video_data: dict[str, Any] | None = None,
 ) -> tuple[Any, _TranscriptMeta, str]:
     """Async helper to interact with the async extractor client."""
     try:
-        payload = await client.transcript(
-            video_id,
-            languages=languages,
-            include_automatic=True,
-        )
+        if video_data is None:
+            payload = await client.transcript(
+                video_id,
+                languages=languages,
+                include_automatic=True,
+            )
+        else:
+            payload = await client.transcript_from_video_data(
+                video_id,
+                video_data,
+                languages=languages,
+                include_automatic=True,
+            )
     except ExtractionError as error:
         message = str(error)
         raise_if_video_unavailable(message)
@@ -180,22 +191,42 @@ def split_transcript_by_chapters_with_metadata(
     """Split a video transcript by chapters and preserve start timing."""
     chapter_transcripts: dict[str, ChapterTranscript] = {}
     seen_titles: dict[str, int] = {}
+    segment_records: list[tuple[float, float, str]] = []
+
+    for segment_index in range(len(transcript.segments)):
+        segment = transcript.segments[segment_index]
+        segment_start = segment.start
+        segment_end = segment.start + max(segment.duration, 0.0)
+        segment_records.append((segment_start, segment_end, segment.text))
+
+    segment_cursor = 0
 
     for chapter in chapters:
         chapter_segments: list[str] = []
 
-        for segment in transcript.segments:
-            segment_start = segment.start
-            segment_end = segment.start + max(segment.duration, 0.0)
+        while (
+            segment_cursor < len(segment_records)
+            and segment_records[segment_cursor][1] <= chapter.start_seconds
+        ):
+            segment_cursor += 1
+
+        scan_index = segment_cursor
+        while scan_index < len(segment_records):
+            segment_start, segment_end, segment_text = segment_records[scan_index]
+
+            if chapter.end_seconds is not None and segment_start >= chapter.end_seconds:
+                break
 
             if chapter.end_seconds is None:
                 if segment_end > chapter.start_seconds:
-                    chapter_segments.append(segment.text)
+                    chapter_segments.append(segment_text)
             elif (
                 segment_end > chapter.start_seconds
                 and segment_start < chapter.end_seconds
             ):
-                chapter_segments.append(segment.text)
+                chapter_segments.append(segment_text)
+
+            scan_index += 1
 
         chapter_text = " ".join(chapter_segments)
         if not chapter_text.strip():

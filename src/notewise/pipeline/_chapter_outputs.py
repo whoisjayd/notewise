@@ -76,7 +76,12 @@ class PipelineProtocol(Protocol):
         allow_existing_base: bool = False,
     ) -> Path: ...
 
-    def _write_output_target_metadata(self, target: Path, video_id: str) -> None: ...
+    def _write_output_target_metadata(
+        self,
+        target: Path,
+        video_id: str,
+        chapter_files: list[Path] | None = None,
+    ) -> None: ...
 
 
 @dataclass(frozen=True)
@@ -299,21 +304,20 @@ async def generate_missing_chapter_notes(
             if on_combine:
                 on_combine(total_parts)
 
-        try:
-            return await original_generate_single(
-                chapter_title=chapter_title,
-                chapter_text=chapter_text,
-                on_chunk=_on_chapter_chunk,
-                on_combine=_on_chapter_combine,
-            )
-        finally:
-            emit(
-                EventType.CHAPTER_COMPLETE,
-                video_id,
-                title=title,
-                chapter_number=chapter_number,
-                total_chapters=total_chapters,
-            )
+        result = await original_generate_single(
+            chapter_title=chapter_title,
+            chapter_text=chapter_text,
+            on_chunk=_on_chapter_chunk,
+            on_combine=_on_chapter_combine,
+        )
+        emit(
+            EventType.CHAPTER_COMPLETE,
+            video_id,
+            title=title,
+            chapter_number=chapter_number,
+            total_chapters=total_chapters,
+        )
+        return result
 
     generate_chapter_notes = pipeline.generator.generate_chapter_notes_concurrent
     return await generate_chapter_notes(
@@ -448,6 +452,12 @@ async def generate_chapter_outputs(
         generated_chapter_notes,
         output_targets.rendered_output_targets,
     )
+    if chapter_directory_output and output_targets.output_target is not None:
+        pipeline._write_output_target_metadata(
+            output_targets.output_target,
+            video_id,
+            list(plan.chapter_output_files.values()),
+        )
     (
         rendered_output_targets,
         render_warning,

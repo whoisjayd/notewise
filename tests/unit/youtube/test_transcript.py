@@ -304,6 +304,53 @@ class TestSplitTranscriptByChapters:
         assert chapter_map["Intro"].text == "Intro text"
         assert chapter_map["Intro"].start_seconds == 0
 
+    def test_split_transcript_by_chapters_with_metadata_uses_segment_cursor(self):
+        """Chapter splitting should not rescan all segments for each chapter."""
+
+        class AccessCountingSegments:
+            def __init__(self, segments):
+                self._segments = segments
+                self.access_count = 0
+
+            def __len__(self):
+                return len(self._segments)
+
+            def __getitem__(self, index):
+                self.access_count += 1
+                return self._segments[index]
+
+        segments = AccessCountingSegments(
+            [
+                TranscriptSegment("zero", 0.0, 5.0),
+                TranscriptSegment("one", 10.0, 5.0),
+                TranscriptSegment("two", 70.0, 5.0),
+                TranscriptSegment("three", 80.0, 5.0),
+                TranscriptSegment("four", 130.0, 5.0),
+                TranscriptSegment("five", 140.0, 5.0),
+            ]
+        )
+        transcript = VideoTranscript(
+            video_id="vid",
+            segments=segments,  # type: ignore[arg-type]
+            language="English",
+            language_code="en",
+            is_generated=False,
+        )
+        chapters = [
+            VideoChapter(title="Intro", start_seconds=0, end_seconds=60),
+            VideoChapter(title="Middle", start_seconds=60, end_seconds=120),
+            VideoChapter(title="End", start_seconds=120, end_seconds=None),
+        ]
+
+        chapter_map = split_transcript_by_chapters_with_metadata(transcript, chapters)
+
+        assert [chapter.text for chapter in chapter_map.values()] == [
+            "zero one",
+            "two three",
+            "four five",
+        ]
+        assert segments.access_count <= len(segments) + len(chapters)
+
     def test_split_transcript_by_chapters_skips_empty_windows(self):
         transcript = VideoTranscript(
             video_id="vid",

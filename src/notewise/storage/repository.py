@@ -88,6 +88,17 @@ class DatabaseRepository:
         with Session(self._engine) as session:
             return session.get(VideoRecord, video_id) is not None
 
+    def get_cached_video_ids(self, video_ids: list[str]) -> set[str]:
+        """Return cached video IDs from the provided IDs in one query."""
+        if not video_ids:
+            return set()
+        with Session(self._engine) as session:
+            return set(
+                session.execute(
+                    select(VideoRecord.id).where(VideoRecord.id.in_(video_ids))
+                ).scalars()
+            )
+
     def get_video(self, video_id: str) -> VideoSchema | None:
         """Load cached video metadata if present."""
         with Session(self._engine) as session:

@@ -12,8 +12,8 @@ from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
     LLMProvider,
     UsageTotals,
-    _summarize_error,
     get_provider,
+    summarize_provider_error,
     suppress_litellm_noise,
 )
 
@@ -566,19 +566,23 @@ class TestLLMProvider:
 
         mock_debug.assert_called_once()
 
-    def test_summarize_error_truncates_long_messages(self):
+    def test_summarize_provider_error_has_no_private_compatibility_alias(self):
+        """Provider error summarization should expose only the public helper."""
+        assert not hasattr(provider_mod, "_summarize_error")
+
+    def test_summarize_provider_error_truncates_long_messages(self):
         """Very long error messages should be clipped to the summary limit."""
-        summary = _summarize_error(Exception("x" * 600))
+        summary = summarize_provider_error(Exception("x" * 600))
         assert summary.endswith("...")
         assert len(summary) == 502
 
-    def test_summarize_error_escapes_unencodable_terminal_characters(self):
+    def test_summarize_provider_error_escapes_unencodable_terminal_characters(self):
         """Error summaries should stay printable on non-UTF terminals."""
         with (
             patch("notewise.logging.sys.stderr", SimpleNamespace(encoding="cp1252")),
             patch("notewise.logging.sys.stdout", SimpleNamespace(encoding="cp1252")),
         ):
-            summary = _summarize_error(Exception("retry later → unavailable"))
+            summary = summarize_provider_error(Exception("retry later → unavailable"))
 
         assert summary == "retry later \\u2192 unavailable"
 
