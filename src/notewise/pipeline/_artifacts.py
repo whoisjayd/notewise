@@ -9,8 +9,16 @@ from typing import TYPE_CHECKING, Any
 import structlog
 from sqlalchemy.exc import SQLAlchemyError
 
-from notewise._constants import SECONDS_PER_HOUR, SECONDS_PER_MINUTE
+from notewise._constants import (
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+    SUPPORTED_TRANSCRIPT_OUTPUT_FORMATS,
+    TRANSCRIPT_EXPORT_FORMAT_ERROR,
+    TRANSCRIPT_JSON_OUTPUT_FORMAT,
+    TRANSCRIPT_TEXT_OUTPUT_FORMAT,
+)
 from notewise.domain.events import EventType
+from notewise.errors import ValidationError
 from notewise.utils import sanitize_filename
 
 
@@ -22,6 +30,16 @@ if TYPE_CHECKING:
 
 
 logger = structlog.get_logger(__name__)
+
+
+def normalize_transcript_export_format(export_format: str | None) -> str | None:
+    """Normalize transcript export format while rejecting unsupported values."""
+    if export_format is None:
+        return None
+    normalized_format = export_format.strip().lower()
+    if normalized_format in SUPPORTED_TRANSCRIPT_OUTPUT_FORMATS:
+        return normalized_format
+    raise ValidationError(TRANSCRIPT_EXPORT_FORMAT_ERROR)
 
 
 def _format_timestamp(seconds: int) -> str:
@@ -128,10 +146,13 @@ def export_transcript(
 ) -> Path:
     """Export a transcript to disk and persist the export record."""
 
+    normalized_format = normalize_transcript_export_format(export_format)
+    normalized_format = normalized_format or TRANSCRIPT_TEXT_OUTPUT_FORMAT
+
     safe_title = sanitize_filename(title)
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    if export_format == "json":
+    if normalized_format == TRANSCRIPT_JSON_OUTPUT_FORMAT:
         export_path = output_dir / f"{safe_title}_transcript.json"
         data = {
             "video_id": transcript.video_id,
@@ -158,7 +179,7 @@ def export_transcript(
     try:
         db.add_export_record(
             video_id=video_id,
-            format=export_format or "txt",
+            format=normalized_format,
             output_path=str(export_path),
         )
     except SQLAlchemyError as exc:

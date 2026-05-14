@@ -1,4 +1,6 @@
 {
+  "python.analysis.extraPaths": ["${workspaceFolder}/src"],
+  "python.defaultInterpreterPath": "${workspaceFolder}/.venv",
   "css.validate": false,
   "scss.validate": false
 }

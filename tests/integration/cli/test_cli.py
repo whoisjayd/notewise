@@ -256,6 +256,26 @@ def test_process_missing_api_key_exits_with_error(monkeypatch):
     assert "Run `notewise setup` to get started." in result.output
 
 
+def test_process_invalid_config_value_exits_with_configuration_error(
+    tmp_path,
+    monkeypatch,
+):
+    """Invalid config.env values should be reported as configuration errors."""
+    monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    config_dir = tmp_path / ".notewise"
+    config_dir.mkdir()
+    (config_dir / "config.env").write_text("TEMPERATURE=hot\n", encoding="utf-8")
+
+    result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 1
+    assert "Configuration Error" in result.output
+    assert "TEMPERATURE" in result.output
+    assert "hot" in result.output
+    assert "unexpected internal error" not in result.output
+    assert "Traceback" not in result.output
+
+
 def test_process_rejects_unsupported_model_before_playlist_network(tmp_path):
     """Unsupported models should fail before touching YouTube playlists."""
 

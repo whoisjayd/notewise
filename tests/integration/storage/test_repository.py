@@ -50,6 +50,23 @@ class TestReadWrite:
         )
         assert repo.has_video("vid1")
 
+    def test_get_cached_video_ids_returns_cached_subset(self, repo):
+        for video_id in ("vid1", "vid2"):
+            repo.upsert_video_cache(
+                video_id=video_id,
+                title="T",
+                duration=10,
+                transcript_content="x",
+                language="en",
+                tokens_used=1,
+                model="m",
+            )
+
+        assert repo.get_cached_video_ids(["vid1", "missing", "vid1", "vid2"]) == {
+            "vid1",
+            "vid2",
+        }
+
     def test_get_video_returns_none_for_missing(self, repo):
         assert repo.get_video("nonexistent") is None
 

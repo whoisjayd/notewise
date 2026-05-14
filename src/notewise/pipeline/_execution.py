@@ -13,6 +13,8 @@ import structlog
 from notewise._constants import (
     CHAPTER_MARKDOWN_FILE_EXTENSION,
     DEFAULT_NOTES_OUTPUT_FORMAT,
+    EMPTY_TRANSCRIPT_ERROR,
+    OUTPUT_METADATA_CHAPTER_FILES_KEY,
     PDF_NOTES_OUTPUT_FORMAT,
     QUIZ_MARKDOWN_FILE_SUFFIX,
     TRANSCRIPT_JSON_OUTPUT_FORMAT,
@@ -22,6 +24,7 @@ from notewise.domain.events import EventType, PipelineEvent
 from notewise.domain.results import PipelineMetrics, PipelineResult
 from notewise.errors import (
     IPBlockError,
+    TranscriptUnavailableError,
     VideoUnavailableError,
     format_user_error,
 )
@@ -34,7 +37,11 @@ from notewise.pipeline._helpers import coerce_usage_totals
 from notewise.pipeline._output_rendering import render_notes_with_warning
 from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
-from notewise.youtube.metadata import get_video_metadata
+from notewise.youtube.metadata import (
+    get_video_details,
+    get_video_metadata,
+    video_metadata_from_details,
+)
 from notewise.youtube.transcript import (
     fetch_transcript,
     split_transcript_by_chapters_with_metadata,
@@ -48,6 +55,8 @@ if TYPE_CHECKING:
 
 
 logger = structlog.get_logger(__name__)
+
+_ORIGINAL_GET_VIDEO_METADATA = get_video_metadata
 
 
 @dataclass(frozen=True)
@@ -92,7 +101,11 @@ def _cached_video_has_requested_artifacts(
         chapter_dir = output_dir / safe_title
         if not pipeline._is_reusable_directory_output(chapter_dir, video_id):
             return False
-        if not any(chapter_dir.glob(f"*{CHAPTER_MARKDOWN_FILE_EXTENSION}")):
+        if not _chapter_directory_has_complete_manifest(
+            pipeline,
+            chapter_dir,
+            video_id,
+        ):
             return False
         transcript_dir = chapter_dir
 
@@ -130,16 +143,46 @@ def _cached_video_has_requested_artifacts(
     return True
 
 
+def _chapter_directory_has_complete_manifest(
+    pipeline: Any,
+    chapter_dir: Path,
+    video_id: str,
+) -> bool:
+    metadata_reader = getattr(pipeline, "_read_output_target_metadata", None)
+    if not callable(metadata_reader):
+        return False
+
+    metadata: Any = metadata_reader(chapter_dir, video_id)
+    if not isinstance(metadata, dict):
+        return False
+    chapter_files = metadata.get(OUTPUT_METADATA_CHAPTER_FILES_KEY)
+    if not isinstance(chapter_files, list) or not chapter_files:
+        return False
+
+    return all(
+        isinstance(filename, str) and (chapter_dir / filename).is_file()
+        for filename in chapter_files
+    )
+
+
 async def _fetch_video_inputs(
     pipeline: Any,
     video_id: str,
     emit: Callable[..., None],
 ) -> _VideoInputs:
     await pipeline._acquire_youtube_request_slot()
-    meta = await get_video_metadata(
-        video_id,
-        pipeline.youtube_cookie_file,
-    )
+    video_data: dict[str, Any] | None = None
+    if get_video_metadata is _ORIGINAL_GET_VIDEO_METADATA:
+        video_data = await get_video_details(
+            video_id,
+            pipeline.youtube_cookie_file,
+        )
+        meta = video_metadata_from_details(video_id, video_data)
+    else:
+        meta = await get_video_metadata(
+            video_id,
+            pipeline.youtube_cookie_file,
+        )
     title: str = meta.title
     chapters = meta.chapters
 
@@ -153,13 +196,20 @@ async def _fetch_video_inputs(
     emit(EventType.TRANSCRIPT_FETCHING, video_id, title=title)
 
     transcript_start = time.perf_counter()
+    transcript_kwargs: dict[str, Any] = {
+        "on_request": pipeline._acquire_youtube_request_slot,
+        "cookie_file": pipeline.youtube_cookie_file,
+    }
+    if video_data is not None:
+        transcript_kwargs["video_data"] = video_data
     transcript = await fetch_transcript(
         video_id,
         pipeline.languages,
-        on_request=pipeline._acquire_youtube_request_slot,
-        cookie_file=pipeline.youtube_cookie_file,
+        **transcript_kwargs,
     )
     transcript_text = transcript.to_text()
+    if not transcript_text.strip():
+        raise TranscriptUnavailableError(EMPTY_TRANSCRIPT_ERROR)
     transcript_seconds = time.perf_counter() - transcript_start
 
     emit(EventType.TRANSCRIPT_FETCHED, video_id, title=title)
@@ -565,23 +615,36 @@ async def run_pipeline(
     pipeline.errors.clear()
     pipeline._run_metrics = PipelineMetrics()
 
-    tasks = [
-        process_single_video(pipeline, video_id, on_event=on_event)
-        for video_id in video_ids
-    ]
+    results: list[bool] = [False] * len(video_ids)
+    next_video_index = 0
+    worker_count = min(
+        len(video_ids),
+        max(1, int(getattr(pipeline, "max_concurrent_videos", 1))),
+    )
 
-    raw_results = await asyncio.gather(*tasks, return_exceptions=True)
-    results: list[bool] = []
-    for vid, result in zip(video_ids, raw_results, strict=False):
-        if isinstance(result, BaseException):
-            err_msg = format_user_error(
-                result if isinstance(result, Exception) else Exception(str(result))
-            )
-            pipeline.errors[vid] = err_msg
-            emit(EventType.VIDEO_FAILED, vid, error=err_msg)
-            results.append(False)
-        else:
-            results.append(bool(result))
+    async def _worker() -> None:
+        nonlocal next_video_index
+        while next_video_index < len(video_ids):
+            index = next_video_index
+            next_video_index += 1
+            vid = video_ids[index]
+            try:
+                result = await process_single_video(
+                    pipeline,
+                    vid,
+                    on_event=on_event,
+                )
+            except BaseException as error:
+                err_msg = format_user_error(
+                    error if isinstance(error, Exception) else Exception(str(error))
+                )
+                pipeline.errors[vid] = err_msg
+                emit(EventType.VIDEO_FAILED, vid, error=err_msg)
+                results[index] = False
+            else:
+                results[index] = bool(result)
+
+    await asyncio.gather(*(_worker() for _ in range(worker_count)))
 
     success_count = sum(1 for result in results if result is True)
     failure_count = len(video_ids) - success_count

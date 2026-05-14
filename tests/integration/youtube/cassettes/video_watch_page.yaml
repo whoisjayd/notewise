@@ -1,0 +1,28 @@
+interactions:
+- request:
+    body: null
+    headers:
+      Accept-Language:
+      - en-US,en;q=0.9
+      Connection:
+      - close
+      User-Agent:
+      - Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like
+        Gecko) Chrome/124.0.0.0 Safari/537.36
+    method: GET
+    uri: https://www.youtube.com/watch?v=SANITIZED_VIDEO_ID
+  response:
+    body:
+      string: |
+        <html><head><title>Replay</title></head><body>
+        <script>ytcfg.set({"INNERTUBE_CONTEXT":{"client":{"clientName":"WEB","clientVersion":"2.0"}}});</script>
+        <script>var ytInitialData = {"engagementPanels":[{"engagementPanelSectionListRenderer":{"content":{"macroMarkersListRenderer":{"contents":[{"macroMarkersListItemRenderer":{"timeDescription":{"simpleText":"0:00"},"title":{"simpleText":"Intro"}}},{"macroMarkersListItemRenderer":{"timeDescription":{"simpleText":"0:30"},"title":{"simpleText":"Deep Dive"}}}]}}}}]};</script>
+        <script>var ytInitialPlayerResponse = {"videoDetails":{"title":"Replay Metadata Video","lengthSeconds":"60","shortDescription":"00:00 Intro\n00:30 Deep Dive","viewCount":"1234","author":"Replay Channel","channelId":"CHANNEL_ID","isLive":false,"keywords":["education"],"thumbnail":{"thumbnails":[{"url":"https://i.ytimg.test/thumb.jpg","width":120,"height":90}]}},"microformat":{"playerMicroformatRenderer":{"uploadDate":"2025-01-01","publishDate":"2025-01-02","category":"Education"}},"captions":{"playerCaptionsTracklistRenderer":{"captionTracks":[{"languageCode":"en","baseUrl":"http://youtube.test/api/timedtext?v=SANITIZED_VIDEO_ID&lang=en","name":{"simpleText":"English"}}]}},"playabilityStatus":{"status":"OK"}};</script>
+        </body></html>
+    headers:
+      Content-Type:
+      - text/html; charset=utf-8
+    status:
+      code: 200
+      message: OK
+version: 1

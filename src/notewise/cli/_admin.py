@@ -268,11 +268,7 @@ async def render_source_info(
         )
         video_ids = list(dict.fromkeys(playlist_video_ids))
         cached_count = (
-            sum(
-                1
-                for video_id in video_ids
-                if repository and repository.has_video(video_id)
-            )
+            len(repository.get_cached_video_ids(video_ids))
             if repository is not None
             else 0
         )

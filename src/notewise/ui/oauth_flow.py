@@ -23,6 +23,7 @@ from notewise._constants import (
 )
 from notewise.config import configure_oauth_token_storage, get_oauth_token_storage_paths
 from notewise.errors import OAuthError
+from notewise.llm.provider import summarize_provider_error
 from notewise.logging import redact_sensitive_text
 
 
@@ -110,7 +111,7 @@ async def run_oauth_login_async(
             "[red]"
             + OAUTH_LOGIN_FAILURE_MESSAGE.format(
                 provider_label=provider_label,
-                error=redact_sensitive_text(str(error)),
+                error=summarize_provider_error(error),
             )
             + "[/red]"
         )
