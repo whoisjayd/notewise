@@ -39,7 +39,6 @@ from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
 from notewise.youtube.metadata import (
     get_video_details,
-    get_video_metadata,
     video_metadata_from_details,
 )
 from notewise.youtube.transcript import (
@@ -55,8 +54,6 @@ if TYPE_CHECKING:
 
 
 logger = structlog.get_logger(__name__)
-
-_ORIGINAL_GET_VIDEO_METADATA = get_video_metadata
 
 
 @dataclass(frozen=True)
@@ -171,18 +168,11 @@ async def _fetch_video_inputs(
     emit: Callable[..., None],
 ) -> _VideoInputs:
     await pipeline._acquire_youtube_request_slot()
-    video_data: dict[str, Any] | None = None
-    if get_video_metadata is _ORIGINAL_GET_VIDEO_METADATA:
-        video_data = await get_video_details(
-            video_id,
-            pipeline.youtube_cookie_file,
-        )
-        meta = video_metadata_from_details(video_id, video_data)
-    else:
-        meta = await get_video_metadata(
-            video_id,
-            pipeline.youtube_cookie_file,
-        )
+    video_data = await get_video_details(
+        video_id,
+        pipeline.youtube_cookie_file,
+    )
+    meta = video_metadata_from_details(video_id, video_data)
     title: str = meta.title
     chapters = meta.chapters
 
@@ -634,10 +624,10 @@ async def run_pipeline(
                     vid,
                     on_event=on_event,
                 )
-            except BaseException as error:
-                err_msg = format_user_error(
-                    error if isinstance(error, Exception) else Exception(str(error))
-                )
+            except asyncio.CancelledError:
+                raise
+            except Exception as error:
+                err_msg = format_user_error(error)
                 pipeline.errors[vid] = err_msg
                 emit(EventType.VIDEO_FAILED, vid, error=err_msg)
                 results[index] = False

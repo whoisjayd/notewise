@@ -110,6 +110,7 @@ def test_markdown_to_html_removes_unsafe_link_hrefs(markdown_text: str) -> None:
     [
         ("[safe](http://example.com)", 'href="http://example.com"'),
         ("[safe](https://example.com/path)", 'href="https://example.com/path"'),
+        ("[safe](  HtTpS://Example.com  )", 'href="HtTpS://Example.com"'),
         ("[safe](mailto:learner@example.com)", 'href="mailto:learner@example.com"'),
         ("[safe](#chapter-1)", 'href="#chapter-1"'),
     ],

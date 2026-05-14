@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -260,7 +261,11 @@ async def test_run_bounds_video_scheduling_to_configured_concurrency(
     first_batch_started = asyncio.Event()
     release_first_batch = asyncio.Event()
 
-    async def _process(_pipeline, video_id, on_event=None):
+    async def _process(
+        _pipeline: CorePipeline,
+        video_id: str,
+        on_event: Any | None = None,
+    ) -> bool:
         del _pipeline, on_event
         started.append(video_id)
         if len(started) == 2:
@@ -286,6 +291,35 @@ async def test_run_bounds_video_scheduling_to_configured_concurrency(
 
     assert result.success_count == 4
     assert result.video_ids == ["v1", "v2", "v3", "v4"]
+
+
+@pytest.mark.asyncio
+async def test_run_propagates_video_worker_cancellation(
+    temp_output_dir,
+    mock_llm_provider,
+) -> None:
+    """Pipeline cancellation should not be converted into a video failure."""
+    pipeline = _make_pipeline(temp_output_dir, mock_llm_provider)
+
+    async def _cancel(
+        _pipeline: CorePipeline,
+        video_id: str,
+        on_event: Any | None = None,
+    ) -> bool:
+        del _pipeline, video_id, on_event
+        raise asyncio.CancelledError
+
+    with (
+        patch.object(pipeline, "_check_api_key", return_value=True),
+        patch(
+            "notewise.pipeline._execution.process_single_video",
+            side_effect=_cancel,
+        ),
+        pytest.raises(asyncio.CancelledError),
+    ):
+        await pipeline.run(["v1"])
+
+    assert pipeline.errors == {}
 
 
 @pytest.mark.asyncio

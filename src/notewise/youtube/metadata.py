@@ -38,9 +38,12 @@ async def get_video_metadata(
 
 def video_metadata_from_details(
     video_id: str,
-    video_data: dict[str, object],
+    video_data: dict[str, object] | VideoMetadata,
 ) -> VideoMetadata:
     """Map a full extractor payload into video metadata."""
+    if isinstance(video_data, VideoMetadata):
+        return video_data
+
     title = str(video_data.get("title") or video_id)
     duration = _coerce_int(video_data.get("duration"))
     chapters = _map_video_chapters(_coerce_raw_chapters(video_data.get("chapters")))
