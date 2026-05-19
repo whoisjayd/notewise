@@ -2,7 +2,7 @@
 
 NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-Current documented version: `1.4.2`.
+Current documented version: `1.4.3`.
 
 Canonical public docs base: `https://notewise.click/docs`
 

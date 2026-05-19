@@ -1,6 +1,6 @@
 [project]
 name = "notewise"
-version = "1.4.2"
+version = "1.4.3"
 description = "A terminal-native CLI that turns YouTube videos and playlists into hierarchical Markdown study notes, quizzes, transcripts, and multi-format exports (MD · HTML · PDF · DOCX) — through the LLM provider you already pay for."
 readme = { file = "README.md", content-type = "text/markdown" }
 requires-python = ">=3.11"
