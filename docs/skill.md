@@ -56,7 +56,7 @@ Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `sta
 
 ## Config
 
-Config file: `~/.notewise/config.env`. `NOTEWISE_HOME` changes the state root. Practical precedence: CLI flags, environment variables, config file, defaults.
+Config file: `~/.notewise/config.env`. `NOTEWISE_HOME` changes the state root. Practical precedence: CLI flags, then environment variables, then config file, then defaults. Exception: `OUTPUT_DIR` from config file is respected unless `--output/-o` is passed.
 
 Common keys: `DEFAULT_MODEL`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys. Do not present `chunk_size`, `chunk_overlap`, or `max_concurrent_chapters` as normal config-file keys.
 

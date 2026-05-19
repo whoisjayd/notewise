@@ -19,6 +19,14 @@ if TYPE_CHECKING:
     from notewise.cli._context import CliProcessContext
 
 
+def _ensure_selected_output_dir(context: CliProcessContext) -> None:
+    ensure_output_dir = getattr(context, "ensure_selected_output_dir", None)
+    if callable(ensure_output_dir):
+        ensure_output_dir()
+    else:
+        context.selected_output.mkdir(parents=True, exist_ok=True)
+
+
 async def prepare_source(
     context: CliProcessContext,
     source_url: str,
@@ -35,6 +43,7 @@ async def prepare_source(
                 "Input Error",
                 [("URL", "Could not extract a video ID from this URL.")],
             )
+        _ensure_selected_output_dir(context)
         return ResolvedSource(
             source_url=source_url,
             label=parsed.video_id,
@@ -49,6 +58,7 @@ async def prepare_source(
             [("URL", "Could not extract a playlist ID from this URL.")],
         )
 
+    _ensure_selected_output_dir(context)
     try:
         video_ids = await context.extract_playlist_videos(
             parsed.playlist_id,

@@ -149,6 +149,10 @@ class CliProcessContext:
         self.api_key_checked = True
         return True
 
+    def ensure_selected_output_dir(self) -> None:
+        """Create the configured base output directory if it is missing."""
+        self.selected_output.mkdir(parents=True, exist_ok=True)
+
     def build_pipeline(
         self,
         output_dir: Path,

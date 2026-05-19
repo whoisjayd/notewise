@@ -48,6 +48,25 @@ class TestConfig:
         assert cfg.openai_api_key == "file_key"
         assert cfg.max_concurrent_videos == 10
 
+    def test_output_dir_from_user_config_overrides_ambient_env(
+        self, tmp_path, monkeypatch
+    ):
+        """Global OUTPUT_DIR should win unless the CLI passes --output."""
+        state_dir = tmp_path / ".notewise"
+        configured_output = tmp_path / "configured-output"
+        ambient_output = tmp_path / "ambient-output"
+        state_dir.mkdir()
+        (state_dir / "config.env").write_text(
+            f"OUTPUT_DIR={configured_output}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.setenv("OUTPUT_DIR", str(ambient_output))
+
+        cfg = Config()
+
+        assert cfg.default_output_dir == configured_output
+
     def test_get_api_key_for_model(self, monkeypatch):
         """get_api_key_for_model reads from os.environ."""
         monkeypatch.setenv("GEMINI_API_KEY", "gem_key")

@@ -81,6 +81,11 @@ async def run_batch_file(
     if not context.ensure_api_key_available():
         return True
 
+    ensure_output_dir = getattr(context, "ensure_selected_output_dir", None)
+    if callable(ensure_output_dir):
+        ensure_output_dir()
+    else:
+        context.selected_output.mkdir(parents=True, exist_ok=True)
     batch_workers = max(1, context.config.max_concurrent_videos)
     batch_label = f"Batch File: {input_path.name}"
     dashboard = None

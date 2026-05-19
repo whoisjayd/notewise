@@ -45,6 +45,11 @@ async def run_single_url(context: CliProcessContext, source_url: str) -> bool:
     if not context.ensure_api_key_available():
         return False
 
+    ensure_output_dir = getattr(context, "ensure_selected_output_dir", None)
+    if callable(ensure_output_dir):
+        ensure_output_dir()
+    else:
+        context.selected_output.mkdir(parents=True, exist_ok=True)
     pipeline = context.build_pipeline(prepared.output_dir)
 
     if context.no_ui:

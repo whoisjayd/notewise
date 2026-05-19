@@ -1,9 +1,11 @@
 """Application configuration via Pydantic v2 BaseSettings.
 
-Load order (later overrides earlier):
-1. Code defaults.
-2. ~/.notewise/config.env.
+Load order:
+1. Explicit init values, used by command flags and tests.
+2. OUTPUT_DIR from ~/.notewise/config.env.
 3. Environment variables.
+4. Other supported ~/.notewise/config.env values.
+5. Code defaults.
 """
 
 from __future__ import annotations
@@ -45,6 +47,7 @@ from notewise._constants import (
     OAUTH_TOKEN_DIR_ENV_VARS,
     OAUTH_TOKEN_DIR_NAMES,
     OAUTH_TOKEN_DIR_PARENT,
+    OUTPUT_DIR_CONFIG_KEY,
     PROVIDER_API_KEY_ENV_VARS,
     PROVIDER_AUTH_ENV_KEYS,
     PROVIDER_CONFIG,
@@ -73,7 +76,7 @@ _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES: dict[str, str] = {}
 _ALLOWED_KEYS: frozenset[str] = frozenset(
     {
         "DEFAULT_MODEL",
-        "OUTPUT_DIR",
+        OUTPUT_DIR_CONFIG_KEY,
         "MAX_CONCURRENT_VIDEOS",
         "YOUTUBE_REQUESTS_PER_MINUTE",
         "TEMPERATURE",
@@ -223,6 +226,22 @@ class UserConfigSource(PydanticBaseSettingsSource):
         return self._load_env_file()
 
 
+class UserOutputDirConfigSource(UserConfigSource):
+    """Load only OUTPUT_DIR from user config before ambient environment values."""
+
+    def get_field_value(
+        self, field: FieldInfo, field_name: str
+    ) -> tuple[Any, str, bool]:
+        if field_name != "default_output_dir":
+            return None, field_name, False
+        return super().get_field_value(field, field_name)
+
+    def __call__(self) -> dict[str, Any]:
+        data = self._load_env_file()
+        output_dir = data.get(OUTPUT_DIR_CONFIG_KEY.lower())
+        return {OUTPUT_DIR_CONFIG_KEY: output_dir} if output_dir is not None else {}
+
+
 class AppSettings(BaseSettings):
     """Global application configuration."""
 
@@ -295,7 +314,12 @@ class AppSettings(BaseSettings):
         file_secret_settings: PydanticBaseSettingsSource,
     ) -> tuple[PydanticBaseSettingsSource, ...]:
         del dotenv_settings, file_secret_settings
-        return (init_settings, env_settings, UserConfigSource(settings_cls))
+        return (
+            init_settings,
+            UserOutputDirConfigSource(settings_cls),
+            env_settings,
+            UserConfigSource(settings_cls),
+        )
 
     def model_post_init(self, __context: object) -> None:
         """Sync API keys back to os.environ for libraries that read env directly."""

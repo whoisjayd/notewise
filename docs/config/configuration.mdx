@@ -22,7 +22,7 @@ Set `NOTEWISE_HOME` to move this state root.
 
 ## Practical precedence
 
-For a command run, command-line flags win. Then environment variables, then `config.env`, then code defaults.
+For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.env` is used unless `--output` is passed. Other settings use environment variables, then `config.env`, then code defaults.
 
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes

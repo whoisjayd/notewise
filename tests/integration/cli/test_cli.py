@@ -223,6 +223,44 @@ def test_process_passes_output_format_flag(mock_config_exists, mock_pipeline):
     assert mock_cls.call_args.kwargs["output_formats"] == ["pdf"]
 
 
+def test_process_uses_configured_output_dir_when_output_flag_is_omitted(
+    mock_config_exists,
+    mock_pipeline,
+    tmp_path,
+):
+    """The global config output directory should be used by default."""
+    del mock_config_exists
+    mock_cls, _pipeline_instance = mock_pipeline
+    configured_output = tmp_path / "configured" / "notes"
+    cli_app_module.config.default_output_dir = configured_output
+
+    result = runner.invoke(app, ["process", _VIDEO_URL])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["output_dir"] == configured_output
+    assert configured_output.is_dir()
+
+
+def test_process_output_flag_overrides_configured_output_dir(
+    mock_config_exists,
+    mock_pipeline,
+    tmp_path,
+):
+    """Only an explicit --output flag should bypass the configured output dir."""
+    del mock_config_exists
+    mock_cls, _pipeline_instance = mock_pipeline
+    configured_output = tmp_path / "configured" / "notes"
+    flag_output = tmp_path / "flag" / "notes"
+    cli_app_module.config.default_output_dir = configured_output
+
+    result = runner.invoke(app, ["process", _VIDEO_URL, "--output", str(flag_output)])
+
+    assert result.exit_code == 0
+    assert mock_cls.call_args.kwargs["output_dir"] == flag_output
+    assert flag_output.is_dir()
+    assert not configured_output.exists()
+
+
 def test_process_short_flags_are_forwarded(mock_config_exists, mock_pipeline):
     """Short process aliases should cover common power-user flows."""
     mock_cls, _pipeline_instance = mock_pipeline
@@ -1804,6 +1842,7 @@ def test_process_env_only_config_does_not_launch_setup(monkeypatch, tmp_path):
 
 def test_process_empty_playlist_shows_no_videos_message(tmp_path):
     """Empty playlists should fail cleanly without rendering a 0/0 dashboard."""
+    output_dir = tmp_path / "empty" / "notes"
     with (
         patch(
             "notewise.cli.app.parse_youtube_url",
@@ -1823,7 +1862,7 @@ def test_process_empty_playlist_shows_no_videos_message(tmp_path):
         patch("notewise.cli.app.PipelineDashboard") as mock_dashboard_cls,
     ):
         mock_config.default_model = "gemini/gemini-2.5-flash"
-        mock_config.default_output_dir = tmp_path
+        mock_config.default_output_dir = output_dir
         mock_config.default_languages = ["en"]
         mock_config.temperature = 0.7
         mock_config.max_tokens = None
@@ -1839,12 +1878,14 @@ def test_process_empty_playlist_shows_no_videos_message(tmp_path):
 
     assert result.exit_code == 1
     assert "No videos found to process." in result.output
+    assert output_dir.is_dir()
+    assert not (output_dir / "Empty Playlist").exists()
     mock_dashboard_cls.assert_not_called()
 
 
-def test_process_playlist_failure_does_not_create_output_dir(tmp_path):
-    """Playlist processing should defer directory creation until files are written."""
-    output_dir = tmp_path / "notes"
+def test_process_playlist_failure_creates_base_output_dir_only(tmp_path):
+    """Playlist failures should create the base output dir, not playlist subdirs."""
+    output_dir = tmp_path / "nested" / "notes"
     pipeline_instance = MagicMock()
     pipeline_instance.run = AsyncMock(
         return_value=PipelineResult(
@@ -1895,6 +1936,7 @@ def test_process_playlist_failure_does_not_create_output_dir(tmp_path):
         )
 
     assert result.exit_code == 1
+    assert output_dir.is_dir()
     assert not (output_dir / "Deferred Playlist").exists()
 
 
