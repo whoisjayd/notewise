@@ -640,6 +640,29 @@ class TestLLMProvider:
         finally:
             warnings.filters[:] = original_filters
 
+    def test_suppress_litellm_noise_suppresses_response_payload_warning(self):
+        """LiteLLM's Responses response serializer warnings should stay off the TTY."""
+        original_filters = warnings.filters[:]
+        try:
+            suppress_litellm_noise()
+
+            with warnings.catch_warnings(record=True) as caught:
+                warnings.warn_explicit(
+                    "Pydantic serializer warnings:\n"
+                    "  PydanticSerializationUnexpectedValue("
+                    "Expected `ResponsesAPIResponse` - serialized value may not be "
+                    "as expected [field_name='response', input_value={}, "
+                    "input_type=dict])",
+                    UserWarning,
+                    filename="pydantic/main.py",
+                    lineno=464,
+                    module="pydantic.main",
+                )
+
+            assert caught == []
+        finally:
+            warnings.filters[:] = original_filters
+
     def test_suppress_litellm_noise_sets_verbose_logger_level(self):
         """LiteLLM runtime should not attach terminal handlers."""
         runtime = MagicMock()
@@ -652,6 +675,32 @@ class TestLLMProvider:
         runtime.verbose_logger.setLevel.assert_called_once_with(logging.WARNING)
         assert runtime.verbose_logger.propagate is False
         runtime.verbose_logger.removeHandler.assert_called_once()
+
+    def test_suppress_litellm_noise_installs_null_handler(self):
+        """LiteLLM's verbose logger should not fall back to logging.lastResort."""
+        logger_name = "LiteLLM-test-nullhandler"
+        litellm_logger = logging.getLogger(logger_name)
+        original_handlers = list(litellm_logger.handlers)
+        original_propagate = litellm_logger.propagate
+        original_level = litellm_logger.level
+        try:
+            litellm_logger.handlers.clear()
+            litellm_logger.propagate = False
+            litellm_logger.setLevel(logging.NOTSET)
+
+            runtime = SimpleNamespace(verbose_logger=litellm_logger)
+            with patch("notewise.llm.provider.litellm", runtime):
+                suppress_litellm_noise()
+
+            assert litellm_logger.propagate is False
+            assert any(
+                isinstance(handler, logging.NullHandler)
+                for handler in litellm_logger.handlers
+            )
+        finally:
+            litellm_logger.handlers[:] = original_handlers
+            litellm_logger.propagate = original_propagate
+            litellm_logger.setLevel(original_level)
 
     def test_extract_usage_handles_invalid_values(self):
         """Non-numeric usage payloads should fail closed to zero values."""

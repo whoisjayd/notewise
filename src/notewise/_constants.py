@@ -25,7 +25,7 @@ WHITESPACE_PATTERN = r"\s+"
 BOOL_SETTING_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
 BOOL_SETTING_FALSY_VALUES = frozenset({"0", "false", "no", "off"})
 PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN = (
-    r"(?s)^Pydantic serializer warnings:.*ResponseAPIUsage"
+    r"(?s)^Pydantic serializer warnings:.*(ResponseAPIUsage|ResponsesAPIResponse)"
 )
 GITHUB_REPOSITORY_OWNER = "whoisjayd"
 GITHUB_REPOSITORY_NAME = "notewise"

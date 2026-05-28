@@ -50,6 +50,10 @@ def suppress_litellm_noise() -> None:
         verbose_logger.propagate = False
         for handler in list(verbose_logger.handlers):
             verbose_logger.removeHandler(handler)
+        if not verbose_logger.handlers:
+            # Avoid Python's `logging.lastResort` handler printing LiteLLM's
+            # non-blocking internal logging exceptions to stderr.
+            verbose_logger.addHandler(logging.NullHandler())
     warnings.filterwarnings(
         "ignore",
         message=PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
