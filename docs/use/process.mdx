@@ -62,6 +62,8 @@ notewise process "https://youtu.be/VIDEO_ID" --format md,docx
 notewise process "https://youtu.be/VIDEO_ID" --quiz --export-transcript json
 ```
 
+Transcript-only downloads do not need an API key or model: use the standalone `notewise transcript "https://youtu.be/VIDEO_ID"` command when you just want the `txt` or `json` transcript file. For playlists and batch files, keep exporting through `process --export-transcript`.
+
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --force --no-ui
 ```

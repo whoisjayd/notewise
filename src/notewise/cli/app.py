@@ -27,12 +27,23 @@ from notewise._constants import (
     PROVIDER_SECRET_ENV_KEYS,
     SENSITIVE_KEY_SUFFIXES,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
+    TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX,
+    TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE,
+    TRANSCRIPT_JSON_OUTPUT_FORMAT,
+    TRANSCRIPT_TEXT_OUTPUT_FORMAT,
 )
-from notewise.errors import ConfigurationError
+from notewise.errors import (
+    ConfigurationError,
+    TranscriptUnavailableError,
+    ValidationError,
+    VideoUnavailableError,
+    format_user_error,
+)
 
 
 if TYPE_CHECKING:
     from notewise.cli._runtime import CliProcessRunner
+    from notewise.domain.youtube import VideoTranscript
 
 
 # Lazy-loaded patch points kept at module scope for test compatibility.
@@ -45,6 +56,7 @@ get_playlist_info: Any = None
 get_video_metadata: Any = None
 get_video_details: Any = None
 get_source_metadata: Any = None
+fetch_transcript: Any = None
 PipelineDashboard: Any = None
 Live: Any = None
 run_setup_wizard: Any = None
@@ -170,6 +182,7 @@ def _load_process_dependencies() -> None:
     global get_video_details
     global get_video_metadata
     global parse_youtube_url
+    global fetch_transcript
 
     _get_config()
     if CorePipeline is None:
@@ -212,6 +225,12 @@ def _load_process_dependencies() -> None:
         )
 
         get_source_metadata = _get_source_metadata
+    if fetch_transcript is None:
+        from notewise.youtube.transcript import (
+            fetch_transcript as _fetch_transcript,
+        )
+
+        fetch_transcript = _fetch_transcript
     if PipelineDashboard is None:
         from notewise.ui.dashboard import PipelineDashboard as _PipelineDashboard
 
@@ -613,6 +632,221 @@ def process(
                 "\n[red]notewise hit an unexpected internal error.[/red]\n"
                 f"[dim]Current log: {get_session_log_path()}[/dim]\n"
             )
+        raise typer.Exit(code=1) from None
+
+
+async def _download_video_transcript(
+    video_id: str,
+    languages: list[str],
+    cookie_file: str | None,
+) -> tuple[str, VideoTranscript]:
+    """Fetch metadata title plus transcript, reusing video_data when available."""
+    from notewise.youtube.metadata import video_metadata_from_details
+
+    title = video_id
+    video_data = await get_video_details(video_id, cookie_file)
+    if video_data is not None:
+        meta = video_metadata_from_details(video_id, video_data)
+        if meta.title:
+            title = meta.title
+
+    transcript_kwargs: dict[str, Any] = {"cookie_file": cookie_file}
+    if video_data is not None:
+        transcript_kwargs["video_data"] = video_data
+    transcript = await fetch_transcript(video_id, languages, **transcript_kwargs)
+    return title, transcript
+
+
+def _write_transcript_artifact(
+    transcript: VideoTranscript,
+    title: str,
+    video_id: str,
+    output_dir: Path,
+    export_format: str,
+) -> Path:
+    """Write the transcript artifact, suffixing the video ID on collisions."""
+    import json
+
+    from notewise.utils import sanitize_filename
+
+    safe_title = sanitize_filename(title)
+    stem = f"{safe_title}{TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX}"
+    extension = (
+        TRANSCRIPT_JSON_OUTPUT_FORMAT
+        if export_format == TRANSCRIPT_JSON_OUTPUT_FORMAT
+        else TRANSCRIPT_TEXT_OUTPUT_FORMAT
+    )
+    export_path = output_dir / f"{stem}.{extension}"
+    if export_path.exists():
+        export_path = output_dir / f"{stem}-{video_id}.{extension}"
+
+    if extension == TRANSCRIPT_JSON_OUTPUT_FORMAT:
+        data = {
+            "video_id": transcript.video_id,
+            "language": transcript.language,
+            "language_code": transcript.language_code,
+            "is_generated": transcript.is_generated,
+            "segments": [
+                {
+                    "text": seg.text,
+                    "start": seg.start,
+                    "duration": seg.duration,
+                }
+                for seg in transcript.segments
+            ],
+        }
+        export_path.write_text(
+            json.dumps(data, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+    else:
+        export_path.write_text(transcript.to_text(), encoding="utf-8")
+    return export_path
+
+
+@app.command()
+def transcript(
+    url: Annotated[
+        str,
+        typer.Argument(
+            help="YouTube video URL to download the transcript for.",
+            show_default=False,
+        ),
+    ],
+    export_format: Annotated[
+        str,
+        typer.Option(
+            "--format",
+            "-f",
+            help=(
+                "Transcript file format. Supported: "
+                "[green]txt[/green], [green]json[/green]."
+            ),
+            rich_help_panel="Common",
+        ),
+    ] = TRANSCRIPT_TEXT_OUTPUT_FORMAT,
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output directory (overrides config).",
+            exists=False,
+            file_okay=False,
+            dir_okay=True,
+            resolve_path=True,
+            rich_help_panel="Common",
+        ),
+    ] = None,
+    language: Annotated[
+        list[str] | None,
+        typer.Option(
+            "--language",
+            "-l",
+            help=("Transcript languages, e.g. [green]en[/green], [green]hi[/green]."),
+            rich_help_panel="Common",
+        ),
+    ] = None,
+    cookie_file: Annotated[
+        Path | None,
+        typer.Option(
+            "--cookie-file",
+            "--cookies",
+            "-c",
+            help=("Netscape-format cookies .txt file for YouTube requests."),
+            exists=False,
+            file_okay=True,
+            dir_okay=False,
+            resolve_path=True,
+            rich_help_panel="Advanced",
+        ),
+    ] = None,
+) -> None:
+    """
+    Download a single video's transcript without any AI generation.
+
+    Requires no API key or model. For playlists and batch files, use
+    `notewise process --export-transcript` instead.
+
+    \b
+    Examples:
+      [cyan]notewise transcript "https://youtube.com/watch?v=VIDEO_ID"[/cyan]
+      [cyan]notewise transcript "URL" --format json -o ./exports[/cyan]
+    """
+    console = _get_console()
+
+    try:
+        from notewise.cli._formatters import print_single_failure
+        from notewise.pipeline._artifacts import normalize_transcript_export_format
+
+        normalized_format = normalize_transcript_export_format(export_format)
+
+        if looks_like_batch_file_path(url):
+            console.print(f"\n[red]{TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE}[/red]\n")
+            raise typer.Exit(code=1)
+
+        _load_process_dependencies()
+        settings = _get_config()
+        selected_output = output or settings.default_output_dir
+        selected_languages = language or settings.default_languages
+        selected_cookie_file = (
+            str(cookie_file)
+            if cookie_file is not None
+            else settings.youtube_cookie_file
+        )
+
+        parsed = parse_youtube_url(url)
+        if parsed.url_type != "video" or not parsed.video_id:
+            console.print(f"\n[red]{TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE}[/red]\n")
+            raise typer.Exit(code=1)
+
+        selected_output.mkdir(parents=True, exist_ok=True)
+
+        with console.status("Fetching transcript..."):
+            title, fetched_transcript = asyncio.run(
+                _download_video_transcript(
+                    parsed.video_id,
+                    selected_languages,
+                    selected_cookie_file,
+                )
+            )
+
+        written_path = _write_transcript_artifact(
+            fetched_transcript,
+            title,
+            parsed.video_id,
+            selected_output,
+            normalized_format or TRANSCRIPT_TEXT_OUTPUT_FORMAT,
+        )
+        console.print(f"[green]Transcript saved:[/green] {written_path}")
+
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
+    except typer.Exit:
+        raise
+    except (ValidationError, ValueError) as error:
+        print_single_failure(console, "Input Error", str(error), item_label="URL")
+        raise typer.Exit(code=1) from None
+    except (TranscriptUnavailableError, VideoUnavailableError) as error:
+        print_single_failure(
+            console,
+            "Transcript Error",
+            format_user_error(error),
+            item_label="Video",
+        )
+        raise typer.Exit(code=1) from None
+    except Exception:
+        import structlog
+
+        structlog.get_logger(__name__).exception("cli.transcript_error")
+        print_single_failure(
+            console,
+            "Unexpected Error",
+            "notewise could not download this transcript. "
+            "Check the current log for details.",
+            item_label="Status",
+        )
         raise typer.Exit(code=1) from None
 
 
