@@ -181,7 +181,6 @@ class TestStudyMaterialGenerator:
         finally:
             config.chunk_size = orig_size
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_on_chunk_callback(self, generator):
         """Ensure on_chunk is invoked with (i, total) for each chunk."""
         chunks = ["chunk1", "chunk2", "chunk3"]
@@ -200,7 +199,6 @@ class TestStudyMaterialGenerator:
         calls = [c.args for c in on_chunk.call_args_list]
         assert calls == [(1, 3), (2, 3), (3, 3)]
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_single(self, generator):
         """Test generating notes for a single chunk."""
         with patch.object(generator, "_chunk_transcript", return_value=["Full text"]):
@@ -209,7 +207,6 @@ class TestStudyMaterialGenerator:
             assert notes == "# Generated Notes\n\nTest content."
             assert generator.provider.generate.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_single_uses_target_language_prompts(
         self, mock_llm_provider
     ):
@@ -225,7 +222,6 @@ class TestStudyMaterialGenerator:
         )
         assert "Write everything in Hindi." in call_kwargs["user_prompt"]
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_uses_default_target_language(
         self, mock_llm_provider
     ):
@@ -245,7 +241,6 @@ class TestStudyMaterialGenerator:
             in call_kwargs["user_prompt"]
         )
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_blank_target_language_falls_back_to_default(
         self, mock_llm_provider
     ):
@@ -266,7 +261,6 @@ class TestStudyMaterialGenerator:
             in call_kwargs["user_prompt"]
         )
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple(self, generator):
         """Test generating and combining multiple chunks."""
         chunks = ["Part 1", "Part 2"]
@@ -277,7 +271,6 @@ class TestStudyMaterialGenerator:
             # 2 chunks + 1 combine = 3 calls
             assert generator.provider.generate.call_count == 3
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_throttle_waits_between_repeated_calls(
         self, mock_llm_provider
     ):
@@ -302,7 +295,6 @@ class TestStudyMaterialGenerator:
             for call in mock_sleep.await_args_list
         )
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_throttle_skips_initial_delay(
         self, mock_llm_provider
     ):
@@ -316,7 +308,6 @@ class TestStudyMaterialGenerator:
 
         mock_sleep.assert_not_awaited()
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple_uses_stitch_prompt_by_default(
         self, mock_llm_provider
     ):
@@ -342,7 +333,6 @@ class TestStudyMaterialGenerator:
             "# Section One\n\nChunk two detail",
         )
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_multiple_passes_target_language_to_stitch(
         self, mock_llm_provider
     ):
@@ -369,7 +359,6 @@ class TestStudyMaterialGenerator:
             target_language="Spanish",
         )
 
-    @pytest.mark.asyncio
     async def test_generate_study_notes_on_combine_callback(self, generator):
         """Chunked note generation should signal when combine begins."""
         chunks = ["Part 1", "Part 2"]
@@ -383,7 +372,6 @@ class TestStudyMaterialGenerator:
 
         on_combine.assert_called_once_with(2)
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_small(self, generator):
         """Single-pass path used when chapter fits within chunk_size."""
         with patch("notewise.pipeline.generation.token_counter", return_value=50):
@@ -391,7 +379,6 @@ class TestStudyMaterialGenerator:
         # One call only (no chunking needed)
         assert generator.provider.generate.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_oversized(self, generator):
         """Chunked path used when chapter text exceeds chunk_size."""
         two_chunks = ["chunk A", "chunk B"]
@@ -403,7 +390,6 @@ class TestStudyMaterialGenerator:
         # 2 chunk calls + 1 combine call = 3
         assert generator.provider.generate.call_count == 3
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_uses_stitch_prompt_by_default(
         self, mock_llm_provider
     ):
@@ -432,7 +418,6 @@ class TestStudyMaterialGenerator:
             "### Topic\n\nChunk two detail",
         )
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_uses_target_language_prompts(
         self, mock_llm_provider
     ):
@@ -448,7 +433,6 @@ class TestStudyMaterialGenerator:
         )
         assert "Write everything in German." in call_kwargs["user_prompt"]
 
-    @pytest.mark.asyncio
     async def test_stitch_chunk_notes_handles_three_chunks(self, mock_llm_provider):
         """Three-chunk stitching should preserve cumulative content across passes."""
         generator = StudyMaterialGenerator(mock_llm_provider)
@@ -476,7 +460,6 @@ class TestStudyMaterialGenerator:
         assert "Chunk 3" not in result
         assert generator.provider.generate.await_count == 2
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_callbacks(self, generator):
         """Chunked chapter generation should signal part and combine callbacks."""
         two_chunks = ["chunk A", "chunk B"]
@@ -497,7 +480,6 @@ class TestStudyMaterialGenerator:
         assert [call.args for call in on_chunk.call_args_list] == [(1, 2), (2, 2)]
         on_combine.assert_called_once_with(2)
 
-    @pytest.mark.asyncio
     async def test_generate_single_chapter_oversized_single_chunk(self, generator):
         """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
@@ -508,7 +490,6 @@ class TestStudyMaterialGenerator:
         # 1 chunk call only — combine is skipped when there is a single chunk
         assert generator.provider.generate.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_generate_chapter_notes_concurrent_preserves_input_order(
         self, generator
     ):
@@ -531,7 +512,6 @@ class TestStudyMaterialGenerator:
         assert result["Intro"] == "notes for Intro"
         assert result["Wrap"] == "notes for Wrap"
 
-    @pytest.mark.asyncio
     async def test_generate_chapter_notes_concurrent_respects_max_concurrency(
         self, generator
     ):
@@ -562,7 +542,6 @@ class TestStudyMaterialGenerator:
 
         assert state["peak"] <= 2
 
-    @pytest.mark.asyncio
     async def test_generate_chapter_notes_concurrent_can_share_external_semaphore(
         self, generator
     ):
@@ -598,7 +577,6 @@ class TestStudyMaterialGenerator:
 
         assert state["peak"] <= 2
 
-    @pytest.mark.asyncio
     async def test_generate_chapter_notes_concurrent_throttle_serializes_requests(
         self, mock_llm_provider
     ):
@@ -630,14 +608,12 @@ class TestStudyMaterialGenerator:
             for call in mock_sleep.await_args_list
         )
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_calls_provider_once(self, generator):
         """generate_quiz() delegates to the provider in a single call."""
         result = await generator.generate_quiz("full transcript text")
         assert generator.provider.generate.call_count == 1
         assert result == "# Generated Notes\n\nTest content."
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_uses_target_language_prompts(self, mock_llm_provider):
         """Quiz generation should honor the requested output language."""
         generator = StudyMaterialGenerator(mock_llm_provider, target_language="Hindi")
@@ -651,7 +627,6 @@ class TestStudyMaterialGenerator:
             target_language="Hindi",
         )
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_chunked_large_transcript(self, generator):
         """generate_quiz() chunks a large transcript and combines partial quizzes."""
         chunks = ["chunk A", "chunk B"]
@@ -665,7 +640,6 @@ class TestStudyMaterialGenerator:
         assert generator.provider.generate.call_count == 3
         assert result == "# Generated Notes\n\nTest content."
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_chunked_uses_target_language_in_combine_prompt(
         self, mock_llm_provider
     ):
@@ -692,7 +666,6 @@ class TestStudyMaterialGenerator:
             target_language="Spanish",
         )
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_callbacks_for_chunked_quiz(self, generator):
         """Chunked quiz generation should signal part and combine callbacks."""
         chunks = ["chunk A", "chunk B"]
@@ -712,7 +685,6 @@ class TestStudyMaterialGenerator:
         assert [call.args for call in on_chunk.call_args_list] == [(1, 2), (2, 2)]
         on_combine.assert_called_once_with(2)
 
-    @pytest.mark.asyncio
     async def test_generate_quiz_chunked_single_chunk_no_combine(self, generator):
         """When the chunker returns exactly one chunk no combine call is made."""
         with (

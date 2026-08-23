@@ -33,7 +33,6 @@ from notewise.youtube.metadata import (
 class TestVideoMetadata:
     """Test video metadata extraction functions."""
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_success(self, mock_extractor_client):
         """Single-call metadata path should map chapters and core fields."""
         client = mock_extractor_client["metadata"].return_value
@@ -60,7 +59,6 @@ class TestVideoMetadata:
             "Deep Dive",
         ]
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_uses_video_id_when_title_missing(
         self, mock_extractor_client
     ):
@@ -78,7 +76,6 @@ class TestVideoMetadata:
         assert metadata.duration == 0
         assert metadata.chapters == []
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_private_video_raises_clear_error(
         self, mock_extractor_client
     ):
@@ -97,7 +94,6 @@ class TestVideoMetadata:
         ):
             await get_video_metadata("video123")
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_unavailable_video_raises_invalid_style_error(
         self, mock_extractor_client
     ):
@@ -116,7 +112,6 @@ class TestVideoMetadata:
         ):
             await get_video_metadata("video123")
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_extractor_error_propagates(
         self, mock_extractor_client
     ):
@@ -126,7 +121,6 @@ class TestVideoMetadata:
         with pytest.raises(ExtractorError, match="network issue"):
             await get_video_metadata("video123")
 
-    @pytest.mark.asyncio
     async def test_get_video_metadata_wraps_generic_error(self, mock_extractor_client):
         client = mock_extractor_client["metadata"].return_value
         client.video_metadata_full.side_effect = RuntimeError("boom")
@@ -137,7 +131,6 @@ class TestVideoMetadata:
         ):
             await get_video_metadata("video123")
 
-    @pytest.mark.asyncio
     async def test_get_video_details_preserves_domain_error(
         self,
         mock_extractor_client,
@@ -154,7 +147,6 @@ class TestVideoMetadata:
 class TestPlaylistMetadata:
     """Test playlist metadata extraction."""
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_success(self, mock_extractor_client):
         """Playlist title and count should be returned when present."""
         client = mock_extractor_client["metadata"].return_value
@@ -168,7 +160,6 @@ class TestPlaylistMetadata:
         assert title == "My Course"
         assert count == 3
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_failure(self, mock_extractor_client):
         """Extractor failures should surface as actionable playlist errors."""
         client = mock_extractor_client["metadata"].return_value
@@ -177,7 +168,6 @@ class TestPlaylistMetadata:
         with pytest.raises(PlaylistError, match="Could not access playlist pl123"):
             await get_playlist_info("pl123")
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_private_playlist_raises(
         self, mock_extractor_client
     ):
@@ -194,7 +184,6 @@ class TestPlaylistMetadata:
         ):
             await get_playlist_info("pl123")
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_falls_back_to_nested_data_title(
         self, mock_extractor_client
     ):
@@ -213,7 +202,6 @@ class TestPlaylistMetadata:
         assert title == "Nested Title"
         assert count == 4
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_falls_back_to_generated_title(
         self, mock_extractor_client
     ):
@@ -228,7 +216,6 @@ class TestPlaylistMetadata:
         assert title == "playlist_pl123"
         assert count == 5
 
-    @pytest.mark.asyncio
     async def test_get_playlist_info_wraps_generic_error(self, mock_extractor_client):
         """Unexpected playlist failures should still raise PlaylistError."""
         client = mock_extractor_client["metadata"].return_value
@@ -237,7 +224,6 @@ class TestPlaylistMetadata:
         with pytest.raises(PlaylistError, match="Could not access playlist pl123"):
             await get_playlist_info("pl123")
 
-    @pytest.mark.asyncio
     async def test_get_source_metadata_forwards_target_and_cookie(
         self, mock_extractor_client
     ):

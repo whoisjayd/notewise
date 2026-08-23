@@ -113,7 +113,6 @@ def pipeline(temp_output_dir, mock_llm_provider):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_empty_video_ids(pipeline):
     """run() with empty list returns zero-count result immediately."""
     result = await pipeline.run([])
@@ -124,7 +123,6 @@ async def test_run_empty_video_ids(pipeline):
     assert result.total_count == 0
 
 
-@pytest.mark.asyncio
 async def test_process_single_video_reuses_chapter_metadata_for_duplicate_titles(
     pipeline,
     temp_output_dir,
@@ -477,7 +475,6 @@ async def test_bundled_chapter_retry_ignores_stale_temporary_artifacts_with_forc
     assert "existing deep dive" not in bundled_notes
 
 
-@pytest.mark.asyncio
 async def test_run_missing_api_key(pipeline):
     """run() returns all-failure result when API key is absent."""
     with patch.object(pipeline, "_check_api_key", return_value=False):
@@ -555,7 +552,6 @@ Body"""
     assert result.startswith("# [00:34] Intro\n\n# Notes")
 
 
-@pytest.mark.asyncio
 async def test_run_single_video_creates_file_named_after_title(pipeline):
     """Output file must use the video title, not the raw video_id."""
     with (
@@ -588,7 +584,6 @@ async def test_run_single_video_creates_file_named_after_title(pipeline):
     assert expected_file.exists(), f"Expected {expected_file} but it does not exist"
 
 
-@pytest.mark.asyncio
 async def test_run_single_video_events_emitted(pipeline):
     """Pipeline emits PIPELINE_START with empty video_id sentinel and correct events."""
     events: list[PipelineEvent] = []
@@ -632,7 +627,6 @@ async def test_run_single_video_events_emitted(pipeline):
     assert pipeline_end.video_id == ""
 
 
-@pytest.mark.asyncio
 async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
     """Each metadata request and transcript fetch should acquire the shared limiter."""
     acquire_mock = AsyncMock()
@@ -679,7 +673,6 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
     assert acquire_mock.await_count >= 1
 
 
-@pytest.mark.asyncio
 async def test_rate_limited_to_thread_supports_kwargs(pipeline):
     """Internal helper should pass through keyword arguments to thread targets."""
     acquire_mock = AsyncMock()
@@ -708,7 +701,6 @@ def test_core_pipeline_instances_share_global_youtube_limiter(
     )
 
 
-@pytest.mark.asyncio
 async def test_run_calls_plain_metadata_helpers(temp_output_dir, mock_llm_provider):
     """Pipeline should call metadata helpers directly and pass transcript hook."""
     with patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider):
@@ -827,7 +819,6 @@ async def test_uncached_video_uses_details_path_without_metadata_identity_branch
     mock_details.assert_awaited_once_with("vid-details", pipeline.youtube_cookie_file)
 
 
-@pytest.mark.asyncio
 async def test_run_fails_early_for_private_video(pipeline):
     """Private videos should fail before transcript fetching starts."""
     with (
@@ -858,7 +849,6 @@ async def test_run_fails_early_for_private_video(pipeline):
     mock_fetch.assert_not_awaited()
 
 
-@pytest.mark.asyncio
 async def test_run_fails_cleanly_for_private_transcript_access(pipeline):
     """Transcript-level private video failures should keep the clean message."""
     with (
@@ -992,7 +982,6 @@ def test_export_transcript_rejects_unsupported_format_before_writing(
     assert not any(temp_output_dir.iterdir())
 
 
-@pytest.mark.asyncio
 async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline):
     """METADATA_FETCHED event must set total_chapters, not chapter_number."""
     events: list[PipelineEvent] = []
@@ -1037,7 +1026,6 @@ async def test_metadata_fetched_uses_total_chapters_not_chapter_number(pipeline)
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_chapters_none_does_not_raise(pipeline):
     """When get_video_chapters returns None the pipeline must not raise TypeError."""
     with (
@@ -1071,7 +1059,6 @@ async def test_run_chapters_none_does_not_raise(pipeline):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_title_failure_falls_back_to_video_id(pipeline):
     """When title fetch raises, the output file is named after the video_id."""
     with (
@@ -1101,7 +1088,6 @@ async def test_run_title_failure_falls_back_to_video_id(pipeline):
     )
 
 
-@pytest.mark.asyncio
 async def test_run_metadata_extraction_error_surfaces_to_user(pipeline):
     """Extractor metadata failures should fail the run instead of faking data."""
     with (
@@ -1134,7 +1120,6 @@ async def test_run_metadata_extraction_error_surfaces_to_user(pipeline):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_ip_block_error_emits_video_failed_event(pipeline):
     """YouTubeIPBlockError triggers VIDEO_FAILED event."""
     events: list[PipelineEvent] = []
@@ -1175,7 +1160,6 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
     assert "temporarily blocking requests" in failed_event.error
 
 
-@pytest.mark.asyncio
 async def test_run_generic_error_emits_video_failed_event(pipeline):
     """When processing raises generic RuntimeError, VIDEO_FAILED event is emitted."""
     events: list[PipelineEvent] = []
@@ -1221,7 +1205,6 @@ async def test_run_generic_error_emits_video_failed_event(pipeline):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.asyncio
 async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline):
     """Long videos with chapters generate per-chapter files."""
     video_id = "video-with-chapters"
@@ -1295,7 +1278,6 @@ async def test_run_long_video_with_chapters_generates_per_chapter_files(pipeline
     assert expected_files.issubset(actual_files)
 
 
-@pytest.mark.asyncio
 async def test_force_regenerates_existing_chapter_files_with_bundle_outputs(
     temp_output_dir,
     mock_llm_provider,
@@ -1364,7 +1346,6 @@ async def test_force_regenerates_existing_chapter_files_with_bundle_outputs(
     )
 
 
-@pytest.mark.asyncio
 async def test_run_chapter_generation_emits_chapter_events(pipeline):
     """Chapter-based generation emits CHAPTER_GENERATING events with correct counts."""
     events: list[PipelineEvent] = []
@@ -1438,7 +1419,6 @@ async def test_run_chapter_generation_emits_chapter_events(pipeline):
         assert event.total_chapters == 3
 
 
-@pytest.mark.asyncio
 async def test_run_chapter_generation_emits_internal_chapter_progress(
     temp_output_dir, mock_llm_provider
 ):
@@ -1684,7 +1664,6 @@ async def test_run_failed_chapter_generation_does_not_emit_chapter_complete(
     assert chapter_complete_events == []
 
 
-@pytest.mark.asyncio
 async def test_run_empty_chapter_split_falls_back_to_single_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -1727,7 +1706,6 @@ async def test_run_empty_chapter_split_falls_back_to_single_file(
     p.generator.generate_single_chapter_notes.assert_not_awaited()
 
 
-@pytest.mark.asyncio
 async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
     temp_output_dir, mock_llm_provider
 ):
@@ -1778,7 +1756,6 @@ async def test_quiz_flag_writes_chapter_video_quiz_inside_video_folder(
     assert not (temp_output_dir / "Long Video_quiz.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_export_transcript_in_chapter_mode_uses_chapter_directory(
     temp_output_dir, mock_llm_provider
 ):
@@ -1903,7 +1880,6 @@ def _seed_cached_video(
     )
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_skips_existing_single_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -1939,7 +1915,6 @@ async def test_checkpoint_skips_existing_single_file(
     mock_fetch.assert_not_awaited()
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_reprocesses_when_requested_quiz_is_missing(
     temp_output_dir, mock_llm_provider
 ):
@@ -2043,7 +2018,6 @@ async def test_checkpoint_reprocesses_incomplete_cached_chapter_directory(
     assert (chapter_dir / "02_Deep Dive.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_force_reprocesses_existing(
     temp_output_dir, mock_llm_provider
 ):
@@ -2077,7 +2051,6 @@ async def test_checkpoint_force_reprocesses_existing(
     assert output_file.read_text(encoding="utf-8") == "# Notes"
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_force_skips_cache_lookup(temp_output_dir, mock_llm_provider):
     """Force mode should bypass the cache lookup entirely."""
     p = _make_pipeline(temp_output_dir, mock_llm_provider, force=True)
@@ -2106,7 +2079,6 @@ async def test_checkpoint_force_skips_cache_lookup(temp_output_dir, mock_llm_pro
     p._get_cached_video.assert_not_awaited()
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider):
     """When no prior output exists the video is processed normally."""
     p = _make_pipeline(
@@ -2139,7 +2111,6 @@ async def test_checkpoint_processes_new_video(temp_output_dir, mock_llm_provider
     assert (temp_output_dir / "Brand New Video.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     """With quiz=True a *_quiz.md file is written alongside the study notes."""
     p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=True)
@@ -2173,7 +2144,6 @@ async def test_quiz_flag_creates_quiz_file(temp_output_dir, mock_llm_provider):
     assert p.generator.generate_quiz.await_args.args == ("full transcript",)
 
 
-@pytest.mark.asyncio
 async def test_non_markdown_output_html_creates_html_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -2206,7 +2176,6 @@ async def test_non_markdown_output_html_creates_html_file(
     assert "<h1>Notes</h1>" in html
 
 
-@pytest.mark.asyncio
 async def test_non_markdown_output_pdf_creates_pdf_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -2237,7 +2206,6 @@ async def test_non_markdown_output_pdf_creates_pdf_file(
     assert pdf_file.read_bytes().startswith(b"%PDF")
 
 
-@pytest.mark.asyncio
 async def test_non_markdown_output_docx_creates_docx_file(
     temp_output_dir, mock_llm_provider
 ):
@@ -2271,7 +2239,6 @@ async def test_non_markdown_output_docx_creates_docx_file(
     assert "background:" not in document_xml
 
 
-@pytest.mark.asyncio
 async def test_multiple_output_formats_create_multiple_files(
     temp_output_dir, mock_llm_provider
 ):
@@ -2307,7 +2274,6 @@ async def test_multiple_output_formats_create_multiple_files(
     assert (temp_output_dir / "Study Subject.docx").exists()
 
 
-@pytest.mark.asyncio
 async def test_non_markdown_chapter_output_bundles_into_single_document(
     temp_output_dir, mock_llm_provider
 ):
@@ -2377,7 +2343,6 @@ async def test_non_markdown_chapter_output_bundles_into_single_document(
     assert "Deep Dive" in bundled_html
 
 
-@pytest.mark.asyncio
 async def test_run_emits_internal_generation_and_quiz_events(
     temp_output_dir, mock_llm_provider
 ):
@@ -2469,7 +2434,6 @@ async def test_run_emits_internal_generation_and_quiz_events(
     assert quiz_combine.total_chunks == 2
 
 
-@pytest.mark.asyncio
 async def test_checkpoint_different_video_same_title_not_skipped(
     temp_output_dir, mock_llm_provider
 ):
@@ -2509,7 +2473,6 @@ async def test_checkpoint_different_video_same_title_not_skipped(
     mock_fetch.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
     temp_output_dir, mock_llm_provider
 ):
@@ -2559,7 +2522,6 @@ async def test_duplicate_video_titles_get_unique_note_and_quiz_files(
     assert (temp_output_dir / "Shared Title (vid2)_quiz.md").exists()
 
 
-@pytest.mark.asyncio
 async def test_run_deduplicates_duplicate_video_ids(temp_output_dir, mock_llm_provider):
     """One pipeline run should only process each video ID once."""
     p = _make_pipeline(temp_output_dir, mock_llm_provider, quiz=False)
@@ -2592,7 +2554,6 @@ async def test_run_deduplicates_duplicate_video_ids(temp_output_dir, mock_llm_pr
     mock_fetch.assert_awaited_once()
 
 
-@pytest.mark.asyncio
 async def test_duplicate_chapter_video_titles_get_unique_folders(
     temp_output_dir, mock_llm_provider
 ):
@@ -2834,7 +2795,6 @@ async def test_pipeline_persists_video_metadata_in_sqlite_cache(
     assert stats[0].model == "mock-model"
 
 
-@pytest.mark.asyncio
 async def test_pipeline_collects_litellm_usage_and_step_timings(
     temp_output_dir, mock_llm_provider
 ):
@@ -2898,7 +2858,6 @@ async def test_pipeline_collects_litellm_usage_and_step_timings(
     assert latest.generation_seconds >= 0
 
 
-@pytest.mark.asyncio
 async def test_pipeline_reuses_sqlite_cache_across_runs(
     temp_output_dir, mock_llm_provider
 ):
@@ -2992,7 +2951,6 @@ def _make_pipeline_with_export(
         return p
 
 
-@pytest.mark.asyncio
 async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
     """export_transcript='txt' creates a .txt file with plain text."""
     p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "txt")
@@ -3030,7 +2988,6 @@ async def test_export_transcript_txt(temp_output_dir, mock_llm_provider):
     assert export_file.read_text(encoding="utf-8") == "Hello world transcript"
 
 
-@pytest.mark.asyncio
 async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
     """export_transcript='json' creates a .json file with timestamped segments."""
     p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "json")
@@ -3093,7 +3050,6 @@ async def test_export_transcript_json(temp_output_dir, mock_llm_provider):
     assert data["segments"][1]["text"] == "world"
 
 
-@pytest.mark.asyncio
 async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
     """No transcript file is created when export_transcript is None."""
     with patch(
@@ -3143,7 +3099,6 @@ async def test_no_export_when_flag_not_set(temp_output_dir, mock_llm_provider):
     assert len(json_files) == 0
 
 
-@pytest.mark.asyncio
 async def test_export_sanitized_filename(temp_output_dir, mock_llm_provider):
     """Export file uses sanitized filename for special characters in title."""
     p = _make_pipeline_with_export(temp_output_dir, mock_llm_provider, "txt")

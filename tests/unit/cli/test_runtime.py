@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
-import pytest
-
 from notewise.cli import _runtime
 
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import pytest
 
 
 def test_read_batch_file_urls_supports_utf16(tmp_path: Path) -> None:
@@ -28,7 +28,6 @@ def test_read_batch_file_urls_supports_utf16(tmp_path: Path) -> None:
     ]
 
 
-@pytest.mark.asyncio
 async def test_cli_process_runner_reports_missing_batch_file() -> None:
     """Batch-looking missing paths should render a user-facing failure."""
     runner = MagicMock()
@@ -44,7 +43,6 @@ async def test_cli_process_runner_reports_missing_batch_file() -> None:
     runner.print_single_failure.assert_called_once()
 
 
-@pytest.mark.asyncio
 async def test_cli_process_runner_reads_batch_file_and_dispatches(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
@@ -67,7 +65,6 @@ async def test_cli_process_runner_reads_batch_file_and_dispatches(
     run_batch.assert_awaited_once_with(runner, batch_file, ["https://example.com/a"])
 
 
-@pytest.mark.asyncio
 async def test_cli_process_runner_dispatches_single_url(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

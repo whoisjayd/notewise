@@ -435,7 +435,6 @@ class TestHighLevelClientCommands:
 
 
 class TestAsyncExtractorClient:
-    @pytest.mark.asyncio
     async def test_video_metadata_full_forwards_target_unchanged(self, monkeypatch):
         captured: dict[str, str] = {}
 
