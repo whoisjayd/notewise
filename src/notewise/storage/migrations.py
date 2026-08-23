@@ -90,7 +90,9 @@ def migration_2_add_video_cached_at(connection: Connection) -> None:
     if "cached_at" in existing:
         return
 
-    default_timestamp = datetime.now(UTC).replace(microsecond=0)
+    # SQLAlchemy's SQLite DATETIME round-trips naive 'YYYY-MM-DD HH:MM:SS'
+    # strings only; an ISO '+00:00' suffix would be unreadable on the way out.
+    default_timestamp = datetime.now(UTC).replace(microsecond=0, tzinfo=None)
     default_literal = default_timestamp.isoformat(sep=" ")
     connection.exec_driver_sql(
         "ALTER TABLE video ADD COLUMN cached_at DATETIME "
@@ -98,9 +100,30 @@ def migration_2_add_video_cached_at(connection: Connection) -> None:
     )
 
 
+def migration_3_normalize_cached_at_literals(connection: Connection) -> None:
+    """Repair cached_at rows backfilled with an ISO '+00:00' suffix.
+
+    Older releases generated ``DEFAULT 'YYYY-MM-DD HH:MM:SS+00:00'`` literals
+    that SQLAlchemy's SQLite DATETIME type cannot parse on read. The suffix is
+    always UTC (the only value ever emitted), so stripping it recovers the
+    exact naive timestamp the ORM expects.
+    """
+    inspector = sa_inspect(connection)
+    if not inspector.has_table("video"):
+        return
+    existing = {col["name"] for col in inspector.get_columns("video")}
+    if "cached_at" not in existing:
+        return
+    connection.exec_driver_sql(
+        "UPDATE video SET cached_at = substr(cached_at, 1, length(cached_at) - 6) "
+        "WHERE substr(cached_at, -6) = '+00:00'"
+    )
+
+
 MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (1, migration_1_add_runstats_columns),
     (2, migration_2_add_video_cached_at),
+    (3, migration_3_normalize_cached_at_literals),
 )
 
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import sys
 from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
@@ -23,8 +24,16 @@ from notewise._constants import (
     UPDATE_INSTALL_SOURCE_PYTHON,
     UPDATE_METADATA_PARSE_ERROR,
     UPDATER_USER_AGENT,
+    VERSION_PRERELEASE_MARKER_PATTERN,
+    VERSION_PRERELEASE_RANKS,
 )
 from notewise.errors import UpdateError
+
+
+_PRERELEASE_MARKER_RE = re.compile(
+    VERSION_PRERELEASE_MARKER_PATTERN,
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True)
@@ -48,19 +57,31 @@ class UpdateStatus:
     update_commands: tuple[str, ...]
 
 
-def _version_key(raw_version: str) -> tuple[int, ...]:
+def _version_key(raw_version: str) -> tuple[int, int, int, int, int, int]:
+    """Return a sort key where release > rc > beta > alpha > dev."""
     version = raw_version.strip().lstrip("v")
     parts = version.split(".")
     if len(parts) < 3:
         raise UpdateError(f"Unsupported release version format: {raw_version}")
 
-    normalized: list[int] = []
-    for part in parts[:3]:
-        digits = "".join(ch for ch in part if ch.isdigit())
-        if not digits:
+    normalized: list[int] = [0, 0, 0]
+    suffixes: list[str] = []
+    for index, part in enumerate(parts[:3]):
+        match = re.match(r"\d+", part)
+        if match is None:
             raise UpdateError(f"Unsupported release version format: {raw_version}")
-        normalized.append(int(digits))
-    return tuple(normalized)
+        normalized[index] = int(match.group(0))
+        suffixes.append(part[match.end() :])
+    major, minor, patch = normalized
+
+    # Prerelease tags ("1.4.4rc1", "1.4.4-rc.2", "1.4.4.beta") must order below
+    # the plain release instead of collapsing onto the base triple.
+    marker = _PRERELEASE_MARKER_RE.search("-".join([*suffixes, *parts[3:]]))
+    if marker is None:
+        return (major, minor, patch, 1, 0, 0)
+    rank = VERSION_PRERELEASE_RANKS[marker.group(1).lower()]
+    prerelease_number = int(marker.group(2) or 0)
+    return (major, minor, patch, 0, rank, prerelease_number)
 
 
 def _request_json(url: str) -> dict[str, object]:

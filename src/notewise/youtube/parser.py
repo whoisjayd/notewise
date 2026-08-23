@@ -31,6 +31,7 @@ def extract_video_id(url: str) -> str | None:
     - Embed: https://www.youtube.com/embed/VIDEO_ID
     - V-path: https://www.youtube.com/v/VIDEO_ID
     - Shorts: https://www.youtube.com/shorts/VIDEO_ID
+    - Live: https://www.youtube.com/live/VIDEO_ID or https://youtu.be/live/VIDEO_ID
 
     Args:
         url: The YouTube URL string.
@@ -44,7 +45,10 @@ def extract_video_id(url: str) -> str | None:
 
     host = _normalized_hostname(parsed)
     if host == "youtu.be":
-        candidate = parsed.path.strip("/").split("/", 1)[0]
+        segments = [part for part in parsed.path.split("/") if part]
+        if segments and segments[0] == "live":
+            segments = segments[1:]
+        candidate = segments[0] if segments else ""
         return candidate if _is_video_id(candidate) else None
 
     path_parts = [part for part in parsed.path.split("/") if part]
@@ -56,7 +60,7 @@ def extract_video_id(url: str) -> str | None:
         query_candidate = _first_query_value(query_params, "v")
         return query_candidate if _is_video_id(query_candidate) else None
 
-    if path_parts[0] in {"embed", "v", "shorts"} and len(path_parts) >= 2:
+    if path_parts[0] in {"embed", "v", "shorts", "live"} and len(path_parts) >= 2:
         candidate = path_parts[1]
         return candidate if _is_video_id(candidate) else None
 

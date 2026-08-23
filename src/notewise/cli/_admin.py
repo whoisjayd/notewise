@@ -81,9 +81,14 @@ def _parse_since_days(value: str | None) -> int | None:
     normalized = value.strip().lower()
     if normalized.endswith("d"):
         normalized = normalized[:-1]
-    days = int(normalized)
-    if days < 0:
-        raise ValueError("since must be zero or a positive integer day count")
+    try:
+        days: int | None = int(normalized)
+    except ValueError:
+        days = None
+    if days is None or days < 0:
+        from notewise.errors import ValidationError
+
+        raise ValidationError("since must be zero or a positive integer day count")
     return days
 
 

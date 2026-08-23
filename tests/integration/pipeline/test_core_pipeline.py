@@ -952,7 +952,7 @@ def test_core_pipeline_rejects_unsupported_export_transcript_format(
     """Unsupported transcript export formats must not fall back to txt."""
     with (
         patch("notewise.pipeline.core.get_provider", return_value=mock_llm_provider),
-        pytest.raises(ValidationError, match="export-transcript"),
+        pytest.raises(ValidationError, match="Transcript format must be one of"),
     ):
         CorePipeline(
             model="mock-model",
@@ -968,7 +968,7 @@ def test_export_transcript_rejects_unsupported_format_before_writing(
     transcript = _make_transcript(video_id="bad-export", text="usable transcript")
     db = MagicMock()
 
-    with pytest.raises(ValidationError, match="export-transcript"):
+    with pytest.raises(ValidationError, match="Transcript format must be one of"):
         export_transcript(
             db,
             transcript,

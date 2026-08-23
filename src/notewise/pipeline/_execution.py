@@ -30,7 +30,7 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
-from notewise.llm.provider import LLMProvider, UsageTotals
+from notewise.llm.provider import UsageTotals
 from notewise.logging import make_log_safe_text
 from notewise.pipeline._artifacts import generate_and_write_quiz
 from notewise.pipeline._chapter_outputs import generate_chapter_outputs
@@ -218,25 +218,24 @@ async def _fetch_video_inputs(
 
 
 def _usage_context(provider: Any) -> Any:
-    usage_context = nullcontext(UsageTotals())
+    """Return the provider's usage-collection context manager when available."""
+    fallback = nullcontext(UsageTotals())
     usage_collector = getattr(provider, "collect_usage", None)
-    if not callable(usage_collector):
-        if hasattr(usage_collector, "__enter__") and hasattr(
-            usage_collector,
-            "__exit__",
-        ):
-            return usage_collector
-        return usage_context
-    if not (
-        isinstance(getattr(usage_collector, "__self__", None), LLMProvider)
-        and getattr(usage_collector, "__func__", None) is LLMProvider.collect_usage
+    if usage_collector is None:
+        return fallback
+    if hasattr(usage_collector, "__enter__") and hasattr(
+        usage_collector,
+        "__exit__",
     ):
-        return usage_context
+        return usage_collector
 
-    candidate = usage_collector()
+    try:
+        candidate = usage_collector()
+    except AttributeError:
+        return fallback
     if hasattr(candidate, "__enter__") and hasattr(candidate, "__exit__"):
         return candidate
-    return usage_context
+    return fallback
 
 
 async def _generate_single_file_output(
@@ -640,7 +639,18 @@ async def run_pipeline(
             else:
                 results[index] = bool(result)
 
-    await asyncio.gather(*(_worker() for _ in range(worker_count)))
+    workers = [asyncio.create_task(_worker()) for _ in range(worker_count)]
+    try:
+        await asyncio.gather(*workers)
+    except BaseException:
+        # A cancelled or failed worker must not orphan its siblings mid-LLM-call:
+        # cancel the remaining workers, wait for them to finish suppressing, then
+        # still emit PIPELINE_COMPLETE before propagating.
+        for worker_task in workers:
+            worker_task.cancel()
+        await asyncio.gather(*workers, return_exceptions=True)
+        emit(EventType.PIPELINE_COMPLETE, "")
+        raise
 
     success_count = sum(1 for result in results if result is True)
     failure_count = len(video_ids) - success_count

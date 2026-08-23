@@ -13,6 +13,7 @@ import pytest
 from rich.console import Console
 
 from notewise.cli import _admin as admin
+from notewise.errors import ValidationError
 
 
 def _symlink_or_skip(link: Path, target: Path) -> None:
@@ -46,8 +47,10 @@ def test_helper_formatting_functions() -> None:
     assert admin._format_age(now - timedelta(days=1)) == "1 day ago"
     assert admin._format_age(naive_now - timedelta(days=3)).endswith("days ago")
     assert admin._parse_since_days("30d") == 30
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValidationError, match="positive integer"):
         admin._parse_since_days("-1")
+    with pytest.raises(ValidationError, match="positive integer"):
+        admin._parse_since_days("soon")
 
 
 def test_open_with_system_app_uses_startfile_on_windows(

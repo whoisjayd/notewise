@@ -66,7 +66,7 @@ def test_legacy_cache_db_is_upgraded_to_latest_schema_version(tmp_path):
             for row in connection.execute("PRAGMA table_info(runstats)").fetchall()
         }
 
-    assert version == (2,)
+    assert version == (3,)
     assert "cached_at" in video_columns
     assert {
         "prompt_tokens",

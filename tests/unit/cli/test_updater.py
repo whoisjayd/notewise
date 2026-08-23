@@ -14,6 +14,45 @@ from notewise.errors import UpdateError
 runner = CliRunner()
 
 
+class TestVersionKey:
+    """Table-driven checks for prerelease-aware version ordering."""
+
+    @pytest.mark.parametrize(
+        ("older", "newer"),
+        [
+            ("1.4.3", "1.4.4"),
+            ("1.9.9", "1.10.0"),
+            ("1.4.4rc1", "1.4.4"),
+            ("1.4.4-rc1", "1.4.4"),
+            ("v1.4.4rc2", "1.4.4"),
+            ("1.4.4beta3", "1.4.4rc1"),
+            ("1.4.4alpha2", "1.4.4beta1"),
+            ("1.4.4a1", "1.4.4b1"),
+            ("1.4.4dev1", "1.4.4alpha1"),
+            ("1.4.4-rc.1", "1.4.4-rc.2"),
+            ("1.4.4-beta.1", "1.4.4"),
+            ("1.4.4.dev1", "1.4.4"),
+        ],
+    )
+    def test_version_ordering(self, older: str, newer: str) -> None:
+        assert updater._version_key(older) < updater._version_key(newer)
+
+    @pytest.mark.parametrize(
+        "version",
+        ["1.4.4", "v1.4.4", "1.4.4.0"],
+    )
+    def test_release_forms_compare_equal(self, version: str) -> None:
+        assert updater._version_key(version) == updater._version_key("1.4.4")
+
+    @pytest.mark.parametrize(
+        "bad_version",
+        ["1.4", "abc", "x.y.z", ""],
+    )
+    def test_unsupported_formats_raise(self, bad_version: str) -> None:
+        with pytest.raises(UpdateError):
+            updater._version_key(bad_version)
+
+
 class _FakeResponse:
     def __init__(self, payload: bytes) -> None:
         self._payload = payload

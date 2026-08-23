@@ -2,15 +2,17 @@
 
 from __future__ import annotations
 
+import asyncio
+from pathlib import Path
+from types import SimpleNamespace
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock, MagicMock
 
-from notewise.cli import _runtime
+from notewise.cli import _batch_runner, _runtime
+from notewise.domain.results import PipelineResult
 
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import pytest
 
 
@@ -82,3 +84,85 @@ async def test_cli_process_runner_dispatches_single_url(
 
     assert result is False
     run_single.assert_awaited_once_with(runner, "https://youtube.com/watch?v=abc")
+
+
+async def test_batch_summary_total_includes_early_failures(
+    mocker: pytest.MockerFixture,
+    tmp_path: Path,
+) -> None:
+    """Mixed batches must keep success + failure == total in the final summary."""
+    prepared = SimpleNamespace(
+        video_ids=["v-ok", "v-bad"],
+        output_dir=tmp_path / "out",
+        label="batch-entry",
+        is_playlist=False,
+    )
+
+    async def _prepare_source(_context: object, source_url: str) -> SimpleNamespace:
+        if source_url == "https://example.com/unresolvable":
+            raise RuntimeError("resolution exploded")
+        return prepared
+
+    class _MixedPipeline:
+        async def run(
+            self,
+            video_ids: list[str],
+            *,
+            on_event: object,
+        ) -> PipelineResult:
+            del on_event
+            if video_ids[0] == "v-bad":
+                return PipelineResult(
+                    success_count=0,
+                    failure_count=1,
+                    total_count=1,
+                    video_ids=video_ids,
+                    errors={"v-bad": "boom"},
+                )
+            return PipelineResult(
+                success_count=1,
+                failure_count=0,
+                total_count=1,
+                video_ids=video_ids,
+                errors={},
+            )
+
+    context = SimpleNamespace(
+        config=SimpleNamespace(max_concurrent_videos=2),
+        console=MagicMock(),
+        selected_model="mock-model",
+        selected_output=tmp_path / "out",
+        api_key_checked=True,
+        ensure_api_key_available=lambda: True,
+        build_pipeline=lambda *_args, **_kwargs: _MixedPipeline(),
+        no_ui=True,
+    )
+    mocker.patch.object(
+        _batch_runner,
+        "prepare_source",
+        side_effect=_prepare_source,
+    )
+    summary = MagicMock(return_value=False)
+    mocker.patch.object(_batch_runner, "print_batch_summary", summary)
+
+    failed = await asyncio.wait_for(
+        _batch_runner.run_batch_file(
+            context,
+            Path("urls.txt"),
+            [
+                "https://example.com/unresolvable",
+                "https://youtube.com/watch?v=abc12345678",
+            ],
+        ),
+        timeout=5,
+    )
+
+    assert failed is False
+    summary.assert_called_once()
+    _context, results, early_failures = summary.call_args.args
+    total_jobs = summary.call_args.kwargs["total_jobs"]
+    successes = sum(1 for result in results if result.success)
+    failures = len(early_failures) + sum(1 for result in results if not result.success)
+    assert successes == 1
+    assert failures == 2
+    assert successes + failures == total_jobs

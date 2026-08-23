@@ -119,6 +119,32 @@ class TestStudyMaterialGenerator:
             config.chunk_size = orig_size
             config.chunk_overlap = orig_overlap
 
+    def test_chunk_transcript_counts_join_separator_in_token_budget(
+        self,
+        generator,
+        mocker,
+    ):
+        """Join separators must consume budget so chunks never exceed chunk_size."""
+        orig_size = config.chunk_size
+        config.chunk_size = 8
+
+        try:
+            mocker.patch(
+                "notewise.pipeline.generation.token_counter",
+                side_effect=lambda **kwargs: len(kwargs["text"]),
+            )
+
+            # "aaa." and "ccc." are 4 tokens each: without separator accounting
+            # they would join into a single 9-token chunk and drift over budget.
+            chunks = generator._chunk_transcript("aaa. ccc.")
+
+            assert len(chunks) == 2
+            assert all(
+                generator._count_tokens(chunk) <= config.chunk_size for chunk in chunks
+            )
+        finally:
+            config.chunk_size = orig_size
+
     def test_chunk_transcript_newlines(self, generator):
         """Test splitting by newlines when sentences fail."""
         orig_size = config.chunk_size

@@ -409,7 +409,11 @@ class StudyMaterialGenerator:
                     start = end
                 continue
 
-            if current_tokens + term_tokens > config.chunk_size:
+            # Chunks are joined with a single space, so that separator consumes
+            # part of the token budget too; otherwise the joined chunk drifts
+            # over chunk_size as sentences accumulate.
+            separator_tokens = 1 if current_chunk else 0
+            if current_tokens + term_tokens + separator_tokens > config.chunk_size:
                 if current_chunk:
                     chunks.append(" ".join(current_chunk))
 
@@ -440,7 +444,7 @@ class StudyMaterialGenerator:
                     current_tokens += term_tokens
             else:
                 current_chunk.append(sentence)
-                current_tokens += term_tokens
+                current_tokens += term_tokens + separator_tokens
 
         # Add remaining chunk
         if current_chunk:

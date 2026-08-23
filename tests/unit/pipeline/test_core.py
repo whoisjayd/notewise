@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextlib import contextmanager
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -60,15 +61,60 @@ def test_usage_coercion_helpers_handle_non_numeric_values():
     assert totals.cost_usd == 0.0025
 
 
-def test_usage_context_does_not_call_arbitrary_collect_usage_callable() -> None:
-    """Only the real provider collector should be invoked as a context factory."""
-    provider = MagicMock()
-    provider.collect_usage = MagicMock(side_effect=AssertionError("called"))
+def test_usage_context_falls_back_when_collector_returns_non_context_manager() -> None:
+    """A collector factory that yields a non-context-manager must not be trusted."""
+
+    class _NonCollectorProvider:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def collect_usage(self):
+            self.calls += 1
+            return object()
+
+    provider = _NonCollectorProvider()
 
     with _usage_context(provider) as usage:
         assert isinstance(usage, UsageTotals)
 
-    provider.collect_usage.assert_not_called()
+    assert provider.calls == 1
+
+
+def test_usage_context_records_metrics_through_wrapper_object() -> None:
+    """Duck-typed providers that are not LLMProvider instances still record usage."""
+
+    class _WrapperProvider:
+        def __init__(self) -> None:
+            self.entered = False
+
+        def collect_usage(self):
+            outer = self
+
+            @contextmanager
+            def _collector():
+                outer.entered = True
+                yield UsageTotals(prompt_tokens=7)
+
+            return _collector()
+
+    wrapper = _WrapperProvider()
+
+    with _usage_context(wrapper) as usage:
+        assert isinstance(usage, UsageTotals)
+        assert usage.prompt_tokens == 7
+
+    assert wrapper.entered is True
+
+
+def test_usage_context_swallows_attribute_error_from_collector() -> None:
+    """A collector blowing up with AttributeError degrades to the null context."""
+
+    class _BrokenProvider:
+        def collect_usage(self):
+            raise AttributeError("no usage support")
+
+    with _usage_context(_BrokenProvider()) as usage:
+        assert isinstance(usage, UsageTotals)
 
 
 def test_chapter_manifest_rejects_path_components(tmp_path):
@@ -337,6 +383,58 @@ async def test_run_propagates_video_worker_cancellation(
         await pipeline.run(["v1"])
 
     assert pipeline.errors == {}
+
+
+async def test_run_cancellation_stops_siblings_and_emits_pipeline_complete(
+    temp_output_dir,
+    mock_llm_provider,
+    mocker,
+) -> None:
+    """Cancelling one video worker must settle siblings and still emit COMPLETE."""
+    pipeline = _make_pipeline(temp_output_dir, mock_llm_provider)
+    pipeline.max_concurrent_videos = 2
+    event_types: list[EventType] = []
+    first_video_started = asyncio.Event()
+    release_first_video = asyncio.Event()
+
+    async def _process(
+        _pipeline: CorePipeline,
+        video_id: str,
+        on_event: Any | None = None,
+    ) -> bool:
+        del _pipeline, on_event
+        if video_id == "v1":
+            first_video_started.set()
+            await release_first_video.wait()
+        return True
+
+    def _on_event(event) -> None:
+        event_types.append(event.event_type)
+
+    mocker.patch.object(pipeline, "_check_api_key", return_value=True)
+    mocker.patch(
+        "notewise.pipeline._execution.process_single_video",
+        side_effect=_process,
+    )
+
+    live_tasks = asyncio.all_tasks() - {asyncio.current_task()}
+    run_task = asyncio.create_task(
+        pipeline.run(["v1", "v2", "v3", "v4"], on_event=_on_event)
+    )
+    await asyncio.wait_for(first_video_started.wait(), timeout=1)
+
+    run_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await run_task
+
+    # Any orphaned worker would still be parked on release_first_video; setting
+    # it lets such stragglers finish, so a clean task set proves none remain.
+    release_first_video.set()
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    assert all(task.done() for task in live_tasks | {run_task})
+    assert EventType.PIPELINE_COMPLETE in event_types
 
 
 async def test_generate_and_write_quiz_creates_output_directory(tmp_path):
