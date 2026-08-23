@@ -20,7 +20,7 @@ class TestVersionKey:
     @pytest.mark.parametrize(
         ("older", "newer"),
         [
-            ("1.4.4", "1.4.4"),
+            ("1.4.4", "1.4.5"),
             ("1.9.9", "1.10.0"),
             ("1.4.4rc1", "1.4.4"),
             ("1.4.4-rc1", "1.4.4"),
@@ -70,7 +70,7 @@ class _FakeResponse:
 def test_check_for_updates_reports_available_release(mocker) -> None:
     payload = b"""
     {
-        "tag_name": "v1.4.4",
+        "tag_name": "v1.4.5",
         "html_url": "https://example.com/release"
     }
     """
@@ -83,7 +83,7 @@ def test_check_for_updates_reports_available_release(mocker) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.4.4"
+    assert status.latest_version == "1.4.5"
     assert status.install_source == "Python Package"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
