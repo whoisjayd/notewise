@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Verify package metadata and release tag
-        run: uv run python scripts/check_version_sync.py --release-tag "${{ env.RELEASE_TAG }}"
+        run: uv run python scripts/check_version_sync.py --release-tag "$RELEASE_TAG"
 
   build-dist:
     name: Build Python Distribution
@@ -112,7 +112,7 @@ jobs:
       - name: Archive standalone binary
         shell: pwsh
         run: |
-          $releaseTag = "${{ env.RELEASE_TAG }}"
+          $releaseTag = $env:RELEASE_TAG
           $artifactName = "${{ matrix.artifact_name }}"
           $archiveExt = "${{ matrix.archive_ext }}"
           $archName = "${{ runner.arch }}".ToLowerInvariant()
@@ -144,7 +144,6 @@ jobs:
     permissions:
       id-token: write
       attestations: write
-      contents: write
     steps:
       - name: Download build artifacts
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8

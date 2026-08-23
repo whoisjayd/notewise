@@ -238,6 +238,64 @@ class TestConfigIO:
         assert "secret-api-key-value" not in rendered
         assert console.print.call_count >= 2
 
+    def test_show_current_config_masks_lowercase_secret_keys(self):
+        """Lowercase secret keys (first-class in config.env) must be masked too."""
+        console = MagicMock()
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"gemini_api_key": "AIzaExample123456789"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "AIzaExample123456789" not in rendered
+
+    def test_show_current_config_masks_mixed_case_secret_keys(self):
+        """Mixed-case secret keys must be gated case-insensitively."""
+        console = MagicMock()
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"Api_Key": "mixed-case-secret-value"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "mixed-case-secret-value" not in rendered
+
+    def test_show_current_config_displays_benign_keys_raw(self):
+        """Benign non-secret keys should still display their raw values."""
+        import io
+
+        from rich.console import Console
+
+        buffer = io.StringIO()
+        console = Console(file=buffer, force_terminal=False, width=200)
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"OUTPUT_DIR": "/tmp/notes"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        assert "/tmp/notes" in buffer.getvalue()
+
     def test_show_current_config_handles_missing_config(self):
         """Read-only config display should report missing config cleanly."""
         console = MagicMock()

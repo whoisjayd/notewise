@@ -40,7 +40,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Verify package metadata and release tag
-        run: uv run python scripts/check_version_sync.py --release-tag "${{ env.RELEASE_TAG }}"
+        run: uv run python scripts/check_version_sync.py --release-tag "$RELEASE_TAG"
 
   build-and-push:
     name: Build and push Docker image

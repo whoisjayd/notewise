@@ -22,6 +22,7 @@ from notewise._constants import (
 )
 from notewise.config import get_state_dir
 from notewise.errors import ConfigurationError
+from notewise.logging import _is_sensitive_key
 from notewise.model_catalog import (
     classify_provider,
     get_model_metadata,
@@ -172,7 +173,7 @@ def show_current_config(*, console: Console | None = None) -> dict[str, str]:
 
     for key in sorted(current_config):
         value = current_config[key]
-        if "KEY" in key or "TOKEN" in key or "SECRET" in key:
+        if _is_sensitive_key(key):
             value = mask_secret(value, suffix=" (set)")
         table.add_row(key, value)
 

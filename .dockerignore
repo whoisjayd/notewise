@@ -54,8 +54,8 @@ scripts/
 
 logs/
 output/
-\*.env
-.env
+**/*.env
+**/.env.*
 
 # Website local artifacts
 
