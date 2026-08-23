@@ -5,8 +5,11 @@ from __future__ import annotations
 import logging
 import os
 import time
+from datetime import datetime
 from types import SimpleNamespace
+from typing import TYPE_CHECKING
 
+import pytest
 import structlog
 
 import notewise.logging as logging_module
@@ -17,6 +20,10 @@ from notewise.logging import (
     redact_sensitive_data,
     redact_sensitive_text,
 )
+
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 
 def _reset_logging_state() -> None:
@@ -221,3 +228,100 @@ def test_prune_log_files_removes_only_old_inactive_logs(tmp_path):
     assert active.exists()
     assert not stale.exists()
     assert fresh.exists()
+
+
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    """Create a symlink or skip when the platform forbids it."""
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation unavailable on this platform")
+
+
+def test_redact_sensitive_text_masks_bearer_header_before_assignment_pass():
+    """Bearer tokens must be masked before assignment-style redaction runs."""
+    token = "abcdefghijklmnop1234567890"
+
+    redacted = redact_sensitive_text(f"Authorization: Bearer {token}")
+
+    assert token not in redacted
+    assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_text_masks_json_quoted_assignments():
+    """JSON-style quoted keys and values should be redacted with structure kept."""
+    secret = "gsk_ABCDEFGHIJKLMNOP1234567890"
+
+    redacted = redact_sensitive_text('{"api_key": "' + secret + '"}')
+
+    assert secret not in redacted
+    assert '"api_key"' in redacted
+    assert "[REDACTED]" in redacted
+
+
+def test_redact_sensitive_text_masks_single_quoted_assignment_values():
+    """Single-quoted secret assignments should be masked like bare ones."""
+    redacted = redact_sensitive_text("api_key = 'supersecretvalue123'")
+
+    assert "supersecretvalue123" not in redacted
+    assert "[REDACTED]" in redacted
+
+
+def test_configure_logging_does_not_follow_planted_session_log_symlink(
+    tmp_path,
+    monkeypatch,
+):
+    """Planted symlinks at predictable session log paths must not be followed."""
+    _reset_logging_state()
+    victim = tmp_path / "outside" / "victim.log"
+    victim.parent.mkdir()
+    victim.write_text("do not touch", encoding="utf-8")
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 2, 3, 4, 5)
+
+    monkeypatch.setattr(logging_module, "datetime", _FixedDatetime)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    planted = log_dir / "notewise-2026-01-02_03-04-05.log"
+    _symlink_or_skip(planted, victim)
+
+    try:
+        session_log = configure_logging(state_dir=tmp_path)
+
+        assert session_log is not None
+        assert session_log != planted
+        logging_module.logging.getLogger("leak-probe").info("probe entry")
+        for handler in logging_module.logging.getLogger().handlers:
+            handler.flush()
+        assert planted.is_symlink()
+        assert victim.read_text(encoding="utf-8") == "do not touch"
+    finally:
+        _reset_logging_state()
+
+
+def test_prune_log_files_skips_symlinked_logs(tmp_path):
+    """Log pruning must skip symlinked *.log entries instead of unlinking them."""
+    _reset_logging_state()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    stale = log_dir / "stale.log"
+    stale.write_text("old", encoding="utf-8")
+    victim = tmp_path / "outside" / "keep-me.log"
+    victim.parent.mkdir()
+    victim.write_text("precious", encoding="utf-8")
+    linked = log_dir / "linked.log"
+    _symlink_or_skip(linked, victim)
+
+    old_time = time.time() - (10 * 24 * 60 * 60)
+    os.utime(stale, (old_time, old_time))
+    os.utime(victim, (old_time, old_time))
+
+    deleted = prune_log_files(older_than_days=7, state_dir=tmp_path)
+
+    assert deleted == 1
+    assert not stale.exists()
+    assert linked.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "precious"

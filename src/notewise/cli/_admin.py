@@ -11,12 +11,16 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from notewise._constants import CONFIG_FILENAME, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
 from notewise.config import get_cache_db_path, get_state_dir
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
 from notewise.utils import coerce_int as _coerce_int
 
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -503,16 +507,24 @@ def clear_cache(console: Console) -> None:
 
     DatabaseRepository.close_instance(db_path)
     removed = []
+    skipped = 0
     candidates = (
         db_path,
         db_path.with_suffix(f"{db_path.suffix}-shm"),
         db_path.with_suffix(f"{db_path.suffix}-wal"),
     )
     for candidate in candidates:
+        if candidate.is_symlink():
+            # Never unlink a symlinked cache file; it may point elsewhere.
+            logger.warning("admin.clear_cache_symlink_skipped", path=str(candidate))
+            skipped += 1
+            continue
         if candidate.exists():
             candidate.unlink()
             removed.append(candidate)
     console.print(f"[green]Removed {len(removed)} cache file(s).[/green]")
+    if skipped:
+        console.print(f"[yellow]Skipped {skipped} symlinked cache file(s).[/yellow]")
 
 
 def prune_cache(console: Console, *, older_than_days: int) -> None:
@@ -608,6 +620,10 @@ def clean_logs(console: Console, *, all_logs: bool, older_than_days: int) -> Non
     active_log = get_session_log_path()
     deleted = 0
     for path in log_dir.glob("*.log"):
+        if path.is_symlink():
+            # Never unlink a symlinked log; it may point outside the log dir.
+            logger.warning("admin.clean_logs_symlink_skipped", path=str(path))
+            continue
         if active_log is not None and path.resolve() == active_log.resolve():
             continue
         path.unlink()

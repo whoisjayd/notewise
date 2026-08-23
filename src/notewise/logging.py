@@ -59,20 +59,24 @@ _SENSITIVE_KEY_NAMES = frozenset(
     | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
-    r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
-    r"session_token|access_token|refresh_token)|"
+    r"(?i)(?P<key_quote>[\"']?)\b(?P<key>[a-z0-9_]*(?:api_key|access_key_id|"
+    r"secret_access_key|session_token|access_token|refresh_token)|"
     r"authorization|token|"
-    r"secret|password|cookie(?:s)?|youtube_cookie_file\b)"
+    r"secret|password|cookie(?:s)?|youtube_cookie_file)\b(?P=key_quote)"
     r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<value_quote>[\"']?)"
     r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,\]}]+)"
+    r"(?P=value_quote)"
 )
 _BEARER_TOKEN_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._+/=-]{10,}")
 _GOOGLE_API_KEY_PATTERN = re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b")
 _OPENAI_STYLE_KEY_PATTERN = re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9._-]{16,}\b")
+_GROQ_API_KEY_PATTERN = re.compile(r"\bgsk_[A-Za-z0-9]{20,}\b")
 _SENSITIVE_TEXT_PATTERNS = (
     _BEARER_TOKEN_PATTERN,
     _GOOGLE_API_KEY_PATTERN,
     _OPENAI_STYLE_KEY_PATTERN,
+    _GROQ_API_KEY_PATTERN,
 )
 
 
@@ -91,12 +95,22 @@ def _is_sensitive_key(key: str) -> bool:
 
 def redact_sensitive_text(text: str) -> str:
     """Redact API keys, tokens, and similar credentials from log text."""
-    sanitized = _ASSIGNMENT_REDACTION_PATTERN.sub(
-        lambda match: f"{match.group('key')}{match.group('sep')}{_REDACTED}",
-        text,
-    )
+    sanitized = text
+    # Text-shaped secrets (bearer headers, raw key formats) must be masked
+    # before assignment-style redaction, which only consumes the value slot.
     for pattern in _SENSITIVE_TEXT_PATTERNS:
         sanitized = pattern.sub(_REDACTED, sanitized)
+
+    def _redact_assignment(match: re.Match[str]) -> str:
+        key_quote = match.group("key_quote")
+        value_quote = match.group("value_quote")
+        return (
+            f"{key_quote}{match.group('key')}{key_quote}"
+            f"{match.group('sep')}"
+            f"{value_quote}{_REDACTED}{value_quote}"
+        )
+
+    sanitized = _ASSIGNMENT_REDACTION_PATTERN.sub(_redact_assignment, sanitized)
     return sanitized
 
 
@@ -170,6 +184,9 @@ def prune_log_files(
     with _LOGGING_LOCK:
         active_log = _SESSION_LOG_PATH
         for log_path in log_dir.glob("*.log"):
+            if log_path.is_symlink():
+                # Never unlink a symlinked entry; it may point outside the log dir.
+                continue
             if active_log is not None and log_path.resolve() == active_log.resolve():
                 continue
             try:
@@ -256,6 +273,16 @@ def configure_logging(
             log_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
             session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
+            if session_log.is_symlink():
+                # A planted symlink at the predictable session log path must
+                # not be followed; fall back once to a pid-suffixed filename.
+                structlog.get_logger(__name__).warning(
+                    "logging.session_log_symlink_refused",
+                    refused_path=str(session_log),
+                )
+                session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}-{os.getpid()}.log"
+                if session_log.is_symlink():
+                    raise OSError(f"session log path is a symlink: {session_log}")
             file_handler = logging.FileHandler(session_log, encoding="utf-8")
             file_handler.setLevel(logging.DEBUG)
             file_handler.setFormatter(formatter)

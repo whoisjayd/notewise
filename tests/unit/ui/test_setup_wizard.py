@@ -1,5 +1,6 @@
 """Tests for the setup wizard."""
 
+import os
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
@@ -127,7 +128,9 @@ class TestConfigIO:
                 "notewise.ui.setup_wizard.load_config",
                 return_value={"OLD_KEY": "old_val"},
             ),
-            patch("pathlib.Path.open", mock_open()) as mock_file,
+            patch("notewise.ui.setup_wizard.os.open", return_value=3) as mock_os_open,
+            patch("notewise.ui.setup_wizard.os.fdopen", mock_open()) as mock_file,
+            patch.object(Path, "chmod") as mock_chmod,
             patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
@@ -144,6 +147,12 @@ class TestConfigIO:
             assert "OLD_KEY=old_val" in written_content
             assert "NEW_KEY=new_val" in written_content
             assert "DEFAULT_MODEL=new_model" in written_content
+            mock_os_open.assert_called_once_with(
+                mock_path,
+                os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
+                0o600,
+            )
+            mock_chmod.assert_called_once_with(0o600)
 
     def test_save_config_strips_legacy_youtube_auth_keys(self):
         """Saving config should remove legacy OAuth and cookie-era auth keys."""
@@ -161,7 +170,9 @@ class TestConfigIO:
                     "OLD_KEY": "old_val",
                 },
             ),
-            patch("pathlib.Path.open", mock_open()) as mock_file,
+            patch("notewise.ui.setup_wizard.os.open", return_value=3),
+            patch("notewise.ui.setup_wizard.os.fdopen", mock_open()) as mock_file,
+            patch.object(Path, "chmod"),
             patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             save_config({"DEFAULT_MODEL": "new_model"})
@@ -176,6 +187,33 @@ class TestConfigIO:
         assert "YOUTUBE_SAVE_OAUTH_TOKEN" not in written_content
         assert "YOUTUBE_OAUTH_TOKEN_FILE" not in written_content
         assert "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN" not in written_content
+
+    def test_save_config_writes_real_file(self, tmp_path, monkeypatch):
+        """save_config should create the config file with expected content."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        config_path = get_config_path()
+        assert config_path.exists()
+        content = config_path.read_text(encoding="utf-8")
+        assert "# notewise Configuration" in content
+        assert "DEFAULT_MODEL=gemini/gemini-2.5-flash" in content
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits only")
+    def test_save_config_creates_owner_only_file(self, tmp_path, monkeypatch):
+        """Config file should be created owner-only (0o600), never world-readable."""
+        import stat
+
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        config_path = get_config_path()
+        mode = stat.S_IMODE(config_path.stat().st_mode)
+        assert mode == 0o600
 
     def test_show_current_config_masks_api_keys(self):
         """Read-only config display should mask secret values."""
@@ -310,6 +348,12 @@ class TestModelFetching:
             "gemini/gemini-pro",
             "unknown-provider/model",
         ]
+        mock_model_cost = {
+            "gpt-4": {"litellm_provider": "openai", "mode": "chat"},
+            "gpt-3.5-turbo": {"litellm_provider": "openai", "mode": "chat"},
+            "claude-3-opus": {"litellm_provider": "anthropic", "mode": "chat"},
+            "gemini/gemini-pro": {"litellm_provider": "gemini", "mode": "chat"},
+        }
 
         with (
             patch(
@@ -317,6 +361,7 @@ class TestModelFetching:
                 return_value={},
             ),
             patch("litellm.model_list", mock_models, create=True),
+            patch("litellm.model_cost", mock_model_cost),
         ):
             models = get_available_models()
 
@@ -596,6 +641,18 @@ class TestInteractiveFlow:
         ):
             key = get_api_key("openai")
             assert key == "sk-valid-length-key-12345"
+
+    def test_get_api_key_masks_existing_key_with_mask_secret(self):
+        """Existing key prompt should use the shared mask_secret helper."""
+        existing = "sk-existing-api-key-123456789"
+
+        with patch("rich.prompt.Confirm.ask", return_value=True) as confirm_ask:
+            key = get_api_key("openai", existing_key=existing)
+
+        prompt = confirm_ask.call_args.args[0]
+        assert "sk-exi...6789" in prompt
+        assert existing not in prompt
+        assert key == existing
 
 
 class TestWizardOrchestration:

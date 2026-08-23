@@ -15,11 +15,13 @@ SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
 OUTPUT_METADATA_CHAPTER_FILES_KEY = "chapter_files"
 OUTPUT_METADATA_VIDEO_ID_KEY = "video_id"
-MASKED_SECRET_MIN_VISIBLE_LENGTH = 8
 MASKED_SECRET_PREFIX_LENGTH = 6
 MASKED_SECRET_SUFFIX_LENGTH = 4
+MASKED_SECRET_UNMASKABLE_MARGIN = 2
 SANITIZED_FILENAME_FALLBACK = "untitled"
-INVALID_FILENAME_CHARS_PATTERN = r'[<>:"/\\|?*\x00-\x1f\x7f]'
+INVALID_FILENAME_CHARS_PATTERN = (
+    r'[<>:"/\\|?*\x00-\x1f\x7f\u202a-\u202e\u2066-\u2069\u200b-\u200f]'
+)
 RESERVED_WINDOWS_FILENAME_PATTERN = r"^(CON|PRN|AUX|NUL|COM[1-9]|LPT[1-9])(\.|$)"
 WHITESPACE_PATTERN = r"\s+"
 BOOL_SETTING_TRUTHY_VALUES = frozenset({"1", "true", "yes", "on"})
@@ -557,6 +559,11 @@ SUPPORTED_TRANSCRIPT_OUTPUT_FORMATS = (
 )
 EMPTY_TRANSCRIPT_ERROR = "No usable transcript text was returned for this video."
 TRANSCRIPT_EXPORT_FORMAT_ERROR = "--export-transcript must be one of: txt, json"
+TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX = "-transcript"
+TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE = (
+    "Playlists and batch files are not supported by `notewise transcript`. "
+    "Use `notewise process --export-transcript` instead."
+)
 NOTES_OUTPUT_EXTENSIONS = {
     "md": ".md",
     "html": ".html",

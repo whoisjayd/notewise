@@ -117,6 +117,9 @@ def configure_oauth_token_storage(
     """Sync LiteLLM OAuth token directories to the current settings paths."""
     resolved_paths = token_paths or get_oauth_token_storage_paths()
     for provider, token_dir in resolved_paths.items():
+        # Pre-create the token directory so LiteLLM never falls back to a
+        # world-readable default when writing provider OAuth tokens.
+        token_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
         env_var = OAUTH_TOKEN_DIR_ENV_VARS[provider]
         env_value = str(token_dir)
         if env_var not in os.environ or _is_managed_oauth_token_dir_env(env_var):

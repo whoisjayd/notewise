@@ -44,6 +44,14 @@ def test_mask_secret_preserves_display_variants() -> None:
     assert mask_secret("abcdefghijklmnop", suffix=" (set)") == "abcdef...mnop (set)"
 
 
+def test_mask_secret_never_discloses_short_secrets() -> None:
+    """Secrets at or below prefix+suffix+margin length must not leak characters."""
+    assert mask_secret("abcdefghij") == "***"  # len 10 == prefix6+suffix4
+    assert mask_secret("abcdefghijkl") == "***"  # exactly at the gate
+    assert mask_secret("abcdefghijklm") == "abcdef...jklm"  # first unmaskable len
+    assert mask_secret("abcdefghi") == "***"  # audit repro: was fully disclosed
+
+
 def test_strip_wrapped_quotes_handles_config_value_variants() -> None:
     assert strip_wrapped_quotes('"quoted"') == "quoted"
     assert strip_wrapped_quotes("'quoted'") == "quoted"
