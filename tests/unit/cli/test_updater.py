@@ -20,7 +20,7 @@ class TestVersionKey:
     @pytest.mark.parametrize(
         ("older", "newer"),
         [
-            ("1.4.3", "1.4.4"),
+            ("1.4.4", "1.4.4"),
             ("1.9.9", "1.10.0"),
             ("1.4.4rc1", "1.4.4"),
             ("1.4.4-rc1", "1.4.4"),
@@ -139,8 +139,8 @@ def test_update_command_prints_detected_source_and_matching_command(mocker) -> N
         cli_app,
         "check_for_updates",
         return_value=updater.UpdateStatus(
-            current_version="1.4.3",
-            latest_version="1.4.3",
+            current_version="1.4.4",
+            latest_version="1.4.4",
             available=True,
             install_source="Standalone Binary",
             release_url="https://example.com/release",
