@@ -543,3 +543,30 @@ class TestGetApiKeyNameForModel:
         assert self.cfg.get_api_key_name_for_model("o1") == "OPENAI_API_KEY"
         assert self.cfg.get_api_key_name_for_model("o3-mini") == "OPENAI_API_KEY"
         assert self.cfg.get_api_key_name_for_model("o4-preview") == "OPENAI_API_KEY"
+
+    def test_allow_unlisted_models_defaults_to_false(self, monkeypatch):
+        """The unlisted-model opt-in must stay off unless explicitly enabled."""
+        monkeypatch.delenv("ALLOW_UNLISTED_MODELS", raising=False)
+
+        assert Config().allow_unlisted_models is False
+
+    def test_allow_unlisted_models_loads_from_env(self, monkeypatch):
+        """ALLOW_UNLISTED_MODELS parses boolean env values."""
+        monkeypatch.setenv("ALLOW_UNLISTED_MODELS", "true")
+        assert Config().allow_unlisted_models is True
+
+        monkeypatch.setenv("ALLOW_UNLISTED_MODELS", "false")
+        assert Config().allow_unlisted_models is False
+
+    def test_allow_unlisted_models_loads_from_user_config(self, tmp_path, monkeypatch):
+        """config.env is an accepted source for the unlisted-model opt-in."""
+        monkeypatch.delenv("ALLOW_UNLISTED_MODELS", raising=False)
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.env").write_text(
+            "ALLOW_UNLISTED_MODELS=true\n",
+            encoding="utf-8",
+        )
+
+        assert Config().allow_unlisted_models is True

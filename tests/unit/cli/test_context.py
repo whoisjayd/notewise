@@ -148,3 +148,56 @@ def test_ensure_selected_output_dir_creates_missing_parent_directories(
     context.ensure_selected_output_dir()
 
     assert output_dir.is_dir()
+
+
+def _unsupported_model_context(config: object) -> CliProcessContext:
+    """Build a minimal CLI context wired to the given config for preflight tests."""
+    return CliProcessContext(
+        console=MagicMock(),
+        config=config,
+        core_pipeline_cls=MagicMock(),
+        parse_youtube_url=MagicMock(),
+        extract_playlist_videos=MagicMock(),
+        get_playlist_info=MagicMock(),
+        dashboard_cls=MagicMock(),
+        live_cls=MagicMock(),
+        selected_model="openrouter/stealth/ox-alpha",
+        selected_output=Path("output"),
+        selected_output_formats=["md"],
+        selected_languages=["en"],
+        selected_temperature=0.7,
+        selected_max_tokens=None,
+        selected_throttle_seconds=0.0,
+        force=False,
+        no_ui=False,
+        quiz=False,
+        export_transcript=None,
+        timestamps=False,
+        chapter_directory_output=False,
+        selected_cookie_file=None,
+    )
+
+
+def test_ensure_model_supported_short_circuits_when_unlisted_models_allowed() -> None:
+    """Opting in must skip the catalog check entirely instead of rejecting."""
+    config = MagicMock()
+    config.allow_unlisted_models = True
+    config.get_unsupported_model_message = MagicMock(
+        return_value="Model is not currently supported."
+    )
+    context = _unsupported_model_context(config)
+
+    assert context.ensure_model_supported() is True
+    config.get_unsupported_model_message.assert_not_called()
+
+
+def test_ensure_model_supported_still_rejects_when_opt_out_unchanged() -> None:
+    """With the default opt-out, unlisted models keep failing preflight."""
+    config = MagicMock()
+    config.allow_unlisted_models = False
+    config.get_unsupported_model_message = MagicMock(
+        return_value="Model is not currently supported."
+    )
+    context = _unsupported_model_context(config)
+
+    assert context.ensure_model_supported() is False

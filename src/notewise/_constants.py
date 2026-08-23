@@ -10,6 +10,7 @@ CACHE_DB_FILENAME = ".notewise_cache.db"
 STATE_DIR_NAME = ".notewise"
 LOGS_DIR_NAME = "logs"
 CONFIG_FILENAME = "config.env"
+ALLOW_UNLISTED_MODELS_CONFIG_KEY = "ALLOW_UNLISTED_MODELS"
 OUTPUT_DIR_CONFIG_KEY = "OUTPUT_DIR"
 SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
@@ -50,6 +51,21 @@ UPDATE_INSTALLER_WINDOWS_URL = "https://notewise.click/install"
 UPDATE_COMMAND_BINARY_UNIX = f"curl -fsSL {UPDATE_INSTALLER_UNIX_URL} | sh"
 UPDATE_COMMAND_BINARY_WINDOWS = f"irm {UPDATE_INSTALLER_WINDOWS_URL} | iex"
 UPDATE_METADATA_PARSE_ERROR = "Could not parse latest release metadata."
+VERSION_PRERELEASE_MARKER_PATTERN = (
+    r"(?<![a-z])(alpha|beta|preview|pre|dev|rc|[abc])(?![a-z])[.\-_]?(\d*)"
+)
+# Ascending severity of prerelease tags; a plain release outranks every tag.
+VERSION_PRERELEASE_RANKS = {
+    "dev": 0,
+    "a": 1,
+    "alpha": 1,
+    "b": 2,
+    "beta": 2,
+    "c": 3,
+    "pre": 3,
+    "preview": 3,
+    "rc": 3,
+}
 LEGACY_CONFIG_KEYS = frozenset(
     {
         "YOUTUBE_USE_OAUTH",
@@ -558,7 +574,7 @@ SUPPORTED_TRANSCRIPT_OUTPUT_FORMATS = (
     TRANSCRIPT_JSON_OUTPUT_FORMAT,
 )
 EMPTY_TRANSCRIPT_ERROR = "No usable transcript text was returned for this video."
-TRANSCRIPT_EXPORT_FORMAT_ERROR = "--export-transcript must be one of: txt, json"
+TRANSCRIPT_EXPORT_FORMAT_ERROR = "Transcript format must be one of: txt, json"
 TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX = "-transcript"
 TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE = (
     "Playlists and batch files are not supported by `notewise transcript`. "

@@ -96,6 +96,7 @@ def test_configuration_doc_common_defaults_match_source_constants():
         "TEMPERATURE": f"`{DEFAULT_TEMPERATURE}`",
         "MAX_TOKENS": "unset",
         "YOUTUBE_COOKIE_FILE": "unset",
+        "ALLOW_UNLISTED_MODELS": "`false`",
     }
 
 

@@ -25,6 +25,7 @@ from pydantic_settings import (
 )
 
 from notewise._constants import (
+    ALLOW_UNLISTED_MODELS_CONFIG_KEY,
     AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
     CONFIG_API_KEY_ENV_KEYS,
@@ -77,6 +78,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
     {
         "DEFAULT_MODEL",
         OUTPUT_DIR_CONFIG_KEY,
+        ALLOW_UNLISTED_MODELS_CONFIG_KEY,
         "MAX_CONCURRENT_VIDEOS",
         "YOUTUBE_REQUESTS_PER_MINUTE",
         "TEMPERATURE",
@@ -265,6 +267,9 @@ class AppSettings(BaseSettings):
     mistral_api_key: str | None = Field(None, alias="MISTRAL_API_KEY")
     cohere_api_key: str | None = Field(None, alias="COHERE_API_KEY")
     deepseek_api_key: str | None = Field(None, alias="DEEPSEEK_API_KEY")
+
+    # Model catalog preflight
+    allow_unlisted_models: bool = Field(False, alias=ALLOW_UNLISTED_MODELS_CONFIG_KEY)
 
     # Generation parameters
     temperature: float = Field(

@@ -105,13 +105,17 @@ class TestLLMProvider:
             assert result == "# Title\nContent"
 
     async def test_generate_logs_cost_estimation_failures(self, mocker):
-        """LiteLLM cost lookup failures should be visible for diagnostics."""
+        """Unmapped-model cost lookups log once per model without traceback spam."""
         mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
         mocker.patch(
             "notewise.llm.provider.completion_cost",
             side_effect=RuntimeError("cost unavailable"),
         )
-        mock_warning = mocker.patch("notewise.llm.provider.logger.warning")
+        mock_debug = mocker.patch("notewise.llm.provider.logger.debug")
+        mocker.patch.dict(
+            "notewise.llm.provider.COST_UNMAPPED_LOGGED_MODELS",
+            clear=True,
+        )
         mock_response = MagicMock()
         mock_response.choices[0].message.content = "Generated content"
         mock_response.usage.prompt_tokens = 1
@@ -122,11 +126,12 @@ class TestLLMProvider:
         provider = LLMProvider("gpt-4o")
         with provider.collect_usage() as usage:
             await provider.generate("sys", "user")
+            await provider.generate("sys", "user again")
 
         assert usage.cost_usd == 0.0
-        mock_warning.assert_called()
-        assert mock_warning.call_args.kwargs["model"] == "gpt-4o"
-        assert mock_warning.call_args.kwargs["exc_info"] is True
+        assert mock_debug.call_count == 1
+        assert mock_debug.call_args.kwargs["model"] == "gpt-4o"
+        assert "exc_info" not in mock_debug.call_args.kwargs
 
     async def test_generate_normalizes_block_content_payloads(self):
         """Structured content blocks should be normalized into plain text."""
@@ -695,3 +700,67 @@ class TestLLMProvider:
         provider = LLMProvider("gpt-4o")
 
         assert provider._normalize_content([{"foo": "bar"}, object()]) == ""
+
+    async def test_generate_resolves_env_api_key_when_config_missing(
+        self, mocker, monkeypatch
+    ):
+        """Env-only credentials must reach acompletion instead of being dropped."""
+        monkeypatch.setenv("OPENROUTER_API_KEY", "env-or-key")
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch("notewise.llm.provider.completion_cost", return_value=0.0)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider("openrouter/openai/gpt-4o-mini")
+
+        assert provider._resolve_credential() == "env-or-key"
+
+        await provider.generate("sys", "user")
+
+        _args, kwargs = mock_acompletion.call_args
+        assert kwargs["api_key"] == "env-or-key"
+
+    async def test_generate_prefers_configured_api_key_over_env(
+        self, mocker, monkeypatch
+    ):
+        """An explicit config value wins over an ambient env var of the same name."""
+        mock_settings = MagicMock()
+        mock_settings.get_api_key_names_for_model.return_value = ("OPENAI_API_KEY",)
+        mock_settings.openai_api_key = "cfg-openai-key"
+        mocker.patch.object(provider_mod, "config", mock_settings)
+        monkeypatch.setenv("OPENAI_API_KEY", "env-openai-key")
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch("notewise.llm.provider.completion_cost", return_value=0.0)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider("openai/gpt-4o")
+        await provider.generate("sys", "user")
+
+        _args, kwargs = mock_acompletion.call_args
+        assert kwargs["api_key"] == "cfg-openai-key"
+
+    async def test_generate_omits_api_key_when_no_credential_resolves(
+        self, mocker, monkeypatch
+    ):
+        """None must never be forwarded to acompletion as api_key."""
+        monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
+        mock_settings = MagicMock()
+        mock_settings.get_api_key_names_for_model.return_value = ("OPENROUTER_API_KEY",)
+        mocker.patch.object(provider_mod, "config", mock_settings)
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch("notewise.llm.provider.completion_cost", return_value=0.0)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider("openrouter/openai/gpt-4o-mini")
+
+        assert provider._resolve_credential() is None
+
+        await provider.generate("sys", "user")
+
+        _args, kwargs = mock_acompletion.call_args
+        assert "api_key" not in kwargs

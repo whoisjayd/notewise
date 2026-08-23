@@ -75,6 +75,8 @@ class CliProcessContext:
 
     def ensure_model_supported(self) -> bool:
         """Reject known unsupported models before any YouTube network work."""
+        if getattr(self.config, "allow_unlisted_models", False):
+            return True
         get_unsupported_model_message = getattr(
             self.config,
             "get_unsupported_model_message",
