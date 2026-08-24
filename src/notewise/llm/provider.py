@@ -1,6 +1,7 @@
 """LLM provider configuration using LiteLLM."""
 
 import logging
+import os
 import warnings
 from collections.abc import AsyncIterable, Generator
 from contextlib import contextmanager
@@ -17,6 +18,7 @@ from notewise._constants import (
     DEFAULT_TEMPERATURE,
     GPT5_MODEL_MARKER,
     GPT5_REQUIRED_TEMPERATURE,
+    LLM_API_KEY_KWARG,
     LLM_ERROR_PAYLOAD_MARKERS,
     LLM_NUM_RETRIES,
     LLM_PAYLOAD_ERROR_SUMMARY,
@@ -25,6 +27,7 @@ from notewise._constants import (
     RESPONSES_API_MODEL_MARKERS,
     RESPONSES_API_PROVIDER_PREFIXES,
 )
+from notewise.config import AppSettings
 from notewise.config import settings as config
 from notewise.errors import LLMGenerationError as _LLMGenerationError
 from notewise.logging import make_log_safe_text, redact_sensitive_text
@@ -36,6 +39,11 @@ _USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
     "notewise_usage_collector",
     default=None,
 )
+
+
+_SETTINGS_FIELD_BY_ALIAS: dict[str, str] = {
+    field.alias: name for name, field in AppSettings.model_fields.items() if field.alias
+}
 _ERROR_SUMMARY_LIMIT = 500
 
 
@@ -97,6 +105,9 @@ class UsageTotals:
 LLMGenerationError = _LLMGenerationError
 
 
+COST_UNMAPPED_LOGGED_MODELS: set[str] = set()
+
+
 class LLMProvider:
     """
     LLM provider interface using LiteLLM.
@@ -143,6 +154,26 @@ class LLMProvider:
             # one (e.g. ollama)
             logger.debug(f"No specific API key mapping found for model: {self.model}")
 
+    @staticmethod
+    def _configured_settings_value(env_name: str) -> str | None:
+        """Return an explicit AppSettings value whose alias matches env_name."""
+        attr = _SETTINGS_FIELD_BY_ALIAS.get(env_name)
+        if attr is None:
+            return None
+        value = getattr(config, attr, None)
+        return value if isinstance(value, str) and value else None
+
+    def _resolve_credential(self) -> str | None:
+        """Resolve the model credential: explicit config value, then env lookup."""
+        for env_name in config.get_api_key_names_for_model(self.model):
+            configured = self._configured_settings_value(env_name)
+            if configured:
+                return configured
+            value = os.environ.get(env_name)
+            if value:
+                return value
+        return None
+
     async def generate(
         self,
         system_prompt: str,
@@ -182,6 +213,9 @@ class LLMProvider:
 
             if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
+            api_key = self._resolve_credential()
+            if api_key is not None:
+                kwargs[LLM_API_KEY_KWARG] = api_key
 
             response: Any | None = None
             content = ""
@@ -402,13 +436,18 @@ class LLMProvider:
                 )
                 cost_value = max(0.0, float(cost or 0.0))
             except Exception as exc:
-                logger.warning(
-                    "Failed to estimate LiteLLM completion cost",
-                    model=model,
-                    call_type=call_type,
-                    error_type=type(exc).__name__,
-                    exc_info=True,
-                )
+                # Unlisted/gateway models are unmapped upstream by design; the
+                # repeated per-call traceback would drown real signal in the
+                # session log, so surface each model once at debug level.
+                if model not in COST_UNMAPPED_LOGGED_MODELS:
+                    COST_UNMAPPED_LOGGED_MODELS.add(model)
+                    logger.debug(
+                        "Cost estimation unavailable for model "
+                        "(not mapped in LiteLLM catalog); treating as $0",
+                        model=model,
+                        call_type=call_type,
+                        error_type=type(exc).__name__,
+                    )
                 continue
             if cost_value > 0:
                 return cost_value

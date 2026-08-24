@@ -25,6 +25,7 @@ from pydantic_settings import (
 )
 
 from notewise._constants import (
+    ALLOW_UNLISTED_MODELS_CONFIG_KEY,
     AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
     CONFIG_API_KEY_ENV_KEYS,
@@ -47,6 +48,8 @@ from notewise._constants import (
     OAUTH_TOKEN_DIR_ENV_VARS,
     OAUTH_TOKEN_DIR_NAMES,
     OAUTH_TOKEN_DIR_PARENT,
+    OAUTH_TOKEN_DIR_PERMISSION_MODE,
+    OAUTH_TOKEN_DIR_SYMLINK_SKIPPED_EVENT,
     OUTPUT_DIR_CONFIG_KEY,
     PROVIDER_API_KEY_ENV_VARS,
     PROVIDER_AUTH_ENV_KEYS,
@@ -77,6 +80,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
     {
         "DEFAULT_MODEL",
         OUTPUT_DIR_CONFIG_KEY,
+        ALLOW_UNLISTED_MODELS_CONFIG_KEY,
         "MAX_CONCURRENT_VIDEOS",
         "YOUTUBE_REQUESTS_PER_MINUTE",
         "TEMPERATURE",
@@ -117,12 +121,43 @@ def configure_oauth_token_storage(
     """Sync LiteLLM OAuth token directories to the current settings paths."""
     resolved_paths = token_paths or get_oauth_token_storage_paths()
     for provider, token_dir in resolved_paths.items():
+        if not _prepare_oauth_token_dir(provider, token_dir):
+            continue
         env_var = OAUTH_TOKEN_DIR_ENV_VARS[provider]
         env_value = str(token_dir)
         if env_var not in os.environ or _is_managed_oauth_token_dir_env(env_var):
             os.environ[env_var] = env_value
         _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES[env_var] = env_value
     return resolved_paths
+
+
+def _prepare_oauth_token_dir(provider: str, token_dir: Path) -> bool:
+    """Create or harden one OAuth token directory.
+
+    Returns False when the directory is (or resolves through) a symlink;
+    the caller leaves the provider env mapping untouched in that case.
+    """
+    # lstat-based check: a planted symlink must never be followed or chmod'd.
+    if token_dir.is_symlink():
+        logger.warning(
+            OAUTH_TOKEN_DIR_SYMLINK_SKIPPED_EVENT,
+            provider=provider,
+            token_dir=str(token_dir),
+        )
+        return False
+    if token_dir.is_dir():
+        # exist_ok mkdir never fixes an already-permissive directory.
+        token_dir.chmod(OAUTH_TOKEN_DIR_PERMISSION_MODE)
+        return True
+    token_dir.mkdir(parents=True, exist_ok=True, mode=OAUTH_TOKEN_DIR_PERMISSION_MODE)
+    if token_dir.is_symlink() or not token_dir.is_dir():
+        logger.warning(
+            OAUTH_TOKEN_DIR_SYMLINK_SKIPPED_EVENT,
+            provider=provider,
+            token_dir=str(token_dir),
+        )
+        return False
+    return True
 
 
 def _default_oauth_token_dir(provider: str) -> Path:
@@ -262,6 +297,9 @@ class AppSettings(BaseSettings):
     mistral_api_key: str | None = Field(None, alias="MISTRAL_API_KEY")
     cohere_api_key: str | None = Field(None, alias="COHERE_API_KEY")
     deepseek_api_key: str | None = Field(None, alias="DEEPSEEK_API_KEY")
+
+    # Model catalog preflight
+    allow_unlisted_models: bool = Field(False, alias=ALLOW_UNLISTED_MODELS_CONFIG_KEY)
 
     # Generation parameters
     temperature: float = Field(

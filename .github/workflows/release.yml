@@ -18,6 +18,10 @@ env:
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   release-sanity:
     name: Release Sanity
@@ -25,10 +29,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
-      - uses: astral-sh/setup-uv@v7
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -36,7 +41,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev --frozen
       - name: Verify package metadata and release tag
-        run: uv run python scripts/check_version_sync.py --release-tag "${{ env.RELEASE_TAG }}"
+        run: uv run python scripts/check_version_sync.py --release-tag "$RELEASE_TAG"
 
   build-dist:
     name: Build Python Distribution
@@ -45,10 +50,11 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
-      - uses: astral-sh/setup-uv@v7
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -56,7 +62,7 @@ jobs:
       - name: Build package
         run: uv build
       - name: Upload build artifacts
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: dist
           path: dist/*
@@ -81,10 +87,11 @@ jobs:
             artifact_name: windows
             archive_ext: zip
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
-      - uses: astral-sh/setup-uv@v7
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -108,7 +115,7 @@ jobs:
       - name: Archive standalone binary
         shell: pwsh
         run: |
-          $releaseTag = "${{ env.RELEASE_TAG }}"
+          $releaseTag = $env:RELEASE_TAG
           $artifactName = "${{ matrix.artifact_name }}"
           $archiveExt = "${{ matrix.archive_ext }}"
           $archName = "${{ runner.arch }}".ToLowerInvariant()
@@ -125,7 +132,7 @@ jobs:
             tar -czf "release/$archiveBase.tar.gz" -C release $binaryName
           }
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
         with:
           name: binary-${{ matrix.artifact_name }}
           path: release/*
@@ -140,23 +147,20 @@ jobs:
     permissions:
       id-token: write
       attestations: write
-      contents: write
     steps:
       - name: Download build artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist
           path: dist
 
       - name: Attest build artifacts
-        uses: actions/attest-build-provenance@v4
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4
         with:
           subject-path: dist/*
 
       - name: Publish to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          password: ${{ secrets.PYPI_API_TOKEN }}
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # release/v1
 
   github-release:
     name: Publish GitHub Release
@@ -168,18 +172,19 @@ jobs:
       contents: write
     steps:
       - name: Check out release sources
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: ${{ env.RELEASE_REF }}
+          persist-credentials: false
 
       - name: Download Python distribution artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           name: dist
           path: dist
 
       - name: Download standalone binary artifacts
-        uses: actions/download-artifact@v8
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
           pattern: binary-*
           path: release-assets
@@ -203,7 +208,7 @@ jobs:
           } >> SHA256SUMS.txt
 
       - name: Create GitHub release
-        uses: softprops/action-gh-release@v3
+        uses: softprops/action-gh-release@3d0d9888cb7fd7b750713d6e236d1fcb99157228 # v3
         with:
           tag_name: ${{ env.RELEASE_TAG }}
           generate_release_notes: true

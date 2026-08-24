@@ -19,6 +19,7 @@ from notewise._constants import (
     DEFAULT_THROTTLE_SECONDS,
     MIN_ESTIMATED_TOKENS,
     TOKEN_ESTIMATE_CHARS_PER_TOKEN,
+    TRANSCRIPT_CHUNK_SEPARATOR_TOKENS,
 )
 from notewise.config import settings as config
 from notewise.llm.prompts.chapter_notes import (
@@ -409,7 +410,11 @@ class StudyMaterialGenerator:
                     start = end
                 continue
 
-            if current_tokens + term_tokens > config.chunk_size:
+            # Chunks are joined with a single space, so that separator consumes
+            # part of the token budget too; otherwise the joined chunk drifts
+            # over chunk_size as sentences accumulate.
+            separator_tokens = TRANSCRIPT_CHUNK_SEPARATOR_TOKENS if current_chunk else 0
+            if current_tokens + term_tokens + separator_tokens > config.chunk_size:
                 if current_chunk:
                     chunks.append(" ".join(current_chunk))
 
@@ -440,7 +445,7 @@ class StudyMaterialGenerator:
                     current_tokens += term_tokens
             else:
                 current_chunk.append(sentence)
-                current_tokens += term_tokens
+                current_tokens += term_tokens + separator_tokens
 
         # Add remaining chunk
         if current_chunk:

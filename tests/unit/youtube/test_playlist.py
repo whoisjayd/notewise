@@ -11,7 +11,6 @@ from notewise.youtube.playlist import extract_playlist_videos
 class TestPlaylistExtraction:
     """Test playlist video extraction."""
 
-    @pytest.mark.asyncio
     async def test_extract_playlist_success(self, mock_extractor_client):
         """Extract video IDs from native playlist entries."""
         client = mock_extractor_client["playlist"].return_value
@@ -28,7 +27,6 @@ class TestPlaylistExtraction:
         assert len(video_ids) == 3
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ", "9bZkp7q19f0"]
 
-    @pytest.mark.asyncio
     async def test_extract_playlist_retry_success(self, mock_extractor_client):
         """Transient failures should retry and then succeed."""
         client = mock_extractor_client["playlist"].return_value
@@ -48,7 +46,6 @@ class TestPlaylistExtraction:
         assert video_ids == ["dQw4w9WgXcQ"]
         assert client.playlist.call_count == 2
 
-    @pytest.mark.asyncio
     async def test_extract_playlist_empty(self, mock_extractor_client):
         """Empty playlist payload should raise PlaylistError after retries."""
         client = mock_extractor_client["playlist"].return_value
@@ -59,7 +56,6 @@ class TestPlaylistExtraction:
 
         assert client.playlist.call_count == 3
 
-    @pytest.mark.asyncio
     async def test_extract_private_playlist_fails_without_retry(
         self, mock_extractor_client
     ):
@@ -77,7 +73,6 @@ class TestPlaylistExtraction:
 
         assert client.playlist.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_extract_signin_playlist_fails_without_retry(
         self, mock_extractor_client
     ):
@@ -95,7 +90,6 @@ class TestPlaylistExtraction:
 
         assert client.playlist.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_extract_playlist_malformed_urls(self, mock_extractor_client):
         """Malformed entries should be skipped while valid IDs are kept."""
         client = mock_extractor_client["playlist"].return_value
@@ -110,7 +104,6 @@ class TestPlaylistExtraction:
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ"]
 
-    @pytest.mark.asyncio
     async def test_extract_async_logs_playlist_title_on_first_attempt(
         self, mock_extractor_client
     ):

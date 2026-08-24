@@ -365,10 +365,11 @@ async def run_batch_file(
                     for result in batch_results
                     if result.failure_row is not None
                 ]
+                total_with_early_failures = total_jobs + len(early_failures)
                 synthetic_result = PipelineResult(
                     success_count=sum(1 for result in batch_results if result.success),
                     failure_count=len(early_failures) + len(failure_rows),
-                    total_count=total_jobs,
+                    total_count=total_with_early_failures,
                     video_ids=[result.display_title for result in batch_results],
                     errors={},
                 )
@@ -386,5 +387,5 @@ async def run_batch_file(
         context,
         batch_results,
         early_failures,
-        total_jobs=total_jobs,
+        total_jobs=total_jobs + len(early_failures),
     )

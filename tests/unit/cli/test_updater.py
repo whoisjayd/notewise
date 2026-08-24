@@ -14,6 +14,45 @@ from notewise.errors import UpdateError
 runner = CliRunner()
 
 
+class TestVersionKey:
+    """Table-driven checks for prerelease-aware version ordering."""
+
+    @pytest.mark.parametrize(
+        ("older", "newer"),
+        [
+            ("1.4.4", "1.4.5"),
+            ("1.9.9", "1.10.0"),
+            ("1.4.4rc1", "1.4.4"),
+            ("1.4.4-rc1", "1.4.4"),
+            ("v1.4.4rc2", "1.4.4"),
+            ("1.4.4beta3", "1.4.4rc1"),
+            ("1.4.4alpha2", "1.4.4beta1"),
+            ("1.4.4a1", "1.4.4b1"),
+            ("1.4.4dev1", "1.4.4alpha1"),
+            ("1.4.4-rc.1", "1.4.4-rc.2"),
+            ("1.4.4-beta.1", "1.4.4"),
+            ("1.4.4.dev1", "1.4.4"),
+        ],
+    )
+    def test_version_ordering(self, older: str, newer: str) -> None:
+        assert updater._version_key(older) < updater._version_key(newer)
+
+    @pytest.mark.parametrize(
+        "version",
+        ["1.4.4", "v1.4.4", "1.4.4.0"],
+    )
+    def test_release_forms_compare_equal(self, version: str) -> None:
+        assert updater._version_key(version) == updater._version_key("1.4.4")
+
+    @pytest.mark.parametrize(
+        "bad_version",
+        ["1.4", "abc", "x.y.z", "", "1.4.4-foo", "1.4.4+build.7"],
+    )
+    def test_unsupported_formats_raise(self, bad_version: str) -> None:
+        with pytest.raises(UpdateError):
+            updater._version_key(bad_version)
+
+
 class _FakeResponse:
     def __init__(self, payload: bytes) -> None:
         self._payload = payload
@@ -31,7 +70,7 @@ class _FakeResponse:
 def test_check_for_updates_reports_available_release(mocker) -> None:
     payload = b"""
     {
-        "tag_name": "v1.4.4",
+        "tag_name": "v1.4.5",
         "html_url": "https://example.com/release"
     }
     """
@@ -44,7 +83,7 @@ def test_check_for_updates_reports_available_release(mocker) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.4.4"
+    assert status.latest_version == "1.4.5"
     assert status.install_source == "Python Package"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
@@ -100,8 +139,8 @@ def test_update_command_prints_detected_source_and_matching_command(mocker) -> N
         cli_app,
         "check_for_updates",
         return_value=updater.UpdateStatus(
-            current_version="1.4.3",
-            latest_version="1.4.3",
+            current_version="1.4.4",
+            latest_version="1.4.4",
             available=True,
             install_source="Standalone Binary",
             release_url="https://example.com/release",

@@ -11,12 +11,24 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from notewise._constants import CONFIG_FILENAME, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
+import structlog
+
+from notewise._constants import (
+    CLEAN_LOGS_SYMLINK_SKIPPED_EVENT,
+    CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE,
+    CLEAR_CACHE_SYMLINK_SKIPPED_EVENT,
+    CONFIG_FILENAME,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+    STATS_SINCE_DAYS_VALIDATION_MESSAGE,
+)
 from notewise.config import get_cache_db_path, get_state_dir
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
 from notewise.utils import coerce_int as _coerce_int
 
+
+logger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -77,9 +89,14 @@ def _parse_since_days(value: str | None) -> int | None:
     normalized = value.strip().lower()
     if normalized.endswith("d"):
         normalized = normalized[:-1]
-    days = int(normalized)
-    if days < 0:
-        raise ValueError("since must be zero or a positive integer day count")
+    try:
+        days: int | None = int(normalized)
+    except ValueError:
+        days = None
+    if days is None or days < 0:
+        from notewise.errors import ValidationError
+
+        raise ValidationError(STATS_SINCE_DAYS_VALIDATION_MESSAGE)
     return days
 
 
@@ -503,16 +520,24 @@ def clear_cache(console: Console) -> None:
 
     DatabaseRepository.close_instance(db_path)
     removed = []
+    skipped = 0
     candidates = (
         db_path,
         db_path.with_suffix(f"{db_path.suffix}-shm"),
         db_path.with_suffix(f"{db_path.suffix}-wal"),
     )
     for candidate in candidates:
+        if candidate.is_symlink():
+            # Never unlink a symlinked cache file; it may point elsewhere.
+            logger.warning(CLEAR_CACHE_SYMLINK_SKIPPED_EVENT, path=str(candidate))
+            skipped += 1
+            continue
         if candidate.exists():
             candidate.unlink()
             removed.append(candidate)
     console.print(f"[green]Removed {len(removed)} cache file(s).[/green]")
+    if skipped:
+        console.print(CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE.format(count=skipped))
 
 
 def prune_cache(console: Console, *, older_than_days: int) -> None:
@@ -608,6 +633,10 @@ def clean_logs(console: Console, *, all_logs: bool, older_than_days: int) -> Non
     active_log = get_session_log_path()
     deleted = 0
     for path in log_dir.glob("*.log"):
+        if path.is_symlink():
+            # Never unlink a symlinked log; it may point outside the log dir.
+            logger.warning(CLEAN_LOGS_SYMLINK_SKIPPED_EVENT, path=str(path))
+            continue
         if active_log is not None and path.resolve() == active_log.resolve():
             continue
         path.unlink()

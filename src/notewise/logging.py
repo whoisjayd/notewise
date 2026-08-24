@@ -10,6 +10,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import stat
 import sys
 import threading
 from collections.abc import Mapping, MutableMapping
@@ -19,10 +20,14 @@ from typing import TYPE_CHECKING, Any
 import structlog
 
 from notewise._constants import (
+    CONFIG_FILE_PERMISSION_MODE,
+    GROQ_API_KEY_PATTERN,
     LOGS_DIR_NAME,
     PROVIDER_SECRET_ENV_KEYS,
     SENSITIVE_KEY_SUFFIXES,
+    SESSION_LOG_FALLBACK_DISABLED_MESSAGE,
     SESSION_LOG_PREFIX,
+    SESSION_LOG_SYMLINK_REFUSED_EVENT,
     THIRD_PARTY_DIAGNOSTIC_LOGGERS,
 )
 
@@ -35,6 +40,9 @@ _SESSION_LOG_PATH: Path | None = None
 _LOGGING_LOCK = threading.Lock()
 _LOGGING_CONFIGURED = False
 _REDACTED = "[REDACTED]"
+_SESSION_LOG_OPEN_FLAGS = (
+    os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+)
 _SENSITIVE_KEY_NAMES = frozenset(
     {
         "geminiapikey",
@@ -59,20 +67,24 @@ _SENSITIVE_KEY_NAMES = frozenset(
     | {re.sub(r"[^a-z0-9]", "", key.lower()) for key in PROVIDER_SECRET_ENV_KEYS}
 )
 _ASSIGNMENT_REDACTION_PATTERN = re.compile(
-    r"(?i)(?P<key>\b[a-z0-9_]*(?:api_key|access_key_id|secret_access_key|"
-    r"session_token|access_token|refresh_token)|"
+    r"(?i)(?P<key_quote>[\"']?)\b(?P<key>[a-z0-9_]*(?:api_key|access_key_id|"
+    r"secret_access_key|session_token|access_token|refresh_token)|"
     r"authorization|token|"
-    r"secret|password|cookie(?:s)?|youtube_cookie_file\b)"
+    r"secret|password|cookie(?:s)?|youtube_cookie_file)\b(?P=key_quote)"
     r"(?P<sep>\s*[:=]\s*)"
+    r"(?P<value_quote>[\"']?)"
     r"(?P<value>'[^']*'|\"[^\"]*\"|[^\s,\]}]+)"
+    r"(?P=value_quote)"
 )
 _BEARER_TOKEN_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._+/=-]{10,}")
 _GOOGLE_API_KEY_PATTERN = re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b")
 _OPENAI_STYLE_KEY_PATTERN = re.compile(r"\b(?:sk|rk|pk)-[A-Za-z0-9._-]{16,}\b")
+_GROQ_API_KEY_PATTERN = re.compile(GROQ_API_KEY_PATTERN)
 _SENSITIVE_TEXT_PATTERNS = (
     _BEARER_TOKEN_PATTERN,
     _GOOGLE_API_KEY_PATTERN,
     _OPENAI_STYLE_KEY_PATTERN,
+    _GROQ_API_KEY_PATTERN,
 )
 
 
@@ -91,12 +103,31 @@ def _is_sensitive_key(key: str) -> bool:
 
 def redact_sensitive_text(text: str) -> str:
     """Redact API keys, tokens, and similar credentials from log text."""
-    sanitized = _ASSIGNMENT_REDACTION_PATTERN.sub(
-        lambda match: f"{match.group('key')}{match.group('sep')}{_REDACTED}",
-        text,
-    )
+    sanitized = text
+    # Text-shaped secrets (bearer headers, raw key formats) must be masked
+    # before assignment-style redaction, which only consumes the value slot.
     for pattern in _SENSITIVE_TEXT_PATTERNS:
         sanitized = pattern.sub(_REDACTED, sanitized)
+
+    def _redact_assignment(match: re.Match[str]) -> str:
+        value = match.group("value")
+        # Idempotency guard: an already-redacted value must stay wrapped
+        # exactly once, otherwise repeated redaction grows '[REDACTED]'
+        # into '[REDACTED]]'. A bare (unquoted) marker is captured without
+        # its closing bracket because the value pattern stops at ']'.
+        if value == _REDACTED or (
+            not match.group("value_quote") and f"{value}]" == _REDACTED
+        ):
+            return match.group(0)
+        key_quote = match.group("key_quote")
+        value_quote = match.group("value_quote")
+        return (
+            f"{key_quote}{match.group('key')}{key_quote}"
+            f"{match.group('sep')}"
+            f"{value_quote}{_REDACTED}{value_quote}"
+        )
+
+    sanitized = _ASSIGNMENT_REDACTION_PATTERN.sub(_redact_assignment, sanitized)
     return sanitized
 
 
@@ -170,6 +201,9 @@ def prune_log_files(
     with _LOGGING_LOCK:
         active_log = _SESSION_LOG_PATH
         for log_path in log_dir.glob("*.log"):
+            if log_path.is_symlink():
+                # Never unlink a symlinked entry; it may point outside the log dir.
+                continue
             if active_log is not None and log_path.resolve() == active_log.resolve():
                 continue
             try:
@@ -184,6 +218,56 @@ def prune_log_files(
             except OSError:
                 continue
     return deleted
+
+
+def _lstat_is_regular_file(path: Path) -> bool:
+    """Return True when *path* is a plain regular file (never a symlink)."""
+    try:
+        return stat.S_ISREG(path.lstat().st_mode)
+    except OSError:
+        return False
+
+
+def _prepare_session_log(log_dir: Path, ts: str) -> Path | None:
+    """Atomically reserve a safe session log file path.
+
+    The predictable timestamped name is created exclusively with restrictive
+    permissions, closing the TOCTOU window between an existence check and
+    the FileHandler attach. An existing plain regular file may be reused; a
+    planted symlink is refused once and retried on a pid-suffixed fallback
+    name. When both candidates are unsafe, file logging is disabled instead
+    of following the link.
+    """
+    session_logger = structlog.get_logger(__name__)
+    primary = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
+    fallback = log_dir / f"{SESSION_LOG_PREFIX}-{ts}-{os.getpid()}.log"
+
+    refused_path = ""
+    for attempt, candidate in enumerate((primary, fallback)):
+        try:
+            fd = os.open(
+                candidate,
+                _SESSION_LOG_OPEN_FLAGS,
+                CONFIG_FILE_PERMISSION_MODE,
+            )
+        except FileExistsError:
+            if _lstat_is_regular_file(candidate):
+                return candidate
+            refused_path = str(candidate)
+        else:
+            os.close(fd)
+            return candidate
+
+        if attempt == 0:
+            # A planted symlink at the predictable session log path must
+            # not be followed; fall back once to a pid-suffixed filename.
+            session_logger.warning(
+                SESSION_LOG_SYMLINK_REFUSED_EVENT,
+                refused_path=refused_path,
+            )
+
+    session_logger.warning(SESSION_LOG_FALLBACK_DISABLED_MESSAGE)
+    return None
 
 
 def configure_logging(
@@ -255,12 +339,13 @@ def configure_logging(
             log_dir = get_log_dir(state_dir)
             log_dir.mkdir(parents=True, exist_ok=True)
             ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-            session_log = log_dir / f"{SESSION_LOG_PREFIX}-{ts}.log"
-            file_handler = logging.FileHandler(session_log, encoding="utf-8")
-            file_handler.setLevel(logging.DEBUG)
-            file_handler.setFormatter(formatter)
-            root.addHandler(file_handler)
-            _SESSION_LOG_PATH = session_log
+            session_log = _prepare_session_log(log_dir, ts)
+            if session_log is not None:
+                file_handler = logging.FileHandler(session_log, encoding="utf-8")
+                file_handler.setLevel(logging.DEBUG)
+                file_handler.setFormatter(formatter)
+                root.addHandler(file_handler)
+                _SESSION_LOG_PATH = session_log
         except Exception:
             logging.getLogger(__name__).warning(
                 "logging.session_log_initialization_failed",

@@ -23,7 +23,6 @@ from notewise.cli._types import ResolvedSource, _BatchVideoJob
 from notewise.errors import PlaylistError, UserVisibleCliError
 
 
-@pytest.mark.asyncio
 async def test_prepare_source_returns_single_video_resolution(tmp_path) -> None:
     """Direct video URLs should resolve without playlist expansion."""
     context = SimpleNamespace(
@@ -40,7 +39,6 @@ async def test_prepare_source_returns_single_video_resolution(tmp_path) -> None:
     assert resolved.output_dir == tmp_path
 
 
-@pytest.mark.asyncio
 async def test_prepare_source_rejects_missing_video_id(tmp_path) -> None:
     """Video inputs without a usable video id should raise a user-visible error."""
     context = SimpleNamespace(
@@ -54,7 +52,6 @@ async def test_prepare_source_rejects_missing_video_id(tmp_path) -> None:
     assert exc.value.rows == [("URL", "Could not extract a video ID from this URL.")]
 
 
-@pytest.mark.asyncio
 async def test_prepare_source_wraps_playlist_errors(tmp_path, mocker) -> None:
     """Playlist extraction failures should normalize to a playlist error panel."""
 

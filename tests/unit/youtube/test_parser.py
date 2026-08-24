@@ -47,6 +47,16 @@ class TestVideoIDExtraction:
         """Test that the YouTube root URL without a path returns None."""
         assert extract_video_id("https://www.youtube.com") is None
 
+    def test_live_path_url(self):
+        """Test youtube.com/live/VIDEO_ID format."""
+        url = "https://www.youtube.com/live/dQw4w9WgXcQ"
+        assert extract_video_id(url) == "dQw4w9WgXcQ"
+
+    def test_short_live_url(self):
+        """Test youtu.be/live/VIDEO_ID format."""
+        url = "https://youtu.be/live/dQw4w9WgXcQ"
+        assert extract_video_id(url) == "dQw4w9WgXcQ"
+
 
 class TestPlaylistIDExtraction:
     """Test playlist ID extraction."""

@@ -89,6 +89,7 @@ See the full [installation guide](https://notewise.click/docs/start/install) for
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
 notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
+notewise transcript "https://youtu.be/VIDEO_ID" --format json
 notewise doctor
 notewise update
 ```

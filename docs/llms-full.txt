@@ -2,7 +2,7 @@
 
 NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-Current documented version: `1.4.3`.
+Current documented version: `1.4.4`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
@@ -159,6 +159,7 @@ Supported video inputs:
 | Embed URL | `https://www.youtube.com/embed/VIDEO_ID` |
 | `/v/` URL | `https://www.youtube.com/v/VIDEO_ID` |
 | Shorts URL | `https://www.youtube.com/shorts/VIDEO_ID` |
+| Live URL | `https://www.youtube.com/live/VIDEO_ID` |
 | Bare video ID | `VIDEO_ID` |
 
 Basic command:
@@ -441,6 +442,7 @@ Main commands:
 | `notewise auth login PROVIDER` | Login to OAuth providers. |
 | `notewise info` | Show runtime config and state paths. |
 | `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
+| `notewise transcript URL --format txt\|json` | Download one video's standalone transcript (txt/json) without AI generation; videos only, no playlists or batches. |
 | `notewise doctor` | Check config, provider readiness, output, cache, and logs. |
 | `notewise stats` | Show processing totals and model breakdown. |
 | `notewise history` | Show recent processed videos. |
@@ -608,7 +610,7 @@ Filenames are sanitized and capped at 100 characters. Batch collisions may appen
 
 NoteWise keeps operational state local. The default state root is `~/.notewise`, or `NOTEWISE_HOME` when set.
 
-The cache DB is `<state>/.notewise_cache.db`. Schema version is `2`.
+The cache DB is `<state>/.notewise_cache.db`. Schema version is `3`.
 
 SQLite tables:
 

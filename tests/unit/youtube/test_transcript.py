@@ -83,7 +83,6 @@ class TestTranscriptHelpers:
 class TestFetchTranscript:
     """Test fetch_transcript function."""
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_success(self, mock_extractor_client):
         """Successful native transcript payload should map to VideoTranscript."""
         client = mock_extractor_client["transcript"].return_value
@@ -106,7 +105,6 @@ class TestFetchTranscript:
         assert result.language == "English"
         assert not result.is_generated
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_calls_on_request_callback(
         self, mock_extractor_client
     ):
@@ -125,7 +123,6 @@ class TestFetchTranscript:
 
         on_request.assert_awaited_once()
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_private_video_fails_without_retry(
         self, mock_extractor_client
     ):
@@ -141,7 +138,6 @@ class TestFetchTranscript:
 
         assert client.transcript.call_count == 1
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_retry_logic(self, mock_extractor_client):
         """Transient errors should be retried up to success."""
         client = mock_extractor_client["transcript"].return_value
@@ -161,7 +157,6 @@ class TestFetchTranscript:
         assert client.transcript.call_count == 3
         mock_extractor_client["transcript"].assert_called_once()
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_ip_block(self, mock_extractor_client):
         """IP block messages should map to YouTubeIPBlockError."""
         client = mock_extractor_client["transcript"].return_value
@@ -172,7 +167,6 @@ class TestFetchTranscript:
         with pytest.raises(YouTubeIPBlockError):
             await fetch_transcript("video123")
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_handles_object_style_segments(
         self, mock_extractor_client
     ):
@@ -196,7 +190,6 @@ class TestFetchTranscript:
         assert result.segments[0].text == "obj"
         assert result.segments[0].start == 1.25
 
-    @pytest.mark.asyncio
     async def test_fetch_transcript_raises_transcript_error_after_retries(
         self, mock_extractor_client, monkeypatch
     ):
@@ -210,7 +203,6 @@ class TestFetchTranscript:
 
         assert client.transcript.call_count == 3
 
-    @pytest.mark.asyncio
     async def test_fetch_async_wraps_not_found(self, mock_extractor_client):
         """No-track native errors should map to TranscriptError."""
         client = mock_extractor_client["transcript"].return_value
@@ -221,7 +213,6 @@ class TestFetchTranscript:
         with pytest.raises(TranscriptError, match="No usable transcript found"):
             await _fetch_async(client, "video123", ["en"])
 
-    @pytest.mark.asyncio
     async def test_fetch_async_success_with_unknown_track_name(
         self, mock_extractor_client
     ):

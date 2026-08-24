@@ -13,6 +13,15 @@ import pytest
 from rich.console import Console
 
 from notewise.cli import _admin as admin
+from notewise.errors import ValidationError
+
+
+def _symlink_or_skip(link: Path, target: Path) -> None:
+    """Create a symlink or skip when the platform forbids it."""
+    try:
+        link.symlink_to(target)
+    except (OSError, NotImplementedError):
+        pytest.skip("symlink creation unavailable on this platform")
 
 
 def _console() -> Console:
@@ -38,8 +47,10 @@ def test_helper_formatting_functions() -> None:
     assert admin._format_age(now - timedelta(days=1)) == "1 day ago"
     assert admin._format_age(naive_now - timedelta(days=3)).endswith("days ago")
     assert admin._parse_since_days("30d") == 30
-    with pytest.raises(ValueError, match="positive integer"):
+    with pytest.raises(ValidationError, match="positive integer"):
         admin._parse_since_days("-1")
+    with pytest.raises(ValidationError, match="positive integer"):
+        admin._parse_since_days("soon")
 
 
 def test_open_with_system_app_uses_startfile_on_windows(
@@ -271,7 +282,6 @@ def test_render_runtime_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     assert "en, hi" in output
 
 
-@pytest.mark.asyncio
 async def test_render_source_info_renders_playlist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -310,7 +320,6 @@ async def test_render_source_info_renders_playlist(
     assert "1/2 processed" in output
 
 
-@pytest.mark.asyncio
 async def test_render_source_info_uses_bulk_cache_lookup_for_playlist(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -349,7 +358,6 @@ async def test_render_source_info_uses_bulk_cache_lookup_for_playlist(
     assert "2/3 processed" in _text(console)
 
 
-@pytest.mark.asyncio
 async def test_render_source_info_renders_video(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -393,7 +401,6 @@ async def test_render_source_info_renders_video(
     assert "42" in output
 
 
-@pytest.mark.asyncio
 async def test_render_source_info_rejects_unresolvable_video(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -557,10 +564,44 @@ def test_render_logs_listing_and_tail(
     assert "line3" in output
 
 
+def test_clear_cache_skips_symlinked_cache_files(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """clear_cache must not unlink symlinked cache files."""
+    console = _console()
+    db_path = tmp_path / "cache.db"
+    db_path.write_text("db", encoding="utf-8")
+    wal_path = tmp_path / "cache.db-wal"
+    wal_path.write_text("wal", encoding="utf-8")
+    victim = tmp_path / "outside" / "cache.db-shm"
+    victim.parent.mkdir()
+    victim.write_text("precious", encoding="utf-8")
+    shm_link = tmp_path / "cache.db-shm"
+    _symlink_or_skip(shm_link, victim)
+
+    close_instance = MagicMock()
+    monkeypatch.setattr(admin, "get_cache_db_path", lambda: db_path)
+    monkeypatch.setattr(
+        "notewise.storage.repository.DatabaseRepository.close_instance",
+        close_instance,
+    )
+
+    admin.clear_cache(console)
+
+    output = _text(console)
+    assert "Removed 2 cache file(s)." in output
+    assert "Skipped 1 symlinked cache file(s)." in output
+    assert shm_link.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "precious"
+    assert not db_path.exists()
+    assert not wal_path.exists()
+
+
 def test_render_logs_open_dir_and_clean_logs(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     console = _console()
+
     log_dir = tmp_path / "logs"
     log_dir.mkdir()
     keep = log_dir / "active.log"
@@ -596,6 +637,34 @@ def test_render_logs_open_dir_and_clean_logs(
     assert "Removed 1 log file(s)." in output
     assert keep.exists()
     assert not drop.exists()
+
+
+def test_clean_logs_all_skips_symlinked_logs(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """clean_logs --all must not unlink symlinked *.log entries."""
+    console = _console()
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    drop = log_dir / "drop.log"
+    drop.write_text("old", encoding="utf-8")
+    victim = tmp_path / "outside" / "keep-me.log"
+    victim.parent.mkdir()
+    victim.write_text("precious", encoding="utf-8")
+    linked = log_dir / "linked.log"
+    _symlink_or_skip(linked, victim)
+
+    monkeypatch.setattr(admin, "get_state_dir", lambda: tmp_path)
+    monkeypatch.setattr(admin, "get_log_dir", lambda _state_dir: log_dir)
+    monkeypatch.setattr(admin, "get_session_log_path", lambda: None)
+
+    admin.clean_logs(console, all_logs=True, older_than_days=30)
+
+    output = _text(console)
+    assert "Removed 1 log file(s)." in output
+    assert not drop.exists()
+    assert linked.is_symlink()
+    assert victim.read_text(encoding="utf-8") == "precious"
 
 
 def test_edit_config_handles_missing_and_existing_file(

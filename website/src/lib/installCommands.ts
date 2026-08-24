@@ -8,12 +8,7 @@ export type InstallCommand = {
 };
 
 export type InstallCommandId =
-  | "uv-tool"
-  | "uvx"
-  | "pipx"
-  | "pip"
-  | "posix-binary"
-  | "powershell-binary";
+  "uv-tool" | "uvx" | "pipx" | "pip" | "posix-binary" | "powershell-binary";
 
 export const packageCommands = [
   {

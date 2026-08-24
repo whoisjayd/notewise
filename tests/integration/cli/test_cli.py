@@ -374,6 +374,7 @@ def test_process_rejects_unsupported_model_before_playlist_network(tmp_path):
         mock_config.max_concurrent_videos = 5
         mock_config.youtube_requests_per_minute = 10
         mock_config.youtube_cookie_file = None
+        mock_config.allow_unlisted_models = False
         mock_config.get_unsupported_model_message.return_value = (
             "Model openrouter/unknown-model is not currently supported. "
             "Run `notewise setup --force` to choose a supported model."
@@ -929,7 +930,7 @@ def test_process_batch_file_aggregates_private_video_and_playlist_failures(tmp_p
     assert "Private YouTube videos are not supported" in result.output
     assert "PL_PRIVATE" in result.output
     assert "Private YouTube playlists are not supported" in result.output
-    assert "Videos completed successfully: 1/2" in result.output
+    assert "Videos completed successfully: 1/3" in result.output
     assert pipeline_instance.run.await_count == 2
     mock_playlist_info.assert_not_called()
 

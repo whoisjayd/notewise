@@ -1,9 +1,15 @@
 """Tests for the setup wizard."""
 
+import os
 from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
+from notewise._constants import (
+    CONFIG_FILE_PERMISSION_MODE,
+    CONFIG_FILENAME,
+    CONFIG_TEMP_SUFFIX,
+)
 from notewise.errors import ConfigurationError
 from notewise.ui.setup_wizard import (
     get_api_key,
@@ -117,58 +123,71 @@ class TestConfigIO:
         with pytest.raises(RuntimeError, match="bug"):
             load_config()
 
-    def test_save_config(self):
+    def test_save_config(self, mocker):
         """Test saving configuration merges with existing."""
         from pathlib import Path
 
         mock_path = Path("dummy_path")
-        with (
-            patch(
-                "notewise.ui.setup_wizard.load_config",
-                return_value={"OLD_KEY": "old_val"},
-            ),
-            patch("pathlib.Path.open", mock_open()) as mock_file,
-            patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
-        ):
-            new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
-            save_config(new_config)
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={"OLD_KEY": "old_val"},
+        )
+        mock_mkstemp = mocker.patch(
+            "notewise.ui.setup_wizard.tempfile.mkstemp",
+            return_value=(3, "dummy_path.tmp"),
+        )
+        mock_fchmod = mocker.patch("notewise.ui.setup_wizard.os.fchmod", create=True)
+        mock_file = mocker.patch("notewise.ui.setup_wizard.os.fdopen", mock_open())
+        mock_replace = mocker.patch("notewise.ui.setup_wizard.os.replace")
+        mocker.patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path)
 
-            # Verify file write operations
-            handle = mock_file()
-            # We expect multiple write calls. Let's check if the keys are written.
-            # We can construct the written string
-            written_content = "".join(
-                call.args[0] for call in handle.write.call_args_list
-            )
+        new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
+        save_config(new_config)
 
-            assert "OLD_KEY=old_val" in written_content
-            assert "NEW_KEY=new_val" in written_content
-            assert "DEFAULT_MODEL=new_model" in written_content
+        # Verify file write operations
+        handle = mock_file()
+        written_content = "".join(call.args[0] for call in handle.write.call_args_list)
 
-    def test_save_config_strips_legacy_youtube_auth_keys(self):
+        assert "OLD_KEY=old_val" in written_content
+        assert "NEW_KEY=new_val" in written_content
+        assert "DEFAULT_MODEL=new_model" in written_content
+        mock_mkstemp.assert_called_once_with(
+            dir=mock_path.parent,
+            prefix=f"{CONFIG_FILENAME}.",
+            suffix=CONFIG_TEMP_SUFFIX,
+        )
+        mock_fchmod.assert_called_once_with(3, CONFIG_FILE_PERMISSION_MODE)
+        mock_replace.assert_called_once_with(Path("dummy_path.tmp"), mock_path)
+
+    def test_save_config_strips_legacy_youtube_auth_keys(self, mocker):
         """Saving config should remove legacy OAuth and cookie-era auth keys."""
         from pathlib import Path
 
         mock_path = Path("dummy_path")
-        with (
-            patch(
-                "notewise.ui.setup_wizard.load_config",
-                return_value={
-                    "YOUTUBE_USE_OAUTH": "true",
-                    "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
-                    "YOUTUBE_OAUTH_TOKEN_FILE": "/tmp/token.json",
-                    "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": "false",
-                    "OLD_KEY": "old_val",
-                },
-            ),
-            patch("pathlib.Path.open", mock_open()) as mock_file,
-            patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
-        ):
-            save_config({"DEFAULT_MODEL": "new_model"})
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={
+                "YOUTUBE_USE_OAUTH": "true",
+                "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
+                "YOUTUBE_OAUTH_TOKEN_FILE": "/tmp/token.json",
+                "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": "false",
+                "OLD_KEY": "old_val",
+            },
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.tempfile.mkstemp",
+            return_value=(3, "dummy_path.tmp"),
+        )
+        mocker.patch("notewise.ui.setup_wizard.os.fchmod", create=True)
+        mock_file = mocker.patch("notewise.ui.setup_wizard.os.fdopen", mock_open())
+        mocker.patch("notewise.ui.setup_wizard.os.replace")
+        mocker.patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path)
 
-            written_content = "".join(
-                call.args[0] for call in mock_file().write.call_args_list
-            )
+        save_config({"DEFAULT_MODEL": "new_model"})
+
+        written_content = "".join(
+            call.args[0] for call in mock_file().write.call_args_list
+        )
 
         assert "OLD_KEY=old_val" in written_content
         assert "DEFAULT_MODEL=new_model" in written_content
@@ -176,6 +195,33 @@ class TestConfigIO:
         assert "YOUTUBE_SAVE_OAUTH_TOKEN" not in written_content
         assert "YOUTUBE_OAUTH_TOKEN_FILE" not in written_content
         assert "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN" not in written_content
+
+    def test_save_config_writes_real_file(self, tmp_path, monkeypatch):
+        """save_config should create the config file with expected content."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        config_path = get_config_path()
+        assert config_path.exists()
+        content = config_path.read_text(encoding="utf-8")
+        assert "# notewise Configuration" in content
+        assert "DEFAULT_MODEL=gemini/gemini-2.5-flash" in content
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits only")
+    def test_save_config_creates_owner_only_file(self, tmp_path, monkeypatch):
+        """Config file should be created owner-only (0o600), never world-readable."""
+        import stat
+
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        config_path = get_config_path()
+        mode = stat.S_IMODE(config_path.stat().st_mode)
+        assert mode == 0o600
 
     def test_show_current_config_masks_api_keys(self):
         """Read-only config display should mask secret values."""
@@ -199,6 +245,64 @@ class TestConfigIO:
         rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
         assert "secret-api-key-value" not in rendered
         assert console.print.call_count >= 2
+
+    def test_show_current_config_masks_lowercase_secret_keys(self):
+        """Lowercase secret keys (first-class in config.env) must be masked too."""
+        console = MagicMock()
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"gemini_api_key": "AIzaExample123456789"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "AIzaExample123456789" not in rendered
+
+    def test_show_current_config_masks_mixed_case_secret_keys(self):
+        """Mixed-case secret keys must be gated case-insensitively."""
+        console = MagicMock()
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"Api_Key": "mixed-case-secret-value"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
+        assert "mixed-case-secret-value" not in rendered
+
+    def test_show_current_config_displays_benign_keys_raw(self):
+        """Benign non-secret keys should still display their raw values."""
+        import io
+
+        from rich.console import Console
+
+        buffer = io.StringIO()
+        console = Console(file=buffer, force_terminal=False, width=200)
+        with (
+            patch(
+                "notewise.ui.setup_wizard.load_config",
+                return_value={"OUTPUT_DIR": "/tmp/notes"},
+            ),
+            patch(
+                "notewise.ui.setup_wizard.get_config_path",
+                return_value=get_config_path(),
+            ),
+        ):
+            show_current_config(console=console)
+
+        assert "/tmp/notes" in buffer.getvalue()
 
     def test_show_current_config_handles_missing_config(self):
         """Read-only config display should report missing config cleanly."""
@@ -310,6 +414,12 @@ class TestModelFetching:
             "gemini/gemini-pro",
             "unknown-provider/model",
         ]
+        mock_model_cost = {
+            "gpt-4": {"litellm_provider": "openai", "mode": "chat"},
+            "gpt-3.5-turbo": {"litellm_provider": "openai", "mode": "chat"},
+            "claude-3-opus": {"litellm_provider": "anthropic", "mode": "chat"},
+            "gemini/gemini-pro": {"litellm_provider": "gemini", "mode": "chat"},
+        }
 
         with (
             patch(
@@ -317,6 +427,7 @@ class TestModelFetching:
                 return_value={},
             ),
             patch("litellm.model_list", mock_models, create=True),
+            patch("litellm.model_cost", mock_model_cost),
         ):
             models = get_available_models()
 
@@ -596,6 +707,18 @@ class TestInteractiveFlow:
         ):
             key = get_api_key("openai")
             assert key == "sk-valid-length-key-12345"
+
+    def test_get_api_key_masks_existing_key_with_mask_secret(self):
+        """Existing key prompt should use the shared mask_secret helper."""
+        existing = "sk-existing-api-key-123456789"
+
+        with patch("rich.prompt.Confirm.ask", return_value=True) as confirm_ask:
+            key = get_api_key("openai", existing_key=existing)
+
+        prompt = confirm_ask.call_args.args[0]
+        assert "sk-exi...6789" in prompt
+        assert existing not in prompt
+        assert key == existing
 
 
 class TestWizardOrchestration:

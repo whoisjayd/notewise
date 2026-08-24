@@ -262,6 +262,34 @@ class TestConfig:
             second_state_dir / "oauth" / "github_copilot"
         )
 
+    def test_oauth_token_dirs_precreated_under_state_dir(self, tmp_path, monkeypatch):
+        """Token directories should be created before env vars are assigned."""
+        state_dir = tmp_path / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
+        monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
+
+        Config()
+
+        assert (state_dir / "oauth" / "chatgpt").is_dir()
+        assert (state_dir / "oauth" / "github_copilot").is_dir()
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits only")
+    def test_oauth_token_dirs_created_owner_only(self, tmp_path, monkeypatch):
+        """Token directories should be private to the owner on POSIX systems."""
+        import stat
+
+        state_dir = tmp_path / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.delenv("CHATGPT_TOKEN_DIR", raising=False)
+        monkeypatch.delenv("GITHUB_COPILOT_TOKEN_DIR", raising=False)
+
+        Config()
+
+        for provider_dir in ("chatgpt", "github_copilot"):
+            mode = stat.S_IMODE((state_dir / "oauth" / provider_dir).stat().st_mode)
+            assert mode == 0o700
+
     def test_load_positive_int_env_uses_default_when_env_is_missing(self, monkeypatch):
         """Missing optional int env uses field default."""
         monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
@@ -439,7 +467,7 @@ class TestGetApiKeyNameForModel:
         monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
         monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
         config_dir = tmp_path / ".notewise"
-        config_dir.mkdir()
+        config_dir.mkdir(exist_ok=True)
         (config_dir / "config.env").write_text(
             "OPENROUTER_API_KEY=or-key\n",
             encoding="utf-8",
@@ -515,3 +543,30 @@ class TestGetApiKeyNameForModel:
         assert self.cfg.get_api_key_name_for_model("o1") == "OPENAI_API_KEY"
         assert self.cfg.get_api_key_name_for_model("o3-mini") == "OPENAI_API_KEY"
         assert self.cfg.get_api_key_name_for_model("o4-preview") == "OPENAI_API_KEY"
+
+    def test_allow_unlisted_models_defaults_to_false(self, monkeypatch):
+        """The unlisted-model opt-in must stay off unless explicitly enabled."""
+        monkeypatch.delenv("ALLOW_UNLISTED_MODELS", raising=False)
+
+        assert Config().allow_unlisted_models is False
+
+    def test_allow_unlisted_models_loads_from_env(self, monkeypatch):
+        """ALLOW_UNLISTED_MODELS parses boolean env values."""
+        monkeypatch.setenv("ALLOW_UNLISTED_MODELS", "true")
+        assert Config().allow_unlisted_models is True
+
+        monkeypatch.setenv("ALLOW_UNLISTED_MODELS", "false")
+        assert Config().allow_unlisted_models is False
+
+    def test_allow_unlisted_models_loads_from_user_config(self, tmp_path, monkeypatch):
+        """config.env is an accepted source for the unlisted-model opt-in."""
+        monkeypatch.delenv("ALLOW_UNLISTED_MODELS", raising=False)
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir(exist_ok=True)
+        (config_dir / "config.env").write_text(
+            "ALLOW_UNLISTED_MODELS=true\n",
+            encoding="utf-8",
+        )
+
+        assert Config().allow_unlisted_models is True

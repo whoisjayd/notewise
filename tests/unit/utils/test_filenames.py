@@ -34,6 +34,9 @@ from notewise.utils import safe_output_path, sanitize_filename
         ("foo\x00bar", "foobar"),
         ("foo\x1fbar", "foobar"),
         ("foo\x7fbar", "foobar"),
+        ("\u202eevil", "evil"),  # RTL override stripped (display spoofing)
+        ("a\u200bb", "ab"),  # zero-width space stripped
+        ("\u2066x\u2069", "x"),  # bidi isolation chars stripped
     ],
 )
 def test_sanitize_filename(name, expected):

@@ -9,9 +9,9 @@ from notewise._constants import (
     BOOL_SETTING_FALSY_VALUES,
     BOOL_SETTING_TRUTHY_VALUES,
     INVALID_FILENAME_CHARS_PATTERN,
-    MASKED_SECRET_MIN_VISIBLE_LENGTH,
     MASKED_SECRET_PREFIX_LENGTH,
     MASKED_SECRET_SUFFIX_LENGTH,
+    MASKED_SECRET_UNMASKABLE_MARGIN,
     MAX_FILENAME_LENGTH,
     RESERVED_WINDOWS_FILENAME_PATTERN,
     SANITIZED_FILENAME_FALLBACK,
@@ -109,7 +109,11 @@ def mask_secret(value: str | None, *, suffix: str = "") -> str:
     """Return a partially masked secret for read-only display."""
     if not value:
         return "(not set)"
-    if len(value) <= MASKED_SECRET_MIN_VISIBLE_LENGTH:
+    if len(value) <= (
+        MASKED_SECRET_PREFIX_LENGTH
+        + MASKED_SECRET_SUFFIX_LENGTH
+        + MASKED_SECRET_UNMASKABLE_MARGIN
+    ):
         return "***"
     return (
         f"{value[:MASKED_SECRET_PREFIX_LENGTH]}..."
