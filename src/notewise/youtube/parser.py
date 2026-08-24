@@ -3,6 +3,7 @@
 import re
 from urllib.parse import ParseResult, parse_qs, urlparse
 
+from notewise._constants import YOUTUBE_LIVE_PATH_SEGMENT
 from notewise.domain.youtube import ParsedURL
 from notewise.errors import ValidationError
 
@@ -46,7 +47,7 @@ def extract_video_id(url: str) -> str | None:
     host = _normalized_hostname(parsed)
     if host == "youtu.be":
         segments = [part for part in parsed.path.split("/") if part]
-        if segments and segments[0] == "live":
+        if segments and segments[0] == YOUTUBE_LIVE_PATH_SEGMENT:
             segments = segments[1:]
         candidate = segments[0] if segments else ""
         return candidate if _is_video_id(candidate) else None
@@ -60,7 +61,16 @@ def extract_video_id(url: str) -> str | None:
         query_candidate = _first_query_value(query_params, "v")
         return query_candidate if _is_video_id(query_candidate) else None
 
-    if path_parts[0] in {"embed", "v", "shorts", "live"} and len(path_parts) >= 2:
+    if (
+        path_parts[0]
+        in {
+            "embed",
+            "v",
+            "shorts",
+            YOUTUBE_LIVE_PATH_SEGMENT,
+        }
+        and len(path_parts) >= 2
+    ):
         candidate = path_parts[1]
         return candidate if _is_video_id(candidate) else None
 

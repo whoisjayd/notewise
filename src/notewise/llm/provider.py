@@ -18,6 +18,7 @@ from notewise._constants import (
     DEFAULT_TEMPERATURE,
     GPT5_MODEL_MARKER,
     GPT5_REQUIRED_TEMPERATURE,
+    LLM_API_KEY_KWARG,
     LLM_ERROR_PAYLOAD_MARKERS,
     LLM_NUM_RETRIES,
     LLM_PAYLOAD_ERROR_SUMMARY,
@@ -214,7 +215,7 @@ class LLMProvider:
                 kwargs["max_tokens"] = max_tokens
             api_key = self._resolve_credential()
             if api_key is not None:
-                kwargs["api_key"] = api_key
+                kwargs[LLM_API_KEY_KWARG] = api_key
 
             response: Any | None = None
             content = ""

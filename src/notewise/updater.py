@@ -24,14 +24,25 @@ from notewise._constants import (
     UPDATE_INSTALL_SOURCE_PYTHON,
     UPDATE_METADATA_PARSE_ERROR,
     UPDATER_USER_AGENT,
+    VERSION_DIGIT_COMPONENT_PATTERN,
+    VERSION_KEY_PRERELEASE_FLAG,
+    VERSION_KEY_RELEASE_FLAG,
+    VERSION_LEADING_V_MARKER,
+    VERSION_MIN_COMPONENT_COUNT,
     VERSION_PRERELEASE_MARKER_PATTERN,
     VERSION_PRERELEASE_RANKS,
+    VERSION_SUFFIX_COMPONENT_PATTERN,
 )
 from notewise.errors import UpdateError
 
 
 _PRERELEASE_MARKER_RE = re.compile(
     VERSION_PRERELEASE_MARKER_PATTERN,
+    re.IGNORECASE,
+)
+
+_SUFFIX_COMPONENT_RE = re.compile(
+    VERSION_SUFFIX_COMPONENT_PATTERN,
     re.IGNORECASE,
 )
 
@@ -59,29 +70,41 @@ class UpdateStatus:
 
 def _version_key(raw_version: str) -> tuple[int, int, int, int, int, int]:
     """Return a sort key where release > rc > beta > alpha > dev."""
-    version = raw_version.strip().lstrip("v")
+    version = raw_version.strip().lstrip(VERSION_LEADING_V_MARKER)
     parts = version.split(".")
-    if len(parts) < 3:
+    if len(parts) < VERSION_MIN_COMPONENT_COUNT:
         raise UpdateError(f"Unsupported release version format: {raw_version}")
 
     normalized: list[int] = [0, 0, 0]
     suffixes: list[str] = []
     for index, part in enumerate(parts[:3]):
-        match = re.match(r"\d+", part)
+        match = re.match(VERSION_DIGIT_COMPONENT_PATTERN, part)
         if match is None:
             raise UpdateError(f"Unsupported release version format: {raw_version}")
         normalized[index] = int(match.group(0))
         suffixes.append(part[match.end() :])
     major, minor, patch = normalized
+    for component in (*suffixes, *parts[3:]):
+        if not component:
+            continue
+        if _SUFFIX_COMPONENT_RE.fullmatch(component) is None:
+            raise UpdateError(f"Unsupported release version format: {raw_version}")
 
     # Prerelease tags ("1.4.4rc1", "1.4.4-rc.2", "1.4.4.beta") must order below
     # the plain release instead of collapsing onto the base triple.
     marker = _PRERELEASE_MARKER_RE.search("-".join([*suffixes, *parts[3:]]))
     if marker is None:
-        return (major, minor, patch, 1, 0, 0)
+        return (major, minor, patch, VERSION_KEY_RELEASE_FLAG, 0, 0)
     rank = VERSION_PRERELEASE_RANKS[marker.group(1).lower()]
     prerelease_number = int(marker.group(2) or 0)
-    return (major, minor, patch, 0, rank, prerelease_number)
+    return (
+        major,
+        minor,
+        patch,
+        VERSION_KEY_PRERELEASE_FLAG,
+        rank,
+        prerelease_number,
+    )
 
 
 def _request_json(url: str) -> dict[str, object]:

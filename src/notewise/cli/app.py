@@ -27,13 +27,17 @@ from notewise._constants import (
     PROVIDER_SECRET_ENV_KEYS,
     SENSITIVE_KEY_SUFFIXES,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
+    TRANSCRIPT_COLLISION_SUFFIX_START,
     TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX,
     TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE,
     TRANSCRIPT_JSON_OUTPUT_FORMAT,
+    TRANSCRIPT_SAVED_PREFIX,
+    TRANSCRIPT_STATUS_MESSAGE,
     TRANSCRIPT_TEXT_OUTPUT_FORMAT,
 )
 from notewise.errors import (
     ConfigurationError,
+    IPBlockError,
     TranscriptUnavailableError,
     ValidationError,
     VideoUnavailableError,
@@ -679,6 +683,12 @@ def _write_transcript_artifact(
     export_path = output_dir / f"{stem}.{extension}"
     if export_path.exists():
         export_path = output_dir / f"{stem}-{video_id}.{extension}"
+        collision_index = TRANSCRIPT_COLLISION_SUFFIX_START
+        while export_path.exists():
+            export_path = output_dir / (
+                f"{stem}-{video_id}-{collision_index}.{extension}"
+            )
+            collision_index += 1
 
     if extension == TRANSCRIPT_JSON_OUTPUT_FORMAT:
         data = {
@@ -799,10 +809,9 @@ def transcript(
         if parsed.url_type != "video" or not parsed.video_id:
             console.print(f"\n[red]{TRANSCRIPT_COMMAND_PLAYLIST_MESSAGE}[/red]\n")
             raise typer.Exit(code=1)
-
         selected_output.mkdir(parents=True, exist_ok=True)
 
-        with console.status("Fetching transcript..."):
+        with console.status(TRANSCRIPT_STATUS_MESSAGE):
             title, fetched_transcript = asyncio.run(
                 _download_video_transcript(
                     parsed.video_id,
@@ -818,17 +827,18 @@ def transcript(
             selected_output,
             normalized_format or TRANSCRIPT_TEXT_OUTPUT_FORMAT,
         )
-        console.print(f"[green]Transcript saved:[/green] {written_path}")
+        console.print(f"[green]{TRANSCRIPT_SAVED_PREFIX}[/green] {written_path}")
 
     except ConfigurationError as error:
         _print_configuration_error(error)
         raise typer.Exit(code=1) from None
     except typer.Exit:
         raise
-    except (ValidationError, ValueError) as error:
-        print_single_failure(console, "Input Error", str(error), item_label="URL")
-        raise typer.Exit(code=1) from None
-    except (TranscriptUnavailableError, VideoUnavailableError) as error:
+    except (
+        TranscriptUnavailableError,
+        VideoUnavailableError,
+        IPBlockError,
+    ) as error:
         print_single_failure(
             console,
             "Transcript Error",
@@ -836,6 +846,11 @@ def transcript(
             item_label="Video",
         )
         raise typer.Exit(code=1) from None
+
+    except (ValidationError, ValueError) as error:
+        print_single_failure(console, "Input Error", str(error), item_label="URL")
+        raise typer.Exit(code=1) from None
+
     except Exception:
         import structlog
 
@@ -1073,7 +1088,7 @@ def info(
         return
 
     from notewise.cli._formatters import print_single_failure
-    from notewise.errors import PlaylistError, ValidationError, VideoUnavailableError
+    from notewise.errors import PlaylistError, VideoUnavailableError
 
     try:
         _load_process_dependencies()

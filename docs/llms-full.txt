@@ -442,6 +442,7 @@ Main commands:
 | `notewise auth login PROVIDER` | Login to OAuth providers. |
 | `notewise info` | Show runtime config and state paths. |
 | `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
+| `notewise transcript URL --format txt\|json` | Download one video's standalone transcript (txt/json) without AI generation; videos only, no playlists or batches. |
 | `notewise doctor` | Check config, provider readiness, output, cache, and logs. |
 | `notewise stats` | Show processing totals and model breakdown. |
 | `notewise history` | Show recent processed videos. |

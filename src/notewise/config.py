@@ -48,6 +48,7 @@ from notewise._constants import (
     OAUTH_TOKEN_DIR_ENV_VARS,
     OAUTH_TOKEN_DIR_NAMES,
     OAUTH_TOKEN_DIR_PARENT,
+    OAUTH_TOKEN_DIR_PERMISSION_MODE,
     OUTPUT_DIR_CONFIG_KEY,
     PROVIDER_API_KEY_ENV_VARS,
     PROVIDER_AUTH_ENV_KEYS,
@@ -121,7 +122,9 @@ def configure_oauth_token_storage(
     for provider, token_dir in resolved_paths.items():
         # Pre-create the token directory so LiteLLM never falls back to a
         # world-readable default when writing provider OAuth tokens.
-        token_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+        token_dir.mkdir(
+            parents=True, exist_ok=True, mode=OAUTH_TOKEN_DIR_PERMISSION_MODE
+        )
         env_var = OAUTH_TOKEN_DIR_ENV_VARS[provider]
         env_value = str(token_dir)
         if env_var not in os.environ or _is_managed_oauth_token_dir_env(env_var):

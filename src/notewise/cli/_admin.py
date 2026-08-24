@@ -13,7 +13,15 @@ from typing import TYPE_CHECKING, Any
 
 import structlog
 
-from notewise._constants import CONFIG_FILENAME, SECONDS_PER_HOUR, SECONDS_PER_MINUTE
+from notewise._constants import (
+    CLEAN_LOGS_SYMLINK_SKIPPED_EVENT,
+    CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE,
+    CLEAR_CACHE_SYMLINK_SKIPPED_EVENT,
+    CONFIG_FILENAME,
+    SECONDS_PER_HOUR,
+    SECONDS_PER_MINUTE,
+    STATS_SINCE_DAYS_VALIDATION_MESSAGE,
+)
 from notewise.config import get_cache_db_path, get_state_dir
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
@@ -88,7 +96,7 @@ def _parse_since_days(value: str | None) -> int | None:
     if days is None or days < 0:
         from notewise.errors import ValidationError
 
-        raise ValidationError("since must be zero or a positive integer day count")
+        raise ValidationError(STATS_SINCE_DAYS_VALIDATION_MESSAGE)
     return days
 
 
@@ -521,7 +529,7 @@ def clear_cache(console: Console) -> None:
     for candidate in candidates:
         if candidate.is_symlink():
             # Never unlink a symlinked cache file; it may point elsewhere.
-            logger.warning("admin.clear_cache_symlink_skipped", path=str(candidate))
+            logger.warning(CLEAR_CACHE_SYMLINK_SKIPPED_EVENT, path=str(candidate))
             skipped += 1
             continue
         if candidate.exists():
@@ -529,7 +537,7 @@ def clear_cache(console: Console) -> None:
             removed.append(candidate)
     console.print(f"[green]Removed {len(removed)} cache file(s).[/green]")
     if skipped:
-        console.print(f"[yellow]Skipped {skipped} symlinked cache file(s).[/yellow]")
+        console.print(CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE.format(count=skipped))
 
 
 def prune_cache(console: Console, *, older_than_days: int) -> None:
@@ -627,7 +635,7 @@ def clean_logs(console: Console, *, all_logs: bool, older_than_days: int) -> Non
     for path in log_dir.glob("*.log"):
         if path.is_symlink():
             # Never unlink a symlinked log; it may point outside the log dir.
-            logger.warning("admin.clean_logs_symlink_skipped", path=str(path))
+            logger.warning(CLEAN_LOGS_SYMLINK_SKIPPED_EVENT, path=str(path))
             continue
         if active_log is not None and path.resolve() == active_log.resolve():
             continue

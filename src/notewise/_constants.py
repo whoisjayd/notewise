@@ -11,6 +11,7 @@ STATE_DIR_NAME = ".notewise"
 LOGS_DIR_NAME = "logs"
 CONFIG_FILENAME = "config.env"
 ALLOW_UNLISTED_MODELS_CONFIG_KEY = "ALLOW_UNLISTED_MODELS"
+ALLOW_UNLISTED_MODELS_ATTR = "allow_unlisted_models"
 OUTPUT_DIR_CONFIG_KEY = "OUTPUT_DIR"
 SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
@@ -32,6 +33,59 @@ PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN = (
 )
 GITHUB_REPOSITORY_OWNER = "whoisjayd"
 GITHUB_REPOSITORY_NAME = "notewise"
+
+# ── File permissions ──────────────────────────────────────────────────────────
+CONFIG_FILE_PERMISSION_MODE = 0o600
+OAUTH_TOKEN_DIR_PERMISSION_MODE = 0o700
+
+# ── Cache schema ──────────────────────────────────────────────────────────────
+VIDEO_CACHE_TABLE_NAME = "video"
+CACHED_AT_COLUMN_NAME = "cached_at"
+LATEST_SCHEMA_VERSION = 3
+UTC_OFFSET_SUFFIX = "+00:00"
+UTC_OFFSET_SUFFIX_LENGTH = len(UTC_OFFSET_SUFFIX)
+CACHED_AT_COLUMN_DDL_TEMPLATE = (
+    f"ALTER TABLE {VIDEO_CACHE_TABLE_NAME} ADD COLUMN {CACHED_AT_COLUMN_NAME} "
+    "DATETIME NOT NULL DEFAULT '{default_literal}'"
+)
+NORMALIZE_CACHED_AT_SQL = (
+    "UPDATE video SET cached_at = substr(cached_at, 1, "
+    f"length(cached_at) - {UTC_OFFSET_SUFFIX_LENGTH}) "
+    f"WHERE substr(cached_at, -{UTC_OFFSET_SUFFIX_LENGTH}) = '{UTC_OFFSET_SUFFIX}'"
+)
+
+# ── Version parsing ───────────────────────────────────────────────────────────
+VERSION_LEADING_V_MARKER = "v"
+VERSION_MIN_COMPONENT_COUNT = 3
+VERSION_DIGIT_COMPONENT_PATTERN = r"\d+"
+# Suffix components beyond the numeric core must be bare numbers (extra
+# segments such as "1.4.4.0") or prerelease tags with optional separators
+# ("rc1", "-beta.2"); anything else fails like a malformed tag.
+VERSION_SUFFIX_COMPONENT_PATTERN = (
+    r"\d+|(?:[-_])?(?:alpha|beta|preview|pre|dev|rc|[abc])(?:[-_.]?\d+)?"
+)
+VERSION_KEY_RELEASE_FLAG = 1
+VERSION_KEY_PRERELEASE_FLAG = 0
+
+# ── CLI & logging messages ────────────────────────────────────────────────────
+LLM_API_KEY_KWARG = "api_key"
+TRANSCRIPT_STATUS_MESSAGE = "Fetching transcript..."
+TRANSCRIPT_SAVED_PREFIX = "Transcript saved:"
+TRANSCRIPT_COLLISION_SUFFIX_START = 2
+TRANSCRIPT_CHUNK_SEPARATOR_TOKENS = 1
+GROQ_API_KEY_PATTERN = r"\bgsk_[A-Za-z0-9]{20,}\b"
+SESSION_LOG_SYMLINK_REFUSED_EVENT = "logging.session_log_symlink_refused"
+SESSION_LOG_FALLBACK_DISABLED_MESSAGE = (
+    "Session log unavailable after symlink refusal; file logging disabled."
+)
+STATS_SINCE_DAYS_VALIDATION_MESSAGE = (
+    "since must be zero or a positive integer day count"
+)
+CLEAR_CACHE_SYMLINK_SKIPPED_EVENT = "admin.clear_cache_symlink_skipped"
+CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE = (
+    "[yellow]Skipped {count} symlinked cache file(s).[/yellow]"
+)
+CLEAN_LOGS_SYMLINK_SKIPPED_EVENT = "admin.clean_logs_symlink_skipped"
 LATEST_RELEASE_API_URL = (
     f"https://api.github.com/repos/{GITHUB_REPOSITORY_OWNER}/"
     f"{GITHUB_REPOSITORY_NAME}/releases/latest"
@@ -468,6 +522,7 @@ SECONDS_PER_MINUTE = 60
 SECONDS_PER_HOUR = 3600
 RUN_LOOP_SENTINEL = -1
 YOUTUBE_LIMIT_PERIOD_SECONDS = SECONDS_PER_MINUTE
+YOUTUBE_LIVE_PATH_SEGMENT = "live"
 
 # ── Dashboard UI ───────────────────────────────────────────────────────────────
 DASHBOARD_RECENT_ACTIVITY_LIMIT = 5

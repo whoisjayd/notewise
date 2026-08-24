@@ -6,7 +6,11 @@ import os
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
-from notewise._constants import CONFIG_FILENAME, DEFAULT_TARGET_LANGUAGE
+from notewise._constants import (
+    ALLOW_UNLISTED_MODELS_ATTR,
+    CONFIG_FILENAME,
+    DEFAULT_TARGET_LANGUAGE,
+)
 from notewise.cli._formatters import print_failure_panel, print_single_failure
 from notewise.config import get_state_dir
 
@@ -75,7 +79,7 @@ class CliProcessContext:
 
     def ensure_model_supported(self) -> bool:
         """Reject known unsupported models before any YouTube network work."""
-        if getattr(self.config, "allow_unlisted_models", False):
+        if getattr(self.config, ALLOW_UNLISTED_MODELS_ATTR, False):
             return True
         get_unsupported_model_message = getattr(
             self.config,

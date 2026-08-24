@@ -267,6 +267,23 @@ def test_redact_sensitive_text_masks_single_quoted_assignment_values():
     assert "[REDACTED]" in redacted
 
 
+def test_redact_sensitive_text_is_idempotent_for_already_redacted_values():
+    """Repeated redaction must never grow '[REDACTED]' into '[REDACTED]]'."""
+    samples = [
+        'api_key="[REDACTED]"',
+        "api_key='[REDACTED]'",
+        "api_key=[REDACTED]",
+        '"api_key": "[REDACTED]"',
+        "password=[REDACTED]",
+    ]
+    for sample in samples:
+        once = redact_sensitive_text(sample)
+        twice = redact_sensitive_text(once)
+        assert once == twice
+        assert "[REDACTED]]" not in once
+        assert once.count("[REDACTED]") == 1
+
+
 def test_configure_logging_does_not_follow_planted_session_log_symlink(
     tmp_path,
     monkeypatch,
@@ -297,6 +314,74 @@ def test_configure_logging_does_not_follow_planted_session_log_symlink(
         for handler in logging_module.logging.getLogger().handlers:
             handler.flush()
         assert planted.is_symlink()
+        assert victim.read_text(encoding="utf-8") == "do not touch"
+    finally:
+        _reset_logging_state()
+
+
+def test_configure_logging_reuses_existing_regular_session_log(tmp_path, monkeypatch):
+    """A plain regular file at the predictable log name should be reused."""
+    _reset_logging_state()
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 2, 3, 4, 5)
+
+    monkeypatch.setattr(logging_module, "datetime", _FixedDatetime)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    existing = log_dir / "notewise-2026-01-02_03-04-05.log"
+    existing.write_text("previous run\n", encoding="utf-8")
+
+    try:
+        session_log = configure_logging(state_dir=tmp_path)
+
+        assert session_log == existing
+        logging_module.logging.getLogger("reuse-probe").info("reuse entry")
+        for handler in logging_module.logging.getLogger().handlers:
+            handler.flush()
+        content = existing.read_text(encoding="utf-8")
+        assert "previous run" in content
+        assert "reuse entry" in content
+    finally:
+        _reset_logging_state()
+
+
+def test_configure_logging_disables_file_logging_when_both_paths_are_symlinks(
+    tmp_path,
+    monkeypatch,
+):
+    """Symlinked primary and fallback names must disable file logging."""
+    _reset_logging_state()
+    victim = tmp_path / "outside" / "victim.log"
+    victim.parent.mkdir()
+    victim.write_text("do not touch", encoding="utf-8")
+
+    class _FixedDatetime(datetime):
+        @classmethod
+        def now(cls):
+            return cls(2026, 1, 2, 3, 4, 5)
+
+    monkeypatch.setattr(logging_module, "datetime", _FixedDatetime)
+    log_dir = tmp_path / "logs"
+    log_dir.mkdir()
+    planted = log_dir / "notewise-2026-01-02_03-04-05.log"
+    fallback = log_dir / f"notewise-2026-01-02_03-04-05-{os.getpid()}.log"
+    _symlink_or_skip(planted, victim)
+    _symlink_or_skip(fallback, victim)
+
+    try:
+        session_log = configure_logging(state_dir=tmp_path)
+
+        assert session_log is None
+        assert logging_module._SESSION_LOG_PATH is None
+        assert not any(
+            isinstance(handler, logging.FileHandler)
+            for handler in logging_module.logging.getLogger().handlers
+        )
+        assert planted.is_symlink()
+        assert fallback.is_symlink()
         assert victim.read_text(encoding="utf-8") == "do not touch"
     finally:
         _reset_logging_state()

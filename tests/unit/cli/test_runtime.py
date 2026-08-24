@@ -127,6 +127,7 @@ async def test_batch_summary_total_includes_early_failures(
                 errors={},
             )
 
+    ensure_output_dir = mocker.MagicMock()
     context = SimpleNamespace(
         config=SimpleNamespace(max_concurrent_videos=2),
         console=MagicMock(),
@@ -134,6 +135,7 @@ async def test_batch_summary_total_includes_early_failures(
         selected_output=tmp_path / "out",
         api_key_checked=True,
         ensure_api_key_available=lambda: True,
+        ensure_selected_output_dir=ensure_output_dir,
         build_pipeline=lambda *_args, **_kwargs: _MixedPipeline(),
         no_ui=True,
     )
@@ -159,6 +161,7 @@ async def test_batch_summary_total_includes_early_failures(
 
     assert failed is False
     summary.assert_called_once()
+    ensure_output_dir.assert_called_once_with()
     _context, results, early_failures = summary.call_args.args
     total_jobs = summary.call_args.kwargs["total_jobs"]
     successes = sum(1 for result in results if result.success)

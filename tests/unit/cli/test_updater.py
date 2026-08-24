@@ -46,7 +46,7 @@ class TestVersionKey:
 
     @pytest.mark.parametrize(
         "bad_version",
-        ["1.4", "abc", "x.y.z", ""],
+        ["1.4", "abc", "x.y.z", "", "1.4.4-foo", "1.4.4+build.7"],
     )
     def test_unsupported_formats_raise(self, bad_version: str) -> None:
         with pytest.raises(UpdateError):

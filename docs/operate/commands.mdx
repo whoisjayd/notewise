@@ -42,7 +42,7 @@ Important flags: `--model`, `--output`, `--format`, `--language`, `--target-lang
 ```bash
 notewise transcript "https://youtu.be/VIDEO_ID"
 notewise transcript "https://youtu.be/VIDEO_ID" --format json -o ./exports
-notewise transcript "https://youtu.be/VIDEO_ID" -l en,hi -c cookies.txt
+notewise transcript "https://youtu.be/VIDEO_ID" -l en -l hi -c cookies.txt
 ```
 
 Downloads one video's transcript without any AI generation and needs no API key. Use `--format json` for structured output instead of the default `txt`, `--output` for a different folder, `--language` to repeat preferred languages, and `--cookie-file` for restricted videos.

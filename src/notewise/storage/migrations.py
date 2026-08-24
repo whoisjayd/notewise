@@ -8,6 +8,14 @@ from datetime import UTC, datetime
 from sqlalchemy import Connection
 from sqlalchemy import inspect as sa_inspect
 
+from notewise._constants import (
+    CACHED_AT_COLUMN_DDL_TEMPLATE,
+    CACHED_AT_COLUMN_NAME,
+    LATEST_SCHEMA_VERSION,
+    NORMALIZE_CACHED_AT_SQL,
+    VIDEO_CACHE_TABLE_NAME,
+)
+
 
 Migration = Callable[[Connection], None]
 
@@ -84,10 +92,10 @@ def migration_1_add_runstats_columns(connection: Connection) -> None:
 def migration_2_add_video_cached_at(connection: Connection) -> None:
     """Add the cached_at freshness timestamp to cached video rows."""
     inspector = sa_inspect(connection)
-    if not inspector.has_table("video"):
+    if not inspector.has_table(VIDEO_CACHE_TABLE_NAME):
         return
-    existing = {col["name"] for col in inspector.get_columns("video")}
-    if "cached_at" in existing:
+    existing = {col["name"] for col in inspector.get_columns(VIDEO_CACHE_TABLE_NAME)}
+    if CACHED_AT_COLUMN_NAME in existing:
         return
 
     # SQLAlchemy's SQLite DATETIME round-trips naive 'YYYY-MM-DD HH:MM:SS'
@@ -95,8 +103,7 @@ def migration_2_add_video_cached_at(connection: Connection) -> None:
     default_timestamp = datetime.now(UTC).replace(microsecond=0, tzinfo=None)
     default_literal = default_timestamp.isoformat(sep=" ")
     connection.exec_driver_sql(
-        "ALTER TABLE video ADD COLUMN cached_at DATETIME "
-        f"NOT NULL DEFAULT '{default_literal}'"
+        CACHED_AT_COLUMN_DDL_TEMPLATE.format(default_literal=default_literal)
     )
 
 
@@ -109,21 +116,18 @@ def migration_3_normalize_cached_at_literals(connection: Connection) -> None:
     exact naive timestamp the ORM expects.
     """
     inspector = sa_inspect(connection)
-    if not inspector.has_table("video"):
+    if not inspector.has_table(VIDEO_CACHE_TABLE_NAME):
         return
-    existing = {col["name"] for col in inspector.get_columns("video")}
-    if "cached_at" not in existing:
+    existing = {col["name"] for col in inspector.get_columns(VIDEO_CACHE_TABLE_NAME)}
+    if CACHED_AT_COLUMN_NAME not in existing:
         return
-    connection.exec_driver_sql(
-        "UPDATE video SET cached_at = substr(cached_at, 1, length(cached_at) - 6) "
-        "WHERE substr(cached_at, -6) = '+00:00'"
-    )
+    connection.exec_driver_sql(NORMALIZE_CACHED_AT_SQL)
 
 
 MIGRATIONS: tuple[tuple[int, Migration], ...] = (
     (1, migration_1_add_runstats_columns),
     (2, migration_2_add_video_cached_at),
-    (3, migration_3_normalize_cached_at_literals),
+    (LATEST_SCHEMA_VERSION, migration_3_normalize_cached_at_literals),
 )
 
 

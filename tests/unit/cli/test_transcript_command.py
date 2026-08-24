@@ -12,7 +12,7 @@ from typer.testing import CliRunner
 
 from notewise.cli import app as cli_app
 from notewise.domain.youtube import TranscriptSegment, VideoTranscript
-from notewise.errors import TranscriptUnavailableError
+from notewise.errors import IPBlockError, TranscriptUnavailableError
 
 
 runner = CliRunner()
@@ -192,6 +192,8 @@ def test_transcript_collision_appends_video_id(mocker, tmp_path, fake_transcript
     _patch_video_layer(mocker, fake_transcript)
     existing = tmp_path / f"{VIDEO_TITLE}-transcript.txt"
     existing.write_text("original", encoding="utf-8")
+    id_collision = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}.txt"
+    id_collision.write_text("previous run", encoding="utf-8")
 
     result = runner.invoke(
         cli_app.app, ["transcript", VIDEO_URL, "--output", str(tmp_path)]
@@ -199,8 +201,30 @@ def test_transcript_collision_appends_video_id(mocker, tmp_path, fake_transcript
 
     assert result.exit_code == 0
     assert existing.read_text(encoding="utf-8") == "original"
-    collision = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}.txt"
-    assert collision.read_text(encoding="utf-8") == "Hello world"
+    assert id_collision.read_text(encoding="utf-8") == "previous run"
+    numbered = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}-2.txt"
+    assert numbered.read_text(encoding="utf-8") == "Hello world"
+
+
+def test_transcript_ip_block_renders_error_panel(mocker, tmp_path, fake_transcript):
+    """An IP block renders a Transcript Error panel via format_user_error."""
+    _patch_video_layer(mocker, fake_transcript)
+    error = IPBlockError("requests blocked")
+    cli_app.fetch_transcript.side_effect = error
+    format_error = mocker.patch.object(
+        cli_app,
+        "format_user_error",
+        return_value="Network is blocked by YouTube.",
+    )
+
+    result = runner.invoke(
+        cli_app.app, ["transcript", VIDEO_URL, "--output", str(tmp_path)]
+    )
+
+    assert result.exit_code == 1
+    assert "Transcript Error" in result.output
+    assert "Network is blocked by YouTube." in result.output
+    format_error.assert_called_once_with(error)
 
 
 def test_transcript_batch_file_input_gets_playlist_pointer(
