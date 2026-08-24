@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock
@@ -191,19 +192,21 @@ def test_transcript_collision_appends_video_id(mocker, tmp_path, fake_transcript
     """Filename collisions gain the video ID before the extension."""
     _patch_video_layer(mocker, fake_transcript)
     existing = tmp_path / f"{VIDEO_TITLE}-transcript.txt"
-    existing.write_text("original", encoding="utf-8")
     id_collision = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}.txt"
-    id_collision.write_text("previous run", encoding="utf-8")
+    numbered = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}-2.txt"
+
+    def _occupied(path: Path) -> bool:
+        return path in (existing, id_collision)
+
+    mocker.patch.object(Path, "exists", autospec=True, side_effect=_occupied)
+    write_text = mocker.patch.object(Path, "write_text", autospec=True)
 
     result = runner.invoke(
         cli_app.app, ["transcript", VIDEO_URL, "--output", str(tmp_path)]
     )
 
     assert result.exit_code == 0
-    assert existing.read_text(encoding="utf-8") == "original"
-    assert id_collision.read_text(encoding="utf-8") == "previous run"
-    numbered = tmp_path / f"{VIDEO_TITLE}-transcript-{VIDEO_ID}-2.txt"
-    assert numbered.read_text(encoding="utf-8") == "Hello world"
+    write_text.assert_called_once_with(numbered, "Hello world", encoding="utf-8")
 
 
 def test_transcript_ip_block_renders_error_panel(mocker, tmp_path, fake_transcript):
@@ -216,6 +219,7 @@ def test_transcript_ip_block_renders_error_panel(mocker, tmp_path, fake_transcri
         "format_user_error",
         return_value="Network is blocked by YouTube.",
     )
+    mkdir = mocker.patch.object(Path, "mkdir", autospec=True)
 
     result = runner.invoke(
         cli_app.app, ["transcript", VIDEO_URL, "--output", str(tmp_path)]
@@ -225,6 +229,7 @@ def test_transcript_ip_block_renders_error_panel(mocker, tmp_path, fake_transcri
     assert "Transcript Error" in result.output
     assert "Network is blocked by YouTube." in result.output
     format_error.assert_called_once_with(error)
+    mkdir.assert_called_once_with(tmp_path, parents=True, exist_ok=True)
 
 
 def test_transcript_batch_file_input_gets_playlist_pointer(

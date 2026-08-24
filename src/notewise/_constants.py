@@ -341,6 +341,7 @@ OAUTH_LOGIN_SAFE_MODELS = {
     provider: config["safe_model"]
     for provider, config in OAUTH_PROVIDER_CONFIGS.items()
 }
+OAUTH_TOKEN_DIR_SYMLINK_SKIPPED_EVENT = "config.oauth_token_dir_symlink_skipped"
 OAUTH_TOKEN_DIR_PARENT = "oauth"
 OAUTH_TOKEN_DIR_ENV_VARS = {
     provider: config["token_dir_env"]

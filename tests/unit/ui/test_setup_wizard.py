@@ -5,6 +5,7 @@ from unittest.mock import MagicMock, mock_open, patch
 
 import pytest
 
+from notewise._constants import CONFIG_FILE_PERMISSION_MODE, CONFIG_FILENAME
 from notewise.errors import ConfigurationError
 from notewise.ui.setup_wizard import (
     get_api_key,
@@ -128,9 +129,13 @@ class TestConfigIO:
                 "notewise.ui.setup_wizard.load_config",
                 return_value={"OLD_KEY": "old_val"},
             ),
-            patch("notewise.ui.setup_wizard.os.open", return_value=3) as mock_os_open,
+            patch(
+                "notewise.ui.setup_wizard.tempfile.mkstemp",
+                return_value=(3, "dummy_path.tmp"),
+            ) as mock_mkstemp,
+            patch("notewise.ui.setup_wizard.os.fchmod", create=True) as mock_fchmod,
             patch("notewise.ui.setup_wizard.os.fdopen", mock_open()) as mock_file,
-            patch.object(Path, "chmod") as mock_chmod,
+            patch("notewise.ui.setup_wizard.os.replace") as mock_replace,
             patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
@@ -138,8 +143,6 @@ class TestConfigIO:
 
             # Verify file write operations
             handle = mock_file()
-            # We expect multiple write calls. Let's check if the keys are written.
-            # We can construct the written string
             written_content = "".join(
                 call.args[0] for call in handle.write.call_args_list
             )
@@ -147,12 +150,13 @@ class TestConfigIO:
             assert "OLD_KEY=old_val" in written_content
             assert "NEW_KEY=new_val" in written_content
             assert "DEFAULT_MODEL=new_model" in written_content
-            mock_os_open.assert_called_once_with(
-                mock_path,
-                os.O_CREAT | os.O_WRONLY | os.O_TRUNC,
-                0o600,
+            mock_mkstemp.assert_called_once_with(
+                dir=mock_path.parent,
+                prefix=f"{CONFIG_FILENAME}.",
+                suffix=".tmp",
             )
-            mock_chmod.assert_called_once_with(0o600)
+            mock_fchmod.assert_called_once_with(3, CONFIG_FILE_PERMISSION_MODE)
+            mock_replace.assert_called_once_with(Path("dummy_path.tmp"), mock_path)
 
     def test_save_config_strips_legacy_youtube_auth_keys(self):
         """Saving config should remove legacy OAuth and cookie-era auth keys."""
@@ -170,9 +174,13 @@ class TestConfigIO:
                     "OLD_KEY": "old_val",
                 },
             ),
-            patch("notewise.ui.setup_wizard.os.open", return_value=3),
+            patch(
+                "notewise.ui.setup_wizard.tempfile.mkstemp",
+                return_value=(3, "dummy_path.tmp"),
+            ),
+            patch("notewise.ui.setup_wizard.os.fchmod", create=True),
             patch("notewise.ui.setup_wizard.os.fdopen", mock_open()) as mock_file,
-            patch.object(Path, "chmod"),
+            patch("notewise.ui.setup_wizard.os.replace"),
             patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path),
         ):
             save_config({"DEFAULT_MODEL": "new_model"})
@@ -214,6 +222,27 @@ class TestConfigIO:
         config_path = get_config_path()
         mode = stat.S_IMODE(config_path.stat().st_mode)
         assert mode == 0o600
+
+    def test_save_config_does_not_truncate_symlink_target(self, tmp_path, monkeypatch):
+        """save_config must swap a planted symlink, not truncate its victim."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
+        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
+
+        victim = tmp_path / "victim.env"
+        victim.write_text("VICTIM=keep-me\n", encoding="utf-8")
+        config_path = get_config_path()
+        try:
+            config_path.symlink_to(victim)
+        except OSError:
+            pytest.skip("symlink creation is not available on this platform")
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        assert victim.read_text(encoding="utf-8") == "VICTIM=keep-me\n"
+        assert "DEFAULT_MODEL=gemini/gemini-2.5-flash" in config_path.read_text(
+            encoding="utf-8"
+        )
+        assert config_path.is_symlink() is False
 
     def test_show_current_config_masks_api_keys(self):
         """Read-only config display should mask secret values."""
