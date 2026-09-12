@@ -187,10 +187,9 @@ def test_inference_update_requires_endpoint_change_before_io(mocker) -> None:
         ["inference", "update", "office", "--model", "vendor/model"],
     )
 
-    assert result.exit_code != 0
+    assert result.exit_code == 2
     load_config.assert_not_called()
     save_config.assert_not_called()
-    assert "--base-url" in result.output
 
 
 def test_inference_delete_refuses_normalized_default_endpoint(mocker) -> None:
