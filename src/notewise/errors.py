@@ -88,6 +88,10 @@ class OAuthError(LLMError):
     """Raised when OAuth/device-flow provider login cannot proceed."""
 
 
+class CustomEndpointError(LLMError):
+    """Raised when a custom OpenAI-compatible endpoint cannot be used safely."""
+
+
 class PersistenceError(NoteWiseError):
     """Raised on SQLite / database failures."""
 
@@ -207,6 +211,9 @@ def format_user_error(error: Exception) -> str:
     if isinstance(error, OAuthError):
         return OAUTH_FALLBACK_MESSAGE
 
+    if isinstance(error, CustomEndpointError):
+        return str(error).split(" [")[0]
+
     text = str(error).strip().lower()
 
     if "timeout" in text or "timed out" in text:
@@ -260,6 +267,7 @@ def format_user_error(error: Exception) -> str:
 
 __all__ = [
     "ConfigurationError",
+    "CustomEndpointError",
     "ExtractionError",
     "IPBlockError",
     "LLMError",

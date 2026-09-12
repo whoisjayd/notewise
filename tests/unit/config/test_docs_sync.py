@@ -90,6 +90,7 @@ def test_configuration_doc_common_defaults_match_source_constants():
 
     assert table == {
         "DEFAULT_MODEL": f"`{DEFAULT_MODEL}`",
+        "CUSTOM_LLM_ENDPOINTS": "unset",
         "OUTPUT_DIR": f"`{DEFAULT_OUTPUT_DIR}`",
         "MAX_CONCURRENT_VIDEOS": f"`{DEFAULT_MAX_CONCURRENT_VIDEOS}`",
         "YOUTUBE_REQUESTS_PER_MINUTE": f"`{DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE}`",

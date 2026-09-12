@@ -8,7 +8,9 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
+import tempfile
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from urllib.request import urlopen
@@ -85,7 +87,7 @@ def build_metadata_snapshot(model_cost: dict[str, Any]) -> dict[str, dict[str, A
 def load_model_cost(
     source: str = LITELLM_MODEL_METADATA_SOURCE_URL,
 ) -> dict[str, Any]:
-    """Load LiteLLM model metadata from the upstream source URL."""
+    """Load validated LiteLLM model metadata from the upstream source URL."""
     with urlopen(
         source,
         timeout=LITELLM_MODEL_METADATA_FETCH_TIMEOUT_SECONDS,
@@ -94,16 +96,40 @@ def load_model_cost(
 
     if not isinstance(loaded, dict):
         raise ValueError(f"Expected a JSON object from {source}")
+    if not any(
+        model != "sample_spec" and isinstance(model, str) and isinstance(metadata, dict)
+        for model, metadata in loaded.items()
+    ):
+        raise ValueError(f"Expected usable model metadata from {source}")
     return loaded
 
 
+def _validate_snapshot(snapshot: dict[str, list[str]]) -> None:
+    """Reject an empty generation before it replaces the packaged catalog."""
+    if not snapshot or not any(snapshot.values()):
+        raise ValueError("LiteLLM metadata produced no setup-safe models.")
+
+
 def write_json(path: Path, payload: dict[str, Any]) -> None:
-    """Write deterministic JSON with a trailing newline."""
+    """Atomically write deterministic JSON with a trailing newline."""
+    content = json.dumps(payload, indent=2, sort_keys=False) + "\n"
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(
-        json.dumps(payload, indent=2, sort_keys=False) + "\n",
-        encoding="utf-8",
+    file_descriptor, temporary_name = tempfile.mkstemp(
+        dir=path.parent,
+        prefix=f"{path.name}.",
+        suffix=".tmp",
     )
+    temporary_path = Path(temporary_name)
+    try:
+        with os.fdopen(file_descriptor, "w", encoding="utf-8") as temporary_file:
+            file_descriptor = -1
+            temporary_file.write(content)
+        temporary_path.replace(path)
+    except BaseException:
+        if file_descriptor >= 0:
+            os.close(file_descriptor)
+        temporary_path.unlink(missing_ok=True)
+        raise
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -131,6 +157,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     model_cost = load_model_cost()
     snapshot = build_snapshot(model_cost)
+    _validate_snapshot(snapshot)
     write_json(args.output, snapshot)
 
     if args.metadata_output is not None:

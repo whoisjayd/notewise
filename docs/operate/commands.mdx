@@ -20,7 +20,8 @@ Run `notewise COMMAND --help` for command-specific flags. The command set is def
 | `notewise auth login PROVIDER` | Login to OAuth providers.                                     |
 | `notewise info`                | Show runtime config and state paths.                          |
 | `notewise info URL`            | Inspect YouTube metadata and cache status without generation. |
-| `notewise transcript URL`     | Download one video's transcript (txt/json) without AI generation. |
+| `notewise transcript URL`      | Download one video's transcript (txt/json) without AI generation. |
+| `notewise inference`           | List and manage saved inference endpoints.                    |
 | `notewise doctor`              | Check config, provider readiness, output, cache, and logs.    |
 | `notewise stats`               | Show processing totals and model breakdown.                   |
 | `notewise history`             | Show recent processed videos.                                 |
@@ -35,7 +36,54 @@ Run `notewise COMMAND --help` for command-specific flags. The command set is def
 notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
 ```
 
-Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, and `--cookie-file`.
+Important flags: `--model`, `--base-url`, `--api-key`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, and `--cookie-file`.
+
+### Custom endpoint run overrides
+
+Set up named custom endpoints with `notewise setup`, then select one through its
+`<name>/<model-id>` model name. `--base-url` sends only the current `process` run
+to a different OpenAI-compatible URL:
+
+```bash
+notewise process "<video-url>" --model <name>/<model-id> --base-url <base-url> --api-key <api-key>
+```
+
+Both flags are transient: they do not update `config.env` or ambient environment
+variables. `--base-url` takes precedence for the request URL. An explicitly passed
+`--api-key` takes precedence for the request key; otherwise, when the model prefix
+exactly matches a saved custom profile, NoteWise uses that profile's key. Supply
+`--api-key` when no matching profile supplies one.
+
+## Inference endpoints
+
+Saved custom endpoints use a model name in the form `<name>/<model-id>`.
+Manage those profiles with the `inference` command group:
+
+```bash
+notewise inference list
+notewise inference add <name> --base-url <url> --api-key <api-key> --model <model-id>
+notewise inference update <name> [--base-url <url>] [--api-key <api-key>] [--model <model-id>]
+notewise inference delete <name>
+```
+
+`list` displays each saved endpoint's name and base URL, never its API key.
+
+`add` requires every shown option. It normalizes the URL, discovers models from
+the live endpoint, and accepts `<model-id>` only when discovery returns it. It
+then verifies the endpoint before atomically adding or replacing the named
+profile.
+
+`update` requires `--base-url`, `--api-key`, or both. Omitted URL and key values
+come from the saved profile. If `--model` is omitted, NoteWise uses the suffix of
+the current default model only when it is named `<name>/<model-id>`; otherwise,
+`--model` is required. The resulting endpoint is live-discovered and verified
+before its saved profile is replaced.
+
+`delete` removes a saved profile without prompting, but refuses to remove a
+profile while the default model begins with `<name>/`.
+
+API keys supplied on a command line can be retained in shell history. Prefer
+`notewise setup` or direct configuration for persistent secrets.
 
 ## Transcript command
 

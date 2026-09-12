@@ -50,6 +50,8 @@ class CliProcessContext:
     chapter_directory_output: bool
     selected_cookie_file: str | None
     selected_target_language: str = DEFAULT_TARGET_LANGUAGE
+    selected_api_base: str | None = None
+    selected_api_key: str | None = None
     api_key_checked: bool | None = None
 
     def print_failure_panel(
@@ -79,6 +81,8 @@ class CliProcessContext:
 
     def ensure_model_supported(self) -> bool:
         """Reject known unsupported models before any YouTube network work."""
+        if self.selected_api_base is not None:
+            return True
         if getattr(self.config, ALLOW_UNLISTED_MODELS_ATTR, False):
             return True
         get_unsupported_model_message = getattr(
@@ -107,6 +111,9 @@ class CliProcessContext:
         if self.api_key_checked is not None:
             return self.api_key_checked
 
+        if self.selected_api_key is not None:
+            self.api_key_checked = True
+            return True
         get_missing_config_names = getattr(
             self.config,
             "get_missing_config_names_for_model",
@@ -166,20 +173,25 @@ class CliProcessContext:
         shared_state: PipelineSharedState | None = None,
     ) -> Any:
         """Create a configured pipeline instance."""
-        return self.core_pipeline_cls(
-            model=self.selected_model,
-            output_dir=output_dir,
-            output_formats=self.selected_output_formats,
-            languages=self.selected_languages,
-            target_language=self.selected_target_language,
-            temperature=self.selected_temperature,
-            max_tokens=self.selected_max_tokens,
-            throttle_seconds=self.selected_throttle_seconds,
-            force=self.force,
-            quiz=self.quiz,
-            export_transcript=self.export_transcript,
-            timestamps=self.timestamps,
-            chapter_directory_output=self.chapter_directory_output,
-            youtube_cookie_file=self.selected_cookie_file,
-            shared_state=shared_state,
-        )
+        pipeline_kwargs: dict[str, Any] = {
+            "model": self.selected_model,
+            "output_dir": output_dir,
+            "output_formats": self.selected_output_formats,
+            "languages": self.selected_languages,
+            "target_language": self.selected_target_language,
+            "temperature": self.selected_temperature,
+            "max_tokens": self.selected_max_tokens,
+            "throttle_seconds": self.selected_throttle_seconds,
+            "force": self.force,
+            "quiz": self.quiz,
+            "export_transcript": self.export_transcript,
+            "timestamps": self.timestamps,
+            "chapter_directory_output": self.chapter_directory_output,
+            "youtube_cookie_file": self.selected_cookie_file,
+            "shared_state": shared_state,
+        }
+        if self.selected_api_base is not None:
+            pipeline_kwargs["api_base"] = self.selected_api_base
+        if self.selected_api_key is not None:
+            pipeline_kwargs["api_key"] = self.selected_api_key
+        return self.core_pipeline_cls(**pipeline_kwargs)

@@ -192,6 +192,60 @@ def test_pipeline_reuses_supplied_shared_state(temp_output_dir, mock_llm_provide
     assert pipeline._reserved_output_targets is shared_state.reserved_output_targets
 
 
+def test_pipeline_forwards_process_scoped_endpoint_to_provider(
+    mocker,
+    temp_output_dir,
+):
+    """CorePipeline must construct its provider with endpoint-scoped values."""
+    get_provider = mocker.patch(
+        "notewise.pipeline.core.get_provider",
+        return_value=MagicMock(),
+    )
+
+    CorePipeline(
+        model="gateway/gateway-model",
+        output_dir=temp_output_dir,
+        api_base="https://gateway.example/v1",
+        api_key="process-key",
+    )
+
+    get_provider.assert_called_once_with(
+        "gateway/gateway-model",
+        api_base="https://gateway.example/v1",
+        api_key="process-key",
+    )
+
+
+def test_pipeline_explicit_endpoint_key_skips_registry_key_preflight(
+    mocker,
+    temp_output_dir,
+):
+    """A transient endpoint key must not require a saved profile."""
+    get_provider = mocker.patch(
+        "notewise.pipeline.core.get_provider",
+        return_value=MagicMock(),
+    )
+    get_missing = mocker.patch(
+        "notewise.config.AppSettings.get_missing_config_names_for_model",
+        return_value=("CUSTOM_LLM_ENDPOINTS",),
+    )
+
+    pipeline = CorePipeline(
+        model="transient/model",
+        output_dir=temp_output_dir,
+        api_base="https://transient.example/v1",
+        api_key="transient-key",
+    )
+
+    get_provider.assert_called_once_with(
+        "transient/model",
+        api_base="https://transient.example/v1",
+        api_key="transient-key",
+    )
+    assert pipeline._check_api_key() is True
+    get_missing.assert_not_called()
+
+
 def test_pipeline_passes_throttle_seconds_into_generator(
     temp_output_dir, mock_llm_provider
 ):

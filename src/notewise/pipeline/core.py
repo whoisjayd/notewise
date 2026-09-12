@@ -118,6 +118,8 @@ class CorePipeline:
         chapter_directory_output: bool = False,
         youtube_cookie_file: str | None = None,
         shared_state: PipelineSharedState | None = None,
+        api_base: str | None = None,
+        api_key: str | None = None,
     ):
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -132,7 +134,8 @@ class CorePipeline:
             temperature if temperature is not None else config.temperature
         )
         self.max_tokens = max_tokens if max_tokens is not None else config.max_tokens
-        self.provider = get_provider(model)
+        self._api_key = api_key
+        self.provider = get_provider(model, api_base=api_base, api_key=api_key)
         from .generation import StudyMaterialGenerator
 
         self.generator = StudyMaterialGenerator(
@@ -193,6 +196,9 @@ class CorePipeline:
         return await asyncio.to_thread(func, *args, **kwargs)
 
     def _check_api_key(self) -> bool:
+        if self._api_key is not None:
+            return True
+
         missing_config = config.get_missing_config_names_for_model(self.model)
         if missing_config:
             expected = ", ".join(missing_config)

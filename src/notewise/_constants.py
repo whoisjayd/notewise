@@ -23,6 +23,15 @@ CONFIG_PRIORITY_KEY_ORDER = (
 ALLOW_UNLISTED_MODELS_CONFIG_KEY = "ALLOW_UNLISTED_MODELS"
 ALLOW_UNLISTED_MODELS_ATTR = "allow_unlisted_models"
 OUTPUT_DIR_CONFIG_KEY = "OUTPUT_DIR"
+CUSTOM_LLM_ENDPOINTS_ENV_VAR = "CUSTOM_LLM_ENDPOINTS"
+CUSTOM_LLM_NAME_PATTERN = r"^[A-Za-z0-9_-]+$"
+CUSTOM_ENDPOINT_HTTP_TIMEOUT_SECONDS = 15
+CUSTOM_ENDPOINT_DISCOVERY_ACCEPT_HEADER = "application/json"
+CUSTOM_ENDPOINT_VERIFICATION_PROMPT = "Reply with OK."
+CUSTOM_ENDPOINT_VERIFICATION_INSTRUCTIONS = (
+    "You are validating a custom OpenAI-compatible endpoint for NoteWise."
+)
+CUSTOM_ENDPOINT_VERIFICATION_MAX_OUTPUT_TOKENS = 4
 SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
 OUTPUT_METADATA_CHAPTER_FILES_KEY = "chapter_files"
@@ -195,6 +204,7 @@ PROVIDER_SECRET_ENV_KEYS = frozenset(PROVIDER_API_KEY_ENV_VAR_PROVIDERS) | froze
         "AWS_ACCESS_KEY_ID",
         "AWS_SECRET_ACCESS_KEY",
         "AWS_SESSION_TOKEN",
+        CUSTOM_LLM_ENDPOINTS_ENV_VAR,
     }
 )
 SENSITIVE_KEY_SUFFIXES = (
@@ -219,7 +229,7 @@ OAUTH_LOGIN_DIRECT_PROVIDERS = ("chatgpt", "github_copilot")
 OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
     "chatgpt": {
         "label": "ChatGPT Subscription",
-        "safe_model": "chatgpt/gpt-5.2",
+        "safe_model": "chatgpt/gpt-5.6-luna",
         "token_dir_env": "CHATGPT_TOKEN_DIR",
         "token_dir_name": "chatgpt",
     },

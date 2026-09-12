@@ -1,7 +1,7 @@
 """Tests for the setup wizard."""
 
 import os
-from unittest.mock import MagicMock, mock_open, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, mock_open, patch
 
 import pytest
 
@@ -10,7 +10,12 @@ from notewise._constants import (
     CONFIG_FILENAME,
     CONFIG_TEMP_SUFFIX,
 )
-from notewise.errors import ConfigurationError
+from notewise.errors import ConfigurationError, CustomEndpointError
+from notewise.llm.custom_endpoint import (
+    CustomEndpointProfile,
+    parse_custom_endpoint_profiles,
+    serialize_custom_endpoint_profiles,
+)
 from notewise.ui.setup_wizard import (
     get_api_key,
     get_available_models,
@@ -635,6 +640,37 @@ class TestInteractiveFlow:
             result = select_provider({"p1": [], "p2": []})
             assert result == "p2"
 
+    def test_select_provider_lists_saved_custom_endpoint_before_add_action(self):
+        """Saved endpoints are visible provider choices ahead of the add action."""
+        from rich.console import Console
+
+        console = Console(record=True, force_terminal=False, width=100)
+        profile = CustomEndpointProfile(
+            name="office",
+            base_url="https://office.example/v1",
+            api_key="office-key",
+        )
+        with (
+            patch(
+                "notewise.ui.setup_wizard.PROVIDER_CONFIG",
+                {"p1": {"name": "P1", "keywords": []}},
+            ),
+            patch("rich.prompt.Prompt.ask", return_value="2"),
+        ):
+            result = select_provider(
+                {"p1": []},
+                custom_profiles=(profile,),
+                console=console,
+            )
+
+        assert result == "office"
+        rendered = console.export_text()
+        assert "office" in rendered
+        assert "Custom endpoint" in rendered
+        assert rendered.index("office") < rendered.index(
+            "Add custom OpenAI-compatible endpoint"
+        )
+
     def test_select_model_pagination(self):
         """Test model selection with pagination."""
         # Create list of 25 models
@@ -751,24 +787,292 @@ class TestWizardOrchestration:
 
             mock_save.assert_called_once()
 
-    def test_run_setup_wizard_stops_when_model_catalog_empty(self):
-        """Wizard should stop before provider prompts when no models are available."""
-        console = MagicMock()
-        current_config = {"DEFAULT_MODEL": "gemini/gemini-pro"}
+    def test_run_setup_wizard_adds_second_custom_endpoint_without_losing_first(
+        self, mocker
+    ):
+        """Adding an endpoint preserves the full pre-existing registry."""
+        first = CustomEndpointProfile(
+            name="office",
+            base_url="https://office.example/v1",
+            api_key="office-key",
+        )
+        second = CustomEndpointProfile(
+            name="home",
+            base_url="https://home.example/v1",
+            api_key="home-key",
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={
+                "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles((first,))
+            },
+        )
+        mocker.patch("notewise.ui.setup_wizard.get_available_models", return_value={})
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="custom_openai_compatible",
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard._setup_custom_openai_compatible_endpoint",
+            return_value=("home/home-model", second),
+        )
+        mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
+        mocker.patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "4"])
 
-        with (
-            patch("notewise.ui.setup_wizard.load_config", return_value=current_config),
-            patch("notewise.ui.setup_wizard.get_available_models", return_value={}),
-            patch("notewise.ui.setup_wizard.select_provider") as mock_provider,
-            patch("notewise.ui.setup_wizard.save_config") as mock_save,
-        ):
-            result = run_setup_wizard(force=True, console=console)
+        result = run_setup_wizard(force=True)
+
+        assert result["DEFAULT_MODEL"] == "home/home-model"
+        assert parse_custom_endpoint_profiles(result["CUSTOM_LLM_ENDPOINTS"]) == (
+            first,
+            second,
+        )
+        assert parse_custom_endpoint_profiles(
+            mock_save.call_args.args[0]["CUSTOM_LLM_ENDPOINTS"]
+        ) == (first, second)
+
+    def test_run_setup_wizard_replaces_endpoint_after_verification(self, mocker):
+        """A same-name endpoint is replaced only after its model verifies."""
+        old_profile = CustomEndpointProfile(
+            name="internal-endpoint",
+            base_url="https://old-endpoint.example/v1",
+            api_key="old-endpoint-key",
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={
+                "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles(
+                    (old_profile,)
+                )
+            },
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="custom_openai_compatible",
+        )
+        select_model = mocker.patch(
+            "notewise.ui.setup_wizard.select_model",
+            return_value="vendor/model-id",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.normalize_custom_model_prefix",
+            return_value="internal-endpoint",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.normalize_openai_base_url",
+            return_value="https://endpoint.example/v1",
+        )
+        discover_models = mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            return_value=["vendor/model-id"],
+        )
+        mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
+
+        async def verify_model(*args: object) -> None:
+            mock_save.assert_not_called()
+
+        verify_model_mock = mocker.patch(
+            "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+            new=AsyncMock(side_effect=verify_model),
+        )
+        mocker.patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=[
+                "Internal endpoint",
+                "https://endpoint.example",
+                "endpoint-secret",
+                "/custom/out",
+                "3",
+            ],
+        )
+
+        result = run_setup_wizard(force=True)
+
+        discover_models.assert_called_once_with(
+            "https://endpoint.example/v1",
+            "endpoint-secret",
+        )
+        assert select_model.call_args.args == (
+            "internal-endpoint",
+            {"internal-endpoint": ["vendor/model-id"]},
+        )
+        verify_model_mock.assert_awaited_once_with(
+            "https://endpoint.example/v1",
+            "endpoint-secret",
+            "vendor/model-id",
+        )
+        assert result["DEFAULT_MODEL"] == "internal-endpoint/vendor/model-id"
+        assert parse_custom_endpoint_profiles(result["CUSTOM_LLM_ENDPOINTS"]) == (
+            CustomEndpointProfile(
+                name="internal-endpoint",
+                base_url="https://endpoint.example/v1",
+                api_key="endpoint-secret",
+            ),
+        )
+
+    def test_run_setup_wizard_uses_selected_saved_endpoint_credentials(self, mocker):
+        """Selecting a saved profile refreshes and verifies with its own key."""
+        profile = CustomEndpointProfile(
+            name="office",
+            base_url="https://office.example/v1",
+            api_key="office-key",
+        )
+        current_config = {
+            "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles((profile,))
+        }
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value=current_config,
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="office",
+        )
+        select_model = mocker.patch(
+            "notewise.ui.setup_wizard.select_model",
+            return_value="vendor/model-id",
+        )
+        discover_models = mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            return_value=["vendor/model-id"],
+        )
+        verify_model = mocker.patch(
+            "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+            new=AsyncMock(),
+        )
+        mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
+        mocker.patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "3"])
+
+        result = run_setup_wizard(force=True)
+
+        discover_models.assert_called_once_with(
+            "https://office.example/v1",
+            "office-key",
+        )
+        select_model.assert_called_once_with(
+            "office",
+            {"office": ["vendor/model-id"]},
+            console=ANY,
+        )
+        verify_model.assert_awaited_once_with(
+            "https://office.example/v1",
+            "office-key",
+            "vendor/model-id",
+        )
+        assert result["DEFAULT_MODEL"] == "office/vendor/model-id"
+        assert mock_save.call_args.args[0] == {
+            "DEFAULT_MODEL": "office/vendor/model-id",
+            "OUTPUT_DIR": "/custom/out",
+            "MAX_CONCURRENT_VIDEOS": "3",
+        }
+
+    def test_run_setup_wizard_replaces_duplicate_endpoint_only_after_validation(
+        self, mocker
+    ):
+        """A same-name replacement retains the old profile when discovery fails."""
+        existing = CustomEndpointProfile(
+            name="office",
+            base_url="https://old-office.example/v1",
+            api_key="old-office-key",
+        )
+        current_config = {
+            "DEFAULT_MODEL": "office/old-model",
+            "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles((existing,)),
+        }
+        console = MagicMock()
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value=current_config,
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="custom_openai_compatible",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            side_effect=CustomEndpointError("Could not discover models."),
+        )
+        mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
+        mocker.patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["Office", "https://new-office.example", "new-key"],
+        )
+
+        result = run_setup_wizard(force=True, console=console)
 
         assert result == current_config
-        mock_provider.assert_not_called()
+        assert parse_custom_endpoint_profiles(result["CUSTOM_LLM_ENDPOINTS"]) == (
+            existing,
+        )
         mock_save.assert_not_called()
-        rendered = "".join(str(call.args[0]) for call in console.print.call_args_list)
-        assert "No setup-safe model catalog is available right now." in rendered
+
+    def test_run_setup_wizard_does_not_save_when_custom_verification_fails(
+        self, mocker
+    ):
+        """Verification failure is visible and leaves configuration unchanged."""
+        current_config = {"DEFAULT_MODEL": "gemini/gemini-pro"}
+        console = MagicMock()
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value=current_config,
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="custom_openai_compatible",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.normalize_custom_model_prefix",
+            return_value="internal-endpoint",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.normalize_openai_base_url",
+            return_value="https://endpoint.example/v1",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            return_value=["vendor/model-id"],
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_model",
+            return_value="vendor/model-id",
+        )
+        verify_model = mocker.patch(
+            "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+            new=AsyncMock(
+                side_effect=CustomEndpointError("Could not verify selected model.")
+            ),
+        )
+        mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
+        mocker.patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["Internal endpoint", "https://endpoint.example", "key"],
+        )
+
+        result = run_setup_wizard(force=True, console=console)
+
+        assert result == current_config
+        verify_model.assert_awaited_once_with(
+            "https://endpoint.example/v1",
+            "key",
+            "vendor/model-id",
+        )
+        mock_save.assert_not_called()
+        console.print.assert_any_call("[red]Could not verify selected model.[/red]")
 
     def test_run_setup_wizard_skips_api_key_for_oauth_provider(self):
         """OAuth/device-flow providers should not prompt for static API keys."""
@@ -905,6 +1209,7 @@ class TestWizardOrchestration:
         mock_models.assert_called_once_with(console=mock_console)
         mock_provider.assert_called_once_with(
             {"gemini": ["gemini-pro"]},
+            custom_profiles=(),
             console=mock_console,
         )
         mock_model.assert_called_once_with(

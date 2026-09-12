@@ -28,11 +28,42 @@ For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `confi
 notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
 ```
 
+## Custom OpenAI-compatible endpoints
+
+`notewise setup` lists built-in providers, each saved custom endpoint by name, and
+**Add custom OpenAI-compatible endpoint**. Select a saved endpoint to use its
+current configuration, or choose **Add** to enter a name, base URL, and API key.
+For either path, setup requests the endpoint's current `/v1/models` list, requires
+you to select a discovered model, and sends a tiny completion request to verify
+that selection. The verification can incur a small provider charge.
+
+Adding an endpoint appends it to the registry. Adding a name that normalizes to an
+existing name replaces only that endpoint after discovery and verification succeed;
+other saved endpoints remain unchanged. Names are unique after normalization. Base
+URLs must be absolute `http://` or `https://` URLs; setup accepts a URL with or
+without `/v1` and stores it with the `/v1` suffix.
+
+The registry is one compact JSON value in `~/.notewise/config.env`. Each object has
+`name`, `base_url`, and `api_key` fields. This safe two-profile example uses
+placeholder credentials:
+
+```dotenv
+CUSTOM_LLM_ENDPOINTS='[{"name":"team-gateway","base_url":"https://gateway.example.com/v1","api_key":"example-team-token"},{"name":"lab-server","base_url":"https://lab.example.net/v1","api_key":"example-lab-token"}]'
+DEFAULT_MODEL=team-gateway/your-model-id
+```
+
+Custom models are always named `<name>/<model-id>`. When that name exactly matches
+a saved profile prefix, NoteWise uses that profile's endpoint configuration and
+sends the compatible request as `openai/<model-id>`. `CUSTOM_LLM_ENDPOINTS` is a
+secret-bearing value: `notewise config` masks the entire value, and NoteWise never
+copies its credentials into ambient environment variables.
+
 ## Common config keys
 
 | Key                           | Default                   | Meaning                             |
 | ----------------------------- | ------------------------- | ----------------------------------- |
 | `DEFAULT_MODEL`               | `gemini/gemini-2.5-flash` | LiteLLM model string.               |
+| `CUSTOM_LLM_ENDPOINTS`        | unset                     | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR`                  | `./output`                | Default output directory.           |
 | `MAX_CONCURRENT_VIDEOS`       | `5`                       | Batch/playlist video workers.       |
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request limit.              |

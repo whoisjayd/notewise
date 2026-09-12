@@ -567,7 +567,7 @@ class TestLLMProvider:
             ),
             patch("notewise.llm.provider.logger.debug") as mock_debug,
         ):
-            LLMProvider("custom/local-model")
+            LLMProvider("unknown-model")
 
         mock_debug.assert_called_once()
 
@@ -764,3 +764,56 @@ class TestLLMProvider:
 
         _args, kwargs = mock_acompletion.call_args
         assert "api_key" not in kwargs
+        assert "api_base" not in kwargs
+
+    @pytest.mark.parametrize(
+        ("model", "api_base", "api_key", "request_model"),
+        [
+            (
+                "first/model/with/slashes",
+                "https://first.example/v1",
+                "first-key",
+                "openai/model/with/slashes",
+            ),
+            (
+                "second/other-model",
+                "https://second.example/v1",
+                "second-key",
+                "openai/other-model",
+            ),
+        ],
+    )
+    async def test_generate_forwards_profile_scoped_endpoint_credentials(
+        self,
+        mocker,
+        model,
+        api_base,
+        api_key,
+        request_model,
+    ):
+        """Each selected profile must pass its own URL/key to LiteLLM."""
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch("notewise.llm.provider.completion_cost", return_value=0.0)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider(model, api_base=api_base, api_key=api_key)
+
+        assert provider.model == model
+
+        await provider.generate("sys", "user")
+
+        assert mock_acompletion.call_args.kwargs["api_base"] == api_base
+        assert mock_acompletion.call_args.kwargs["api_key"] == api_key
+        assert mock_acompletion.call_args.kwargs["model"] == request_model
+
+    def test_endpoint_request_model_preserves_openai_prefix(self):
+        """Already OpenAI-prefixed endpoint models must not be rewritten."""
+        provider = LLMProvider(
+            "openai/model/with/slashes",
+            api_base="https://gateway.example/v1",
+            api_key="process-key",
+        )
+
+        assert provider._litellm_request_model() == "openai/model/with/slashes"
