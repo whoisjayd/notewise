@@ -1,1 +1,1 @@
-export const NOTEWISE_VERSION = "1.4.4";
+export const NOTEWISE_VERSION = "1.5.0";
