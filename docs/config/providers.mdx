@@ -30,6 +30,10 @@ The source default is `gemini/gemini-2.5-flash`.
   <Card title="Subscription login" href="/config/oauth">
     Use ChatGPT or GitHub Copilot OAuth instead of static API keys.
   </Card>
+  <Card title="Custom endpoint" href="/config/configuration#custom-openai-compatible-endpoints">
+    Save one or more OpenAI-compatible endpoints with `notewise setup` or
+    `notewise inference`.
+  </Card>
 </CardGroup>
 
 ## Credential map
@@ -62,3 +66,16 @@ The source default is `gemini/gemini-2.5-flash`.
 ## Model inference
 
 When a model string has no explicit provider prefix, NoteWise can infer common key requirements from model names such as Gemini, GPT/OpenAI, Claude, Groq, Grok/xAI, Mistral, Cohere/Command, and DeepSeek.
+
+## Saved custom endpoints
+
+`notewise process --model <name>/<model-id>` automatically resolves a saved
+endpoint named `<name>`, uses that profile's base URL and API key, and sends
+LiteLLM `openai/<model-id>`. This lookup is exact after endpoint-name
+normalization, so profiles remain isolated. Use explicit `--base-url` or
+`--api-key` only to override a single run; neither flag changes the saved
+profile.
+
+Use `notewise inference list`, `add`, `update`, and `delete` to manage the
+saved profiles. See [Configuration](/config/configuration#custom-openai-compatible-endpoints)
+for the registry format and setup behavior.
