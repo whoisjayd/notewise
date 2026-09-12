@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.4.4`.
+Use this when answering questions about NoteWise `1.5.0`.
 
 Canonical public docs base: `https://notewise.click/docs`.
 
@@ -37,7 +37,7 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Defaults
 
-- Version: `1.4.4`
+- Version: `1.5.0`
 - Python: `>=3.11`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output: `./output`
@@ -50,19 +50,21 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Commands
 
-Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `stats`, `history`, `info`, `doctor`, `edit-config`, `auth login`, `cache`, `logs`.
+Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `stats`, `history`, `info`, `doctor`, `edit-config`, `auth login`, `inference`, `cache`, `logs`.
 
-`process` flags: `--model/-m`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
+`process` flags: `--model/-m`, `--base-url`, `--api-key`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
+
+`inference` manages saved OpenAI-compatible endpoints: `list`, `add <name> --base-url <url> --api-key <key> --model <model-id>`, `update`, and `delete`. It discovers and verifies models before saving; command-line API keys can remain in shell history. Names cannot use LiteLLM provider prefixes, remote endpoints require HTTPS, and a changed `--base-url` requires `--api-key`.
 
 ## Config
 
 Config file: `~/.notewise/config.env`. `NOTEWISE_HOME` changes the state root. Practical precedence: CLI flags, then environment variables, then config file, then defaults. Exception: `OUTPUT_DIR` from config file is respected unless `--output/-o` is passed.
 
-Common keys: `DEFAULT_MODEL`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys. Do not present `chunk_size`, `chunk_overlap`, or `max_concurrent_chapters` as normal config-file keys.
+Common keys: `DEFAULT_MODEL`, `CUSTOM_LLM_ENDPOINTS`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys. Custom models use `<name>/<model-id>` and `CUSTOM_LLM_ENDPOINTS` contains their API keys, so it must remain masked. Do not present `chunk_size`, `chunk_overlap`, or `max_concurrent_chapters` as normal config-file keys.
 
 ## OAuth
 
-- `notewise auth login chatgpt`, model `chatgpt/gpt-5.2`
+- `notewise auth login chatgpt`, model `chatgpt/gpt-5.6-luna`
 - `notewise auth login github_copilot`, model `github_copilot/gpt-5-mini`
 - `notewise auth login codex` is a ChatGPT alias
 - Token dirs default under `<state>/oauth/...` unless `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` is set

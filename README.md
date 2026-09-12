@@ -79,6 +79,7 @@ See the full [installation guide](https://notewise.click/docs/start/install) for
 | First successful run         | [Quickstart](https://notewise.click/docs/start/quickstart)               |
 | Processing flags and formats | [Process videos](https://notewise.click/docs/use/process)                |
 | Provider/model setup         | [Providers](https://notewise.click/docs/config/providers)                |
+| Custom inference endpoints   | [Configuration](https://notewise.click/docs/config/configuration)        |
 | OAuth providers              | [OAuth](https://notewise.click/docs/config/oauth)                        |
 | Playlists and batches        | [Playlists & batches](https://notewise.click/docs/use/playlists-batches) |
 | Troubleshooting              | [Troubleshooting](https://notewise.click/docs/operate/troubleshooting)   |
@@ -90,6 +91,7 @@ See the full [installation guide](https://notewise.click/docs/start/install) for
 notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
 notewise process "https://youtube.com/playlist?list=PLAYLIST_ID"
 notewise transcript "https://youtu.be/VIDEO_ID" --format json
+notewise inference list
 notewise doctor
 notewise update
 ```

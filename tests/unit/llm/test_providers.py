@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from notewise.errors import LLMGenerationError
+from notewise.errors import ConfigurationError, LLMGenerationError
 from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
     LLMProvider,
@@ -43,6 +43,48 @@ class TestLLMProvider:
         # Config fixture sets dummy keys, so this should pass
         provider = LLMProvider(model="gemini/gemini-pro")
         assert provider.model == "gemini/gemini-pro"
+
+    @pytest.mark.parametrize("api_key", ["", "   "])
+    def test_init_rejects_blank_explicit_api_key(self, api_key: str) -> None:
+        """Explicit keys cannot silently disable configured credential fallback."""
+        with pytest.raises(ConfigurationError, match="cannot be blank"):
+            LLMProvider("openai/gpt-4o", api_key=api_key)
+
+    def test_init_rejects_remote_http_endpoint_with_explicit_key(self) -> None:
+        """Credentials are never forwarded to an unencrypted remote endpoint."""
+        with pytest.raises(ConfigurationError, match="HTTPS"):
+            LLMProvider(
+                "custom/model",
+                api_base="http://models.example.test/v1",
+                api_key="test-key",
+            )
+
+    def test_init_allows_loopback_http_endpoint_with_explicit_key(self) -> None:
+        """Explicit local endpoints remain usable for self-hosted development."""
+        provider = LLMProvider(
+            "custom/model",
+            api_base="http://localhost:11434/v1",
+            api_key="test-key",
+        )
+
+        assert provider.api_base == "http://localhost:11434/v1"
+
+    async def test_generate_rejects_remote_http_endpoint_with_resolved_key(
+        self,
+        mocker,
+    ) -> None:
+        """A credential resolved after construction is not sent over remote HTTP."""
+        provider = LLMProvider(
+            "custom/model",
+            api_base="http://models.example.test/v1",
+        )
+        mocker.patch.object(provider, "_resolve_credential", return_value="test-key")
+        completion = mocker.patch("notewise.llm.provider.acompletion")
+
+        with pytest.raises(ConfigurationError, match="HTTPS"):
+            await provider.generate("system", "user")
+
+        completion.assert_not_called()
 
     async def test_generate_success(self):
         """Test successful generation."""
@@ -567,7 +609,7 @@ class TestLLMProvider:
             ),
             patch("notewise.llm.provider.logger.debug") as mock_debug,
         ):
-            LLMProvider("custom/local-model")
+            LLMProvider("unknown-model")
 
         mock_debug.assert_called_once()
 
@@ -764,3 +806,56 @@ class TestLLMProvider:
 
         _args, kwargs = mock_acompletion.call_args
         assert "api_key" not in kwargs
+        assert "api_base" not in kwargs
+
+    @pytest.mark.parametrize(
+        ("model", "api_base", "api_key", "request_model"),
+        [
+            (
+                "first/model/with/slashes",
+                "https://first.example/v1",
+                "first-key",
+                "openai/model/with/slashes",
+            ),
+            (
+                "second/other-model",
+                "https://second.example/v1",
+                "second-key",
+                "openai/other-model",
+            ),
+        ],
+    )
+    async def test_generate_forwards_profile_scoped_endpoint_credentials(
+        self,
+        mocker,
+        model,
+        api_base,
+        api_key,
+        request_model,
+    ):
+        """Each selected profile must pass its own URL/key to LiteLLM."""
+        mock_acompletion = mocker.patch("notewise.llm.provider.acompletion")
+        mocker.patch("notewise.llm.provider.completion_cost", return_value=0.0)
+        mock_response = MagicMock()
+        mock_response.choices[0].message.content = "Generated content"
+        mock_acompletion.return_value = mock_response
+
+        provider = LLMProvider(model, api_base=api_base, api_key=api_key)
+
+        assert provider.model == model
+
+        await provider.generate("sys", "user")
+
+        assert mock_acompletion.call_args.kwargs["api_base"] == api_base
+        assert mock_acompletion.call_args.kwargs["api_key"] == api_key
+        assert mock_acompletion.call_args.kwargs["model"] == request_model
+
+    def test_endpoint_request_model_preserves_openai_prefix(self):
+        """Already OpenAI-prefixed endpoint models must not be rewritten."""
+        provider = LLMProvider(
+            "openai/model/with/slashes",
+            api_base="https://gateway.example/v1",
+            api_key="process-key",
+        )
+
+        assert provider._litellm_request_model() == "openai/model/with/slashes"

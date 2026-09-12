@@ -48,6 +48,43 @@ class TestConfig:
         assert cfg.openai_api_key == "file_key"
         assert cfg.max_concurrent_videos == 10
 
+    def test_custom_endpoint_registry_loads_from_user_config_without_key_leak(
+        self, tmp_path, monkeypatch
+    ):
+        """Saved endpoint credentials remain scoped to AppSettings."""
+        endpoints = (
+            '[{"name":"local-endpoint","base_url":"https://llm.example.test/v1",'
+            '"api_key":"local-test-key"},{"name":"backup","base_url":'
+            '"https://backup.example.test/v1","api_key":"backup-test-key"}]'
+        )
+        state_dir = tmp_path / ".notewise"
+        state_dir.mkdir()
+        (state_dir / "config.env").write_text(
+            "DEFAULT_MODEL=local-endpoint/Local-Model\n"
+            f"CUSTOM_LLM_ENDPOINTS={endpoints}\n",
+            encoding="utf-8",
+        )
+        monkeypatch.setenv("NOTEWISE_HOME", str(state_dir))
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        monkeypatch.delenv("CUSTOM_LLM_ENDPOINTS", raising=False)
+
+        cfg = Config()
+
+        assert cfg.custom_llm_endpoints == endpoints
+        assert [
+            (profile.name, profile.base_url, profile.api_key)
+            for profile in cfg.get_custom_endpoint_profiles()
+        ] == [
+            ("local-endpoint", "https://llm.example.test/v1", "local-test-key"),
+            ("backup", "https://backup.example.test/v1", "backup-test-key"),
+        ]
+        assert cfg.get_custom_endpoint_for_model("backup/any-model") == (
+            "https://backup.example.test/v1",
+            "backup-test-key",
+        )
+        assert "CUSTOM_LLM_ENDPOINTS" not in os.environ
+        assert "OPENAI_API_KEY" not in os.environ
+
     def test_output_dir_from_user_config_overrides_ambient_env(
         self, tmp_path, monkeypatch
     ):
@@ -477,6 +514,55 @@ class TestGetApiKeyNameForModel:
 
         assert cfg.get_api_key_for_model("openrouter/openai/gpt-4o-mini") == "or-key"
         assert os.environ["OPENROUTER_API_KEY"] == "or-key"
+
+    def test_custom_endpoint_resolution_matches_every_saved_profile(self):
+        """Each normalized profile prefix resolves independent of DEFAULT_MODEL."""
+        cfg = Config(
+            default_model="local-endpoint/Local-Model",
+            custom_llm_endpoints=(
+                '[{"name":"Local-Endpoint","base_url":"https://llm.example.test",'
+                '"api_key":"local-test-key"},{"name":"backup","base_url":'
+                '"https://backup.example.test/v1","api_key":"backup-test-key"}]'
+            ),
+        )
+
+        assert cfg.get_custom_endpoint_for_model(" LOCAL-ENDPOINT/local-model ") == (
+            "https://llm.example.test/v1",
+            "local-test-key",
+        )
+        assert cfg.get_custom_endpoint_for_model("backup/other-model") == (
+            "https://backup.example.test/v1",
+            "backup-test-key",
+        )
+        assert cfg.get_custom_endpoint_for_model("unconfigured/model") is None
+
+    def test_custom_endpoint_registry_preflight_is_model_scoped(self, monkeypatch):
+        """Only unconfigured custom prefixes report the endpoint registry."""
+        monkeypatch.delenv("OPENAI_API_KEY", raising=False)
+        configured = Config(
+            custom_llm_endpoints=(
+                '[{"name":"local-endpoint","base_url":"https://llm.example.test/v1",'
+                '"api_key":"custom-test-key"}]'
+            )
+        )
+        missing_profile = Config(default_model="unconfigured-endpoint/local-model")
+
+        assert (
+            configured.get_missing_config_names_for_model("local-endpoint/local-model")
+            == ()
+        )
+        assert missing_profile.get_missing_config_names_for_model(
+            "unconfigured-endpoint/local-model"
+        ) == ("CUSTOM_LLM_ENDPOINTS",)
+        assert missing_profile.get_missing_config_names_for_model(
+            "openai/other-model"
+        ) == ("OPENAI_API_KEY",)
+        assert missing_profile.get_missing_config_names_for_model("ollama/llama3") == ()
+
+    def test_custom_endpoint_registry_is_validated_at_construction(self):
+        """Invalid persisted endpoint registries fail settings construction."""
+        with pytest.raises(ValidationError, match="valid JSON array"):
+            Config(custom_llm_endpoints="not-json")
 
     def test_alternate_api_key_names_are_accepted(self, monkeypatch):
         """Providers with alternate env var names should accept either key."""

@@ -1,6 +1,6 @@
 # NoteWise docs for LLMs
 
-NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study notes through LiteLLM providers. Current documented version: `1.4.4`.
+NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study notes through LiteLLM providers. Current documented version: `1.5.0`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
@@ -47,7 +47,8 @@ Config truth:
 - Config file: `~/.notewise/config.env`
 - `NOTEWISE_HOME` changes the state root.
 - Practical precedence: CLI flags, then environment variables, then config file, then defaults.
-- Common keys: `DEFAULT_MODEL`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys.
+- Common keys: `DEFAULT_MODEL`, `CUSTOM_LLM_ENDPOINTS`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys.
+- Saved custom endpoints use `<name>/<model-id>` and are managed with `notewise inference list|add|update|delete`; names cannot use LiteLLM provider prefixes, remote endpoints require HTTPS, and a changed `--base-url` requires `--api-key`. The compact `CUSTOM_LLM_ENDPOINTS` registry contains API keys and must stay masked.
 - `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal config-file keys.
 
 Provider truth:
@@ -72,7 +73,7 @@ Provider truth:
 
 OAuth truth:
 
-- ChatGPT login: `notewise auth login chatgpt`, safe model `chatgpt/gpt-5.2`
+- ChatGPT login: `notewise auth login chatgpt`, safe model `chatgpt/gpt-5.6-luna`
 - GitHub Copilot login: `notewise auth login github_copilot`, safe model `github_copilot/gpt-5-mini`
 - `codex` is a CLI alias for ChatGPT login.
 - Token dirs default under `<state>/oauth/...` unless `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` is set.

@@ -2,7 +2,7 @@
 
 NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-Current documented version: `1.4.4`.
+Current documented version: `1.5.0`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
@@ -322,6 +322,7 @@ Common config keys:
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model string. |
+| `CUSTOM_LLM_ENDPOINTS` | unset | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR` | `./output` | Default output directory. |
 | `MAX_CONCURRENT_VIDEOS` | `5` | Batch/playlist video workers. |
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10` | YouTube request limit. |
@@ -332,6 +333,8 @@ Common config keys:
 Provider API keys and provider auth keys are also accepted in `config.env` when they are listed in source constants.
 
 `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.env` keys.
+
+Saved custom endpoints use `<name>/<model-id>`. `notewise process --model <name>/<model-id>` automatically selects that profile's base URL and API key, then sends LiteLLM `openai/<model-id>`. Custom names cannot use LiteLLM provider prefixes; remote endpoints require HTTPS; and changing `--base-url` requires a new `--api-key` instead of reusing a saved credential. Manage profiles with `notewise inference list|add|update|delete`; never expose the secret-bearing `CUSTOM_LLM_ENDPOINTS` value.
 
 Config commands:
 
@@ -407,7 +410,7 @@ Safe test models:
 
 | Provider | Safe model used by login checks |
 | --- | --- |
-| ChatGPT | `chatgpt/gpt-5.2` |
+| ChatGPT | `chatgpt/gpt-5.6-luna` |
 | GitHub Copilot | `github_copilot/gpt-5-mini` |
 
 Default token directories:
@@ -422,7 +425,7 @@ Persist the state directory in Docker if you want OAuth login to survive contain
 Use after login:
 
 ```bash
-notewise process "https://youtu.be/VIDEO_ID" --model chatgpt/gpt-5.2
+notewise process "https://youtu.be/VIDEO_ID" --model chatgpt/gpt-5.6-luna
 notewise process "https://youtu.be/VIDEO_ID" --model github_copilot/gpt-5-mini
 ```
 
@@ -440,6 +443,7 @@ Main commands:
 | `notewise config-path` | Print the active config path. |
 | `notewise edit-config` | Open the config file in an editor. |
 | `notewise auth login PROVIDER` | Login to OAuth providers. |
+| `notewise inference` | List and manage saved inference endpoints. |
 | `notewise info` | Show runtime config and state paths. |
 | `notewise info URL` | Inspect YouTube metadata and cache status without generation. |
 | `notewise transcript URL --format txt\|json` | Download one video's standalone transcript (txt/json) without AI generation; videos only, no playlists or batches. |
@@ -457,7 +461,16 @@ Process command example:
 notewise process "https://youtu.be/VIDEO_ID" --format md,docx --quiz
 ```
 
-Important flags: `--model`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, and `--cookie-file`.
+Important flags: `--model`, `--base-url`, `--api-key`, `--output`, `--format`, `--language`, `--target-language`, `--temperature`, `--max-tokens`, `--throttle`, `--force`, `--no-ui`, `--verbose`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, and `--cookie-file`.
+
+Inference endpoint commands:
+
+```bash
+notewise inference list
+notewise inference add <name> --base-url <url> --api-key <key> --model <model-id>
+notewise inference update <name> [--base-url <url>] [--api-key <key>] [--model <model-id>]
+notewise inference delete <name>
+```
 
 Setup and auth:
 

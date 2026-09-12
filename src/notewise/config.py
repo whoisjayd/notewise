@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import structlog
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -31,6 +31,7 @@ from notewise._constants import (
     CONFIG_API_KEY_ENV_KEYS,
     CONFIG_ENV_SYNC_KEYS,
     CONFIG_FILENAME,
+    CUSTOM_LLM_ENDPOINTS_ENV_VAR,
     DEFAULT_CHUNK_OVERLAP,
     DEFAULT_CHUNK_SIZE,
     DEFAULT_LANGUAGES,
@@ -59,6 +60,12 @@ from notewise._constants import (
     UNSUPPORTED_MODEL_LIST_LIMIT,
     UNSUPPORTED_MODEL_MESSAGE,
 )
+from notewise.errors import CustomEndpointError
+from notewise.llm.custom_endpoint import (
+    CustomEndpointProfile,
+    normalize_custom_model_prefix,
+    parse_custom_endpoint_profiles,
+)
 from notewise.model_catalog import (
     bundled_model_snapshot_path,
     parse_model_snapshot,
@@ -86,6 +93,7 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         "TEMPERATURE",
         "MAX_TOKENS",
         "YOUTUBE_COOKIE_FILE",
+        CUSTOM_LLM_ENDPOINTS_ENV_VAR,
     }
     | CONFIG_API_KEY_ENV_KEYS
     | PROVIDER_AUTH_ENV_KEYS
@@ -298,6 +306,9 @@ class AppSettings(BaseSettings):
     cohere_api_key: str | None = Field(None, alias="COHERE_API_KEY")
     deepseek_api_key: str | None = Field(None, alias="DEEPSEEK_API_KEY")
 
+    # Custom OpenAI-compatible endpoint registry. This remains scoped to
+    # settings so its credentials are never copied into ambient environment.
+    custom_llm_endpoints: str | None = Field(None, alias=CUSTOM_LLM_ENDPOINTS_ENV_VAR)
     # Model catalog preflight
     allow_unlisted_models: bool = Field(False, alias=ALLOW_UNLISTED_MODELS_CONFIG_KEY)
 
@@ -342,6 +353,16 @@ class AppSettings(BaseSettings):
         alias="GITHUB_COPILOT_TOKEN_DIR",
     )
 
+    @field_validator("custom_llm_endpoints")
+    @classmethod
+    def _validate_custom_llm_endpoints(cls, value: str | None) -> str | None:
+        """Validate the persisted custom endpoint registry at construction."""
+        try:
+            parse_custom_endpoint_profiles(value)
+        except CustomEndpointError as error:
+            raise ValueError(str(error)) from error
+        return value
+
     @classmethod
     def settings_customise_sources(
         cls,
@@ -360,7 +381,7 @@ class AppSettings(BaseSettings):
         )
 
     def model_post_init(self, __context: object) -> None:
-        """Sync API keys back to os.environ for libraries that read env directly."""
+        """Sync provider API keys back to os.environ for env-driven libraries."""
         default_token_dirs = get_oauth_token_storage_paths()
         if _is_managed_oauth_token_dir_env("CHATGPT_TOKEN_DIR"):
             object.__setattr__(self, "chatgpt_token_dir", default_token_dirs["chatgpt"])
@@ -395,6 +416,33 @@ class AppSettings(BaseSettings):
 
     def get_state_dir(self) -> Path:
         return get_state_dir()
+
+    def get_custom_endpoint_profiles(self) -> tuple[CustomEndpointProfile, ...]:
+        """Return the validated custom endpoint profiles in persisted order."""
+        return parse_custom_endpoint_profiles(self.custom_llm_endpoints)
+
+    def _get_custom_endpoint_profile_for_model(
+        self, model: str
+    ) -> CustomEndpointProfile | None:
+        """Return the saved profile selected by a custom model prefix."""
+        prefix, separator, model_id = model.strip().partition("/")
+        if not prefix or not separator or not model_id:
+            return None
+        try:
+            normalized_prefix = normalize_custom_model_prefix(prefix)
+        except CustomEndpointError:
+            return None
+        for profile in self.get_custom_endpoint_profiles():
+            if profile.name == normalized_prefix:
+                return profile
+        return None
+
+    def get_custom_endpoint_for_model(self, model: str) -> tuple[str, str] | None:
+        """Return explicit credentials for the saved profile selected by ``model``."""
+        profile = self._get_custom_endpoint_profile_for_model(model)
+        if profile is None:
+            return None
+        return profile.base_url, profile.api_key
 
     def get_api_key_name_for_model(self, model: str) -> str | None:
         """Return the env var name for the API key required by a given model."""
@@ -524,8 +572,30 @@ class AppSettings(BaseSettings):
             return ()
         return PROVIDER_REQUIRED_ENV_VARS.get(provider, ())
 
+    def _has_unconfigured_custom_prefix(self, model: str) -> bool:
+        """Return whether a model uses an unrecognized custom endpoint prefix."""
+        prefix, separator, model_id = model.strip().partition("/")
+        if not prefix or not separator or not model_id:
+            return False
+        try:
+            normalized_prefix = normalize_custom_model_prefix(prefix)
+        except CustomEndpointError:
+            return False
+        return (
+            normalized_prefix not in PROVIDER_API_KEY_ENV_VARS
+            and normalized_prefix not in PROVIDER_REQUIRED_ENV_VARS
+            and normalized_prefix not in OAUTH_DEVICE_PROVIDER_PREFIXES
+            and normalized_prefix not in AMBIENT_CREDENTIAL_PROVIDER_PREFIXES
+        )
+
     def get_missing_config_names_for_model(self, model: str) -> tuple[str, ...]:
         """Return missing auth/config env names for a model provider."""
+        profile = self._get_custom_endpoint_profile_for_model(model)
+        if profile is not None:
+            return ()
+        if self._has_unconfigured_custom_prefix(model):
+            return (CUSTOM_LLM_ENDPOINTS_ENV_VAR,)
+
         missing: list[str] = []
         api_key_names = self.get_api_key_names_for_model(model)
         if api_key_names and not any(os.environ.get(name) for name in api_key_names):

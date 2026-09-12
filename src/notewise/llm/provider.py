@@ -1,5 +1,6 @@
 """LLM provider configuration using LiteLLM."""
 
+import ipaddress
 import logging
 import os
 import warnings
@@ -8,6 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import litellm
 import structlog
@@ -29,7 +31,12 @@ from notewise._constants import (
 )
 from notewise.config import AppSettings
 from notewise.config import settings as config
-from notewise.errors import LLMGenerationError as _LLMGenerationError
+from notewise.errors import (
+    ConfigurationError,
+)
+from notewise.errors import (
+    LLMGenerationError as _LLMGenerationError,
+)
 from notewise.logging import make_log_safe_text, redact_sensitive_text
 from notewise.utils import coerce_non_negative_int
 
@@ -108,6 +115,27 @@ LLMGenerationError = _LLMGenerationError
 COST_UNMAPPED_LOGGED_MODELS: set[str] = set()
 
 
+def _is_remote_http_endpoint(api_base: str | None) -> bool:
+    """Return whether an endpoint is unencrypted and not constrained to loopback."""
+    if not isinstance(api_base, str):
+        return False
+    try:
+        parsed = urlsplit(api_base)
+    except ValueError:
+        return True
+    if parsed.scheme.lower() != "http":
+        return False
+    hostname = parsed.hostname
+    if hostname is None:
+        return True
+    if hostname.lower() == "localhost" or hostname.lower().endswith(".localhost"):
+        return False
+    try:
+        return not ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return True
+
+
 class LLMProvider:
     """
     LLM provider interface using LiteLLM.
@@ -115,14 +143,30 @@ class LLMProvider:
     Handles API key verification and text generation with retries.
     """
 
-    def __init__(self, model: str = DEFAULT_MODEL):
+    def __init__(
+        self,
+        model: str = DEFAULT_MODEL,
+        *,
+        api_base: str | None = None,
+        api_key: str | None = None,
+    ):
         """
         Initialize LLM provider.
 
         Args:
             model: LiteLLM-compatible model string (e.g., 'gemini/gemini-2.5-flash').
+            api_base: Optional endpoint URL for this provider instance.
+            api_key: Optional API key for this provider instance.
         """
+        if api_key is not None and not api_key.strip():
+            raise ConfigurationError("Explicit API key cannot be blank.")
+        if api_key is not None and _is_remote_http_endpoint(api_base):
+            raise ConfigurationError(
+                "HTTPS is required before forwarding an explicit API key."
+            )
         self.model = model
+        self.api_base = api_base
+        self.api_key = api_key
         self._validate_config()
 
     @staticmethod
@@ -137,6 +181,8 @@ class LLMProvider:
         Verify that the necessary API key for the selected model is set.
         Logs a warning if missing.
         """
+        if self.api_key is not None:
+            return
         # We rely on Config to check environment variables,
         # but we can double check here for the specific model
         missing_config = config.get_missing_config_names_for_model(self.model)
@@ -165,6 +211,8 @@ class LLMProvider:
 
     def _resolve_credential(self) -> str | None:
         """Resolve the model credential: explicit config value, then env lookup."""
+        if self.api_key is not None:
+            return self.api_key
         for env_name in config.get_api_key_names_for_model(self.model):
             configured = self._configured_settings_value(env_name)
             if configured:
@@ -173,6 +221,13 @@ class LLMProvider:
             if value:
                 return value
         return None
+
+    def _litellm_request_model(self) -> str:
+        """Return the model name LiteLLM needs for an endpoint-scoped request."""
+        if self.api_base is None or self.model.lower().startswith("openai/"):
+            return self.model
+        _custom_name, separator, model_id = self.model.partition("/")
+        return f"openai/{model_id if separator else self.model}"
 
     async def generate(
         self,
@@ -196,6 +251,10 @@ class LLMProvider:
         Raises:
             LLMGenerationError: If generation fails after retries.
         """
+        api_key = self._resolve_credential()
+        if api_key is not None and _is_remote_http_endpoint(self.api_base):
+            raise ConfigurationError("HTTPS is required before forwarding an API key.")
+
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -204,7 +263,7 @@ class LLMProvider:
 
             provider_temperature = self._normalize_temperature(temperature)
             kwargs: dict[str, Any] = {
-                "model": self.model,
+                "model": self._litellm_request_model(),
                 "messages": messages,
                 "temperature": provider_temperature,
                 # LiteLLM handles exponential backoff for RateLimitError
@@ -213,7 +272,8 @@ class LLMProvider:
 
             if max_tokens is not None:
                 kwargs["max_tokens"] = max_tokens
-            api_key = self._resolve_credential()
+            if self.api_base is not None:
+                kwargs["api_base"] = self.api_base
             if api_key is not None:
                 kwargs[LLM_API_KEY_KWARG] = api_key
 
@@ -325,7 +385,7 @@ class LLMProvider:
     ) -> Any:
         """Generate text with LiteLLM's Responses API."""
         kwargs: dict[str, Any] = {
-            "model": self.model,
+            "model": self._litellm_request_model(),
             "instructions": system_prompt,
             "input": [{"role": "user", "content": user_prompt}],
             "temperature": temperature,
@@ -333,6 +393,11 @@ class LLMProvider:
         }
         if max_tokens is not None:
             kwargs["max_output_tokens"] = max_tokens
+        if self.api_base is not None:
+            kwargs["api_base"] = self.api_base
+        api_key = self._resolve_credential()
+        if api_key is not None:
+            kwargs[LLM_API_KEY_KWARG] = api_key
         if self._uses_streamed_responses_api():
             kwargs["stream"] = True
             stream = await aresponses(**kwargs)
@@ -572,14 +637,21 @@ class LLMProvider:
         return self._normalize_content(getattr(response, "output", None))
 
 
-def get_provider(model: str = DEFAULT_MODEL) -> LLMProvider:
+def get_provider(
+    model: str = DEFAULT_MODEL,
+    *,
+    api_base: str | None = None,
+    api_key: str | None = None,
+) -> LLMProvider:
     """
     Factory function to get an LLM provider instance.
 
     Args:
         model: LiteLLM-compatible model string.
+        api_base: Optional endpoint URL for this provider instance.
+        api_key: Optional API key for this provider instance.
 
     Returns:
         Configured LLMProvider instance.
     """
-    return LLMProvider(model=model)
+    return LLMProvider(model=model, api_base=api_base, api_key=api_key)

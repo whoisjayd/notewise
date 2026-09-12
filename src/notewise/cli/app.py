@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from pathlib import Path
-from typing import TYPE_CHECKING, Annotated, Any
+from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 from urllib.parse import urlparse
 
 import typer
@@ -89,6 +89,12 @@ logs_app = typer.Typer(
 auth_app = typer.Typer(
     name="auth",
     help="Authenticate OAuth/device-flow LLM providers.",
+    rich_markup_mode="rich",
+)
+
+inference_app = typer.Typer(
+    name="inference",
+    help="Manage saved OpenAI-compatible inference endpoints.",
     rich_markup_mode="rich",
 )
 
@@ -446,6 +452,22 @@ def process(
             rich_help_panel="Advanced",
         ),
     ] = DEFAULT_THROTTLE_SECONDS,
+    base_url: Annotated[
+        str | None,
+        typer.Option(
+            "--base-url",
+            help="OpenAI-compatible endpoint URL for this run.",
+            rich_help_panel="Advanced",
+        ),
+    ] = None,
+    api_key: Annotated[
+        str | None,
+        typer.Option(
+            "--api-key",
+            help="OpenAI-compatible endpoint API key for this run.",
+            rich_help_panel="Advanced",
+        ),
+    ] = None,
     force: Annotated[
         bool,
         typer.Option(
@@ -558,6 +580,56 @@ def process(
         configure_logging(verbose=verbose)
         suppress_litellm_noise()
         settings = _get_config()
+        selected_model = model or settings.default_model
+        get_custom_endpoint = getattr(settings, "get_custom_endpoint_for_model", None)
+        configured_endpoint_value = (
+            get_custom_endpoint(selected_model)
+            if callable(get_custom_endpoint)
+            else None
+        )
+        configured_endpoint = (
+            configured_endpoint_value
+            if (
+                isinstance(configured_endpoint_value, tuple)
+                and len(configured_endpoint_value) == 2
+                and all(isinstance(value, str) for value in configured_endpoint_value)
+            )
+            else None
+        )
+        if base_url is not None:
+            from notewise.errors import CustomEndpointError
+            from notewise.llm.custom_endpoint import normalize_openai_base_url
+
+            try:
+                selected_api_base = normalize_openai_base_url(base_url)
+            except CustomEndpointError as error:
+                raise typer.BadParameter(str(error), param_hint="--base-url") from error
+        elif configured_endpoint is not None:
+            selected_api_base = configured_endpoint[0]
+        else:
+            selected_api_base = None
+
+        selected_api_key = (
+            api_key
+            if api_key is not None
+            else configured_endpoint[1]
+            if (
+                configured_endpoint is not None
+                and selected_api_base == configured_endpoint[0]
+            )
+            else None
+        )
+        if (
+            base_url is not None
+            and configured_endpoint is not None
+            and selected_api_key is None
+        ):
+            raise typer.BadParameter(
+                "An explicit --api-key is required when --base-url changes "
+                "a saved endpoint.",
+                param_hint="--api-key",
+            )
+
         try:
             selected_output_formats = normalize_output_formats(output_format)
         except ValidationError as error:
@@ -572,7 +644,7 @@ def process(
             get_playlist_info=get_playlist_info,
             dashboard_cls=PipelineDashboard,
             live_cls=Live,
-            selected_model=model or settings.default_model,
+            selected_model=selected_model,
             selected_output=output or settings.default_output_dir,
             selected_output_formats=selected_output_formats,
             selected_languages=language or settings.default_languages,
@@ -595,6 +667,8 @@ def process(
                 if cookie_file is not None
                 else settings.youtube_cookie_file
             ),
+            selected_api_base=selected_api_base,
+            selected_api_key=selected_api_key,
         )
 
         had_failures = asyncio.run(
@@ -612,6 +686,9 @@ def process(
             )
         else:
             console.print("\n[red]Processing stopped before it finished.[/red]\n")
+        raise typer.Exit(code=1) from None
+    except typer.BadParameter as error:
+        console.print(f"[red]{error}[/red]")
         raise typer.Exit(code=1) from None
     except ConfigurationError as error:
         _print_configuration_error(error)
@@ -1172,6 +1249,279 @@ def auth_login(
         raise typer.Exit(code=1)
 
 
+def _exit_inference_error(message: str) -> NoReturn:
+    """Print an inference command error without exposing endpoint credentials."""
+    _get_console().print(f"[red]{message}[/red]")
+    raise typer.Exit(code=1)
+
+
+def _replace_inference_profile(
+    profiles: tuple[Any, ...], replacement: Any
+) -> tuple[Any, ...]:
+    """Replace an endpoint with the same normalized name or append it."""
+    if any(profile.name == replacement.name for profile in profiles):
+        return tuple(
+            replacement if profile.name == replacement.name else profile
+            for profile in profiles
+        )
+    return (*profiles, replacement)
+
+
+@inference_app.command("list")
+def inference_list() -> None:
+    """List saved OpenAI-compatible endpoints without their credentials."""
+    from notewise.errors import ConfigurationError, CustomEndpointError
+    from notewise.llm.custom_endpoint import parse_custom_endpoint_profiles
+    from notewise.ui.setup_wizard import load_config
+
+    try:
+        profiles = parse_custom_endpoint_profiles(
+            load_config().get("CUSTOM_LLM_ENDPOINTS")
+        )
+    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _exit_inference_error(str(error))
+
+    if not profiles:
+        _get_console().print("No saved inference endpoints.")
+        return
+
+    from rich.table import Table
+
+    table = Table(title="Saved inference endpoints")
+    table.add_column("Name")
+    table.add_column("Base URL")
+    for profile in profiles:
+        table.add_row(profile.name, profile.base_url)
+    _get_console().print(table)
+
+
+@inference_app.command("add")
+def inference_add(
+    name: Annotated[str, typer.Argument(help="Name for this saved endpoint.")],
+    base_url: Annotated[
+        str, typer.Option("--base-url", help="OpenAI-compatible endpoint URL.")
+    ],
+    api_key: Annotated[
+        str, typer.Option("--api-key", help="API key for this endpoint.")
+    ],
+    model: Annotated[
+        str, typer.Option("--model", help="Model ID returned by this endpoint.")
+    ],
+) -> None:
+    """Discover, verify, and save an OpenAI-compatible endpoint."""
+    from notewise.errors import ConfigurationError, CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        CustomEndpointProfile,
+        discover_openai_compatible_models,
+        normalize_custom_model_prefix,
+        normalize_openai_base_url,
+        parse_custom_endpoint_profiles,
+        serialize_custom_endpoint_profiles,
+        verify_openai_compatible_model,
+    )
+    from notewise.ui.setup_wizard import load_config, save_config
+
+    if not api_key.strip():
+        raise typer.BadParameter(
+            "Custom endpoint API key is required.", param_hint="--api-key"
+        )
+
+    try:
+        profile = CustomEndpointProfile(
+            name=normalize_custom_model_prefix(name),
+            base_url=normalize_openai_base_url(base_url),
+            api_key=api_key,
+        )
+        current_config = load_config()
+        profiles = parse_custom_endpoint_profiles(
+            current_config.get("CUSTOM_LLM_ENDPOINTS")
+        )
+        discovered_models = discover_openai_compatible_models(
+            profile.base_url, profile.api_key
+        )
+        if model not in discovered_models:
+            _exit_inference_error(
+                f"Model {model!r} was not returned by endpoint {profile.name!r}."
+            )
+        asyncio.run(
+            verify_openai_compatible_model(profile.base_url, profile.api_key, model)
+        )
+        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
+            _replace_inference_profile(profiles, profile)
+        )
+        save_config(current_config, console=_get_console())
+    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _exit_inference_error(str(error))
+
+    _get_console().print(
+        f"[green]Saved inference endpoint {profile.name!r} "
+        f"for model {profile.name}/{model}.[/green]"
+    )
+
+
+@inference_app.command("update")
+def inference_update(
+    name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
+    base_url: Annotated[
+        str | None,
+        typer.Option("--base-url", help="Replacement OpenAI-compatible endpoint URL."),
+    ] = None,
+    api_key: Annotated[
+        str | None,
+        typer.Option("--api-key", help="Replacement API key for this endpoint."),
+    ] = None,
+    model: Annotated[
+        str | None,
+        typer.Option("--model", help="Model ID returned by the endpoint."),
+    ] = None,
+) -> None:
+    """Discover, verify, and replace one saved inference endpoint."""
+    if base_url is None and api_key is None:
+        raise typer.BadParameter(
+            "Provide --base-url, --api-key, or both when updating an endpoint."
+        )
+    if api_key is not None and not api_key.strip():
+        raise typer.BadParameter(
+            "Custom endpoint API key is required.", param_hint="--api-key"
+        )
+
+    from notewise.errors import ConfigurationError, CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        CustomEndpointProfile,
+        discover_openai_compatible_models,
+        normalize_custom_model_prefix,
+        normalize_openai_base_url,
+        parse_custom_endpoint_profiles,
+        serialize_custom_endpoint_profiles,
+        verify_openai_compatible_model,
+    )
+    from notewise.ui.setup_wizard import load_config, save_config
+
+    try:
+        normalized_name = normalize_custom_model_prefix(name)
+        current_config = load_config()
+        profiles = parse_custom_endpoint_profiles(
+            current_config.get("CUSTOM_LLM_ENDPOINTS")
+        )
+        existing_profile = next(
+            (profile for profile in profiles if profile.name == normalized_name),
+            None,
+        )
+        if existing_profile is None:
+            _exit_inference_error(
+                f"No saved inference endpoint is named {normalized_name!r}."
+            )
+
+        selected_model = model
+        if selected_model is None:
+            default_prefix, separator, default_model_id = current_config.get(
+                "DEFAULT_MODEL", ""
+            ).partition("/")
+            default_uses_endpoint = False
+            if separator and default_model_id:
+                default_uses_endpoint = (
+                    normalize_custom_model_prefix(default_prefix) == normalized_name
+                )
+            if default_uses_endpoint:
+                selected_model = default_model_id
+            else:
+                _exit_inference_error(
+                    "--model is required unless DEFAULT_MODEL uses this endpoint."
+                )
+
+        selected_base_url = (
+            normalize_openai_base_url(base_url)
+            if base_url is not None
+            else existing_profile.base_url
+        )
+        if (
+            base_url is not None
+            and api_key is None
+            and selected_base_url != existing_profile.base_url
+        ):
+            _exit_inference_error(
+                "--api-key is required when --base-url changes a saved endpoint."
+            )
+        profile = CustomEndpointProfile(
+            name=normalized_name,
+            base_url=selected_base_url,
+            api_key=api_key if api_key is not None else existing_profile.api_key,
+        )
+        discovered_models = discover_openai_compatible_models(
+            profile.base_url, profile.api_key
+        )
+        if selected_model not in discovered_models:
+            _exit_inference_error(
+                f"Model {selected_model!r} was not returned by endpoint "
+                f"{profile.name!r}."
+            )
+        asyncio.run(
+            verify_openai_compatible_model(
+                profile.base_url, profile.api_key, selected_model
+            )
+        )
+        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
+            _replace_inference_profile(profiles, profile)
+        )
+        save_config(current_config, console=_get_console())
+    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _exit_inference_error(str(error))
+
+    _get_console().print(
+        f"[green]Updated inference endpoint {profile.name!r} "
+        f"for model {profile.name}/{selected_model}.[/green]"
+    )
+
+
+@inference_app.command("delete")
+def inference_delete(
+    name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
+) -> None:
+    """Remove a saved inference endpoint that is not the configured default."""
+    from notewise.errors import ConfigurationError, CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        normalize_custom_model_prefix,
+        parse_custom_endpoint_profiles,
+        serialize_custom_endpoint_profiles,
+    )
+    from notewise.ui.setup_wizard import load_config, save_config
+
+    try:
+        normalized_name = normalize_custom_model_prefix(name)
+        current_config = load_config()
+        profiles = parse_custom_endpoint_profiles(
+            current_config.get("CUSTOM_LLM_ENDPOINTS")
+        )
+        if not any(profile.name == normalized_name for profile in profiles):
+            _exit_inference_error(
+                f"No saved inference endpoint is named {normalized_name!r}."
+            )
+
+        default_prefix, separator, _default_model_id = current_config.get(
+            "DEFAULT_MODEL", ""
+        ).partition("/")
+        default_uses_endpoint = False
+        if separator:
+            default_uses_endpoint = (
+                normalize_custom_model_prefix(default_prefix) == normalized_name
+            )
+        if default_uses_endpoint:
+            _exit_inference_error(
+                f"Cannot delete {normalized_name!r} while it is used by DEFAULT_MODEL."
+            )
+
+        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
+            profile for profile in profiles if profile.name != normalized_name
+        )
+        save_config(current_config, console=_get_console())
+    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _exit_inference_error(str(error))
+
+    _get_console().print(
+        f"[green]Deleted inference endpoint {normalized_name!r}.[/green]"
+    )
+
+
 @app.command("edit-config")
 def edit_config() -> None:
     """Open the config file in the configured editor or OS default editor."""
@@ -1380,6 +1730,7 @@ def logs_clean(
 app.add_typer(cache_app, name="cache")
 app.add_typer(logs_app, name="logs")
 app.add_typer(auth_app, name="auth")
+app.add_typer(inference_app, name="inference")
 
 
 if __name__ == "__main__":

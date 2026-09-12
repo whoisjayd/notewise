@@ -15,12 +15,12 @@ from notewise._constants import (
     CONFIG_FILENAME,
     CONFIG_PRIORITY_KEY_ORDER,
     CONFIG_TEMP_SUFFIX,
+    CUSTOM_LLM_ENDPOINTS_ENV_VAR,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
     OAUTH_SETUP_RUN_PROMPT,
     PROVIDER_CONFIG,
     SETUP_EMPTY_MODEL_CATALOG_MESSAGE,
-    SETUP_EMPTY_MODEL_CATALOG_RETRY_MESSAGE,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
@@ -39,7 +39,11 @@ from notewise.utils import mask_secret, parse_config_env_lines
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable
+
     from rich.console import Console
+
+    from notewise.llm.custom_endpoint import CustomEndpointProfile
 
 
 class RunOAuthLoginProto(Protocol):
@@ -283,13 +287,15 @@ def _prompt_positive_int(
 def select_provider(
     available_models: dict[str, list[str]],
     *,
+    custom_profiles: Iterable[CustomEndpointProfile] = (),
     console: Console | None = None,
 ) -> str:
-    """Interactive provider selection."""
+    """Interactively select a built-in or saved custom endpoint provider."""
     from rich.prompt import Prompt
     from rich.table import Table
 
     active_console = _resolve_console(console)
+    profiles = tuple(custom_profiles)
     active_console.print("\n[bold cyan]Select LLM Provider:[/bold cyan]\n")
 
     table = Table(show_header=True, header_style="bold magenta")
@@ -297,12 +303,28 @@ def select_provider(
     table.add_column("Provider", style="cyan")
     table.add_column("Models Available", style="dim")
 
-    providers_list = []
-    for prov_key in PROVIDER_CONFIG:
-        if prov_key in available_models:
-            providers_list.append(prov_key)
+    providers_list = [
+        provider_key
+        for provider_key in PROVIDER_CONFIG
+        if provider_key in available_models
+    ]
+    providers_list.extend(profile.name for profile in profiles)
+    providers_list = list(dict.fromkeys(providers_list))
+    providers_list.append("custom_openai_compatible")
 
+    profile_names = {profile.name for profile in profiles}
     for i, provider_key in enumerate(providers_list, 1):
+        if provider_key == "custom_openai_compatible":
+            table.add_row(
+                str(i),
+                "Add custom OpenAI-compatible endpoint",
+                "Discover models",
+            )
+            continue
+        if provider_key in profile_names:
+            table.add_row(str(i), provider_key, "Custom endpoint")
+            continue
+
         config_data = PROVIDER_CONFIG[provider_key]
         model_count = len(available_models.get(provider_key, []))
         table.add_row(str(i), config_data["name"], f"{model_count} models")
@@ -329,18 +351,19 @@ def select_model(
     from rich.table import Table
 
     active_console = _resolve_console(console)
-    provider_config = PROVIDER_CONFIG[provider_key]
+    if provider_key == "custom_openai_compatible":
+        provider_name = "Custom OpenAI-Compatible Endpoint"
+    elif provider_key not in PROVIDER_CONFIG:
+        provider_name = f"{provider_key} custom endpoint"
+    else:
+        provider_name = PROVIDER_CONFIG[provider_key]["name"]
     models = available_models.get(provider_key, [])
 
     if not models:
-        active_console.print(
-            f"[yellow]No models found for {provider_config['name']}[/yellow]"
-        )
+        active_console.print(f"[yellow]No models found for {provider_name}[/yellow]")
         return f"{provider_key}/default"
 
-    active_console.print(
-        f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
-    )
+    active_console.print(f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n")
     active_console.print(f"[dim]Showing {len(models)} available models[/dim]\n")
 
     page_size = 20
@@ -389,14 +412,14 @@ def select_model(
             current_page += 1
             active_console.clear()
             active_console.print(
-                f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
+                f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
             )
             continue
         elif choice.lower() == "p" and current_page > 0:
             current_page -= 1
             active_console.clear()
             active_console.print(
-                f"\n[bold cyan]Select {provider_config['name']} Model:[/bold cyan]\n"
+                f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
             )
             continue
         elif choice.isdigit() and 1 <= int(choice) <= len(models):
@@ -449,6 +472,104 @@ def get_api_key(
         active_console.print("[red]Invalid API key. Please try again.[/red]")
 
 
+def _discover_and_verify_custom_endpoint(
+    profile: CustomEndpointProfile,
+    *,
+    console: Console,
+) -> str | None:
+    """Refresh a profile's model list and verify its selected model."""
+    import asyncio
+
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        discover_openai_compatible_models,
+        verify_openai_compatible_model,
+    )
+
+    console.print("\n[cyan]Discovering endpoint models...[/cyan]")
+    try:
+        models = discover_openai_compatible_models(profile.base_url, profile.api_key)
+    except CustomEndpointError as error:
+        console.print(f"[red]{error}[/red]")
+        return None
+
+    model_id = select_model(
+        profile.name,
+        {profile.name: models},
+        console=console,
+    )
+    console.print("\n[cyan]Verifying selected model...[/cyan]")
+    try:
+        asyncio.run(
+            verify_openai_compatible_model(profile.base_url, profile.api_key, model_id)
+        )
+    except CustomEndpointError as error:
+        console.print(f"[red]{error}[/red]")
+        return None
+
+    return model_id
+
+
+def _setup_custom_openai_compatible_endpoint(
+    *,
+    console: Console,
+) -> tuple[str, CustomEndpointProfile] | None:
+    """Collect, validate, discover, and verify a new custom endpoint."""
+    from rich.prompt import Prompt
+
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        CustomEndpointProfile,
+        normalize_custom_model_prefix,
+        normalize_openai_base_url,
+    )
+
+    display_name = ""
+    custom_model_prefix = ""
+    while not custom_model_prefix:
+        display_name = Prompt.ask("Endpoint display name").strip()
+        try:
+            custom_model_prefix = normalize_custom_model_prefix(display_name)
+        except CustomEndpointError as error:
+            console.print(f"[red]{error}[/red]")
+    normalized_base_url = ""
+    while not normalized_base_url:
+        base_url = Prompt.ask("OpenAI-compatible base URL").strip()
+        try:
+            normalized_base_url = normalize_openai_base_url(base_url)
+        except CustomEndpointError as error:
+            console.print(f"[red]{error}[/red]")
+
+    api_key = ""
+    while not api_key:
+        api_key = Prompt.ask("API key", password=True).strip()
+        if not api_key:
+            console.print("[red]API key cannot be empty.[/red]")
+
+    profile = CustomEndpointProfile(
+        name=custom_model_prefix,
+        base_url=normalized_base_url,
+        api_key=api_key,
+    )
+    model_id = _discover_and_verify_custom_endpoint(profile, console=console)
+    if model_id is None:
+        return None
+    return f"{profile.name}/{model_id}", profile
+
+
+def _replace_custom_endpoint_profile(
+    profiles: tuple[CustomEndpointProfile, ...],
+    replacement: CustomEndpointProfile,
+) -> tuple[CustomEndpointProfile, ...]:
+    """Replace a same-name profile in place or append a newly named profile."""
+    if any(profile.name == replacement.name for profile in profiles):
+        return tuple(
+            replacement if profile.name == replacement.name else profile
+            for profile in profiles
+        )
+    return (*profiles, replacement)
+
+
 def run_setup_wizard(
     force: bool = False,
     console: Console | None = None,
@@ -456,6 +577,12 @@ def run_setup_wizard(
     """Run interactive setup wizard."""
     from rich.panel import Panel
     from rich.prompt import Confirm, Prompt
+
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        parse_custom_endpoint_profiles,
+        serialize_custom_endpoint_profiles,
+    )
 
     active_console = _resolve_console(console)
     active_console.print(
@@ -477,52 +604,91 @@ def run_setup_wizard(
             active_console.print("[green]Using existing configuration.[/green]")
             return current_config
 
+    try:
+        custom_profiles = parse_custom_endpoint_profiles(
+            current_config.get(CUSTOM_LLM_ENDPOINTS_ENV_VAR)
+        )
+    except CustomEndpointError as error:
+        active_console.print(f"[red]{error}[/red]")
+        return current_config
+
     active_console.print("\n[cyan]Loading available models...[/cyan]")
     available_models = get_available_models(console=active_console)
-    if not available_models:
-        active_console.print(f"[red]{SETUP_EMPTY_MODEL_CATALOG_MESSAGE}[/red]")
+    if available_models:
         active_console.print(
-            f"[yellow]{SETUP_EMPTY_MODEL_CATALOG_RETRY_MESSAGE}[/yellow]"
+            f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
+            f"models across {len(available_models)} providers[/green]"
         )
-        return current_config
-    active_console.print(
-        f"[green]✓ Found {sum(len(m) for m in available_models.values())} "
-        f"models across {len(available_models)} providers[/green]"
+    else:
+        active_console.print(f"[yellow]{SETUP_EMPTY_MODEL_CATALOG_MESSAGE}[/yellow]")
+        active_console.print(
+            "[yellow]Built-in providers are unavailable, but you can still "
+            "configure a custom OpenAI-compatible endpoint.[/yellow]"
+        )
+
+    provider_key = select_provider(
+        available_models,
+        custom_profiles=custom_profiles,
+        console=active_console,
+    )
+    custom_config: dict[str, str] = {}
+    env_var: str | None = None
+    api_key: str | None = None
+    selected_profile = next(
+        (profile for profile in custom_profiles if profile.name == provider_key),
+        None,
     )
 
-    provider_key = select_provider(available_models, console=active_console)
-    model = select_model(provider_key, available_models, console=active_console)
-
-    provider_info = PROVIDER_CONFIG[provider_key]
-    env_var = provider_info.get("env_var")
-    api_key = None
-    if provider_info.get(
-        "auth_type", AUTH_TYPE_API_KEY
-    ) == AUTH_TYPE_API_KEY and isinstance(
-        env_var,
-        str,
-    ):
-        existing_key = current_config.get(env_var)
-        api_key = get_api_key(provider_key, existing_key, console=active_console)
-    elif provider_info.get("auth_type") == AUTH_TYPE_OAUTH_DEVICE:
-        active_console.print(
-            f"\n[bold yellow]OAuth Device Flow:[/bold yellow] {provider_info['name']}"
+    if provider_key == "custom_openai_compatible":
+        custom_endpoint = _setup_custom_openai_compatible_endpoint(
+            console=active_console,
         )
-        active_console.print(
-            "[dim]No API key is required for this provider. LiteLLM will show a "
-            "device code on first use and store provider tokens locally. Existing "
-            "API keys in config are preserved for future provider switches.[/dim]"
+        if custom_endpoint is None:
+            return current_config
+        model, profile = custom_endpoint
+        custom_config[CUSTOM_LLM_ENDPOINTS_ENV_VAR] = (
+            serialize_custom_endpoint_profiles(
+                _replace_custom_endpoint_profile(custom_profiles, profile)
+            )
         )
-        if Confirm.ask(OAUTH_SETUP_RUN_PROMPT, default=True):
-            _load_oauth_dependencies()
-            if run_oauth_login is not None and not run_oauth_login(
-                provider_key,
-                console=active_console,
-            ):
-                active_console.print(
-                    "[red]OAuth login failed or was cancelled. Setup stopped.[/red]"
-                )
-                return current_config
+    elif selected_profile is not None:
+        model_id = _discover_and_verify_custom_endpoint(
+            selected_profile,
+            console=active_console,
+        )
+        if model_id is None:
+            return current_config
+        model = f"{selected_profile.name}/{model_id}"
+    else:
+        model = select_model(provider_key, available_models, console=active_console)
+        provider_info = PROVIDER_CONFIG[provider_key]
+        configured_env_var = provider_info.get("env_var")
+        env_var = configured_env_var if isinstance(configured_env_var, str) else None
+        if provider_info.get("auth_type", AUTH_TYPE_API_KEY) == AUTH_TYPE_API_KEY and (
+            env_var is not None
+        ):
+            existing_key = current_config.get(env_var)
+            api_key = get_api_key(provider_key, existing_key, console=active_console)
+        elif provider_info.get("auth_type") == AUTH_TYPE_OAUTH_DEVICE:
+            active_console.print(
+                "\n[bold yellow]OAuth Device Flow:[/bold yellow] "
+                f"{provider_info['name']}"
+            )
+            active_console.print(
+                "[dim]No API key is required for this provider. LiteLLM will show a "
+                "device code on first use and store provider tokens locally. Existing "
+                "API keys in config are preserved for future provider switches.[/dim]"
+            )
+            if Confirm.ask(OAUTH_SETUP_RUN_PROMPT, default=True):
+                _load_oauth_dependencies()
+                if run_oauth_login is not None and not run_oauth_login(
+                    provider_key,
+                    console=active_console,
+                ):
+                    active_console.print(
+                        "[red]OAuth login failed or was cancelled. Setup stopped.[/red]"
+                    )
+                    return current_config
 
     active_console.print("\n[bold cyan]Output Directory:[/bold cyan]")
     default_output = str(Path.cwd() / Path(DEFAULT_OUTPUT_DIR))
@@ -546,8 +712,9 @@ def run_setup_wizard(
         "DEFAULT_MODEL": model,
         "OUTPUT_DIR": output_dir,
         "MAX_CONCURRENT_VIDEOS": concurrency,
+        **custom_config,
     }
-    if isinstance(env_var, str) and api_key:
+    if env_var is not None and api_key:
         new_config[env_var] = api_key
 
     save_config(new_config, console=active_console)
