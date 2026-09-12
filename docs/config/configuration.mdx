@@ -39,9 +39,10 @@ that selection. The verification can incur a small provider charge.
 
 Adding an endpoint appends it to the registry. Adding a name that normalizes to an
 existing name replaces only that endpoint after discovery and verification succeed;
-other saved endpoints remain unchanged. Names are unique after normalization. Base
-URLs must be absolute `http://` or `https://` URLs; setup accepts a URL with or
-without `/v1` and stores it with the `/v1` suffix.
+other saved endpoints remain unchanged. Names are unique after normalization and
+cannot use LiteLLM provider prefixes. Base URLs must be absolute HTTPS URLs, except
+explicit loopback endpoints may use HTTP. Setup accepts a URL with or without `/v1`
+and stores it with the `/v1` suffix.
 
 The registry is one compact JSON value in `~/.notewise/config.env`. Each object has
 `name`, `base_url`, and `api_key` fields. This safe two-profile example uses

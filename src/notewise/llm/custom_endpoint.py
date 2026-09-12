@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import re
 from dataclasses import dataclass
+from functools import cache
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
+
+import structlog
 
 from notewise._constants import (
     CUSTOM_ENDPOINT_DISCOVERY_ACCEPT_HEADER,
@@ -19,6 +23,9 @@ from notewise._constants import (
     CUSTOM_LLM_NAME_PATTERN,
 )
 from notewise.errors import CustomEndpointError
+
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -139,6 +146,24 @@ class _NoRedirectHandler(HTTPRedirectHandler):
         return None
 
 
+@cache
+def _litellm_provider_prefixes() -> frozenset[str]:
+    """Return the installed LiteLLM provider identifiers without eager imports."""
+    from litellm.types.utils import LlmProviders
+
+    return frozenset(provider.value for provider in LlmProviders)
+
+
+def _is_loopback_hostname(hostname: str) -> bool:
+    """Return whether a URL hostname resolves only to the local host."""
+    if hostname.lower() == "localhost" or hostname.lower().endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return False
+
+
 def normalize_openai_base_url(value: str) -> str:
     """Return an absolute OpenAI-compatible base URL ending in ``/v1``.
 
@@ -180,6 +205,10 @@ def normalize_openai_base_url(value: str) -> str:
             "Custom endpoint URL must be an absolute HTTP(S) URL without "
             "credentials, query parameters, or fragments."
         )
+    if parsed.scheme.lower() == "http" and not _is_loopback_hostname(hostname):
+        raise CustomEndpointError(
+            "Custom endpoint URL must use HTTPS unless its host is loopback."
+        )
 
     path = parsed.path.rstrip("/")
     if not path.endswith("/v1"):
@@ -198,7 +227,12 @@ def normalize_custom_model_prefix(value: str) -> str:
             "Custom endpoint name must contain only letters, digits, "
             "underscores, or hyphens."
         )
-    return value.lower()
+    normalized = value.lower()
+    if normalized in _litellm_provider_prefixes():
+        raise CustomEndpointError(
+            "Custom endpoint name must not use a LiteLLM provider prefix."
+        )
+    return normalized
 
 
 def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
@@ -225,6 +259,11 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         ) as response:
             raw_payload = response.read()
     except HTTPError as error:
+        logger.warning(
+            "Custom endpoint model discovery failed",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
         if 300 <= error.code < 400:
             raise CustomEndpointError(
                 "Custom endpoint redirected model discovery. "
@@ -233,11 +272,21 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         raise CustomEndpointError(
             f"Custom endpoint model discovery failed with HTTP {error.code}."
         ) from None
-    except (URLError, TimeoutError, OSError):
+    except (URLError, TimeoutError, OSError) as error:
+        logger.warning(
+            "Custom endpoint model discovery failed",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
         raise CustomEndpointError(
             "Could not reach the custom endpoint while discovering models."
         ) from None
-    except Exception:
+    except Exception as error:
+        logger.warning(
+            "Custom endpoint model discovery failed",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
         raise CustomEndpointError(
             "Could not reach the custom endpoint while discovering models."
         ) from None
@@ -303,7 +352,12 @@ async def verify_openai_compatible_model(
             api_base=normalized_base_url,
             api_key=api_key,
         )
-    except Exception:
+    except Exception as error:
+        logger.warning(
+            "Custom endpoint model verification failed",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
         raise CustomEndpointError(
             "Custom endpoint model verification failed. "
             "Check the model, URL, and API key."

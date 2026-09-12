@@ -50,9 +50,9 @@ notewise process "<video-url>" --model <name>/<model-id> --base-url <base-url> -
 
 Both flags are transient: they do not update `config.env` or ambient environment
 variables. `--base-url` takes precedence for the request URL. An explicitly passed
-`--api-key` takes precedence for the request key; otherwise, when the model prefix
-exactly matches a saved custom profile, NoteWise uses that profile's key. Supply
-`--api-key` when no matching profile supplies one.
+`--api-key` takes precedence for the request key; otherwise, NoteWise reuses a
+saved profile key only when the normalized URL is the profile's saved origin.
+Supply `--api-key` whenever `--base-url` changes that origin.
 
 ## Inference endpoints
 
@@ -74,10 +74,11 @@ then verifies the endpoint before atomically adding or replacing the named
 profile.
 
 `update` requires `--base-url`, `--api-key`, or both. Omitted URL and key values
-come from the saved profile. If `--model` is omitted, NoteWise uses the suffix of
-the current default model only when it is named `<name>/<model-id>`; otherwise,
-`--model` is required. The resulting endpoint is live-discovered and verified
-before its saved profile is replaced.
+come from the saved profile, except changing `--base-url` also requires a new
+`--api-key`. If `--model` is omitted, NoteWise uses the suffix of the current
+default model only when it is named `<name>/<model-id>`; otherwise, `--model` is
+required. The resulting endpoint is live-discovered and verified before its saved
+profile is replaced.
 
 `delete` removes a saved profile without prompting, but refuses to remove a
 profile while the default model begins with `<name>/`.

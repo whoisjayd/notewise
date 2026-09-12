@@ -177,6 +177,42 @@ def test_inference_update_uses_current_default_model_and_preserves_other_profile
     assert "replacement-secret" not in result.output
 
 
+def test_inference_update_requires_key_when_replacing_endpoint_origin(mocker) -> None:
+    """Changing an endpoint URL cannot reuse its key with a different origin."""
+    office = CustomEndpointProfile(
+        name="office",
+        base_url="https://office.example/v1",
+        api_key="old-secret",
+    )
+    mocker.patch(
+        "notewise.ui.setup_wizard.load_config",
+        return_value={
+            "DEFAULT_MODEL": "office/vendor/model",
+            "CUSTOM_LLM_ENDPOINTS": _registry(office),
+        },
+    )
+    discover = mocker.patch(
+        "notewise.llm.custom_endpoint.discover_openai_compatible_models"
+    )
+    save_config = mocker.patch("notewise.ui.setup_wizard.save_config")
+
+    result = runner.invoke(
+        cli_app.app,
+        [
+            "inference",
+            "update",
+            "office",
+            "--base-url",
+            "https://replacement.example",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "api-key" in result.output
+    discover.assert_not_called()
+    save_config.assert_not_called()
+
+
 def test_inference_update_requires_endpoint_change_before_io(mocker) -> None:
     """Updating only a model is rejected before loading or saving configuration."""
     load_config = mocker.patch("notewise.ui.setup_wizard.load_config")
@@ -214,6 +250,29 @@ def test_inference_delete_refuses_normalized_default_endpoint(mocker) -> None:
     save_config.assert_not_called()
     assert "DEFAULT_MODEL" in result.output
     assert "hidden-secret" not in result.output
+
+
+def test_inference_delete_rejects_invalid_default_model_prefix(mocker) -> None:
+    """An invalid default model cannot bypass endpoint deletion protection."""
+    office = CustomEndpointProfile(
+        name="office",
+        base_url="https://office.example/v1",
+        api_key="hidden-secret",
+    )
+    mocker.patch(
+        "notewise.ui.setup_wizard.load_config",
+        return_value={
+            "DEFAULT_MODEL": "invalid%prefix/vendor/model",
+            "CUSTOM_LLM_ENDPOINTS": _registry(office),
+        },
+    )
+    save_config = mocker.patch("notewise.ui.setup_wizard.save_config")
+
+    result = runner.invoke(cli_app.app, ["inference", "delete", "office"])
+
+    assert result.exit_code == 1
+    assert "Custom endpoint name" in result.output
+    save_config.assert_not_called()
 
 
 def test_inference_list_and_delete_never_render_api_keys(mocker) -> None:

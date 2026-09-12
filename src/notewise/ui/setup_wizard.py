@@ -309,6 +309,7 @@ def select_provider(
         if provider_key in available_models
     ]
     providers_list.extend(profile.name for profile in profiles)
+    providers_list = list(dict.fromkeys(providers_list))
     providers_list.append("custom_openai_compatible")
 
     profile_names = {profile.name for profile in profiles}

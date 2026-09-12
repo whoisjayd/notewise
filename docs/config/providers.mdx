@@ -74,7 +74,8 @@ endpoint named `<name>`, uses that profile's base URL and API key, and sends
 LiteLLM `openai/<model-id>`. This lookup is exact after endpoint-name
 normalization, so profiles remain isolated. Use explicit `--base-url` or
 `--api-key` only to override a single run; neither flag changes the saved
-profile.
+profile. When `--base-url` changes a saved endpoint, supply `--api-key` so the
+saved credential is never sent to a different origin.
 
 Use `notewise inference list`, `add`, `update`, and `delete` to manage the
 saved profiles. See [Configuration](/config/configuration#custom-openai-compatible-endpoints)

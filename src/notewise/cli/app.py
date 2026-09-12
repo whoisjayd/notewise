@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Annotated, Any, NoReturn
 from urllib.parse import urlparse
@@ -614,9 +613,22 @@ def process(
             api_key
             if api_key is not None
             else configured_endpoint[1]
-            if configured_endpoint is not None
+            if (
+                configured_endpoint is not None
+                and selected_api_base == configured_endpoint[0]
+            )
             else None
         )
+        if (
+            base_url is not None
+            and configured_endpoint is not None
+            and selected_api_key is None
+        ):
+            raise typer.BadParameter(
+                "An explicit --api-key is required when --base-url changes "
+                "a saved endpoint.",
+                param_hint="--api-key",
+            )
 
         try:
             selected_output_formats = normalize_output_formats(output_format)
@@ -674,6 +686,9 @@ def process(
             )
         else:
             console.print("\n[red]Processing stopped before it finished.[/red]\n")
+        raise typer.Exit(code=1) from None
+    except typer.BadParameter as error:
+        console.print(f"[red]{error}[/red]")
         raise typer.Exit(code=1) from None
     except ConfigurationError as error:
         _print_configuration_error(error)
@@ -1404,10 +1419,9 @@ def inference_update(
             ).partition("/")
             default_uses_endpoint = False
             if separator and default_model_id:
-                with contextlib.suppress(CustomEndpointError):
-                    default_uses_endpoint = (
-                        normalize_custom_model_prefix(default_prefix) == normalized_name
-                    )
+                default_uses_endpoint = (
+                    normalize_custom_model_prefix(default_prefix) == normalized_name
+                )
             if default_uses_endpoint:
                 selected_model = default_model_id
             else:
@@ -1415,13 +1429,22 @@ def inference_update(
                     "--model is required unless DEFAULT_MODEL uses this endpoint."
                 )
 
+        selected_base_url = (
+            normalize_openai_base_url(base_url)
+            if base_url is not None
+            else existing_profile.base_url
+        )
+        if (
+            base_url is not None
+            and api_key is None
+            and selected_base_url != existing_profile.base_url
+        ):
+            _exit_inference_error(
+                "--api-key is required when --base-url changes a saved endpoint."
+            )
         profile = CustomEndpointProfile(
             name=normalized_name,
-            base_url=(
-                normalize_openai_base_url(base_url)
-                if base_url is not None
-                else existing_profile.base_url
-            ),
+            base_url=selected_base_url,
             api_key=api_key if api_key is not None else existing_profile.api_key,
         )
         discovered_models = discover_openai_compatible_models(
@@ -1479,10 +1502,9 @@ def inference_delete(
         ).partition("/")
         default_uses_endpoint = False
         if separator:
-            with contextlib.suppress(CustomEndpointError):
-                default_uses_endpoint = (
-                    normalize_custom_model_prefix(default_prefix) == normalized_name
-                )
+            default_uses_endpoint = (
+                normalize_custom_model_prefix(default_prefix) == normalized_name
+            )
         if default_uses_endpoint:
             _exit_inference_error(
                 f"Cannot delete {normalized_name!r} while it is used by DEFAULT_MODEL."

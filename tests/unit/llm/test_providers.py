@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from notewise.errors import LLMGenerationError
+from notewise.errors import ConfigurationError, LLMGenerationError
 from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
     LLMProvider,
@@ -43,6 +43,48 @@ class TestLLMProvider:
         # Config fixture sets dummy keys, so this should pass
         provider = LLMProvider(model="gemini/gemini-pro")
         assert provider.model == "gemini/gemini-pro"
+
+    @pytest.mark.parametrize("api_key", ["", "   "])
+    def test_init_rejects_blank_explicit_api_key(self, api_key: str) -> None:
+        """Explicit keys cannot silently disable configured credential fallback."""
+        with pytest.raises(ConfigurationError, match="cannot be blank"):
+            LLMProvider("openai/gpt-4o", api_key=api_key)
+
+    def test_init_rejects_remote_http_endpoint_with_explicit_key(self) -> None:
+        """Credentials are never forwarded to an unencrypted remote endpoint."""
+        with pytest.raises(ConfigurationError, match="HTTPS"):
+            LLMProvider(
+                "custom/model",
+                api_base="http://models.example.test/v1",
+                api_key="test-key",
+            )
+
+    def test_init_allows_loopback_http_endpoint_with_explicit_key(self) -> None:
+        """Explicit local endpoints remain usable for self-hosted development."""
+        provider = LLMProvider(
+            "custom/model",
+            api_base="http://localhost:11434/v1",
+            api_key="test-key",
+        )
+
+        assert provider.api_base == "http://localhost:11434/v1"
+
+    async def test_generate_rejects_remote_http_endpoint_with_resolved_key(
+        self,
+        mocker,
+    ) -> None:
+        """A credential resolved after construction is not sent over remote HTTP."""
+        provider = LLMProvider(
+            "custom/model",
+            api_base="http://models.example.test/v1",
+        )
+        mocker.patch.object(provider, "_resolve_credential", return_value="test-key")
+        completion = mocker.patch("notewise.llm.provider.acompletion")
+
+        with pytest.raises(ConfigurationError, match="HTTPS"):
+            await provider.generate("system", "user")
+
+        completion.assert_not_called()
 
     async def test_generate_success(self):
         """Test successful generation."""

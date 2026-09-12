@@ -1,5 +1,6 @@
 """LLM provider configuration using LiteLLM."""
 
+import ipaddress
 import logging
 import os
 import warnings
@@ -8,6 +9,7 @@ from contextlib import contextmanager
 from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import Any, cast
+from urllib.parse import urlsplit
 
 import litellm
 import structlog
@@ -29,7 +31,12 @@ from notewise._constants import (
 )
 from notewise.config import AppSettings
 from notewise.config import settings as config
-from notewise.errors import LLMGenerationError as _LLMGenerationError
+from notewise.errors import (
+    ConfigurationError,
+)
+from notewise.errors import (
+    LLMGenerationError as _LLMGenerationError,
+)
 from notewise.logging import make_log_safe_text, redact_sensitive_text
 from notewise.utils import coerce_non_negative_int
 
@@ -108,6 +115,27 @@ LLMGenerationError = _LLMGenerationError
 COST_UNMAPPED_LOGGED_MODELS: set[str] = set()
 
 
+def _is_remote_http_endpoint(api_base: str | None) -> bool:
+    """Return whether an endpoint is unencrypted and not constrained to loopback."""
+    if not isinstance(api_base, str):
+        return False
+    try:
+        parsed = urlsplit(api_base)
+    except ValueError:
+        return True
+    if parsed.scheme.lower() != "http":
+        return False
+    hostname = parsed.hostname
+    if hostname is None:
+        return True
+    if hostname.lower() == "localhost" or hostname.lower().endswith(".localhost"):
+        return False
+    try:
+        return not ipaddress.ip_address(hostname).is_loopback
+    except ValueError:
+        return True
+
+
 class LLMProvider:
     """
     LLM provider interface using LiteLLM.
@@ -130,6 +158,12 @@ class LLMProvider:
             api_base: Optional endpoint URL for this provider instance.
             api_key: Optional API key for this provider instance.
         """
+        if api_key is not None and not api_key.strip():
+            raise ConfigurationError("Explicit API key cannot be blank.")
+        if api_key is not None and _is_remote_http_endpoint(api_base):
+            raise ConfigurationError(
+                "HTTPS is required before forwarding an explicit API key."
+            )
         self.model = model
         self.api_base = api_base
         self.api_key = api_key
@@ -217,6 +251,10 @@ class LLMProvider:
         Raises:
             LLMGenerationError: If generation fails after retries.
         """
+        api_key = self._resolve_credential()
+        if api_key is not None and _is_remote_http_endpoint(self.api_base):
+            raise ConfigurationError("HTTPS is required before forwarding an API key.")
+
         try:
             messages = [
                 {"role": "system", "content": system_prompt},
@@ -236,7 +274,6 @@ class LLMProvider:
                 kwargs["max_tokens"] = max_tokens
             if self.api_base is not None:
                 kwargs["api_base"] = self.api_base
-            api_key = self._resolve_credential()
             if api_key is not None:
                 kwargs[LLM_API_KEY_KWARG] = api_key
 

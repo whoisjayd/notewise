@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import io
 from unittest.mock import MagicMock
-from urllib.error import HTTPError
+from urllib.error import HTTPError, URLError
 
 import pytest
 
@@ -62,6 +62,7 @@ def test_normalize_openai_base_url_appends_or_preserves_v1(
     [
         "models.example.test",
         "ftp://models.example.test",
+        "http://models.example.test",
         "https://user:password@models.example.test",
         "https://models.example.test/v1?tenant=example",
         "https://models.example.test/v1#models",
@@ -71,6 +72,22 @@ def test_normalize_openai_base_url_rejects_unsafe_urls(value: str) -> None:
     """Only direct absolute HTTP(S) endpoint URLs are accepted."""
     with pytest.raises(CustomEndpointError):
         normalize_openai_base_url(value)
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("http://localhost:8000", "http://localhost:8000/v1"),
+        ("http://127.0.0.1:8000", "http://127.0.0.1:8000/v1"),
+        ("http://[::1]:8000", "http://[::1]:8000/v1"),
+    ],
+)
+def test_normalize_openai_base_url_allows_loopback_http(
+    value: str,
+    expected: str,
+) -> None:
+    """Local endpoints may use HTTP without exposing credentials remotely."""
+    assert normalize_openai_base_url(value) == expected
 
 
 @pytest.mark.parametrize(
@@ -90,7 +107,7 @@ def test_normalize_custom_model_prefix_lowercases_safe_names(
 
 @pytest.mark.parametrize(
     "value",
-    ["", "custom/name", "custom endpoint", "custom.endpoint"],
+    ["", "custom/name", "custom endpoint", "custom.endpoint", "openai", "ollama"],
 )
 def test_normalize_custom_model_prefix_rejects_unsafe_names(value: str) -> None:
     """Custom model prefixes cannot create an extra provider path segment."""
@@ -281,6 +298,23 @@ def test_discover_models_rejects_redirect_without_exposing_response_body(
 
     assert "redirect" in str(raised.value).lower()
     assert "upstream-details" not in str(raised.value)
+
+
+def test_discover_models_logs_sanitized_failure_context(mocker) -> None:
+    """Discovery failures retain a traceback for diagnostics without user leakage."""
+    opener = MagicMock()
+    opener.open.side_effect = URLError("unavailable")
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+    warning = mocker.patch("notewise.llm.custom_endpoint.logger.warning")
+
+    with pytest.raises(CustomEndpointError):
+        discover_openai_compatible_models("https://models.example.test", "test-key")
+
+    warning.assert_called_once_with(
+        "Custom endpoint model discovery failed",
+        error_type="URLError",
+        exc_info=True,
+    )
 
 
 async def test_verify_model_forwards_selected_model_base_and_key(mocker) -> None:

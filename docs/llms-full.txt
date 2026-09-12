@@ -334,7 +334,7 @@ Provider API keys and provider auth keys are also accepted in `config.env` when 
 
 `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.env` keys.
 
-Saved custom endpoints use `<name>/<model-id>`. `notewise process --model <name>/<model-id>` automatically selects that profile's base URL and API key, then sends LiteLLM `openai/<model-id>`. `--base-url` or `--api-key` override only the current run. Manage profiles with `notewise inference list|add|update|delete`; never expose the secret-bearing `CUSTOM_LLM_ENDPOINTS` value.
+Saved custom endpoints use `<name>/<model-id>`. `notewise process --model <name>/<model-id>` automatically selects that profile's base URL and API key, then sends LiteLLM `openai/<model-id>`. Custom names cannot use LiteLLM provider prefixes; remote endpoints require HTTPS; and changing `--base-url` requires a new `--api-key` instead of reusing a saved credential. Manage profiles with `notewise inference list|add|update|delete`; never expose the secret-bearing `CUSTOM_LLM_ENDPOINTS` value.
 
 Config commands:
 

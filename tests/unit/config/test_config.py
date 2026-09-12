@@ -557,6 +557,7 @@ class TestGetApiKeyNameForModel:
         assert missing_profile.get_missing_config_names_for_model(
             "openai/other-model"
         ) == ("OPENAI_API_KEY",)
+        assert missing_profile.get_missing_config_names_for_model("ollama/llama3") == ()
 
     def test_custom_endpoint_registry_is_validated_at_construction(self):
         """Invalid persisted endpoint registries fail settings construction."""

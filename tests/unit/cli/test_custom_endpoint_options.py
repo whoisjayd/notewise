@@ -86,6 +86,38 @@ def test_process_transports_normalized_endpoint_options(mocker, tmp_path: Path) 
     assert captured["selected_api_key"] == "run-key"
 
 
+def test_process_refuses_to_reuse_key_for_different_endpoint_origin(
+    mocker,
+    tmp_path: Path,
+) -> None:
+    """A saved credential must not be sent to an explicitly different endpoint."""
+    captured, settings = _capture_process_runner(mocker, tmp_path)
+    settings.get_custom_endpoint_for_model.return_value = (
+        "https://stored.example/v1",
+        "stored-key",
+    )
+    mocker.patch(
+        "notewise.llm.custom_endpoint.normalize_openai_base_url",
+        return_value="https://replacement.example/v1",
+    )
+
+    result = runner.invoke(
+        cli_app.app,
+        [
+            "process",
+            "https://youtube.com/watch?v=video",
+            "--model",
+            "gateway/selected-model",
+            "--base-url",
+            "https://replacement.example",
+        ],
+    )
+
+    assert result.exit_code == 1
+    assert "api-key" in result.output
+    assert captured == {}
+
+
 def test_process_selects_each_matching_configured_custom_profile(
     mocker,
     tmp_path: Path,

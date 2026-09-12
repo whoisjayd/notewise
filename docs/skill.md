@@ -54,7 +54,7 @@ Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `sta
 
 `process` flags: `--model/-m`, `--base-url`, `--api-key`, `--output/-o`, `--format`, `--language/-l`, `--target-language`, `--temperature/-t`, `--max-tokens/-k`, `--throttle`, `--force/-F`, `--no-ui`, `--verbose/-v`, `--quiz`, `--export-transcript`, `--timestamps`, `--chapter-directory-output`, `--cookie-file/--cookies`.
 
-`inference` manages saved OpenAI-compatible endpoints: `list`, `add <name> --base-url <url> --api-key <key> --model <model-id>`, `update`, and `delete`. It discovers and verifies models before saving; command-line API keys can remain in shell history.
+`inference` manages saved OpenAI-compatible endpoints: `list`, `add <name> --base-url <url> --api-key <key> --model <model-id>`, `update`, and `delete`. It discovers and verifies models before saving; command-line API keys can remain in shell history. Names cannot use LiteLLM provider prefixes, remote endpoints require HTTPS, and a changed `--base-url` requires `--api-key`.
 
 ## Config
 
