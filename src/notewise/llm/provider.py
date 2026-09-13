@@ -22,6 +22,7 @@ from notewise._constants import (
     GPT5_REQUIRED_TEMPERATURE,
     LLM_API_KEY_KWARG,
     LLM_ERROR_PAYLOAD_MARKERS,
+    LLM_ERROR_SUMMARY_LIMIT,
     LLM_NUM_RETRIES,
     LLM_PAYLOAD_ERROR_SUMMARY,
     PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
@@ -51,7 +52,6 @@ _USAGE_COLLECTOR: ContextVar["UsageTotals | None"] = ContextVar(
 _SETTINGS_FIELD_BY_ALIAS: dict[str, str] = {
     field.alias: name for name, field in AppSettings.model_fields.items() if field.alias
 }
-_ERROR_SUMMARY_LIMIT = 500
 
 
 def suppress_litellm_noise() -> None:
@@ -80,8 +80,8 @@ def summarize_provider_error(error: Exception) -> str:
     summary_lower = summary.lower()
     if any(marker in summary_lower for marker in LLM_ERROR_PAYLOAD_MARKERS):
         return LLM_PAYLOAD_ERROR_SUMMARY
-    if len(summary) > _ERROR_SUMMARY_LIMIT:
-        return f"{summary[: _ERROR_SUMMARY_LIMIT - 1]}..."
+    if len(summary) > LLM_ERROR_SUMMARY_LIMIT:
+        return f"{summary[: LLM_ERROR_SUMMARY_LIMIT - 1]}..."
     return summary
 
 
@@ -279,44 +279,56 @@ class LLMProvider:
 
             response: Any | None = None
             content = ""
-            for attempt in range(LLM_NUM_RETRIES + 1):
-                if self._uses_responses_api():
-                    response = await self._generate_responses(
-                        system_prompt,
-                        user_prompt,
-                        temperature=provider_temperature,
-                        max_tokens=max_tokens,
-                    )
-                    content = self._normalize_responses_content(response)
-                else:
-                    # LiteLLM's acompletion handles async requests to providers.
-                    response = await acompletion(**kwargs)
-                    if response.choices and response.choices[0].message.content:
-                        content = self._normalize_content(
-                            response.choices[0].message.content
+            prompt_tokens_total = 0
+            completion_tokens_total = 0
+            total_tokens_total = 0
+            cost_usd_total = 0.0
+            try:
+                for attempt in range(LLM_NUM_RETRIES + 1):
+                    if self._uses_responses_api():
+                        response = await self._generate_responses(
+                            system_prompt,
+                            user_prompt,
+                            temperature=provider_temperature,
+                            max_tokens=max_tokens,
                         )
+                        content = self._normalize_responses_content(response)
                     else:
-                        content = ""
+                        # LiteLLM's acompletion handles async requests to providers.
+                        response = await acompletion(**kwargs)
+                        if response.choices and response.choices[0].message.content:
+                            content = self._normalize_content(
+                                response.choices[0].message.content
+                            )
+                        else:
+                            content = ""
 
-                if content:
-                    break
-                if attempt == LLM_NUM_RETRIES:
-                    raise LLMGenerationError(
-                        "Received empty response from LLM provider"
+                    # Every attempt can incur real provider cost even when it
+                    # returns empty content, so usage/cost must accumulate
+                    # across retries rather than reflecting only the last call.
+                    attempt_prompt, attempt_completion, attempt_total = (
+                        self._extract_usage(response)
                     )
+                    prompt_tokens_total += attempt_prompt
+                    completion_tokens_total += attempt_completion
+                    total_tokens_total += attempt_total
+                    cost_usd_total += self._extract_cost(response)
 
-            prompt_tokens, completion_tokens, total_tokens = self._extract_usage(
-                response
-            )
-            call_cost_usd = self._extract_cost(response)
-            collector = _USAGE_COLLECTOR.get()
-            if collector is not None:
-                collector.add(
-                    prompt_tokens,
-                    completion_tokens,
-                    total_tokens,
-                    call_cost_usd,
-                )
+                    if content:
+                        break
+                    if attempt == LLM_NUM_RETRIES:
+                        raise LLMGenerationError(
+                            "Received empty response from LLM provider"
+                        )
+            finally:
+                collector = _USAGE_COLLECTOR.get()
+                if collector is not None:
+                    collector.add(
+                        prompt_tokens_total,
+                        completion_tokens_total,
+                        total_tokens_total,
+                        cost_usd_total,
+                    )
 
             return self._clean_content(content)
 
@@ -462,16 +474,12 @@ class LLMProvider:
             )
             total_raw = usage.get("total_tokens")
         else:
-            prompt_raw = getattr(usage, "prompt_tokens", None) or getattr(
-                usage,
-                "input_tokens",
-                None,
-            )
-            completion_raw = getattr(usage, "completion_tokens", None) or getattr(
-                usage,
-                "output_tokens",
-                None,
-            )
+            prompt_raw = getattr(usage, "prompt_tokens", None)
+            if prompt_raw is None:
+                prompt_raw = getattr(usage, "input_tokens", None)
+            completion_raw = getattr(usage, "completion_tokens", None)
+            if completion_raw is None:
+                completion_raw = getattr(usage, "output_tokens", None)
             total_raw = getattr(usage, "total_tokens", None)
 
         prompt_tokens = coerce_non_negative_int(prompt_raw)

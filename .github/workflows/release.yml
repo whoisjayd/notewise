@@ -104,7 +104,7 @@ jobs:
           uv run pyinstaller `
             --noconfirm `
             --clean `
-            --onefile `
+            --onedir `
             --name notewise `
             --collect-all litellm `
             --collect-all tiktoken `
@@ -119,17 +119,18 @@ jobs:
           $artifactName = "${{ matrix.artifact_name }}"
           $archiveExt = "${{ matrix.archive_ext }}"
           $archName = "${{ runner.arch }}".ToLowerInvariant()
-          $binaryName = if ("${{ runner.os }}" -eq "Windows") { "notewise.exe" } else { "notewise" }
           $archiveBase = "notewise-$releaseTag-$artifactName-$archName"
 
+          # PyInstaller --onedir emits dist/notewise/ containing the entry
+          # binary plus its _internal/ support files; the whole directory
+          # must ship together so the binary can find its dependencies.
           New-Item -ItemType Directory -Path release -Force | Out-Null
-          Copy-Item "dist/$binaryName" "release/$binaryName"
 
           if ($archiveExt -eq "zip") {
-            Compress-Archive -Path "release/$binaryName" -DestinationPath "release/$archiveBase.zip" -Force
+            Compress-Archive -Path "dist/notewise/*" -DestinationPath "release/$archiveBase.zip" -Force
           }
           else {
-            tar -czf "release/$archiveBase.tar.gz" -C release $binaryName
+            tar -czf "release/$archiveBase.tar.gz" -C "dist/notewise" .
           }
       - name: Upload binary artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7

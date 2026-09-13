@@ -428,50 +428,59 @@ async def generate_chapter_outputs(
         reserved_targets,
         chapter_directory_output,
     )
-    plan = build_chapter_generation_plan(
-        pipeline,
-        title,
-        ordered_chapters,
-        total_chapters,
-        output_targets.output_target,
-        output_targets.temporary_chapter_dir,
-        chapter_directory_output,
-    )
-    generated_chapter_notes = await generate_missing_chapter_notes(
-        pipeline,
-        video_id,
-        title,
-        ordered_chapters,
-        total_chapters,
-        plan,
-        emit,
-    )
-    bundled_chapter_notes = write_chapter_outputs_and_collect_bundle(
-        pipeline,
-        plan,
-        generated_chapter_notes,
-        output_targets.rendered_output_targets,
-    )
-    if chapter_directory_output and output_targets.output_target is not None:
-        pipeline._write_output_target_metadata(
+    # The caller only takes ownership of temporary_chapter_directory (and
+    # cleans it up) once this function returns it successfully. If anything
+    # below raises, this function must clean it up itself or the directory
+    # leaks until TemporaryDirectory's GC finalizer eventually runs.
+    try:
+        plan = build_chapter_generation_plan(
+            pipeline,
+            title,
+            ordered_chapters,
+            total_chapters,
             output_targets.output_target,
-            video_id,
-            list(plan.chapter_output_files.values()),
+            output_targets.temporary_chapter_dir,
+            chapter_directory_output,
         )
-    (
-        rendered_output_targets,
-        render_warning,
-        output_target,
-        transcript_output_dir,
-    ) = render_bundled_chapter_outputs(
-        pipeline,
-        title,
-        bundled_chapter_notes,
-        output_targets.rendered_output_targets,
-        output_targets.output_target,
-        output_targets.transcript_output_dir,
-        chapter_directory_output,
-    )
+        generated_chapter_notes = await generate_missing_chapter_notes(
+            pipeline,
+            video_id,
+            title,
+            ordered_chapters,
+            total_chapters,
+            plan,
+            emit,
+        )
+        bundled_chapter_notes = write_chapter_outputs_and_collect_bundle(
+            pipeline,
+            plan,
+            generated_chapter_notes,
+            output_targets.rendered_output_targets,
+        )
+        if chapter_directory_output and output_targets.output_target is not None:
+            pipeline._write_output_target_metadata(
+                output_targets.output_target,
+                video_id,
+                list(plan.chapter_output_files.values()),
+            )
+        (
+            rendered_output_targets,
+            render_warning,
+            output_target,
+            transcript_output_dir,
+        ) = render_bundled_chapter_outputs(
+            pipeline,
+            title,
+            bundled_chapter_notes,
+            output_targets.rendered_output_targets,
+            output_targets.output_target,
+            output_targets.transcript_output_dir,
+            chapter_directory_output,
+        )
+    except BaseException:
+        if output_targets.temporary_chapter_directory is not None:
+            output_targets.temporary_chapter_directory.cleanup()
+        raise
 
     return (
         rendered_output_targets,

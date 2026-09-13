@@ -28,6 +28,7 @@ repos:
       - id: check-executables-have-shebangs # scripts without shebangs fail silently
       - id: check-shebang-scripts-are-executable # inverse: shebang ⟹ must be +x
       - id: check-added-large-files
+        exclude: ^src/notewise/ui/fonts/.*\.ttf$ # bundled Noto Sans PDF fonts
       - id: debug-statements
       - id: detect-private-key
       - id: end-of-file-fixer

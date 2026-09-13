@@ -72,3 +72,4 @@ notewise.tape
 .beads/*.db
 .beads-credential-key
 .beads
+.playwright-mcp

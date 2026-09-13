@@ -49,28 +49,35 @@ export function Hero({ stats }: { stats: RepoStats }) {
       </svg>
 
       <div className="relative mx-auto max-w-[1200px] px-5 sm:px-6">
-        <div className="grid gap-12 xl:grid-cols-[1.05fr_0.95fr] xl:gap-16 items-center">
+        <div className="grid gap-12 xl:grid-cols-[1fr_1.05fr] xl:gap-16 items-center">
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <div className="reveal flex flex-wrap items-center gap-x-3 gap-y-2">
               <span className="stamp">v{stats.version} · stable</span>
               <span className="t-mono-meta">released {relativeTime(stats.pushedAt)}</span>
             </div>
 
             <h1 className="mt-6 sm:mt-7 t-h1">
-              A YouTube link,
-              <br />
-              turned into <em className="text-stamp">study notes</em>
-              <br />
-              you actually <span className="marker">keep.</span>
+              <span className="reveal block" style={{ animationDelay: "70ms" }}>
+                Paste a link.
+              </span>
+              <span className="reveal block" style={{ animationDelay: "160ms" }}>
+                Walk away with <em className="text-stamp">study notes</em>
+              </span>
+              <span className="reveal block" style={{ animationDelay: "250ms" }}>
+                you actually <span className="marker">keep.</span>
+              </span>
             </h1>
 
-            <p className="mt-6 sm:mt-7 max-w-xl t-lead">
-              NoteWise reads a video — or a whole playlist — and writes hierarchical Markdown the
-              way a careful student would. Quizzes, transcripts, PDF, DOCX, HTML. Cached locally.
-              Through the LLM provider you choose.
+            <p className="reveal mt-6 sm:mt-7 max-w-xl t-lead" style={{ animationDelay: "340ms" }}>
+              One command reads the transcript, writes real structured Markdown, and can throw in a
+              quiz and a PDF while it's at it. Point it at a whole playlist and it runs unattended,
+              through whichever model you already have a key for.
             </p>
 
-            <div className="mt-8 sm:mt-9 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3">
+            <div
+              className="reveal mt-8 sm:mt-9 flex flex-col sm:flex-row sm:flex-wrap items-stretch sm:items-center gap-3"
+              style={{ animationDelay: "420ms" }}
+            >
               <a
                 href="#install"
                 className="hover-feedback inline-flex items-center justify-center gap-2 rounded-full border border-transparent bg-foreground px-5 py-3 t-btn text-background sm:py-2.5"
@@ -93,13 +100,16 @@ export function Hero({ stats }: { stats: RepoStats }) {
               </a>
             </div>
 
-            <ul className="mt-9 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 t-meta sm:max-w-md">
+            <ul
+              className="reveal mt-9 sm:mt-10 grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2.5 t-meta sm:max-w-md"
+              style={{ animationDelay: "500ms" }}
+            >
               {(
                 [
-                  { i: "playlist", t: "Videos & playlists" },
-                  { i: "chapters", t: "Chapter-aware notes" },
-                  { i: "route", t: "LiteLLM provider routing" },
-                  { i: "doc", t: "MD · HTML · PDF · DOCX" },
+                  { i: "playlist", t: "Single video or full playlist" },
+                  { i: "chapters", t: "Splits by chapter on its own" },
+                  { i: "route", t: "Any model you've got a key for" },
+                  { i: "doc", t: "MD, HTML, PDF, DOCX — one run" },
                 ] as const
               ).map((x) => (
                 <li key={x.t} className="flex items-center gap-2">
@@ -110,7 +120,11 @@ export function Hero({ stats }: { stats: RepoStats }) {
             </ul>
           </div>
 
-          <div className="relative min-w-0">
+          <div className="reveal relative min-w-0" style={{ animationDelay: "230ms" }}>
+            <div
+              aria-hidden="true"
+              className="glow-breathe pointer-events-none absolute -inset-4 -z-10 rounded-[24px] bg-stamp/25 blur-2xl"
+            />
             <Terminal
               title="~/notewise"
               lines={[
@@ -133,6 +147,15 @@ export function Hero({ stats }: { stats: RepoStats }) {
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need.md" },
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need_quiz.md" },
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need.pdf" },
+                {
+                  kind: "muted",
+                  text: (
+                    <span
+                      aria-hidden="true"
+                      className="cursor-blink inline-block h-[1em] w-[0.55em] translate-y-[2px] bg-stamp"
+                    />
+                  ),
+                },
               ]}
               caption="cached · skip on rerun unless --force"
             />

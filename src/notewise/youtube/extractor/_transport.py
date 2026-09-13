@@ -9,6 +9,7 @@ import time
 from http.client import RemoteDisconnected
 from typing import Any, cast
 from urllib.error import HTTPError, URLError
+from urllib.parse import urlsplit, urlunsplit
 from urllib.request import Request
 
 import structlog
@@ -70,6 +71,12 @@ def _is_retryable_transport_error(exc: Exception) -> bool:
     return False
 
 
+def _sanitize_url_for_logging(url: str) -> str:
+    """Strip query/fragment (often a signed token) before a URL reaches logs."""
+    parsed = urlsplit(url)
+    return urlunsplit((parsed.scheme, parsed.netloc, parsed.path, "", ""))
+
+
 def _retry_backoff_seconds(attempt: int) -> float:
     """Return exponential backoff with bounded jitter for one retry attempt."""
     return float(HTTP_BACKOFF_BASE * (2**attempt) * random.uniform(0.8, 1.2))
@@ -101,17 +108,18 @@ def _fetch_with_retry(
 
 def _fetch_text(client: Any, url: str) -> str:
     req = Request(url=url, headers=_auth_ops._default_headers(), method="GET")
+    log_url = _sanitize_url_for_logging(url)
     try:
         with _fetch_with_retry(
             lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
-            url=url,
+            url=log_url,
         ) as resp:
             body = resp.read()
             if isinstance(body, bytes):
                 return body.decode("utf-8", errors="replace")
             return str(body)
     except Exception as exc:
-        raise ExtractionError(f"Request failed for {url}: {exc}", url=url) from exc
+        raise ExtractionError(f"Request failed for {log_url}: {exc}", url=url) from exc
 
 
 def _fetch_json(
@@ -174,6 +182,12 @@ def _transcript_via_innertube_player(
                 client_override=override,
             )
         except Exception:
+            logger.warning(
+                "transport.innertube_player_override_failed",
+                video_id=video_id,
+                client_override=(override or {}).get("clientName"),
+                exc_info=True,
+            )
             continue
         captions = (player.get("captions") or {}).get(
             "playerCaptionsTracklistRenderer"
@@ -207,6 +221,11 @@ def _transcript_via_innertube_player(
                 },
             }
         except Exception:
+            logger.warning(
+                "transport.innertube_track_fetch_failed",
+                video_id=video_id,
+                exc_info=True,
+            )
             continue
     return None
 
@@ -228,6 +247,11 @@ def _player_response_from_innertube(
             ),
         )
     except Exception:
+        logger.warning(
+            "transport.innertube_player_response_failed",
+            video_id=video_id,
+            exc_info=True,
+        )
         return None
 
 

@@ -25,7 +25,7 @@ export function Format() {
   return (
     <section
       id="format"
-      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="grid gap-12 md:grid-cols-[1fr_1.4fr] md:gap-16 lg:gap-20">
@@ -37,8 +37,8 @@ export function Format() {
               kinds of paper.
             </h2>
             <p className="mt-5 max-w-md t-body">
-              Pick a single format or pass a comma-separated list — NoteWise renders each one from
-              the same generated study notes.
+              Six formats come out of one generation pass. Wanting a PDF too doesn't mean running
+              the transcript through the model a second time.
             </p>
             <pre className="mt-6 overflow-x-auto rounded-md border border-[var(--rule)] bg-card px-4 py-3 t-code whitespace-pre">
               <span className="text-stamp">›</span> notewise process{" "}
@@ -46,15 +46,16 @@ export function Format() {
               <span className="text-thread">--format md,html,pdf,docx</span>
             </pre>
             <p className="mt-4 t-mono-meta">
-              ¶ PDF rendering supports Latin scripts cleanly; CJK / RTL fall back to HTML.
+              ¶ PDF ships a bundled Unicode font (Latin, Cyrillic, Greek, Vietnamese, Devanagari);
+              other scripts fall back to Markdown for that video.
             </p>
           </div>
 
           <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {formats.map((f, i) => (
-              <li key={f.id} className="leaf-card group relative p-4 sm:p-5">
+              <li key={f.id} className="leaf-card hover-feedback group relative p-4 sm:p-5">
                 <div className="flex items-center justify-between">
-                  <span className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--rule)] bg-muted text-stamp">
+                  <span className="flex h-9 w-9 items-center justify-center rounded-md border border-[var(--rule)] bg-muted text-stamp transition-colors duration-150 group-hover:bg-stamp group-hover:text-background">
                     <FineIcon name={f.icon} size={16} />
                   </span>
                   <span className="t-mono-meta uppercase tracking-[0.2em]">.{f.id}</span>

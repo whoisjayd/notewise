@@ -27,7 +27,7 @@ export function Install() {
     <section
       id="install"
       aria-labelledby="install-heading"
-      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background sm:scroll-mt-24"
+      className="relative scroll-mt-20 bg-background sm:scroll-mt-24"
     >
       <div className="relative mx-auto max-w-[920px] px-5 sm:px-6 py-20 sm:py-28 md:py-36 text-center">
         <span className="t-eyebrow">Coda · Install</span>
@@ -35,8 +35,8 @@ export function Install() {
           Pick a video. <em className="text-stamp">Keep</em> what you learn.
         </h2>
         <p className="mx-auto mt-5 max-w-xl t-body">
-          Use Python tooling when you want the PyPI package. Prefer the short installer when you
-          want the standalone binary from GitHub releases.
+          Already set up with uv or pipx? Grab the PyPI package below. Just want a binary and
+          nothing else? The short URL figures out your shell and hands back the right installer.
         </p>
 
         <div className="mx-auto mt-9 sm:mt-10 max-w-2xl text-left">

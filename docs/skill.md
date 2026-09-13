@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.5.0`.
+Use this when answering questions about NoteWise `1.6.0`.
 
 Canonical public docs base: `https://notewise.click/docs`.
 
@@ -37,7 +37,7 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Defaults
 
-- Version: `1.5.0`
+- Version: `1.6.0`
 - Python: `>=3.11`
 - Default model: `gemini/gemini-2.5-flash`
 - Default output: `./output`
@@ -58,7 +58,7 @@ Commands: `process`, `setup`, `config`, `config-path`, `version`, `update`, `sta
 
 ## Config
 
-Config file: `~/.notewise/config.env`. `NOTEWISE_HOME` changes the state root. Practical precedence: CLI flags, then environment variables, then config file, then defaults. Exception: `OUTPUT_DIR` from config file is respected unless `--output/-o` is passed.
+Config database: `~/.notewise/config.db`. `NOTEWISE_HOME` changes the state root. Practical precedence: CLI flags, then environment variables, then config database, then defaults. Exception: `OUTPUT_DIR` from the config database is respected unless `--output/-o` is passed.
 
 Common keys: `DEFAULT_MODEL`, `CUSTOM_LLM_ENDPOINTS`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys. Custom models use `<name>/<model-id>` and `CUSTOM_LLM_ENDPOINTS` contains their API keys, so it must remain masked. Do not present `chunk_size`, `chunk_overlap`, or `max_concurrent_chapters` as normal config-file keys.
 

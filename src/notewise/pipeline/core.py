@@ -272,6 +272,7 @@ class CorePipeline:
         try:
             return max(1, int(self.generator.count_tokens(transcript_text)))
         except Exception:
+            logger.warning("pipeline.token_count_failed", exc_info=True)
             return estimate_tokens_used(transcript_text)
 
     async def _reserve_output_target(

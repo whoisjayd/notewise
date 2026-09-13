@@ -65,3 +65,4 @@ website/.output/
 website/.tanstack/
 website/.wrangler/
 website/.env*
+.playwright-mcp

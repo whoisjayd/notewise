@@ -148,7 +148,12 @@ def is_setup_safe_model(model: str, metadata: dict[str, Any]) -> bool:
         normalized_modalities = {
             str(modality).lower() for modality in output_modalities
         }
-        if normalized_modalities != {"text"}:
+        # A model that can *also* emit images/audio (e.g. gpt-5.1, which lists
+        # ["text", "image"]) is still a legitimate text chat model for notewise's
+        # purposes -- it never requests those other modalities. Excluding it
+        # requiring an *exact* {"text"} match was throwing away real models;
+        # only exclude when text isn't offered at all (pure image/audio models).
+        if "text" not in normalized_modalities:
             return False
 
     return True

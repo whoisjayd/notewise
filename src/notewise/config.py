@@ -2,17 +2,20 @@
 
 Load order:
 1. Explicit init values, used by command flags and tests.
-2. OUTPUT_DIR from ~/.notewise/config.env.
+2. OUTPUT_DIR from ~/.notewise/config.db (auto-imported from a legacy
+   ~/.notewise/config.env on first run).
 3. Environment variables.
-4. Other supported ~/.notewise/config.env values.
+4. Other supported ~/.notewise/config.db values.
 5. Code defaults.
 """
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import re
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -29,6 +32,7 @@ from notewise._constants import (
     AMBIENT_CREDENTIAL_PROVIDER_PREFIXES,
     CACHE_DB_FILENAME,
     CONFIG_API_KEY_ENV_KEYS,
+    CONFIG_DB_FILENAME,
     CONFIG_ENV_SYNC_KEYS,
     CONFIG_FILENAME,
     CUSTOM_LLM_ENDPOINTS_ENV_VAR,
@@ -51,6 +55,7 @@ from notewise._constants import (
     OAUTH_TOKEN_DIR_PARENT,
     OAUTH_TOKEN_DIR_PERMISSION_MODE,
     OAUTH_TOKEN_DIR_SYMLINK_SKIPPED_EVENT,
+    OPENAI_REASONING_MODEL_PATTERN,
     OUTPUT_DIR_CONFIG_KEY,
     PROVIDER_API_KEY_ENV_VARS,
     PROVIDER_AUTH_ENV_KEYS,
@@ -70,6 +75,7 @@ from notewise.model_catalog import (
     bundled_model_snapshot_path,
     parse_model_snapshot,
 )
+from notewise.storage import config_store
 from notewise.utils import parse_config_env_lines
 
 
@@ -78,7 +84,35 @@ if TYPE_CHECKING:
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
-_OPENAI_REASONING_MODEL = re.compile(r"(^|/)(o1|o3|o4)([-_/]|$)")
+_OPENAI_REASONING_MODEL = re.compile(OPENAI_REASONING_MODEL_PATTERN)
+
+# Ordered prefix groups for classifying an *unprefixed* model name (no
+# "provider/" segment, e.g. "gpt-4o" or "claude-3") to its canonical LiteLLM
+# provider id. Shared by get_api_key_names_for_model (env var lookup) and
+# _get_snapshot_provider_for_model (setup snapshot lookup) so the two never
+# drift out of sync when a provider is added.
+_UNPREFIXED_MODEL_PROVIDER_GROUPS: tuple[tuple[tuple[str, ...], str], ...] = (
+    (("gemini", "vertex"), "gemini"),
+    (("gpt", "openai"), "openai"),
+    (("claude", "anthropic"), "anthropic"),
+    (("groq",), "groq"),
+    (("grok", "xai"), "xai"),
+    (("mistral",), "mistral"),
+    (("cohere", "command"), "cohere"),
+    (("deepseek",), "deepseek"),
+)
+
+
+def _classify_unprefixed_model_provider(model_lower: str) -> str | None:
+    """Map an unprefixed model name to its canonical LiteLLM provider id."""
+    if _OPENAI_REASONING_MODEL.search(model_lower):
+        return "openai"
+    for prefixes, provider_id in _UNPREFIXED_MODEL_PROVIDER_GROUPS:
+        if model_lower.startswith(prefixes):
+            return provider_id
+    return None
+
+
 _LEGACY_IGNORED_KEYS: frozenset[str] = LEGACY_CONFIG_KEYS
 _MODEL_SNAPSHOT_CACHE: dict[str, tuple[str, ...]] | None = None
 _MANAGED_OAUTH_TOKEN_DIR_ENV_VALUES: dict[str, str] = {}
@@ -101,6 +135,11 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
 )
 
 
+def allowed_config_keys() -> frozenset[str]:
+    """Return the config keys `notewise config set/unset` may read or write."""
+    return _ALLOWED_KEYS
+
+
 def get_state_dir() -> Path:
     """Return the base directory for NoteWise persistent state files."""
     override = os.getenv("NOTEWISE_HOME")
@@ -112,6 +151,19 @@ def get_state_dir() -> Path:
 def get_cache_db_path() -> Path:
     """Return the canonical global cache DB path."""
     return get_state_dir() / CACHE_DB_FILENAME
+
+
+def get_config_db_path() -> Path:
+    """Return the canonical global config DB path."""
+    return get_state_dir() / CONFIG_DB_FILENAME
+
+
+def config_exists() -> bool:
+    """Return whether persisted config exists, importing a legacy config.env once."""
+    db_path = get_config_db_path()
+    if config_store.config_db_is_empty(db_path):
+        _import_legacy_config_file(db_path)
+    return not config_store.config_db_is_empty(db_path)
 
 
 def get_oauth_token_storage_paths() -> dict[str, Path]:
@@ -215,50 +267,108 @@ def _load_bundled_model_snapshot() -> dict[str, tuple[str, ...]]:
     return _MODEL_SNAPSHOT_CACHE
 
 
+def _import_legacy_config_file(db_path: Path) -> None:
+    """One-time migration: import ``~/.notewise/config.env`` into config.db.
+
+    Only called when config.db has no stored settings yet, so an existing
+    file-based install upgrades transparently without losing its config, and
+    the DB becomes the sole source of truth from then on.
+    """
+    legacy_path = get_state_dir() / CONFIG_FILENAME
+    # O_NOFOLLOW makes the existence check and the read a single atomic
+    # syscall: a local attacker who can write to the state directory could
+    # otherwise swap in a symlink between an `exists()` check and a
+    # `read_text()` call, getting arbitrary file content imported into
+    # config.db. A plain "file not found" is the common, silent case; any
+    # other failure (including a planted symlink) is worth a warning.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(legacy_path, flags)
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.warning(
+            "UserConfigSource failed to import legacy config.env",
+            config_path=str(legacy_path),
+            exc_info=True,
+        )
+        return
+    try:
+        with os.fdopen(fd, encoding="utf-8") as handle:
+            parsed = parse_config_env_lines(handle.read().splitlines())
+    except (OSError, UnicodeError):
+        logger.warning(
+            "UserConfigSource failed to import legacy config.env",
+            config_path=str(legacy_path),
+            exc_info=True,
+        )
+        return
+
+    imported = {
+        key: value for key, value in parsed.items() if key not in _LEGACY_IGNORED_KEYS
+    }
+    if imported:
+        config_store.update_config_db(db_path, imported)
+
+    try:
+        legacy_path.unlink()
+    except OSError:
+        logger.warning(
+            "UserConfigSource imported legacy config.env but could not delete it",
+            config_path=str(legacy_path),
+            exc_info=True,
+        )
+    else:
+        logger.info(
+            "UserConfigSource imported legacy config.env into config.db and "
+            "removed the legacy file",
+            config_path=str(legacy_path),
+        )
+
+
 class UserConfigSource(PydanticBaseSettingsSource):
-    """Load settings from config.env in the active state directory."""
+    """Load settings from config.db (SQLite) in the active state directory."""
 
     def __init__(self, settings_cls: type[BaseSettings]) -> None:
         super().__init__(settings_cls)
-        self._cached_env_file: dict[str, str] | None = None
+        self._cached_config: dict[str, str] | None = None
 
-    def _load_env_file(self) -> dict[str, str]:
-        """Parse the config.env file and return a key->value mapping."""
-        if self._cached_env_file is not None:
-            return self._cached_env_file
+    def _load_config(self) -> dict[str, str]:
+        """Load persisted settings, auto-importing a legacy config.env once."""
+        if self._cached_config is not None:
+            return self._cached_config
 
-        path = get_state_dir() / CONFIG_FILENAME
-        if not path.exists():
-            self._cached_env_file = {}
-            return self._cached_env_file
-        result: dict[str, str] = {}
+        db_path = get_config_db_path()
         try:
-            for key, value in parse_config_env_lines(
-                path.read_text(encoding="utf-8").splitlines()
-            ).items():
-                if key in _LEGACY_IGNORED_KEYS:
-                    continue
-                if key in _ALLOWED_KEYS:
-                    if key in CONFIG_ENV_SYNC_KEYS and key not in os.environ:
-                        os.environ[key] = value
-                    result[key.lower()] = value
-        except (OSError, UnicodeError):
+            if config_store.config_db_is_empty(db_path):
+                _import_legacy_config_file(db_path)
+            raw = config_store.load_config_db(db_path)
+        except (OSError, sqlite3.Error):
             logger.warning(
-                "UserConfigSource ignored unreadable user config file",
-                config_path=str(path),
+                "UserConfigSource ignored unreadable config database",
+                db_path=str(db_path),
                 exc_info=True,
             )
-            self._cached_env_file = {}
-            return self._cached_env_file
+            self._cached_config = {}
+            return self._cached_config
 
-        self._cached_env_file = result
-        return self._cached_env_file
+        result: dict[str, str] = {}
+        for key, value in raw.items():
+            if key in _LEGACY_IGNORED_KEYS:
+                continue
+            if key in _ALLOWED_KEYS:
+                if key in CONFIG_ENV_SYNC_KEYS and key not in os.environ:
+                    os.environ[key] = value
+                result[key.lower()] = value
+
+        self._cached_config = result
+        return self._cached_config
 
     def get_field_value(
         self, field: FieldInfo, field_name: str
     ) -> tuple[Any, str, bool]:
         del field
-        data = self._load_env_file()
+        data = self._load_config()
         # Try field_name and alias lookups
         for lookup in (field_name, field_name.lower()):
             if lookup in data:
@@ -266,7 +376,7 @@ class UserConfigSource(PydanticBaseSettingsSource):
         return None, field_name, False
 
     def __call__(self) -> dict[str, Any]:
-        return self._load_env_file()
+        return self._load_config()
 
 
 class UserOutputDirConfigSource(UserConfigSource):
@@ -280,9 +390,14 @@ class UserOutputDirConfigSource(UserConfigSource):
         return super().get_field_value(field, field_name)
 
     def __call__(self) -> dict[str, Any]:
-        data = self._load_env_file()
+        data = self._load_config()
         output_dir = data.get(OUTPUT_DIR_CONFIG_KEY.lower())
         return {OUTPUT_DIR_CONFIG_KEY: output_dir} if output_dir is not None else {}
+
+
+_VALIDATION_ONLY: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_VALIDATION_ONLY", default=False
+)
 
 
 class AppSettings(BaseSettings):
@@ -382,6 +497,11 @@ class AppSettings(BaseSettings):
 
     def model_post_init(self, __context: object) -> None:
         """Sync provider API keys back to os.environ for env-driven libraries."""
+        if _VALIDATION_ONLY.get():
+            # validate_candidate_config() builds an instance purely to run
+            # field validation; it must not mutate os.environ or touch the
+            # oauth token directories as a side effect of that check.
+            return
         default_token_dirs = get_oauth_token_storage_paths()
         if _is_managed_oauth_token_dir_env("CHATGPT_TOKEN_DIR"):
             object.__setattr__(self, "chatgpt_token_dir", default_token_dirs["chatgpt"])
@@ -462,25 +582,8 @@ class AppSettings(BaseSettings):
             ):
                 return ()
             return PROVIDER_API_KEY_ENV_VARS.get(provider, ())
-        if model_lower.startswith(("gemini", "vertex")):
-            return ("GEMINI_API_KEY",)
-        if model_lower.startswith(("gpt", "openai")) or _OPENAI_REASONING_MODEL.search(
-            model_lower
-        ):
-            return ("OPENAI_API_KEY",)
-        if model_lower.startswith(("claude", "anthropic")):
-            return ("ANTHROPIC_API_KEY",)
-        if model_lower.startswith("groq"):
-            return ("GROQ_API_KEY",)
-        if model_lower.startswith(("grok", "xai")):
-            return ("XAI_API_KEY",)
-        if model_lower.startswith("mistral"):
-            return ("MISTRAL_API_KEY",)
-        if model_lower.startswith(("cohere", "command")):
-            return ("COHERE_API_KEY",)
-        if model_lower.startswith("deepseek"):
-            return ("DEEPSEEK_API_KEY",)
-        return ()
+        provider_id = _classify_unprefixed_model_provider(model_lower)
+        return PROVIDER_API_KEY_ENV_VARS.get(provider_id, ()) if provider_id else ()
 
     def get_provider_prefix_for_model(self, model: str) -> str | None:
         """Return the normalized LiteLLM provider prefix for a model string."""
@@ -545,25 +648,8 @@ class AppSettings(BaseSettings):
             }:
                 return snapshot_provider
 
-        if normalized_model.startswith(
-            ("gpt", "openai")
-        ) or _OPENAI_REASONING_MODEL.search(normalized_model):
-            return "openai" if "openai" in snapshot else None
-        if normalized_model.startswith(("gemini", "vertex")):
-            return "gemini" if "gemini" in snapshot else None
-        if normalized_model.startswith(("claude", "anthropic")):
-            return "anthropic" if "anthropic" in snapshot else None
-        if normalized_model.startswith("groq"):
-            return "groq" if "groq" in snapshot else None
-        if normalized_model.startswith(("grok", "xai")):
-            return "xai" if "xai" in snapshot else None
-        if normalized_model.startswith("mistral"):
-            return "mistral" if "mistral" in snapshot else None
-        if normalized_model.startswith(("cohere", "command")):
-            return "cohere" if "cohere" in snapshot else None
-        if normalized_model.startswith("deepseek"):
-            return "deepseek" if "deepseek" in snapshot else None
-        return None
+        provider_id = _classify_unprefixed_model_provider(normalized_model)
+        return provider_id if provider_id and provider_id in snapshot else None
 
     def get_required_env_names_for_model(self, model: str) -> tuple[str, ...]:
         """Return non-API-key env vars required by a provider integration."""
@@ -646,6 +732,26 @@ class _LazyAppSettings:
 
     def __repr__(self) -> str:
         return repr(self._get_instance())
+
+
+def validate_candidate_config(candidate: dict[str, str]) -> None:
+    """Validate a full candidate config dict the way AppSettings would, but
+    without persisting it or running any of its side effects.
+
+    `config set` and `edit-config` currently commit to config.db first and
+    only validate afterward (via a reload), so an invalid value -- e.g.
+    ``TEMPERATURE=not-a-number`` -- lands in storage anyway. Every later
+    AppSettings load then fails the same way, including the very next CLI
+    command, with no way back in except editing config.db by hand. Calling
+    this before the commit lets the caller reject the value and leave the
+    previously persisted configuration untouched. Raises
+    ``pydantic.ValidationError`` on an invalid candidate.
+    """
+    token = _VALIDATION_ONLY.set(True)
+    try:
+        AppSettings.model_validate(candidate)
+    finally:
+        _VALIDATION_ONLY.reset(token)
 
 
 settings = _LazyAppSettings()

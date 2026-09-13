@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 
@@ -185,9 +186,17 @@ def test_normalize_pdf_markdown_downgrades_unicode_punctuation() -> None:
     assert normalized == '"quote" - dash ...'
 
 
-def test_normalize_pdf_markdown_rejects_non_latin_scripts() -> None:
-    with pytest.raises(ValidationError, match="PDF output currently supports"):
-        _normalize_pdf_markdown("हिंदी नोट्स", target_language="Hindi")
+def test_normalize_pdf_markdown_accepts_devanagari_script() -> None:
+    """The bundled PDF font covers Devanagari, Cyrillic, Greek, and Vietnamese."""
+    normalized = _normalize_pdf_markdown("हिंदी नोट्स", target_language="Hindi")
+
+    assert normalized == "हिंदी नोट्स"
+
+
+def test_normalize_pdf_markdown_rejects_unsupported_scripts() -> None:
+    """Scripts outside the bundled font's coverage (e.g. CJK) still fall back."""
+    with pytest.raises(ValidationError, match="does not yet support"):
+        _normalize_pdf_markdown("笔记标题", target_language="Chinese")
 
 
 def test_build_html_document_sets_language_attribute() -> None:
@@ -230,9 +239,8 @@ def test_render_html_document_normalizes_underscore_locale_tag(
     assert '<html lang="pt-BR">' in html
 
 
-def test_render_pdf_document_falls_back_to_markdown_for_non_latin_text(
-    tmp_path: Path,
-) -> None:
+def test_render_pdf_document_renders_devanagari_text(tmp_path: Path) -> None:
+    """Hindi study notes must render as an actual PDF, not fall back to Markdown."""
     output_path = tmp_path / "notes.pdf"
 
     rendered_path = render_notes_document(
@@ -243,9 +251,74 @@ def test_render_pdf_document_falls_back_to_markdown_for_non_latin_text(
         target_language="Hindi",
     )
 
+    assert rendered_path == output_path
+    assert rendered_path.exists()
+    assert rendered_path.read_bytes().startswith(b"%PDF")
+
+
+def test_render_pdf_document_falls_back_to_markdown_for_unsupported_script(
+    tmp_path: Path,
+) -> None:
+    output_path = tmp_path / "notes.pdf"
+
+    rendered_path = render_notes_document(
+        "# 笔记标题\n\n笔记内容",
+        "Chinese Notes",
+        output_path,
+        "pdf",
+        target_language="Chinese",
+    )
+
     assert rendered_path == output_path.with_suffix(".md")
     assert rendered_path.exists()
-    assert rendered_path.read_text(encoding="utf-8").startswith("# शीर्षक")
+    assert rendered_path.read_text(encoding="utf-8").startswith("# 笔记标题")
+
+
+def test_render_pdf_document_falls_back_to_markdown_for_any_renderer_failure(
+    tmp_path: Path,
+) -> None:
+    """A PDF-library failure unrelated to Unicode must still degrade to Markdown.
+
+    fpdf2's write_html() can raise on malformed/unsupported HTML constructs
+    that have nothing to do with the Latin-1 encoding check; that must not
+    take down every other requested output format for the video.
+    """
+    output_path = tmp_path / "notes.pdf"
+
+    def _broken_pdf_renderer(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("fpdf2 choked on this HTML")
+
+    with patch.dict(
+        "notewise.pipeline._documents._DOCUMENT_RENDERERS",
+        {"pdf": _broken_pdf_renderer},
+    ):
+        rendered_path = render_notes_document(
+            "# Title\n\nBody",
+            "Some Notes",
+            output_path,
+            "pdf",
+        )
+
+    assert rendered_path == output_path.with_suffix(".md")
+    assert rendered_path.exists()
+    assert rendered_path.read_text(encoding="utf-8").startswith("# Title")
+
+
+def test_render_html_document_failure_is_not_swallowed(tmp_path: Path) -> None:
+    """Only the PDF renderer degrades gracefully; other formats must still raise."""
+    output_path = tmp_path / "notes.html"
+
+    def _broken_html_renderer(*_args: object, **_kwargs: object) -> None:
+        raise RuntimeError("html renderer bug")
+
+    with (
+        patch.dict(
+            "notewise.pipeline._documents._DOCUMENT_RENDERERS",
+            {"html": _broken_html_renderer},
+        ),
+        pytest.raises(RuntimeError, match="html renderer bug"),
+    ):
+        render_notes_document("# Title\n\nBody", "Some Notes", output_path, "html")
 
 
 def test_build_chapter_bundle_wraps_notes_under_video_title() -> None:

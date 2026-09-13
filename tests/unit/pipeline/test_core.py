@@ -546,3 +546,17 @@ def test_estimate_tokens_used_falls_back_when_counter_raises(
 
     assert pipeline._estimate_tokens_used("") == 1
     assert pipeline._estimate_tokens_used("abcd" * 5) == 5
+
+
+def test_estimate_tokens_used_logs_counter_failure(
+    temp_output_dir,
+    mock_llm_provider,
+):
+    """A failing tokenizer must not fail silently."""
+    pipeline = _make_pipeline(temp_output_dir, mock_llm_provider)
+    pipeline.generator.count_tokens.side_effect = RuntimeError("count failed")
+
+    with patch("notewise.pipeline.core.logger.warning") as mock_warning:
+        pipeline._estimate_tokens_used("abcd")
+
+    mock_warning.assert_called_once_with("pipeline.token_count_failed", exc_info=True)

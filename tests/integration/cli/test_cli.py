@@ -307,6 +307,16 @@ def test_process_verbose_enables_debug_file_logging(mock_config_exists, mock_pip
     mock_configure_logging.assert_called_once_with(verbose=True)
 
 
+def test_non_process_commands_configure_logging():
+    """Every subcommand should route logs through the redaction pipeline."""
+
+    with patch("notewise.logging.configure_logging") as mock_configure_logging:
+        result = runner.invoke(app, ["version"])
+
+    assert result.exit_code == 0
+    mock_configure_logging.assert_called_once_with()
+
+
 def test_process_missing_api_key_exits_with_error(monkeypatch):
     """CLI exits with code 1 and helpful message when required API key is missing."""
 
@@ -407,10 +417,9 @@ def test_version():
 
 def test_config_path_exists(mock_config_exists):
     """Test config-path command when config exists."""
-    with patch("pathlib.Path.exists", return_value=True):
-        result = runner.invoke(app, ["config-path"])
-        assert result.exit_code == 0
-        assert "Configuration file:" in result.stdout
+    result = runner.invoke(app, ["config-path"])
+    assert result.exit_code == 0
+    assert "Configuration database:" in result.stdout
 
 
 def test_config_path_missing():
@@ -1754,8 +1763,9 @@ def test_process_no_ui_shows_pdf_fallback_reason(tmp_path):
                     video_id=video_ids[0],
                     title="Video One",
                     error=(
-                        "PDF output currently supports Latin-script text only. "
-                        "Use Markdown, HTML, or DOCX for Hindi output."
+                        "PDF rendering failed for this video; a Markdown file "
+                        "was generated instead. Use HTML or DOCX if you need "
+                        "a rendered document."
                     ),
                 )
             )
@@ -1800,8 +1810,8 @@ def test_process_no_ui_shows_pdf_fallback_reason(tmp_path):
 
     assert result.exit_code == 0
     assert "Generation complete: Video One:" in result.output
-    assert "PDF output currently supports Latin-script text" in result.output
-    assert "Use Markdown, HTML, or DOCX for Hindi output." in result.output
+    assert "PDF rendering failed for this video" in result.output
+    assert "Use HTML or DOCX if you need a rendered document." in result.output
     assert "Done: Video One" in result.output
 
 

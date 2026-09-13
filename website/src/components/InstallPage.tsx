@@ -18,8 +18,8 @@ export function InstallPage() {
             <br /> Any shell.
           </h1>
           <p className="mt-6 max-w-2xl t-body">
-            Choose the install style that matches your workflow. Python tool installers are usually
-            best; the short URL is for standalone binary installs.
+            Pick whichever fits how you already work. Python tooling is the recommended path; the
+            short URL grabs the standalone binary instead.
           </p>
         </section>
 
@@ -99,7 +99,7 @@ function CommandCard({ command }: { command: InstallCommand }) {
   return (
     <article
       className={[
-        "min-w-0 rounded-lg border bg-card p-4",
+        "hover-feedback min-w-0 rounded-lg border bg-card p-4",
         command.recommended ? "border-stamp/55" : "border-[var(--rule)]",
       ].join(" ")}
     >

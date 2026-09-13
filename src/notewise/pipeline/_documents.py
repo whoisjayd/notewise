@@ -10,6 +10,8 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import unquote
 
+import structlog
+
 from notewise._constants import (
     CHAPTER_BUNDLE_SEPARATOR,
     DEFAULT_NOTES_OUTPUT_FORMAT,
@@ -41,12 +43,47 @@ from notewise._constants import (
     MARKDOWN_RENDER_EXTENSIONS,
     NOTES_OUTPUT_EXTENSIONS,
     OUTPUT_FORMAT_SEPARATOR,
+    PDF_FONT_FAMILY,
+    PDF_FONT_FILENAMES,
     PDF_UNSUPPORTED_UNICODE_ERROR,
     RAW_HTML_TAG_PATTERN,
     RENDERED_CODE_BLOCK_PATTERN,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
 )
 from notewise.errors import ValidationError
+
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+_PDF_FONTS_DIR = Path(__file__).parent.parent / "ui" / "fonts"
+_PDF_FONT_CODEPOINTS: frozenset[int] | None = None
+
+
+def _pdf_font_path(style: str) -> Path:
+    """Return the bundled Noto Sans TTF path for an fpdf2 style flag."""
+    return _PDF_FONTS_DIR / PDF_FONT_FILENAMES[style]
+
+
+def _pdf_font_covers(codepoint: int) -> bool:
+    """Return whether every bundled PDF font style can render a codepoint.
+
+    Checking only the Regular font would pass a codepoint that Bold/Italic
+    happens to be missing, which write_html() could then render with a
+    missing glyph -- intersect all four styles so the pre-check matches
+    whatever style the rendered HTML actually ends up using.
+    """
+    global _PDF_FONT_CODEPOINTS
+    if _PDF_FONT_CODEPOINTS is None:
+        from fontTools.ttLib import TTFont
+
+        covered: frozenset[int] | None = None
+        for style in PDF_FONT_FILENAMES:
+            font_codepoints = frozenset(
+                TTFont(_pdf_font_path(style)).getBestCmap() or {}
+            )
+            covered = font_codepoints if covered is None else covered & font_codepoints
+        _PDF_FONT_CODEPOINTS = covered or frozenset()
+    return codepoint in _PDF_FONT_CODEPOINTS
 
 
 DocumentRenderer = Callable[[str, str, Path, str | None], None]
@@ -127,12 +164,20 @@ def render_notes_document(
     try:
         renderer(markdown_text, title, output_path, target_language)
         return output_path
-    except ValidationError as error:
-        if normalized_format != "pdf" or not str(error).startswith(
-            "PDF output currently supports Latin-script text only."
-        ):
+    except Exception as error:
+        # PDF rendering (fpdf2's limited HTML/font support) is the one format
+        # known to fail on content the other renderers handle fine -- e.g.
+        # non-Latin-script text, or HTML constructs write_html() rejects.
+        # A PDF failure must degrade to Markdown rather than sink every
+        # other requested output format for the video.
+        if normalized_format != "pdf":
             raise
 
+        logger.warning(
+            "documents.pdf_render_failed",
+            error_type=type(error).__name__,
+            error=str(error),
+        )
         fallback_path = output_path.with_suffix(NOTES_OUTPUT_EXTENSIONS["md"])
         _write_markdown(markdown_text, title, fallback_path, target_language)
         return fallback_path
@@ -292,13 +337,15 @@ def _normalize_pdf_markdown(
 ) -> str:
     translated = markdown_text.translate(_PDF_CHARACTER_TRANSLATIONS)
     normalized = unicodedata.normalize("NFKC", translated)
-    try:
-        normalized.encode("latin-1")
-    except UnicodeEncodeError as error:
+    unsupported = any(
+        not char.isspace() and not _pdf_font_covers(ord(char))
+        for char in set(normalized)
+    )
+    if unsupported:
         language_label = (target_language or DEFAULT_TARGET_LANGUAGE).strip()
         raise ValidationError(
             PDF_UNSUPPORTED_UNICODE_ERROR.format(target_language=language_label)
-        ) from error
+        )
     return normalized
 
 
@@ -379,12 +426,14 @@ def _write_pdf(
     pdf.set_author("notewise")
     pdf.set_auto_page_break(auto=True, margin=16)
     pdf.set_margins(16, 16, 16)
+    for style in PDF_FONT_FILENAMES:
+        pdf.add_font(PDF_FONT_FAMILY, style, str(_pdf_font_path(style)))
     pdf.add_page()
     pdf.write_html(
         _markdown_to_html(
             _normalize_pdf_markdown(markdown_text, target_language=target_language)
         ),
-        font_family="Times",
+        font_family=PDF_FONT_FAMILY,
     )
     pdf.output(str(output_path))
 

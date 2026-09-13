@@ -70,7 +70,7 @@ class _FakeResponse:
 def test_check_for_updates_reports_available_release(mocker) -> None:
     payload = b"""
     {
-        "tag_name": "v1.5.1",
+        "tag_name": "v1.6.1",
         "html_url": "https://example.com/release"
     }
     """
@@ -83,7 +83,7 @@ def test_check_for_updates_reports_available_release(mocker) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.5.1"
+    assert status.latest_version == "1.6.1"
     assert status.install_source == "Python Package"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
@@ -139,8 +139,8 @@ def test_update_command_prints_detected_source_and_matching_command(mocker) -> N
         cli_app,
         "check_for_updates",
         return_value=updater.UpdateStatus(
-            current_version="1.5.0",
-            latest_version="1.5.0",
+            current_version="1.6.0",
+            latest_version="1.6.0",
             available=True,
             install_source="Standalone Binary",
             release_url="https://example.com/release",

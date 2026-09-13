@@ -31,6 +31,19 @@ def sample_playlist_id() -> str:
 
 
 @pytest.fixture(autouse=True)
+def deterministic_console_color(monkeypatch):
+    """Force Rich's terminal auto-detection so ANSI codes don't leak into
+    CliRunner output based on the host shell's FORCE_COLOR/TTY_COMPATIBLE.
+
+    Rich's Console.is_terminal honors FORCE_COLOR/TTY_COMPATIBLE ahead of an
+    actual isatty() check, so a dev shell that sets FORCE_COLOR (common in
+    modern terminals) makes CLI tests assert against ANSI-colored output.
+    """
+    monkeypatch.delenv("FORCE_COLOR", raising=False)
+    monkeypatch.delenv("TTY_COMPATIBLE", raising=False)
+
+
+@pytest.fixture(autouse=True)
 def isolate_state_dir(tmp_path, monkeypatch):
     """Redirect ~/.notewise to a tmp dir so tests never touch real state."""
     DatabaseRepository.close_all_instances()

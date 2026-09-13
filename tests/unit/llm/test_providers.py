@@ -237,6 +237,41 @@ class TestLLMProvider:
 
             assert usage == UsageTotals()
 
+    async def test_generate_accumulates_usage_across_empty_retries(self):
+        """Tokens/cost billed by earlier empty-content attempts must not be dropped."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch(
+                "notewise.llm.provider.completion_cost",
+                side_effect=[0.001, 0.002],
+            ),
+        ):
+            empty_response = MagicMock()
+            empty_response.choices[0].message.content = ""
+            empty_response.usage.prompt_tokens = 10
+            empty_response.usage.completion_tokens = 0
+            empty_response.usage.total_tokens = 10
+
+            filled_response = MagicMock()
+            filled_response.choices[0].message.content = "Recovered"
+            filled_response.usage.prompt_tokens = 10
+            filled_response.usage.completion_tokens = 5
+            filled_response.usage.total_tokens = 15
+
+            mock_acompletion.side_effect = [empty_response, filled_response]
+
+            provider = LLMProvider("gpt-4o")
+            with provider.collect_usage() as usage:
+                result = await provider.generate("sys", "user")
+
+        assert result == "Recovered"
+        assert usage == UsageTotals(
+            prompt_tokens=20,
+            completion_tokens=5,
+            total_tokens=25,
+            cost_usd=0.003,
+        )
+
     async def test_collect_usage_nested_scopes_roll_up_to_outer(self):
         """Nested usage scopes should preserve inner totals in the outer collector."""
         with (
@@ -588,6 +623,23 @@ class TestLLMProvider:
         assert prompt == 4
         assert completion == 8
         assert total == 12
+
+    def test_extract_usage_preserves_legitimate_zero_completion_tokens(self):
+        """A real 0 completion_tokens must not fall back to output_tokens."""
+        provider = LLMProvider("gpt-4o")
+        usage = SimpleNamespace(
+            prompt_tokens=10,
+            completion_tokens=0,
+            output_tokens=99,
+            total_tokens=10,
+        )
+        response = SimpleNamespace(usage=usage)
+
+        prompt, completion, total = provider._extract_usage(response)
+
+        assert prompt == 10
+        assert completion == 0
+        assert total == 10
 
     def test_extract_cost_returns_zero_when_litellm_raises(self):
         """Cost extraction should fail closed when LiteLLM pricing lookup fails."""

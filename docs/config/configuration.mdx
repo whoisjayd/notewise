@@ -1,11 +1,11 @@
 ---
 title: "Configuration"
 sidebarTitle: "Configuration"
-description: "Understand NoteWise config files, environment variables, defaults, and command overrides."
-keywords: ["notewise config", "config.env", "NOTEWISE_HOME", "DEFAULT_MODEL"]
+description: "Understand NoteWise config storage, environment variables, defaults, and command overrides."
+keywords: ["notewise config", "config.db", "NOTEWISE_HOME", "DEFAULT_MODEL"]
 ---
 
-NoteWise reads settings from code defaults, `config.env`, environment variables, and command flags.
+NoteWise reads settings from code defaults, `config.db`, environment variables, and command flags.
 
 ## State directory
 
@@ -13,16 +13,22 @@ By default, state lives under `~/.notewise`.
 
 | File or folder                   | Purpose                                  |
 | -------------------------------- | ---------------------------------------- |
-| `~/.notewise/config.env`         | User config written by `notewise setup`. |
+| `~/.notewise/config.db`          | User config written by `notewise setup`/`config`. |
 | `~/.notewise/.notewise_cache.db` | SQLite cache and run history.            |
 | `~/.notewise/logs/`              | Session logs.                            |
 | `~/.notewise/oauth/`             | Default OAuth token storage.             |
 
 Set `NOTEWISE_HOME` to move this state root.
 
+<Note>
+  Older installs stored config in a `~/.notewise/config.env` text file. On the
+  first run after upgrading, NoteWise imports any existing `config.env` into
+  `config.db` and deletes the file — no manual migration needed.
+</Note>
+
 ## Practical precedence
 
-For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.env` is used unless `--output` is passed. Other settings use environment variables, then `config.env`, then code defaults.
+For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.db` is used unless `--output` is passed. Other settings use environment variables, then `config.db`, then code defaults.
 
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
@@ -44,13 +50,15 @@ cannot use LiteLLM provider prefixes. Base URLs must be absolute HTTPS URLs, exc
 explicit loopback endpoints may use HTTP. Setup accepts a URL with or without `/v1`
 and stores it with the `/v1` suffix.
 
-The registry is one compact JSON value in `~/.notewise/config.env`. Each object has
-`name`, `base_url`, and `api_key` fields. This safe two-profile example uses
-placeholder credentials:
+The registry is stored as one row per endpoint (`name`, `base_url`, `api_key`) in a
+dedicated table in `~/.notewise/config.db`, managed with `notewise inference
+list|add|update|delete`. You can also override the whole registry for one process
+with the `CUSTOM_LLM_ENDPOINTS` environment variable, a compact JSON array with the
+same fields — this safe two-profile example uses placeholder credentials:
 
-```dotenv
-CUSTOM_LLM_ENDPOINTS='[{"name":"team-gateway","base_url":"https://gateway.example.com/v1","api_key":"example-team-token"},{"name":"lab-server","base_url":"https://lab.example.net/v1","api_key":"example-lab-token"}]'
-DEFAULT_MODEL=team-gateway/your-model-id
+```bash
+export CUSTOM_LLM_ENDPOINTS='[{"name":"team-gateway","base_url":"https://gateway.example.com/v1","api_key":"example-team-token"},{"name":"lab-server","base_url":"https://lab.example.net/v1","api_key":"example-lab-token"}]'
+export DEFAULT_MODEL=team-gateway/your-model-id
 ```
 
 Custom models are always named `<name>/<model-id>`. When that name exactly matches
@@ -73,11 +81,11 @@ copies its credentials into ambient environment variables.
 | `YOUTUBE_COOKIE_FILE`         | unset                     | Default Netscape cookies file path. |
 | `ALLOW_UNLISTED_MODELS`       | `false`                   | Permit out-of-catalog models.       |
 
-Provider API keys and provider auth keys are also accepted in `config.env` when they are listed in source constants.
+Provider API keys and provider auth keys are also accepted in `config.db` (via `notewise config set KEY VALUE`) when they are listed in source constants. Omit `VALUE` for a sensitive key to be prompted for it with hidden input instead of typing it as a plain CLI argument.
 
 <Note>
   `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default
-  settings, not normal `config.env` keys.
+  settings, not normal `config.db` keys.
 </Note>
 
 ## Commands
@@ -87,8 +95,20 @@ notewise setup
 notewise setup --show
 notewise setup --force
 notewise config
+notewise config keys
+notewise config get DEFAULT_MODEL
+notewise config set DEFAULT_MODEL gemini/gemini-2.5-flash
+notewise config unset MAX_TOKENS
 notewise config-path
 notewise edit-config
 ```
 
-`notewise config` masks secrets before printing settings.
+`notewise config` (no arguments) masks secrets before printing all settings.
+`notewise config keys` lists every key `get`/`set`/`unset` accept, since the
+full set (provider API keys, provider auth keys, and core settings) isn't
+obvious up front. `notewise config get/set/unset` read or write one key at a
+time; `set` validates the new value immediately and reports an error without
+leaving the process in a broken state if it's invalid (e.g. `TEMPERATURE` out
+of range). `edit-config`
+opens the current settings as an editable env-style file in your `$EDITOR`, then
+re-saves whatever you leave in it — including removing lines you delete.

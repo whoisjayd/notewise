@@ -425,8 +425,10 @@ async def test_render_source_info_rejects_unresolvable_video(
 
 def test_render_doctor_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     console = _console()
-    config_path = tmp_path / admin.CONFIG_FILENAME
-    config_path.write_text("DEFAULT_MODEL=x\n", encoding="utf-8")
+    config_path = tmp_path / "config.db"
+    from notewise.storage import config_store
+
+    config_store.update_config_db(config_path, {"DEFAULT_MODEL": "x"})
     db_path = tmp_path / "cache.db"
     with closing(sqlite3.connect(db_path)) as connection:
         connection.execute("CREATE TABLE test (id INTEGER)")
@@ -448,6 +450,8 @@ def test_render_doctor_ready(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
     )
     monkeypatch.setattr(admin, "app_settings", settings)
     monkeypatch.setattr(admin, "get_state_dir", lambda: tmp_path)
+    monkeypatch.setattr(admin, "get_config_db_path", lambda: config_path)
+    monkeypatch.setattr(admin, "config_exists", lambda: True)
     monkeypatch.setattr(admin, "get_cache_db_path", lambda: db_path)
     monkeypatch.setattr(admin, "get_log_dir", _log_dir)
     monkeypatch.setattr(admin, "get_session_log_path", lambda: latest_log)
@@ -670,22 +674,63 @@ def test_clean_logs_all_skips_symlinked_logs(
 def test_edit_config_handles_missing_and_existing_file(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
+    from notewise.storage import config_store
+
     console = _console()
-    config_path = tmp_path / admin.CONFIG_FILENAME
-    opened: list[Path] = []
-    monkeypatch.setattr(admin, "get_state_dir", lambda: tmp_path)
-    monkeypatch.setattr(admin, "_open_in_editor", lambda path: opened.append(path))
+    config_path = tmp_path / "config.db"
+    monkeypatch.setattr(admin, "get_config_db_path", lambda: config_path)
+    monkeypatch.setattr(
+        admin, "config_exists", lambda: not config_store.config_db_is_empty(config_path)
+    )
 
     admin.edit_config(console)
-    config_path.write_text("DEFAULT_MODEL=x\n", encoding="utf-8")
+    output_before = _text(console)
+    assert "Run `notewise setup` first" in output_before
+
+    config_store.update_config_db(config_path, {"DEFAULT_MODEL": "x"})
+
+    def _fake_edit(path: Path) -> None:
+        path.write_text("DEFAULT_MODEL=y\n", encoding="utf-8")
+
+    monkeypatch.setattr(admin, "_open_in_editor", _fake_edit)
+
     admin.edit_config(console)
+
+    output_after = _text(console)
+    assert "Updated configuration at" in output_after
+    assert str(config_path) in output_after.replace("\n", "")
+    assert config_store.load_config_db(config_path)["DEFAULT_MODEL"] == "y"
+
+
+def test_edit_config_refuses_to_overwrite_concurrent_change(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """A config write that lands while the editor is open must not be discarded."""
+    from notewise.storage import config_store
+
+    console = _console()
+    config_path = tmp_path / "config.db"
+    config_store.update_config_db(config_path, {"DEFAULT_MODEL": "original"})
+    monkeypatch.setattr(admin, "get_config_db_path", lambda: config_path)
+    monkeypatch.setattr(admin, "config_exists", lambda: True)
+
+    def _edit_and_race(path: Path) -> None:
+        # Simulate another process committing a change while $EDITOR is open.
+        config_store.update_config_db(config_path, {"MAX_TOKENS": "500"})
+        path.write_text("DEFAULT_MODEL=edited\n", encoding="utf-8")
+
+    monkeypatch.setattr(admin, "_open_in_editor", _edit_and_race)
+
+    import typer
+
+    with pytest.raises(typer.Exit):
+        admin.edit_config(console)
 
     output = _text(console)
-    normalized_output = output.replace("\n", "").replace("\r", "")
-    assert "Run `notewise setup` first" in output
-    assert "Opened" in output
-    assert str(config_path) in normalized_output
-    assert opened == [config_path]
+    assert "changed elsewhere" in output
+    current = config_store.load_config_db(config_path)
+    assert current["DEFAULT_MODEL"] == "original"
+    assert current["MAX_TOKENS"] == "500"
 
 
 def test_render_stats_handles_empty_model_breakdown(
@@ -718,9 +763,11 @@ def test_render_doctor_reports_output_and_db_failures(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
 ) -> None:
+    from notewise.storage import config_store
+
     console = _console()
-    config_path = tmp_path / admin.CONFIG_FILENAME
-    config_path.write_text("DEFAULT_MODEL=x\n", encoding="utf-8")
+    config_path = tmp_path / "config.db"
+    config_store.update_config_db(config_path, {"DEFAULT_MODEL": "x"})
     db_path = tmp_path / "cache.db"
     db_path.write_text("broken", encoding="utf-8")
 
@@ -731,6 +778,8 @@ def test_render_doctor_reports_output_and_db_failures(
     )
     monkeypatch.setattr(admin, "app_settings", settings)
     monkeypatch.setattr(admin, "get_state_dir", lambda: tmp_path)
+    monkeypatch.setattr(admin, "get_config_db_path", lambda: config_path)
+    monkeypatch.setattr(admin, "config_exists", lambda: True)
     monkeypatch.setattr(admin, "get_cache_db_path", lambda: db_path)
     monkeypatch.setattr(admin, "get_log_dir", lambda _state_dir: tmp_path / "missing")
     monkeypatch.setattr(admin, "get_session_log_path", lambda: None)

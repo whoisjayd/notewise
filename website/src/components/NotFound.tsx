@@ -1,23 +1,27 @@
 import { Link } from "@tanstack/react-router";
+import { FineIcon } from "@/ui/FineIcon";
 
 export function NotFound() {
   return (
     <main
       id="main-content"
-      className="flex min-h-screen items-center justify-center bg-background px-4"
+      className="flex min-h-screen items-center justify-center bg-background px-5"
     >
       <div className="max-w-md text-center">
-        <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">Page not found</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          The page you're looking for doesn't exist or has been moved.
+        <span className="t-eyebrow">Error · 404</span>
+        <h1 className="mt-4 t-h1 text-[clamp(48px,9vw,88px)]">
+          Wrong <em className="text-stamp">page</em>.
+        </h1>
+        <p className="mt-5 t-body">
+          That link is stale or was never real. The rest of the site still is.
         </p>
-        <div className="mt-6">
+        <div className="mt-8 flex justify-center">
           <Link
             to="/"
-            className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+            className="hover-feedback inline-flex items-center gap-2 rounded-full border border-transparent bg-foreground px-5 py-3 t-btn text-background sm:py-2.5"
           >
-            Go home
+            Back to NoteWise
+            <FineIcon name="arrow" size={14} />
           </Link>
         </div>
       </div>
