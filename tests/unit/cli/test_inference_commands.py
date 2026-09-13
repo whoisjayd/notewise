@@ -70,6 +70,93 @@ def test_inference_add_replaces_profile_after_discovery_and_verification(
     assert "new-secret" not in result.output
 
 
+def test_inference_add_accepts_short_flag_aliases(mocker) -> None:
+    """-b/-k/-m should behave identically to --base-url/--api-key/--model."""
+    db_path = get_config_db_path()
+    discover = mocker.patch(
+        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+        return_value=["vendor/new-model"],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=AsyncMock,
+    )
+
+    result = runner.invoke(
+        cli_app.app,
+        [
+            "inference",
+            "add",
+            "office",
+            "-b",
+            "https://new.example/",
+            "-k",
+            "new-secret",
+            "-m",
+            "vendor/new-model",
+        ],
+    )
+
+    assert result.exit_code == 0
+    discover.assert_called_once_with("https://new.example/v1", "new-secret")
+    verify.assert_awaited_once_with(
+        "https://new.example/v1", "new-secret", "vendor/new-model"
+    )
+    assert config_store.list_custom_endpoints(db_path) == (
+        CustomEndpointProfile(
+            name="office",
+            base_url="https://new.example/v1",
+            api_key="new-secret",
+        ),
+    )
+
+
+def test_inference_update_accepts_short_flag_aliases(mocker) -> None:
+    """-b/-k/-m should behave identically to --base-url/--api-key/--model."""
+    db_path = get_config_db_path()
+    office = CustomEndpointProfile(
+        name="office",
+        base_url="https://office.example/v1",
+        api_key="old-secret",
+    )
+    config_store.upsert_custom_endpoint(db_path, office)
+    mocker.patch(
+        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+        return_value=["vendor/new-model"],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=AsyncMock,
+    )
+
+    result = runner.invoke(
+        cli_app.app,
+        [
+            "inference",
+            "update",
+            "office",
+            "-b",
+            "https://new.example/",
+            "-k",
+            "new-secret",
+            "-m",
+            "vendor/new-model",
+        ],
+    )
+
+    assert result.exit_code == 0
+    verify.assert_awaited_once_with(
+        "https://new.example/v1", "new-secret", "vendor/new-model"
+    )
+    assert config_store.list_custom_endpoints(db_path) == (
+        CustomEndpointProfile(
+            name="office",
+            base_url="https://new.example/v1",
+            api_key="new-secret",
+        ),
+    )
+
+
 def test_inference_add_rejects_model_missing_from_live_discovery(mocker) -> None:
     """A supplied model must be present in the endpoint's live model list."""
     db_path = get_config_db_path()

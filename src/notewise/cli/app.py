@@ -1481,13 +1481,15 @@ def inference_list() -> None:
 def inference_add(
     name: Annotated[str, typer.Argument(help="Name for this saved endpoint.")],
     base_url: Annotated[
-        str, typer.Option("--base-url", help="OpenAI-compatible endpoint URL.")
+        str,
+        typer.Option("--base-url", "-b", help="OpenAI-compatible endpoint URL."),
     ],
     api_key: Annotated[
-        str, typer.Option("--api-key", help="API key for this endpoint.")
+        str, typer.Option("--api-key", "-k", help="API key for this endpoint.")
     ],
     model: Annotated[
-        str, typer.Option("--model", help="Model ID returned by this endpoint.")
+        str,
+        typer.Option("--model", "-m", help="Model ID returned by this endpoint."),
     ],
 ) -> None:
     """Discover, verify, and save an OpenAI-compatible endpoint."""
@@ -1529,15 +1531,19 @@ def inference_update(
     name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
     base_url: Annotated[
         str | None,
-        typer.Option("--base-url", help="Replacement OpenAI-compatible endpoint URL."),
+        typer.Option(
+            "--base-url",
+            "-b",
+            help="Replacement OpenAI-compatible endpoint URL.",
+        ),
     ] = None,
     api_key: Annotated[
         str | None,
-        typer.Option("--api-key", help="Replacement API key for this endpoint."),
+        typer.Option("--api-key", "-k", help="Replacement API key for this endpoint."),
     ] = None,
     model: Annotated[
         str | None,
-        typer.Option("--model", help="Model ID returned by the endpoint."),
+        typer.Option("--model", "-m", help="Model ID returned by the endpoint."),
     ] = None,
 ) -> None:
     """Discover, verify, and replace one saved inference endpoint."""
