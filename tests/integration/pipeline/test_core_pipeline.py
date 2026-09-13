@@ -3,12 +3,12 @@
 import asyncio
 import json
 import zipfile
-from pathlib import Path
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
-from notewise.config import get_cache_db_path
+from notewise._constants import CHAPTER_RESUME_CACHE_DIR_NAME
+from notewise.config import get_cache_db_path, get_state_dir
 from notewise.domain.youtube import ChapterTranscript
 from notewise.errors import (
     ExtractionError as ExtractorError,
@@ -17,6 +17,7 @@ from notewise.errors import (
     IPBlockError as YouTubeIPBlockError,
 )
 from notewise.errors import (
+    PartialChapterGenerationError,
     ValidationError,
 )
 from notewise.errors import (
@@ -411,12 +412,14 @@ async def test_bundled_chapter_failure_does_not_leak_temporary_chapter_artifacts
     assert not (temp_output_dir / ".working").exists()
 
 
-async def test_chapter_generation_failure_cleans_up_temporary_directory(
+async def test_chapter_generation_failure_preserves_resumable_cache_dir(
     temp_output_dir, mock_llm_provider
 ):
-    """A raise from chapter-note generation must not leak the TemporaryDirectory."""
-    import notewise.pipeline._chapter_outputs as chapter_outputs_module
-
+    """A raise from chapter-note generation must not delete the resumable
+    per-video chapter cache -- unlike the old random TemporaryDirectory
+    (always wiped on any failure), the deterministic cache dir now survives
+    so a rerun can skip whatever chapters a prior attempt already finished.
+    """
     p = _make_pipeline(temp_output_dir, mock_llm_provider)
     p.timestamps = False
     p.export_transcript_format = None
@@ -424,25 +427,12 @@ async def test_chapter_generation_failure_cleans_up_temporary_directory(
         side_effect=RuntimeError("chapter generation stopped")
     )
 
-    created_dirs: list[Path] = []
-    real_temporary_directory = chapter_outputs_module.TemporaryDirectory
-
-    def _tracking_temporary_directory(*args, **kwargs):
-        instance = real_temporary_directory(*args, **kwargs)
-        created_dirs.append(Path(instance.name))
-        return instance
-
     chapter_meta = [
         VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
         VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
     ]
 
     with (
-        patch.object(
-            chapter_outputs_module,
-            "TemporaryDirectory",
-            side_effect=_tracking_temporary_directory,
-        ),
         patch(
             _COMMON_PATCHES["metadata"],
             new=AsyncMock(
@@ -473,8 +463,90 @@ async def test_chapter_generation_failure_cleans_up_temporary_directory(
         result = await p.run(["vid-leak"])
 
     assert result.failure_count == 1
-    assert created_dirs, "expected a TemporaryDirectory to be created"
-    assert not any(created_dir.exists() for created_dir in created_dirs)
+    cache_dir = get_state_dir() / CHAPTER_RESUME_CACHE_DIR_NAME / "vid-leak"
+    assert cache_dir.exists()
+
+
+async def test_bundled_chapter_rerun_skips_chapters_a_prior_run_already_finished(
+    temp_output_dir, mock_llm_provider
+):
+    """A rerun after a partial chapter failure must not repay for chapters a
+    prior (even a separate process') attempt already finished -- this is
+    what the deterministic per-video chapter cache dir exists for.
+    """
+    p = _make_pipeline(temp_output_dir, mock_llm_provider)
+    p.timestamps = False
+    p.export_transcript_format = None
+
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    async def _first_attempt(chapter_transcripts, **kwargs):
+        del kwargs
+        raise PartialChapterGenerationError(
+            completed={"Intro": "# Intro\n\nfirst attempt notes"},
+            failures=[("Deep Dive", RuntimeError("stalled"))],
+        )
+
+    p.generator.generate_chapter_notes_concurrent = AsyncMock(
+        side_effect=_first_attempt
+    )
+
+    chapter_transcripts = {
+        "Intro": ChapterTranscript(
+            title="Intro", text="intro transcript", start_seconds=0
+        ),
+        "Deep Dive": ChapterTranscript(
+            title="Deep Dive", text="deep dive transcript", start_seconds=30
+        ),
+    }
+
+    with (
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-resume",
+                    title="Resume Video",
+                    duration=60,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
+            return_value=chapter_transcripts,
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id="vid-resume")
+
+        first_result = await p.run(["vid-resume"])
+        assert first_result.failure_count == 1
+
+        p.generator.generate_chapter_notes_concurrent = (
+            _mock_generate_chapter_notes_concurrent(p.generator)
+        )
+        p.generator.generate_single_chapter_notes = AsyncMock(
+            return_value="# Deep Dive\n\nsecond attempt notes"
+        )
+
+        second_result = await p.run(["vid-resume"])
+
+    assert second_result.success_count == 1
+    call_kwargs = p.generator.generate_chapter_notes_concurrent.call_args
+    regenerated = call_kwargs.args[0] if call_kwargs.args else call_kwargs.kwargs
+    assert "Deep Dive" in regenerated
+    assert "Intro" not in regenerated
+
+    bundled_notes = (temp_output_dir / "Resume Video.md").read_text(encoding="utf-8")
+    assert "first attempt notes" in bundled_notes
+    assert "second attempt notes" in bundled_notes
+    cache_dir = get_state_dir() / CHAPTER_RESUME_CACHE_DIR_NAME / "vid-resume"
+    assert not cache_dir.exists()
 
 
 async def test_bundled_chapter_retry_ignores_stale_temporary_artifacts_with_force(

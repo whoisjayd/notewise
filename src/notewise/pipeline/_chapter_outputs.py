@@ -4,17 +4,16 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from pathlib import Path
-from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
 
 from notewise._constants import (
     CHAPTER_MARKDOWN_FILE_EXTENSION,
-    CHAPTER_TEMPORARY_DIRECTORY_PREFIX,
+    CHAPTER_RESUME_CACHE_DIR_NAME,
     DEFAULT_NOTES_OUTPUT_FORMAT,
 )
+from notewise.config import get_state_dir
 from notewise.config import settings as config
 from notewise.domain.events import EventType
 from notewise.errors import PartialChapterGenerationError
@@ -26,6 +25,7 @@ from notewise.utils import sanitize_filename
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
+    from pathlib import Path
 
 
 logger = structlog.get_logger(__name__)
@@ -90,7 +90,7 @@ class ChapterOutputTargets:
     rendered_output_targets: dict[str, Path]
     output_target: Path | None
     transcript_output_dir: Path
-    temporary_chapter_directory: TemporaryDirectory[str] | None
+    bundled_chapter_cache_dir: Path | None
     temporary_chapter_dir: Path | None
 
 
@@ -169,19 +169,23 @@ async def prepare_chapter_output_targets(
         output_target = next(iter(rendered_output_targets.values()))
         transcript_output_dir = output_target.parent
 
-    temporary_chapter_directory: TemporaryDirectory[str] | None = None
+    bundled_chapter_cache_dir: Path | None = None
     temporary_chapter_dir: Path | None = None
     if rendered_output_targets and not chapter_directory_output:
-        temporary_chapter_directory = TemporaryDirectory(
-            prefix=CHAPTER_TEMPORARY_DIRECTORY_PREFIX
+        # Deterministic (keyed by video_id), not a random TemporaryDirectory,
+        # so a fresh process invocation after a crash/interrupt can still
+        # find and skip chapters a prior run already finished.
+        bundled_chapter_cache_dir = (
+            get_state_dir() / CHAPTER_RESUME_CACHE_DIR_NAME / video_id
         )
-        temporary_chapter_dir = Path(temporary_chapter_directory.name)
+        bundled_chapter_cache_dir.mkdir(parents=True, exist_ok=True)
+        temporary_chapter_dir = bundled_chapter_cache_dir
 
     return ChapterOutputTargets(
         rendered_output_targets=rendered_output_targets,
         output_target=output_target,
         transcript_output_dir=transcript_output_dir,
-        temporary_chapter_directory=temporary_chapter_directory,
+        bundled_chapter_cache_dir=bundled_chapter_cache_dir,
         temporary_chapter_dir=temporary_chapter_dir,
     )
 
@@ -446,7 +450,7 @@ async def generate_chapter_outputs(
     str | None,
     Path | None,
     Path,
-    TemporaryDirectory[str] | None,
+    Path | None,
 ]:
     chapter_directory_output = pipeline.chapter_directory_output
     total_chapters = len(chapter_transcripts)
@@ -459,10 +463,14 @@ async def generate_chapter_outputs(
         reserved_targets,
         chapter_directory_output,
     )
-    # The caller only takes ownership of temporary_chapter_directory (and
-    # cleans it up) once this function returns it successfully. If anything
-    # below raises, this function must clean it up itself or the directory
-    # leaks until TemporaryDirectory's GC finalizer eventually runs.
+    # The caller only takes ownership of bundled_chapter_cache_dir (and
+    # removes it) once this function returns it successfully -- a full
+    # bundle means every chapter is accounted for, so the cache is no longer
+    # needed. On any failure below, this function deliberately leaves the
+    # directory in place (unlike the old random TemporaryDirectory, which
+    # was always wiped): whatever chapters made it to disk stay there so a
+    # future rerun's chapter_file.exists() skip-check can reuse them instead
+    # of repaying for them.
     try:
         plan = build_chapter_generation_plan(
             pipeline,
@@ -509,17 +517,11 @@ async def generate_chapter_outputs(
             chapter_directory_output,
         )
     except PartialChapterGenerationError as partial_error:
-        # Persist whatever finished before re-raising: for
-        # --chapter-directory-output (a real, persistent directory), this is
-        # what lets a rerun's existing chapter_file.exists() skip-check pick
-        # these back up instead of regenerating -- and repaying for -- them.
+        # Persist whatever finished before re-raising -- this is what lets a
+        # rerun's existing chapter_file.exists() skip-check pick these back
+        # up instead of regenerating -- and repaying for -- them, in both
+        # --chapter-directory-output and (now deterministic) bundled mode.
         persist_completed_chapter_files(pipeline, plan, partial_error.completed)
-        if output_targets.temporary_chapter_directory is not None:
-            output_targets.temporary_chapter_directory.cleanup()
-        raise
-    except BaseException:
-        if output_targets.temporary_chapter_directory is not None:
-            output_targets.temporary_chapter_directory.cleanup()
         raise
 
     return (
@@ -527,5 +529,5 @@ async def generate_chapter_outputs(
         render_warning,
         output_target,
         transcript_output_dir,
-        output_targets.temporary_chapter_directory,
+        output_targets.bundled_chapter_cache_dir,
     )

@@ -781,7 +781,9 @@ NOTES_OUTPUT_EXTENSIONS = {
     "pdf": ".pdf",
     "docx": ".docx",
 }
-CHAPTER_TEMPORARY_DIRECTORY_PREFIX = "notewise-chapters-"
+# Deterministic (per video_id) so a rerun after a crash/interrupt can find and
+# skip already-generated chapters even in bundled (non-directory-output) mode.
+CHAPTER_RESUME_CACHE_DIR_NAME = "chapter_cache"
 CHAPTER_MARKDOWN_FILE_EXTENSION = NOTES_OUTPUT_EXTENSIONS[DEFAULT_NOTES_OUTPUT_FORMAT]
 QUIZ_MARKDOWN_FILE_SUFFIX = f"_quiz{CHAPTER_MARKDOWN_FILE_EXTENSION}"
 HTML_LANGUAGE_ALIASES = {
