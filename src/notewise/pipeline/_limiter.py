@@ -37,7 +37,11 @@ def get_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
     except RuntimeError:
         limiters = _SENTINEL_LIMITERS
     else:
-        limiters = _LOOP_SCOPED_LIMITERS.setdefault(loop, {})
+        limiters = _LOOP_SCOPED_LIMITERS.get(loop)
+        if limiters is None:
+            limiters = {}
+            _LOOP_SCOPED_LIMITERS[loop] = limiters
+            _evict_on_close(loop)
 
     limiter = limiters.get(requests_per_minute)
     if limiter is None:
@@ -47,6 +51,25 @@ def get_youtube_limiter(requests_per_minute: int) -> AsyncLimiter:
         )
         limiters[requests_per_minute] = limiter
     return limiter
+
+
+def _evict_on_close(loop: asyncio.AbstractEventLoop) -> None:
+    """Drop this loop's cached limiters as soon as it closes.
+
+    Once acquired, ``AsyncLimiter`` keeps a strong reference to the loop it
+    ran on (aiolimiter sets ``self._event_loop`` in ``acquire()``). Left
+    alone, that reference runs straight back through this cache -- a
+    module-level GC root -- to ``loop`` itself, so the weak key here would
+    never actually go weak and the entry would never get collected. Evicting
+    on ``close()`` (rather than waiting on GC) breaks that chain deterministically.
+    """
+    original_close = loop.close
+
+    def close_and_evict() -> None:
+        _LOOP_SCOPED_LIMITERS.pop(loop, None)
+        original_close()
+
+    loop.close = close_and_evict  # ty: ignore[invalid-assignment]
 
 
 def clear_youtube_limiters() -> None:

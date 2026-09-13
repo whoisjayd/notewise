@@ -42,12 +42,17 @@ async def test_loop_scoped_limiter_is_shared_within_one_loop():
 def test_loop_scoped_limiter_is_dropped_when_its_loop_is_garbage_collected():
     """A dead loop's limiters must not leak, and its id() must not be reused
     to silently hand back a stale limiter to an unrelated new loop.
+
+    The limiter is actually acquired (not just constructed): AsyncLimiter
+    only stores a strong reference back to its loop once ``acquire()`` runs,
+    and that reference is exactly what would keep the loop pinned alive
+    through this cache if eviction only happened on garbage collection.
     """
     clear_youtube_limiters()
 
     loop = asyncio.new_event_loop()
     try:
-        loop.run_until_complete(_call_get_youtube_limiter())
+        loop.run_until_complete(_acquire_youtube_limiter())
         assert len(_LOOP_SCOPED_LIMITERS) == 1
     finally:
         loop.close()
@@ -58,5 +63,6 @@ def test_loop_scoped_limiter_is_dropped_when_its_loop_is_garbage_collected():
     assert len(_LOOP_SCOPED_LIMITERS) == 0
 
 
-async def _call_get_youtube_limiter():
-    get_youtube_limiter(5)
+async def _acquire_youtube_limiter():
+    async with get_youtube_limiter(5):
+        pass
