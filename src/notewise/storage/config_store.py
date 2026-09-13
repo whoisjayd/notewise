@@ -54,6 +54,12 @@ if TYPE_CHECKING:
 
 def _connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
+    # A symlink planted at db_path must never be followed -- sqlite3.connect
+    # would happily open (and rewrite) whatever it points to. Unlinking it
+    # first makes sqlite3.connect create a fresh regular file in its place,
+    # leaving any symlink target untouched.
+    if db_path.is_symlink():
+        db_path.unlink()
     connection = sqlite3.connect(db_path, timeout=30, isolation_level="DEFERRED")
     connection.execute(
         f"CREATE TABLE IF NOT EXISTS {CONFIG_SETTINGS_TABLE_NAME} "
