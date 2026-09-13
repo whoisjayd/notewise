@@ -171,22 +171,6 @@ def select_config_category(
         )
 
 
-def _default_model_uses_endpoint(
-    current_config: dict[str, str], name: str
-) -> str | None:
-    """Return the model id if DEFAULT_MODEL selects this saved endpoint."""
-    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
-
-    default_prefix, separator, default_model_id = current_config.get(
-        "DEFAULT_MODEL", ""
-    ).partition("/")
-    if not separator or not default_model_id:
-        return None
-    if normalize_custom_model_prefix(default_prefix) != name:
-        return None
-    return default_model_id
-
-
 def _verify_and_save_endpoint(
     console: Console,
     db_path: Path,
@@ -195,30 +179,18 @@ def _verify_and_save_endpoint(
 ) -> bool:
     """Discover, verify, and persist one endpoint. Returns True on success."""
     import sqlite3
+    from dataclasses import replace
 
     from notewise.errors import ConfigurationError, CustomEndpointError
-    from notewise.llm.custom_endpoint import (
-        discover_openai_compatible_models,
-        verify_openai_compatible_model,
-    )
+    from notewise.llm.custom_endpoint import discover_and_verify_model
 
     try:
-        discovered_models = discover_openai_compatible_models(
-            profile.base_url, profile.api_key
+        pricing = discover_and_verify_model(
+            profile.base_url, profile.api_key, model, endpoint_name=profile.name
         )
-        if model not in discovered_models:
-            console.print(
-                f"[red]Model {model!r} was not returned by endpoint "
-                f"{profile.name!r}.[/red]"
-            )
-            return False
-
-        import asyncio
-
-        asyncio.run(
-            verify_openai_compatible_model(profile.base_url, profile.api_key, model)
+        config_store.upsert_custom_endpoint(
+            db_path, replace(profile, model_pricing=pricing)
         )
-        config_store.upsert_custom_endpoint(db_path, profile)
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         console.print(f"[red]{error}[/red]")
         return False
@@ -293,7 +265,10 @@ def _pick_model_and_save_endpoint(
     existing profile) -- this only handles the part both flows share.
     """
     from notewise.errors import CustomEndpointError
-    from notewise.llm.custom_endpoint import CustomEndpointProfile
+    from notewise.llm.custom_endpoint import (
+        CustomEndpointProfile,
+        default_model_endpoint_match,
+    )
 
     model = _select_or_enter_model(console, base_url, api_key)
     if not model:
@@ -304,8 +279,21 @@ def _pick_model_and_save_endpoint(
     except CustomEndpointError as error:
         console.print(f"[red]{error}[/red]")
         return
-    if _verify_and_save_endpoint(console, db_path, profile, model):
-        console.print(f"[green]{success_verb} endpoint {profile.name!r}.[/green]")
+    if not _verify_and_save_endpoint(console, db_path, profile, model):
+        return
+    console.print(f"[green]{success_verb} endpoint {profile.name!r}.[/green]")
+
+    # Keep DEFAULT_MODEL pointed at this endpoint's current model: sync it
+    # immediately (no prompt) whenever it already targets this endpoint, or
+    # is unset, so a model swap during update takes effect right away.
+    target = f"{name}/{model}"
+    current_config = load_config(suppress_errors=True)
+    current_default = current_config.get("DEFAULT_MODEL", "")
+    if current_default == target:
+        return
+    matched_model = default_model_endpoint_match(current_config, name)
+    if matched_model is not None or not current_default:
+        save_config({"DEFAULT_MODEL": target}, console=console)
 
 
 def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
@@ -323,6 +311,7 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
 
     from notewise.errors import CustomEndpointError
     from notewise.llm.custom_endpoint import (
+        default_model_endpoint_match,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
     )
@@ -439,7 +428,7 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             except ConfigurationError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
-            if _default_model_uses_endpoint(current_config, normalized) is not None:
+            if default_model_endpoint_match(current_config, normalized) is not None:
                 active_console.print(
                     f"[red]Cannot delete {normalized!r} while DEFAULT_MODEL "
                     "uses it.[/red]"
@@ -458,6 +447,46 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
         active_console.print("[red]Invalid choice. Enter 'a', 'u', 'd', or 'q'.[/red]")
 
 
+def _select_default_model_interactively(console: Console) -> str | None:
+    """Offer the same provider+model pickers `notewise setup` uses.
+
+    Returns None when the user picks "add a new custom endpoint" (that
+    needs the full setup/endpoint-manager flow, not a quick DEFAULT_MODEL
+    edit) or when nothing could be selected.
+    """
+    import sqlite3
+
+    from notewise.storage import config_store
+
+    db_path = get_config_db_path()
+    try:
+        custom_profiles = config_store.list_custom_endpoints(db_path)
+    except sqlite3.Error:
+        custom_profiles = ()
+
+    console.print("\n[cyan]Loading available models...[/cyan]")
+    available_models = get_available_models(console=console)
+    provider_key = select_provider(
+        available_models, custom_profiles=custom_profiles, console=console
+    )
+
+    if provider_key == "custom_openai_compatible":
+        console.print(
+            "[yellow]Add a new endpoint from the Custom Endpoints "
+            "category first.[/yellow]"
+        )
+        return None
+
+    profile = next((p for p in custom_profiles if p.name == provider_key), None)
+    if profile is None:
+        return select_model(provider_key, available_models, console=console)
+
+    model_id = _discover_and_verify_custom_endpoint(profile, console=console)
+    if model_id is None:
+        return None
+    return f"{profile.name}/{model_id}"
+
+
 def run_config_editor(*, console: Console | None = None) -> None:
     """Interactively browse and edit persisted config, grouped by category."""
     import sqlite3
@@ -466,7 +495,11 @@ def run_config_editor(*, console: Console | None = None) -> None:
     from rich.prompt import Prompt
     from rich.table import Table
 
-    from notewise.config import categorize_config_keys, validate_candidate_config
+    from notewise.config import (
+        categorize_config_keys,
+        format_settings_validation_error,
+        validate_candidate_config,
+    )
     from notewise.config import settings as app_settings
     from notewise.errors import CustomEndpointError
     from notewise.storage import config_store
@@ -554,14 +587,21 @@ def run_config_editor(*, console: Console | None = None) -> None:
                     try:
                         app_settings.reload()
                     except PydanticValidationError as error:
-                        active_console.print(f"[red]{error}[/red]")
+                        active_console.print(
+                            f"[red]{format_settings_validation_error(error)}[/red]"
+                        )
                 continue
 
             if action in ("s", "set"):
-                new_value = Prompt.ask(
-                    f"Enter value for {selected_key}",
-                    password=_is_sensitive_key(selected_key),
-                )
+                if selected_key == "DEFAULT_MODEL":
+                    new_value = _select_default_model_interactively(active_console)
+                    if not new_value:
+                        continue
+                else:
+                    new_value = Prompt.ask(
+                        f"Enter value for {selected_key}",
+                        password=_is_sensitive_key(selected_key),
+                    )
                 try:
                     candidate = {
                         **load_config(suppress_errors=True),
@@ -570,7 +610,7 @@ def run_config_editor(*, console: Console | None = None) -> None:
                     validate_candidate_config(candidate)
                 except PydanticValidationError as error:
                     active_console.print(
-                        f"[red]Invalid value for {selected_key}: {error}[/red]"
+                        f"[red]{format_settings_validation_error(error)}[/red]"
                     )
                     continue
 
@@ -588,11 +628,18 @@ def run_config_editor(*, console: Console | None = None) -> None:
                 try:
                     app_settings.reload()
                 except PydanticValidationError as error:
-                    active_console.print(f"[red]{error}[/red]")
+                    active_console.print(
+                        f"[red]{format_settings_validation_error(error)}[/red]"
+                    )
                 continue
 
-            # Any other input (including the 'c'/'cancel' default) cancels
-            # back to the key list without changes.
+            if action not in ("c", "cancel", ""):
+                active_console.print(
+                    f"[yellow]{action!r} was not understood; no changes made. "
+                    "Use 's' to set, 'u' to unset, or 'c' to cancel.[/yellow]"
+                )
+            # Cancel (explicit 'c'/'cancel', or the default blank input)
+            # returns to the key list without changes.
 
 
 def show_current_config(*, console: Console | None = None) -> dict[str, str]:

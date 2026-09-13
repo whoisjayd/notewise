@@ -13,6 +13,7 @@ from notewise.ui.setup_wizard import (
     get_available_models,
     get_config_path,
     load_config,
+    run_config_editor,
     run_custom_endpoint_manager,
     run_setup_wizard,
     save_config,
@@ -648,6 +649,54 @@ class TestInteractiveFlow:
             "[red]Invalid choice. Enter a category number or 'q'.[/red]"
         )
 
+    def test_run_config_editor_set_shows_clean_validation_message(self):
+        """An invalid value must show a clean summary, not pydantic's raw dump."""
+        mock_console = MagicMock()
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["1", "2", "s", "20000", "q"],
+        ):
+            run_config_editor(console=mock_console)
+
+        rendered = "\n".join(
+            str(call.args[0]) for call in mock_console.print.call_args_list
+        )
+        assert "Invalid configuration value" in rendered
+        assert "validation error for AppSettings" not in rendered
+
+    def test_run_config_editor_set_rejects_unrecognized_action_with_message(self):
+        """Typing a value straight into the action prompt must not silently no-op."""
+        mock_console = MagicMock()
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["1", "5", "800", "q"],
+        ):
+            run_config_editor(console=mock_console)
+
+        rendered = "\n".join(
+            str(call.args[0]) for call in mock_console.print.call_args_list
+        )
+        assert "not understood" in rendered
+        assert load_config().get("CHUNK_OVERLAP") is None
+
+    def test_run_config_editor_set_default_model_uses_interactive_picker(self):
+        """Setting DEFAULT_MODEL must use the provider/model picker, not free text."""
+        mock_console = MagicMock()
+
+        with (
+            patch(
+                "notewise.ui.setup_wizard._select_default_model_interactively",
+                return_value="gemini/gemini-2.5-flash",
+            ) as picker,
+            patch("rich.prompt.Prompt.ask", side_effect=["1", "1", "s", "q"]),
+        ):
+            run_config_editor(console=mock_console)
+
+        picker.assert_called_once()
+        assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
+
     def test_run_custom_endpoint_manager_update_rejects_invalid_index(self):
         """An out-of-range or non-numeric index should warn and cancel, not crash."""
         from notewise.config import get_config_db_path
@@ -681,8 +730,8 @@ class TestInteractiveFlow:
 
         with (
             patch(
-                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-                return_value=["vendor/model-a", "vendor/model-b"],
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/model-a"}, {"id": "vendor/model-b"}],
             ),
             patch(
                 "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -722,8 +771,8 @@ class TestInteractiveFlow:
 
         with (
             patch(
-                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-                return_value=["vendor/new-model"],
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
             ),
             patch(
                 "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -752,6 +801,41 @@ class TestInteractiveFlow:
                 api_key="new-secret",
             ),
         )
+        assert load_config()["DEFAULT_MODEL"] == "office/vendor/new-model"
+
+    def test_run_custom_endpoint_manager_add_leaves_existing_default_model(self):
+        """Adding a new endpoint must not clobber an already-configured default."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert config_store.list_custom_endpoints(get_config_db_path())
+        assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
 
     def test_run_custom_endpoint_manager_updates_existing_endpoint(self):
         """'u' should re-verify and replace only the targeted endpoint."""
@@ -768,8 +852,8 @@ class TestInteractiveFlow:
 
         with (
             patch(
-                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-                return_value=["vendor/new-model"],
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
             ),
             patch(
                 "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -798,6 +882,72 @@ class TestInteractiveFlow:
                 api_key="old-key",
             ),
         )
+
+    def test_run_custom_endpoint_manager_update_syncs_default_model(self):
+        """Updating the endpoint DEFAULT_MODEL already uses must sync it."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "office/vendor-old-model"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["u", "1", "", "", "vendor/new-model", "q"],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert load_config()["DEFAULT_MODEL"] == "office/vendor/new-model"
+
+    def test_run_custom_endpoint_manager_update_leaves_unrelated_default_model(self):
+        """Updating an endpoint DEFAULT_MODEL doesn't use must not touch it."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "lab-server/some-model"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["u", "1", "", "", "vendor/new-model", "q"],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert load_config()["DEFAULT_MODEL"] == "lab-server/some-model"
 
     def test_run_custom_endpoint_manager_delete_blocked_by_default_model(self):
         """Deleting the endpoint DEFAULT_MODEL uses must be refused, not applied."""

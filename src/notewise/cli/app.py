@@ -133,21 +133,9 @@ def _get_config_file_path() -> Path:
 
 def _format_config_validation_error(error: Any) -> str:
     """Return a user-facing summary for settings validation failures."""
-    messages: list[str] = []
-    for item in error.errors():
-        location = item.get("loc") or ("configuration",)
-        name = str(location[0]).upper()
-        message = str(item.get("msg") or "Invalid value")
-        value = item.get("input")
-        if value is None:
-            messages.append(f"{name}: {message}")
-        elif _is_sensitive_key(name):
-            messages.append(f"{name}=<redacted>: {message}")
-        else:
-            messages.append(f"{name}={value!r}: {message}")
+    from notewise.config import format_settings_validation_error
 
-    details = "; ".join(messages) if messages else str(error)
-    return f"{details}. Invalid configuration value."
+    return format_settings_validation_error(error)
 
 
 def _print_configuration_error(error: Exception) -> None:
@@ -1426,47 +1414,6 @@ def _exit_inference_error(message: str) -> NoReturn:
     raise typer.Exit(code=1)
 
 
-def _discover_and_verify_endpoint(profile: Any, model: str) -> None:
-    """Discover an endpoint's models, confirm `model` is one of them, then
-    verify it with a live request. Shared by `inference add` and `update`.
-    """
-    from notewise.llm.custom_endpoint import (
-        discover_openai_compatible_models,
-        verify_openai_compatible_model,
-    )
-
-    discovered_models = discover_openai_compatible_models(
-        profile.base_url, profile.api_key
-    )
-    if model not in discovered_models:
-        _exit_inference_error(
-            f"Model {model!r} was not returned by endpoint {profile.name!r}."
-        )
-    asyncio.run(
-        verify_openai_compatible_model(profile.base_url, profile.api_key, model)
-    )
-
-
-def _default_model_endpoint_match(
-    current_config: dict[str, str], normalized_name: str
-) -> str | None:
-    """Return the model id if DEFAULT_MODEL selects this saved endpoint.
-
-    Shared by `inference update` (to pick a default model) and `inference
-    delete` (to block deleting an endpoint DEFAULT_MODEL still relies on).
-    """
-    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
-
-    default_prefix, separator, default_model_id = current_config.get(
-        "DEFAULT_MODEL", ""
-    ).partition("/")
-    if not separator or not default_model_id:
-        return None
-    if normalize_custom_model_prefix(default_prefix) != normalized_name:
-        return None
-    return default_model_id
-
-
 @inference_app.command("list")
 def inference_list() -> None:
     """List saved OpenAI-compatible endpoints without their credentials."""
@@ -1516,6 +1463,7 @@ def inference_add(
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
+        discover_and_verify_model,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
     )
@@ -1527,12 +1475,17 @@ def inference_add(
         )
 
     try:
-        profile = CustomEndpointProfile(
-            name=normalize_custom_model_prefix(name),
-            base_url=normalize_openai_base_url(base_url),
-            api_key=api_key,
+        normalized_name = normalize_custom_model_prefix(name)
+        normalized_base_url = normalize_openai_base_url(base_url)
+        pricing = discover_and_verify_model(
+            normalized_base_url, api_key, model, endpoint_name=normalized_name
         )
-        _discover_and_verify_endpoint(profile, model)
+        profile = CustomEndpointProfile(
+            name=normalized_name,
+            base_url=normalized_base_url,
+            api_key=api_key,
+            model_pricing=pricing,
+        )
         config_store.upsert_custom_endpoint(get_config_db_path(), profile)
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
@@ -1579,6 +1532,8 @@ def inference_update(
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
+        default_model_endpoint_match,
+        discover_and_verify_model,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
     )
@@ -1601,7 +1556,7 @@ def inference_update(
 
         selected_model = model
         if selected_model is None:
-            selected_model = _default_model_endpoint_match(
+            selected_model = default_model_endpoint_match(
                 current_config, normalized_name
             )
             if selected_model is None:
@@ -1627,7 +1582,15 @@ def inference_update(
             base_url=selected_base_url,
             api_key=api_key if api_key is not None else existing_profile.api_key,
         )
-        _discover_and_verify_endpoint(profile, selected_model)
+        pricing = discover_and_verify_model(
+            profile.base_url,
+            profile.api_key,
+            selected_model,
+            endpoint_name=profile.name,
+        )
+        from dataclasses import replace
+
+        profile = replace(profile, model_pricing=pricing)
         config_store.upsert_custom_endpoint(db_path, profile)
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
@@ -1647,7 +1610,10 @@ def inference_delete(
 
     from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
-    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
+    from notewise.llm.custom_endpoint import (
+        default_model_endpoint_match,
+        normalize_custom_model_prefix,
+    )
     from notewise.storage import config_store
     from notewise.ui.setup_wizard import load_config
 
@@ -1661,7 +1627,7 @@ def inference_delete(
                 f"No saved inference endpoint is named {normalized_name!r}."
             )
 
-        if _default_model_endpoint_match(current_config, normalized_name) is not None:
+        if default_model_endpoint_match(current_config, normalized_name) is not None:
             _exit_inference_error(
                 f"Cannot delete {normalized_name!r} while it is used by DEFAULT_MODEL."
             )

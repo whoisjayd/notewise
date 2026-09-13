@@ -140,6 +140,32 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
 )
 
 
+def format_settings_validation_error(error: Any) -> str:
+    """Return a user-facing summary for AppSettings validation failures.
+
+    Shared by the CLI's `config set` and the interactive config editor's
+    'set' flow so both report the same clean, one-line summary instead of
+    pydantic's raw multi-line `ValidationError` dump.
+    """
+    from notewise.logging import _is_sensitive_key
+
+    messages: list[str] = []
+    for item in error.errors():
+        location = item.get("loc") or ("configuration",)
+        name = str(location[0]).upper()
+        message = str(item.get("msg") or "Invalid value")
+        value = item.get("input")
+        if value is None:
+            messages.append(f"{name}: {message}")
+        elif _is_sensitive_key(name):
+            messages.append(f"{name}=<redacted>: {message}")
+        else:
+            messages.append(f"{name}={value!r}: {message}")
+
+    details = "; ".join(messages) if messages else str(error)
+    return f"{details}. Invalid configuration value."
+
+
 def allowed_config_keys() -> frozenset[str]:
     """Return the config keys `notewise config set/unset` may read or write."""
     return _ALLOWED_KEYS

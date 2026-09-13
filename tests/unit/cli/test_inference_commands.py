@@ -30,8 +30,8 @@ def test_inference_add_replaces_profile_after_discovery_and_verification(
     save_config({"UNRELATED_SETTING": "keep-me"})
 
     discover = mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-        return_value=["vendor/new-model"],
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/new-model"}],
     )
     verify = mocker.patch(
         "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -74,8 +74,8 @@ def test_inference_add_accepts_short_flag_aliases(mocker) -> None:
     """-b/-k/-m should behave identically to --base-url/--api-key/--model."""
     db_path = get_config_db_path()
     discover = mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-        return_value=["vendor/new-model"],
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/new-model"}],
     )
     verify = mocker.patch(
         "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -121,8 +121,8 @@ def test_inference_update_accepts_short_flag_aliases(mocker) -> None:
     )
     config_store.upsert_custom_endpoint(db_path, office)
     mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-        return_value=["vendor/new-model"],
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/new-model"}],
     )
     verify = mocker.patch(
         "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -161,8 +161,8 @@ def test_inference_add_rejects_model_missing_from_live_discovery(mocker) -> None
     """A supplied model must be present in the endpoint's live model list."""
     db_path = get_config_db_path()
     mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-        return_value=["available-model"],
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "available-model"}],
     )
     verify = mocker.patch(
         "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -216,8 +216,8 @@ def test_inference_update_uses_current_default_model_and_preserves_other_profile
     )
 
     discover = mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-        return_value=["vendor/current-model"],
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/current-model"}],
     )
     verify = mocker.patch(
         "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -259,9 +259,7 @@ def test_inference_update_requires_key_when_replacing_endpoint_origin(mocker) ->
     )
     config_store.upsert_custom_endpoint(db_path, office)
     save_config({"DEFAULT_MODEL": "office/vendor/model"})
-    discover = mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models"
-    )
+    discover = mocker.patch("notewise.llm.custom_endpoint._fetch_model_list_payload")
 
     result = runner.invoke(
         cli_app.app,
@@ -282,9 +280,7 @@ def test_inference_update_requires_key_when_replacing_endpoint_origin(mocker) ->
 
 def test_inference_update_requires_endpoint_change_before_io(mocker) -> None:
     """Updating only a model is rejected before loading or saving configuration."""
-    discover = mocker.patch(
-        "notewise.llm.custom_endpoint.discover_openai_compatible_models"
-    )
+    discover = mocker.patch("notewise.llm.custom_endpoint._fetch_model_list_payload")
 
     result = runner.invoke(
         cli_app.app,

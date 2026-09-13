@@ -5,7 +5,7 @@ from __future__ import annotations
 import ipaddress
 import json
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from functools import cache
 from typing import TYPE_CHECKING
 from urllib.error import HTTPError, URLError
@@ -21,6 +21,7 @@ from notewise._constants import (
     CUSTOM_ENDPOINT_VERIFICATION_MAX_OUTPUT_TOKENS,
     CUSTOM_ENDPOINT_VERIFICATION_PROMPT,
     CUSTOM_LLM_NAME_PATTERN,
+    LLM_IDENTIFYING_HEADERS,
 )
 from notewise.errors import CustomEndpointError
 from notewise.logging import make_log_safe_text, redact_sensitive_text
@@ -40,11 +41,25 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class CustomEndpointProfile:
-    """A named OpenAI-compatible endpoint and its credential."""
+    """A named OpenAI-compatible endpoint and its credential.
+
+    `model_pricing` maps a discovered model id to (prompt_cost_per_token,
+    completion_cost_per_token) in USD, captured from the endpoint's own
+    `/v1/models` response when it exposes a `pricing` field (OpenRouter and
+    other gateways use this convention; it is not OpenRouter-specific).
+    Empty when the endpoint doesn't advertise pricing or hasn't been
+    (re)discovered since this field was added.
+    """
 
     name: str
     base_url: str
     api_key: str
+    # Excluded from eq/hash: auxiliary metadata, not part of an endpoint's
+    # identity, and a plain dict would make this (frozen, hashable) class
+    # unhashable -- breaking any existing code that puts profiles in a set.
+    model_pricing: dict[str, tuple[float, float]] = field(
+        default_factory=dict, compare=False
+    )
 
 
 def parse_custom_endpoint_profiles(
@@ -241,8 +256,11 @@ def normalize_custom_model_prefix(value: str) -> str:
     return normalized
 
 
-def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
-    """Fetch sorted, unique model IDs from an OpenAI-compatible endpoint.
+def _fetch_model_list_payload(base_url: str, api_key: str) -> list[dict[str, object]]:
+    """Fetch and validate the raw `/v1/models` `data` array.
+
+    Shared by model-ID discovery and pricing discovery so both parse the
+    exact same response instead of issuing two requests.
 
     Redirects are refused so the bearer token is never forwarded to another
     origin. Failures intentionally omit upstream response bodies and secrets.
@@ -254,6 +272,7 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         headers={
             "Accept": CUSTOM_ENDPOINT_DISCOVERY_ACCEPT_HEADER,
             "Authorization": f"Bearer {api_key}",
+            **LLM_IDENTIFYING_HEADERS,
         },
         method="GET",
     )
@@ -309,12 +328,19 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
             "Custom endpoint model discovery returned an invalid model list."
         )
 
-    model_ids: list[str] = []
     for model in payload["data"]:
         if not isinstance(model, dict):
             raise CustomEndpointError(
                 "Custom endpoint model discovery returned an invalid model list."
             )
+
+    return payload["data"]
+
+
+def _extract_model_ids(models: list[dict[str, object]]) -> list[str]:
+    """Validate and collect model ids from a `/v1/models` `data` array."""
+    model_ids: list[str] = []
+    for model in models:
         model_id = model.get("id")
         try:
             model_ids.append(_validate_model_id(model_id))
@@ -322,6 +348,13 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
             raise CustomEndpointError(
                 "Custom endpoint model discovery returned an invalid model list."
             ) from None
+    return model_ids
+
+
+def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
+    """Fetch sorted, unique model IDs from an OpenAI-compatible endpoint."""
+    models = _fetch_model_list_payload(base_url, api_key)
+    model_ids = _extract_model_ids(models)
 
     if not model_ids:
         raise CustomEndpointError(
@@ -329,6 +362,88 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         )
 
     return sorted(set(model_ids))
+
+
+# Known field-name pairs for per-token USD pricing nested under a model
+# entry's `pricing` object, tried in this order. Different gateways that
+# embed live pricing in their OpenAI-compatible `/v1/models` response use
+# different key names for the same (prompt cost, completion cost) pair:
+#   - OpenRouter:         pricing.prompt / pricing.completion
+#   - Vercel AI Gateway:  pricing.input / pricing.output
+# Self-hosted servers (vLLM, Ollama, LM Studio) and gateways whose pricing
+# lives behind a separate API (e.g. Portkey) simply have no `pricing` object
+# here at all, so they fall through untouched -- same as today.
+_NESTED_PRICING_FIELD_PAIRS: tuple[tuple[str, str], ...] = (
+    ("prompt", "completion"),
+    ("input", "output"),
+)
+# Fallback when pricing isn't nested under `pricing` but flattened directly
+# onto the model entry, using LiteLLM's own cost-map naming convention
+# (seen on some self-hosted LiteLLM-proxy-style servers).
+_FLAT_PRICING_FIELD_PAIR = ("input_cost_per_token", "output_cost_per_token")
+
+
+def _coerce_price(value: object) -> float | None:
+    """Parse one pricing value (str or number), rejecting anything negative."""
+    if not isinstance(value, (str, int, float)):
+        return None
+    try:
+        price = float(value)
+    except (TypeError, ValueError):
+        return None
+    return price if price >= 0 else None
+
+
+def _extract_model_pricing(model: dict[str, object]) -> tuple[float, float] | None:
+    """Try each known pricing convention against one model entry."""
+    raw_pricing = model.get("pricing")
+    if isinstance(raw_pricing, dict):
+        for prompt_key, completion_key in _NESTED_PRICING_FIELD_PAIRS:
+            prompt_cost = _coerce_price(raw_pricing.get(prompt_key))
+            completion_cost = _coerce_price(raw_pricing.get(completion_key))
+            if prompt_cost is not None and completion_cost is not None:
+                return (prompt_cost, completion_cost)
+
+    input_key, output_key = _FLAT_PRICING_FIELD_PAIR
+    prompt_cost = _coerce_price(model.get(input_key))
+    completion_cost = _coerce_price(model.get(output_key))
+    if prompt_cost is not None and completion_cost is not None:
+        return (prompt_cost, completion_cost)
+    return None
+
+
+def _extract_all_pricing(
+    models: list[dict[str, object]],
+) -> dict[str, tuple[float, float]]:
+    """Extract per-model pricing from a `/v1/models` `data` array.
+
+    Tries several known real-world conventions (see
+    `_NESTED_PRICING_FIELD_PAIRS` and `_FLAT_PRICING_FIELD_PAIR`) generically
+    against any endpoint's response. Models with no recognizable pricing are
+    silently skipped -- this never fails discovery, and callers should keep
+    treating an absent entry as "unknown, estimate as $0" exactly like
+    before this existed.
+    """
+    pricing: dict[str, tuple[float, float]] = {}
+    for model in models:
+        model_id = model.get("id")
+        if not isinstance(model_id, str) or not model_id:
+            continue
+        model_pricing = _extract_model_pricing(model)
+        if model_pricing is not None:
+            pricing[model_id] = model_pricing
+    return pricing
+
+
+def discover_openai_compatible_model_pricing(
+    base_url: str, api_key: str
+) -> dict[str, tuple[float, float]]:
+    """Fetch per-model (prompt, completion) USD-per-token pricing, when advertised.
+
+    See `_extract_all_pricing` for the conventions tried and fallback
+    behavior when an endpoint doesn't advertise pricing at all.
+    """
+    return _extract_all_pricing(_fetch_model_list_payload(base_url, api_key))
 
 
 async def verify_openai_compatible_model(
@@ -357,6 +472,7 @@ async def verify_openai_compatible_model(
             num_retries=0,
             api_base=normalized_base_url,
             api_key=api_key,
+            extra_headers=dict(LLM_IDENTIFYING_HEADERS),
         )
     except Exception as error:
         logger.warning(
@@ -368,6 +484,71 @@ async def verify_openai_compatible_model(
             "Custom endpoint model verification failed. "
             "Check the model, URL, and API key."
         ) from None
+
+
+def discover_and_verify_model(
+    base_url: str,
+    api_key: str,
+    model: str,
+    *,
+    endpoint_name: str | None = None,
+) -> dict[str, tuple[float, float]]:
+    """Confirm `model` is discoverable, verify it live, and return pricing.
+
+    Shared by `notewise inference add|update` and the interactive config
+    editor's custom-endpoint manager so all three apply the exact same
+    safety check before a profile is ever saved. The returned pricing map
+    (often empty -- see `_extract_all_pricing`) comes from the same single
+    `/v1/models` request used to confirm `model` exists, so callers get it
+    for free and can attach it to the saved profile.
+    """
+    models = _fetch_model_list_payload(base_url, api_key)
+    model_ids = _extract_model_ids(models)
+    if not model_ids:
+        raise CustomEndpointError(
+            "Custom endpoint model discovery returned no usable models."
+        )
+    if model not in model_ids:
+        where = f" by endpoint {endpoint_name!r}" if endpoint_name else ""
+        raise CustomEndpointError(f"Model {model!r} was not returned{where}.")
+
+    import asyncio
+
+    asyncio.run(verify_openai_compatible_model(base_url, api_key, model))
+    return _extract_all_pricing(models)
+
+
+def default_model_endpoint_match(
+    current_config: dict[str, str], endpoint_name: str
+) -> str | None:
+    """Return the model id if DEFAULT_MODEL currently selects this endpoint.
+
+    Shared by `notewise inference update|delete` (to pick a default model,
+    and to block deleting an endpoint DEFAULT_MODEL still relies on) and the
+    interactive config editor's custom-endpoint manager.
+    """
+    default_prefix, separator, default_model_id = current_config.get(
+        "DEFAULT_MODEL", ""
+    ).partition("/")
+    if not separator or not default_model_id:
+        return None
+    if re.fullmatch(CUSTOM_LLM_NAME_PATTERN, default_prefix) is None:
+        # Genuinely malformed, not just "a real provider" -- we can't safely
+        # rule out a match, so fail closed and let the caller decide
+        # (e.g. `inference delete` refuses rather than risk deleting an
+        # endpoint DEFAULT_MODEL might still reference).
+        raise CustomEndpointError(
+            "Custom endpoint name must contain only letters, digits, "
+            "underscores, or hyphens."
+        )
+    normalized_prefix = default_prefix.lower()
+    if normalized_prefix in _litellm_provider_prefixes():
+        # A real LiteLLM provider prefix (e.g. "gemini") can never be a
+        # saved custom endpoint name -- not a match, not an error.
+        return None
+    if normalized_prefix != endpoint_name:
+        return None
+    return default_model_id
 
 
 def _validate_api_key(value: str) -> str:

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from notewise import __version__ as _NOTEWISE_VERSION
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 CACHE_DB_FILENAME = ".notewise_cache.db"
@@ -88,6 +90,15 @@ LLM_API_KEY_KWARG = "api_key"
 # widely-supported fallback nearly every OpenAI-compatible endpoint accepts.
 LLM_APP_REFERER_URL = "https://notewise.click"
 LLM_APP_TITLE = "NoteWise"
+# Sent on every provider request (built-in, custom-endpoint generation, and
+# custom-endpoint verification alike) so usage dashboards attribute traffic
+# to notewise instead of "unknown". Centralized here so no call site can
+# accidentally skip it.
+LLM_IDENTIFYING_HEADERS: dict[str, str] = {
+    "HTTP-Referer": LLM_APP_REFERER_URL,
+    "X-Title": LLM_APP_TITLE,
+    "User-Agent": f"notewise/{_NOTEWISE_VERSION}",
+}
 TRANSCRIPT_STATUS_MESSAGE = "Fetching transcript..."
 TRANSCRIPT_SAVED_PREFIX = "Transcript saved:"
 TRANSCRIPT_COLLISION_SUFFIX_START = 2

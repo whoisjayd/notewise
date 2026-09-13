@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from notewise import __version__ as notewise_version
 from notewise.errors import ConfigurationError, LLMGenerationError
 from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
@@ -491,7 +492,7 @@ class TestLLMProvider:
             extra_headers={
                 "HTTP-Referer": "https://notewise.click",
                 "X-Title": "NoteWise",
-                "User-Agent": f"notewise/{provider_mod.__version__}",
+                "User-Agent": f"notewise/{notewise_version}",
             },
             max_output_tokens=128,
         )
@@ -545,7 +546,7 @@ class TestLLMProvider:
             extra_headers={
                 "HTTP-Referer": "https://notewise.click",
                 "X-Title": "NoteWise",
-                "User-Agent": f"notewise/{provider_mod.__version__}",
+                "User-Agent": f"notewise/{notewise_version}",
             },
             stream=True,
         )
