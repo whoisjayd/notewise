@@ -83,7 +83,7 @@ Output truth:
 - Cache check happens before metadata/transcript unless `--force` is used.
 - Videos with YouTube chapters use chapter-aware generation.
 - Chapter videos default to bundled notes; per-chapter folders require `--chapter-directory-output`.
-- PDF uses fpdf and Latin-compatible text; unsupported Unicode falls back to Markdown.
+- PDF uses fpdf2 with a bundled Noto Sans font (Latin, Cyrillic, Greek, Vietnamese, Devanagari); other scripts or renderer failures fall back to Markdown.
 - `cache clear` deletes the SQLite DB and sidecars, not generated notes.
 - Logs are structlog key-value text, not JSON.
 

@@ -311,7 +311,7 @@ By default, state lives under `~/.notewise`.
 
 Set `NOTEWISE_HOME` to move the state root.
 
-For a command run, command-line flags win. Then environment variables, then `config.db`, then code defaults.
+For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.db` is used unless `--output` is passed. Other settings use environment variables, then `config.db`, then code defaults.
 
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
