@@ -23,9 +23,15 @@ from notewise._constants import (
     CUSTOM_LLM_NAME_PATTERN,
 )
 from notewise.errors import CustomEndpointError
+from notewise.logging import make_log_safe_text, redact_sensitive_text
 
 
 logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
+
+
+def _summarize_error(error: Exception) -> str:
+    """Collapse exception text into one redacted, log-friendly summary line."""
+    return make_log_safe_text(redact_sensitive_text(" ".join(str(error).split())))
 
 
 if TYPE_CHECKING:
@@ -262,7 +268,7 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         logger.warning(
             "Custom endpoint model discovery failed",
             error_type=type(error).__name__,
-            exc_info=True,
+            error=_summarize_error(error),
         )
         if 300 <= error.code < 400:
             raise CustomEndpointError(
@@ -276,7 +282,7 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         logger.warning(
             "Custom endpoint model discovery failed",
             error_type=type(error).__name__,
-            exc_info=True,
+            error=_summarize_error(error),
         )
         raise CustomEndpointError(
             "Could not reach the custom endpoint while discovering models."
@@ -285,7 +291,7 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
         logger.warning(
             "Custom endpoint model discovery failed",
             error_type=type(error).__name__,
-            exc_info=True,
+            error=_summarize_error(error),
         )
         raise CustomEndpointError(
             "Could not reach the custom endpoint while discovering models."
@@ -356,7 +362,7 @@ async def verify_openai_compatible_model(
         logger.warning(
             "Custom endpoint model verification failed",
             error_type=type(error).__name__,
-            exc_info=True,
+            error=_summarize_error(error),
         )
         raise CustomEndpointError(
             "Custom endpoint model verification failed. "

@@ -301,7 +301,7 @@ def test_discover_models_rejects_redirect_without_exposing_response_body(
 
 
 def test_discover_models_logs_sanitized_failure_context(mocker) -> None:
-    """Discovery failures retain a traceback for diagnostics without user leakage."""
+    """Discovery failures log a redacted summary, not a raw traceback dump."""
     opener = MagicMock()
     opener.open.side_effect = URLError("unavailable")
     mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
@@ -313,8 +313,23 @@ def test_discover_models_logs_sanitized_failure_context(mocker) -> None:
     warning.assert_called_once_with(
         "Custom endpoint model discovery failed",
         error_type="URLError",
-        exc_info=True,
+        error="<urlopen error unavailable>",
     )
+
+
+def test_discover_models_redacts_secrets_from_logged_failure(mocker) -> None:
+    """A secret-shaped substring in the upstream error text must not reach logs."""
+    opener = MagicMock()
+    opener.open.side_effect = URLError("sk-abcdefghijklmnopqrstuvwx1234567890ABCD")
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+    warning = mocker.patch("notewise.llm.custom_endpoint.logger.warning")
+
+    with pytest.raises(CustomEndpointError):
+        discover_openai_compatible_models("https://models.example.test", "test-key")
+
+    logged_error = warning.call_args.kwargs["error"]
+    assert "sk-abcdefghijklmnopqrstuvwx1234567890ABCD" not in logged_error
+    assert "exc_info" not in warning.call_args.kwargs
 
 
 async def test_verify_model_forwards_selected_model_base_and_key(mocker) -> None:
