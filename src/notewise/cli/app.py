@@ -1220,6 +1220,14 @@ def config_path() -> None:
         )
 
 
+@app.command("help")
+def help_command(ctx: typer.Context) -> None:
+    """Show this message and exit."""
+    if ctx.parent is not None:
+        typer.echo(ctx.parent.get_help())
+    raise typer.Exit()
+
+
 @app.command()
 def version() -> None:
     """Show version information."""

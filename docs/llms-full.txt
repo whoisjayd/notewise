@@ -476,6 +476,7 @@ Main commands:
 | `notewise logs` | Inspect or clean session logs. |
 | `notewise update` | Check whether a newer release is available. |
 | `notewise version` | Show the installed version. |
+| `notewise help` | Show the same output as `notewise --help`/`-h`. |
 
 Process command example:
 

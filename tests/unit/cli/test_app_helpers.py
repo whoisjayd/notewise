@@ -29,3 +29,12 @@ def test_short_help_alias_works_at_every_command_level() -> None:
         result = runner.invoke(app, args)
         assert result.exit_code == 0
         assert "Show this message and exit" in result.output
+
+
+def test_help_command_matches_root_help_output() -> None:
+    """`notewise help` should print the same thing as `notewise --help`."""
+    help_result = runner.invoke(app, ["help"])
+    flag_result = runner.invoke(app, ["--help"])
+
+    assert help_result.exit_code == 0
+    assert help_result.output == flag_result.output
