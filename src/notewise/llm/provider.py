@@ -15,12 +15,15 @@ import litellm
 import structlog
 from litellm import acompletion, aresponses, completion_cost
 
+from notewise import __version__
 from notewise._constants import (
     DEFAULT_MODEL,
     DEFAULT_TEMPERATURE,
     GPT5_MODEL_MARKER,
     GPT5_REQUIRED_TEMPERATURE,
     LLM_API_KEY_KWARG,
+    LLM_APP_REFERER_URL,
+    LLM_APP_TITLE,
     LLM_ERROR_PAYLOAD_MARKERS,
     LLM_ERROR_SUMMARY_LIMIT,
     LLM_NUM_RETRIES,
@@ -113,6 +116,16 @@ LLMGenerationError = _LLMGenerationError
 
 
 COST_UNMAPPED_LOGGED_MODELS: set[str] = set()
+
+# Sent on every provider request so usage dashboards can attribute traffic to
+# notewise instead of showing "unknown" (OpenRouter's App column, etc.).
+# HTTP-Referer/X-Title are OpenRouter-specific; User-Agent is the generic
+# fallback most OpenAI-compatible gateways recognize regardless of vendor.
+_IDENTIFYING_HEADERS: dict[str, str] = {
+    "HTTP-Referer": LLM_APP_REFERER_URL,
+    "X-Title": LLM_APP_TITLE,
+    "User-Agent": f"notewise/{__version__}",
+}
 
 
 def _is_remote_http_endpoint(api_base: str | None) -> bool:
@@ -268,6 +281,7 @@ class LLMProvider:
                 "temperature": provider_temperature,
                 # LiteLLM handles exponential backoff for RateLimitError
                 "num_retries": LLM_NUM_RETRIES,
+                "extra_headers": dict(_IDENTIFYING_HEADERS),
             }
 
             if max_tokens is not None:
@@ -402,6 +416,7 @@ class LLMProvider:
             "input": [{"role": "user", "content": user_prompt}],
             "temperature": temperature,
             "num_retries": LLM_NUM_RETRIES,
+            "extra_headers": dict(_IDENTIFYING_HEADERS),
         }
         if max_tokens is not None:
             kwargs["max_output_tokens"] = max_tokens

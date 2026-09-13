@@ -82,6 +82,12 @@ VERSION_KEY_PRERELEASE_FLAG = 0
 
 # ── CLI & logging messages ────────────────────────────────────────────────────
 LLM_API_KEY_KWARG = "api_key"
+# Identify notewise to LLM gateways so usage dashboards (e.g. OpenRouter's
+# "App" attribution) show the app name instead of "unknown". HTTP-Referer and
+# X-Title are OpenRouter-specific conventions; User-Agent is the generic,
+# widely-supported fallback nearly every OpenAI-compatible endpoint accepts.
+LLM_APP_REFERER_URL = "https://notewise.click"
+LLM_APP_TITLE = "NoteWise"
 TRANSCRIPT_STATUS_MESSAGE = "Fetching transcript..."
 TRANSCRIPT_SAVED_PREFIX = "Transcript saved:"
 TRANSCRIPT_COLLISION_SUFFIX_START = 2

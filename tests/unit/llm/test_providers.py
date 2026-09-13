@@ -111,6 +111,48 @@ class TestLLMProvider:
                 {"role": "user", "content": "user"},
             ]
 
+    async def test_generate_sends_identifying_headers(self):
+        """Every request should identify notewise to the provider/gateway."""
+        from notewise import __version__
+
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user")
+
+            _args, kwargs = mock_acompletion.call_args
+            headers = kwargs["extra_headers"]
+            assert headers["X-Title"] == "NoteWise"
+            assert headers["HTTP-Referer"] == "https://notewise.click"
+            assert headers["User-Agent"] == f"notewise/{__version__}"
+
+    async def test_generate_sends_identifying_headers_for_custom_endpoint(self):
+        """Custom OpenAI-compatible endpoints should also get identifying headers."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider(
+                "team-gateway/gpt-4o",
+                api_base="https://gateway.example.test/v1",
+                api_key="test-key",
+            )
+            await provider.generate("sys", "user")
+
+            _args, kwargs = mock_acompletion.call_args
+            assert "extra_headers" in kwargs
+            assert kwargs["extra_headers"]["X-Title"] == "NoteWise"
+
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
         with (
@@ -446,6 +488,11 @@ class TestLLMProvider:
             input=[{"role": "user", "content": "user"}],
             temperature=1.0,
             num_retries=3,
+            extra_headers={
+                "HTTP-Referer": "https://notewise.click",
+                "X-Title": "NoteWise",
+                "User-Agent": f"notewise/{provider_mod.__version__}",
+            },
             max_output_tokens=128,
         )
         assert usage == UsageTotals(
@@ -495,6 +542,11 @@ class TestLLMProvider:
             input=[{"role": "user", "content": "user"}],
             temperature=1.0,
             num_retries=3,
+            extra_headers={
+                "HTTP-Referer": "https://notewise.click",
+                "X-Title": "NoteWise",
+                "User-Agent": f"notewise/{provider_mod.__version__}",
+            },
             stream=True,
         )
         assert usage == UsageTotals(
