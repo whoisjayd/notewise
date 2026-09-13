@@ -135,7 +135,10 @@ def get_quiz_combine_prompt(
 ) -> str:
     """Generate prompt for combining partial quiz sections into one final quiz."""
     combined = "\n\n---\n\n".join(
-        f"### Section {i + 1}\n\n{q}" for i, q in enumerate(quiz_sections)
+        f'<quiz_section index="{i + 1}">\n'
+        f"{escape_untrusted_content(q)}\n"
+        f"</quiz_section>"
+        for i, q in enumerate(quiz_sections)
     )
     return QUIZ_COMBINE_PROMPT.format(
         quiz_sections=combined,

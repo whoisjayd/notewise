@@ -187,8 +187,8 @@ def get_stitch_prompt(
 ) -> str:
     """Generate prompt for stitching two adjacent chunk-note fragments."""
     return STITCH_CHUNKS_PROMPT.format(
-        previous_chunk_notes=previous_chunk_notes,
-        next_chunk_notes=next_chunk_notes,
+        previous_chunk_notes=escape_untrusted_content(previous_chunk_notes),
+        next_chunk_notes=escape_untrusted_content(next_chunk_notes),
         target_language=target_language,
     )
 
