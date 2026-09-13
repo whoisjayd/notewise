@@ -73,12 +73,12 @@ const recipes = [
           <>
             <span className="text-foreground">notewise process</span>{" "}
             <span className="text-azure">"…"</span>{" "}
-            <span className="text-thread">--model chatgpt/gpt-5.2</span>
+            <span className="text-thread">--model chatgpt/gpt-5.6-luna</span>
           </>
         ),
       },
     ],
-    caption: "tokens stored in ~/.notewise/auth.json · also: github_copilot/gpt-5-mini",
+    caption: "tokens stored under ~/.notewise/oauth/ · also: github_copilot/gpt-5-mini",
   },
 ];
 
@@ -86,7 +86,7 @@ export function Cookbook() {
   return (
     <section
       id="cookbook"
-      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
+      className="relative scroll-mt-20 bg-background py-20 sm:scroll-mt-24 sm:py-28 md:py-36"
     >
       <div className="mx-auto max-w-[1200px] px-5 sm:px-6">
         <div className="max-w-2xl">
@@ -97,14 +97,14 @@ export function Cookbook() {
             most of <em className="text-stamp">a semester</em>.
           </h2>
           <p className="mt-5 t-body max-w-xl">
-            Anything more elaborate is a flag away —{" "}
+            These four cover almost everything. For the rest, there's a flag for it:{" "}
             <code className="t-code text-foreground/85">notewise process --help</code>.
           </p>
         </div>
 
         <div className="mt-12 sm:mt-14 grid gap-5 md:grid-cols-2">
           {recipes.map((r, i) => (
-            <div key={`${r.title}-${i}`} className="leaf-card p-5 sm:p-6">
+            <div key={`${r.title}-${i}`} className="leaf-card hover-feedback p-5 sm:p-6">
               <p className="t-eyebrow">Recipe · {String(i + 1).padStart(2, "0")}</p>
               <h3 className="mt-2 t-cardtitle text-balance">{r.title}</h3>
               <p className="mt-1.5 t-meta">{r.sub}</p>

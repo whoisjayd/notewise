@@ -48,10 +48,7 @@ const steps = [
 
 export function Pipeline() {
   return (
-    <section
-      id="pipeline"
-      className="relative scroll-mt-20 border-t border-[var(--rule)] bg-background sm:scroll-mt-24"
-    >
+    <section id="pipeline" className="relative scroll-mt-20 bg-background sm:scroll-mt-24">
       <div className="relative mx-auto max-w-[1200px] px-5 sm:px-6 py-20 sm:py-28 md:py-36">
         <div className="max-w-2xl">
           <span className="t-eyebrow">No 03 · Pipeline</span>
@@ -59,25 +56,34 @@ export function Pipeline() {
             From <em className="text-stamp">URL</em> to filed-away notes, in six small steps.
           </h2>
           <p className="mt-5 t-body max-w-xl">
-            Nothing exotic. Each step is observable, tunable through CLI flags, and resumable from
-            cache.
+            Six ordinary steps, not a black box. Each one shows up in the logs, takes a flag if you
+            want to change it, and if step four dies, rerunning picks up from cache instead of
+            starting over.
           </p>
         </div>
 
-        <ol className="mt-12 sm:mt-14 grid gap-px overflow-hidden rounded-lg border border-[var(--rule)] bg-[var(--rule)] sm:grid-cols-2 lg:grid-cols-3">
-          {steps.map((s) => (
-            <li key={s.n} className="bg-card p-5 sm:p-7">
-              <div className="flex items-start justify-between">
-                <span className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-md border border-[var(--rule)] bg-muted text-stamp">
+        <div className="relative mt-12 sm:mt-14">
+          <div
+            aria-hidden="true"
+            className="absolute left-[22px] top-3 bottom-3 w-px bg-[var(--rule)]"
+          />
+          <ol className="space-y-5 sm:space-y-6">
+            {steps.map((s) => (
+              <li key={s.n} className="group relative flex gap-5 sm:gap-6">
+                <span className="relative z-10 flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-stamp bg-card text-stamp transition-colors duration-150 group-hover:bg-stamp group-hover:text-background">
                   <FineIcon name={s.icon} size={17} />
                 </span>
-                <span className="t-mono-meta tracking-[0.18em]">{s.n}</span>
-              </div>
-              <h3 className="mt-5 t-cardtitle">{s.title}</h3>
-              <p className="mt-2 t-meta">{s.body}</p>
-            </li>
-          ))}
-        </ol>
+                <div className="hover-feedback flex-1 rounded-lg border border-[var(--rule)] bg-card p-4 sm:p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="t-cardtitle">{s.title}</h3>
+                    <span className="t-mono-meta shrink-0 tracking-[0.18em]">{s.n}</span>
+                  </div>
+                  <p className="mt-1.5 t-meta">{s.body}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+        </div>
       </div>
     </section>
   );
