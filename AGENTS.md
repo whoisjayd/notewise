@@ -37,6 +37,7 @@ src/notewise/
 ├── ui/oauth_flow.py    ← LiteLLM OAuth/device-flow login helpers
 ├── ui/setup_wizard.py  ← Interactive provider/config setup wizard
 ├── ui/litellm_models_snapshot.json ← Bundled text-only LiteLLM setup catalog
+├── ui/fonts/           ← Bundled Noto Sans TTFs used by pipeline/_documents.py PDF export
 └── youtube/            ← Transcript & metadata extraction; no LLM calls here
 ```
 

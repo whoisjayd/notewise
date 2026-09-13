@@ -8,11 +8,10 @@ from typing import TYPE_CHECKING, Any
 
 from notewise._constants import (
     ALLOW_UNLISTED_MODELS_ATTR,
-    CONFIG_FILENAME,
     DEFAULT_TARGET_LANGUAGE,
 )
 from notewise.cli._formatters import print_failure_panel, print_single_failure
-from notewise.config import get_state_dir
+from notewise.config import config_exists
 
 
 if TYPE_CHECKING:
@@ -136,8 +135,7 @@ class CliProcessContext:
 
         if missing_config:
             expected_config = ", ".join(missing_config)
-            config_file_exists = (get_state_dir() / CONFIG_FILENAME).exists()
-            if not config_file_exists:
+            if not config_exists():
                 self.print_failure_panel(
                     "Setup Required",
                     [

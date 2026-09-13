@@ -44,7 +44,7 @@ Important `process` flags:
 
 Config truth:
 
-- Config file: `~/.notewise/config.env`
+- Config file: `~/.notewise/config.db`
 - `NOTEWISE_HOME` changes the state root.
 - Practical precedence: CLI flags, then environment variables, then config file, then defaults.
 - Common keys: `DEFAULT_MODEL`, `CUSTOM_LLM_ENDPOINTS`, `OUTPUT_DIR`, `MAX_CONCURRENT_VIDEOS`, `YOUTUBE_REQUESTS_PER_MINUTE`, `TEMPERATURE`, `MAX_TOKENS`, `YOUTUBE_COOKIE_FILE`, provider API/auth keys.

@@ -15,8 +15,12 @@ Run `notewise COMMAND --help` for command-specific flags. The command set is def
 | `notewise process URL`         | Generate notes from one video, playlist, or batch file.       |
 | `notewise setup`               | Run the interactive config wizard.                            |
 | `notewise config`              | Print masked effective config.                                |
-| `notewise config-path`         | Print the active config path.                                 |
-| `notewise edit-config`         | Open the config file in an editor.                            |
+| `notewise config keys`         | List every key `get`/`set`/`unset` accept.                     |
+| `notewise config get KEY`      | Print one config value (masked if secret).                    |
+| `notewise config set KEY VAL`  | Set one config value.                                         |
+| `notewise config unset KEY`    | Remove one config value.                                       |
+| `notewise config-path`         | Print the active config database path.                        |
+| `notewise edit-config`         | Edit config as an env-style file in your editor.               |
 | `notewise auth login PROVIDER` | Login to OAuth providers.                                     |
 | `notewise info`                | Show runtime config and state paths.                          |
 | `notewise info URL`            | Inspect YouTube metadata and cache status without generation. |
@@ -48,7 +52,7 @@ to a different OpenAI-compatible URL:
 notewise process "<video-url>" --model <name>/<model-id> --base-url <base-url> --api-key <api-key>
 ```
 
-Both flags are transient: they do not update `config.env` or ambient environment
+Both flags are transient: they do not update `config.db` or ambient environment
 variables. `--base-url` takes precedence for the request URL. An explicitly passed
 `--api-key` takes precedence for the request key; otherwise, NoteWise reuses a
 saved profile key only when the normalized URL is the profile's saved origin.

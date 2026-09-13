@@ -53,8 +53,10 @@ try {
     $extractDir = Join-Path $tempDir "extracted"
     Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
 
+    # The release archive is a PyInstaller --onedir bundle: notewise.exe plus
+    # its _internal/ support files, which must stay together on disk.
     New-Item -ItemType Directory -Path $installDir -Force | Out-Null
-    Copy-Item (Join-Path $extractDir "notewise.exe") (Join-Path $installDir "notewise.exe") -Force
+    Copy-Item (Join-Path $extractDir "*") $installDir -Recurse -Force
 
     $userPath = [Environment]::GetEnvironmentVariable("Path", "User")
     $pathEntries = @()

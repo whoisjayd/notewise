@@ -2,30 +2,27 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
+import sqlite3
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
+
+import structlog
 
 from notewise._constants import (
     AUTH_TYPE_API_KEY,
     AUTH_TYPE_OAUTH_DEVICE,
-    CONFIG_FILE_HEADER_LINES,
-    CONFIG_FILE_PERMISSION_MODE,
-    CONFIG_FILENAME,
-    CONFIG_PRIORITY_KEY_ORDER,
-    CONFIG_TEMP_SUFFIX,
     CUSTOM_LLM_ENDPOINTS_ENV_VAR,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
     DEFAULT_OUTPUT_DIR,
     OAUTH_SETUP_RUN_PROMPT,
     PROVIDER_CONFIG,
     SETUP_EMPTY_MODEL_CATALOG_MESSAGE,
+    SETUP_MODEL_SELECTION_PAGE_SIZE,
 )
 from notewise._constants import (
     LEGACY_CONFIG_KEYS as APP_LEGACY_CONFIG_KEYS,
 )
-from notewise.config import get_state_dir
+from notewise.config import get_config_db_path
 from notewise.errors import ConfigurationError
 from notewise.logging import _is_sensitive_key
 from notewise.model_catalog import (
@@ -35,7 +32,11 @@ from notewise.model_catalog import (
     load_model_snapshot,
     normalize_available_models,
 )
-from notewise.utils import mask_secret, parse_config_env_lines
+from notewise.storage import config_store
+from notewise.utils import mask_secret
+
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -86,29 +87,21 @@ def _load_bundled_model_snapshot() -> dict[str, list[str]]:
 
 
 def get_config_path() -> Path:
-    """Get path to user config file."""
-    config_dir = get_state_dir()
-    config_dir.mkdir(parents=True, exist_ok=True)
-    return config_dir / CONFIG_FILENAME
+    """Get path to the config database."""
+    return get_config_db_path()
 
 
 def load_config(*, suppress_errors: bool = False) -> dict[str, str]:
     """Load existing configuration."""
-    config_path = get_config_path()
-    loaded_config = {}
-
-    if config_path.exists():
-        try:
-            with config_path.open(encoding="utf-8") as f:
-                loaded_config.update(parse_config_env_lines(f))
-        except (OSError, UnicodeError) as error:
-            if suppress_errors:
-                return {}
-            raise ConfigurationError(
-                f"Failed to read configuration from {config_path}: {error}"
-            ) from error
-
-    return loaded_config
+    db_path = get_config_db_path()
+    try:
+        return config_store.load_config_db(db_path)
+    except (OSError, sqlite3.Error) as error:
+        if suppress_errors:
+            return {}
+        raise ConfigurationError(
+            f"Failed to read configuration from {db_path}: {error}"
+        ) from error
 
 
 def save_config(
@@ -117,56 +110,21 @@ def save_config(
     console: Console | None = None,
 ) -> None:
     """
-    Save configuration to file, preserving existing keys.
+    Save configuration, merging with existing keys.
 
     Args:
         new_config: Dictionary of new configuration values to merge/update.
     """
     active_console = _resolve_console(console)
-    config_path = get_config_path()
-    current_config = load_config(suppress_errors=True)
+    db_path = get_config_db_path()
 
-    current_config.update(new_config)
-    for key in LEGACY_CONFIG_KEYS:
-        current_config.pop(key, None)
-
-    # Write to a securely created temp file in the same directory, then swap
-    # it into place with os.replace: a symlink planted at config_path is
-    # replaced as a directory entry instead of being followed and truncated.
-    # No world-readable window exists because the temp file is restricted
-    # before any content is written.
-    temp_fd, temp_name = tempfile.mkstemp(
-        dir=config_path.parent,
-        prefix=f"{CONFIG_FILENAME}.",
-        suffix=CONFIG_TEMP_SUFFIX,
-    )
-    temp_path = Path(temp_name)
-    try:
-        fchmod = getattr(os, "fchmod", None)
-        if fchmod is not None:
-            fchmod(temp_fd, CONFIG_FILE_PERMISSION_MODE)
-        with os.fdopen(temp_fd, "w", encoding="utf-8") as f:
-            temp_fd = -1  # Ownership transferred to the file object.
-            for header_line in CONFIG_FILE_HEADER_LINES:
-                f.write(header_line)
-
-            for key in CONFIG_PRIORITY_KEY_ORDER:
-                if key in current_config:
-                    f.write(f"{key}={current_config[key]}\n")
-
-            for key, value in sorted(current_config.items()):
-                if key not in CONFIG_PRIORITY_KEY_ORDER:
-                    f.write(f"{key}={value}\n")
-
-        Path(temp_path).replace(config_path)
-    except BaseException:
-        if temp_fd >= 0:
-            os.close(temp_fd)
-        temp_path.unlink(missing_ok=True)
-        raise
+    # update_config_db holds SQLite's write lock across the whole
+    # read-modify-write cycle, so concurrent callers (e.g. two `notewise
+    # inference add` invocations) cannot silently clobber each other's change.
+    config_store.update_config_db(db_path, new_config, drop_keys=LEGACY_CONFIG_KEYS)
 
     active_console.print(
-        f"\n[green]✓[/green] Configuration saved to: [cyan]{config_path}[/cyan]"
+        f"\n[green]✓[/green] Configuration saved to: [cyan]{db_path}[/cyan]"
     )
 
 
@@ -240,6 +198,11 @@ def _load_litellm_models(*, console: Console | None = None) -> dict[str, list[st
         return _normalize_available_models(provider_models)
 
     except Exception as e:
+        logger.warning(
+            "setup_wizard.model_fetch_failed",
+            error_type=type(e).__name__,
+            exc_info=True,
+        )
         active_console.print(
             f"[yellow]⚠ Could not fetch models from LiteLLM: {e}[/yellow]"
         )
@@ -366,7 +329,7 @@ def select_model(
     active_console.print(f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n")
     active_console.print(f"[dim]Showing {len(models)} available models[/dim]\n")
 
-    page_size = 20
+    page_size = SETUP_MODEL_SELECTION_PAGE_SIZE
     current_page = 0
 
     while True:

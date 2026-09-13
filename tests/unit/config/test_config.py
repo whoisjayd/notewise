@@ -83,6 +83,7 @@ class TestConfig:
             "backup-test-key",
         )
         assert "CUSTOM_LLM_ENDPOINTS" not in os.environ
+        assert not (state_dir / "config.env").exists()
         assert "OPENAI_API_KEY" not in os.environ
 
     def test_output_dir_from_user_config_overrides_ambient_env(
@@ -382,7 +383,7 @@ class TestConfig:
 
         assert UserConfigSource(Config)() == {}
         warning.assert_called_once_with(
-            "UserConfigSource ignored unreadable user config file",
+            "UserConfigSource failed to import legacy config.env",
             config_path=str(config_dir / "config.env"),
             exc_info=True,
         )

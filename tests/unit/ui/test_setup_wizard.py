@@ -1,15 +1,7 @@
 """Tests for the setup wizard."""
 
-import os
-from unittest.mock import ANY, AsyncMock, MagicMock, mock_open, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
-import pytest
-
-from notewise._constants import (
-    CONFIG_FILE_PERMISSION_MODE,
-    CONFIG_FILENAME,
-    CONFIG_TEMP_SUFFIX,
-)
 from notewise.errors import ConfigurationError, CustomEndpointError
 from notewise.llm.custom_endpoint import (
     CustomEndpointProfile,
@@ -30,179 +22,59 @@ from notewise.ui.setup_wizard import (
 from notewise.utils import strip_wrapped_quotes
 
 
-# Mock config content
-MOCK_CONFIG_CONTENT = """
-GEMINI_API_KEY=old_gemini_key
-DEFAULT_MODEL=gemini/old-model
-"""
-
-
 class TestConfigIO:
-    """Test configuration loading and saving."""
+    """Test configuration loading and saving against the config.db backend."""
 
-    def test_load_config_exists(self):
-        """Test loading config when file exists."""
-        with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch("pathlib.Path.open", mock_open(read_data=MOCK_CONFIG_CONTENT)),
-        ):
-            config = load_config()
-            assert config["GEMINI_API_KEY"] == "old_gemini_key"
-            assert config["DEFAULT_MODEL"] == "gemini/old-model"
+    def test_load_config_not_exists(self, tmp_path, monkeypatch):
+        """Loading config with no config.db yet should return an empty dict."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
 
-    def test_load_config_not_exists(self):
-        """Test loading config when file does not exist."""
-        with patch("pathlib.Path.exists", return_value=False):
-            config = load_config()
-            assert config == {}
+        assert load_config() == {}
 
-    def test_config_path_creates_nested_notewise_home_parents(
-        self, tmp_path, monkeypatch
-    ):
-        """Nested NOTEWISE_HOME paths should be created before writing config."""
-        nested_home = tmp_path / "missing" / "nested" / ".notewise"
-        monkeypatch.setenv("NOTEWISE_HOME", str(nested_home))
+    def test_config_path_points_at_config_db(self, tmp_path, monkeypatch):
+        """get_config_path should resolve to config.db under NOTEWISE_HOME."""
+        home = tmp_path / ".notewise"
+        monkeypatch.setenv("NOTEWISE_HOME", str(home))
 
-        config_path = get_config_path()
+        assert get_config_path() == home / "config.db"
 
-        assert config_path == nested_home / "config.env"
-        assert nested_home.is_dir()
+    def test_save_and_load_config_round_trip(self, tmp_path, monkeypatch):
+        """Saved keys should be readable afterward, merged with prior keys."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
 
-    def test_config_path_preserves_mkdir_os_errors(self, tmp_path, monkeypatch, mocker):
-        """Real directory creation failures should still surface to callers."""
-        nested_home = tmp_path / "missing" / "nested" / ".notewise"
-        monkeypatch.setenv("NOTEWISE_HOME", str(nested_home))
-        mocker.patch("pathlib.Path.mkdir", side_effect=OSError("denied"))
+        save_config({"OLD_KEY": "old_val"})
+        save_config({"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"})
 
-        with pytest.raises(OSError, match="denied"):
-            get_config_path()
+        config = load_config()
+        assert config["OLD_KEY"] == "old_val"
+        assert config["NEW_KEY"] == "new_val"
+        assert config["DEFAULT_MODEL"] == "new_model"
 
-    def test_load_config_corrupted(self):
-        """Test loading corrupted config file."""
-        with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch(
-                "pathlib.Path.open",
-                mock_open(read_data="junk data without equals sign"),
-            ),
-        ):
-            config = load_config()
-            assert config == {}
-
-    def test_load_config_strips_wrapped_quotes(self):
-        """Quoted env-style values should load without their wrapper quotes."""
-        quoted_config = (
-            'GEMINI_API_KEY="quoted-key"\n'
-            "OUTPUT_DIR='/tmp/notes'\n"
-            "DEFAULT_MODEL=gemini/gemini-2.5-flash\n"
-        )
-
-        with (
-            patch("pathlib.Path.exists", return_value=True),
-            patch("pathlib.Path.open", mock_open(read_data=quoted_config)),
-        ):
-            config = load_config()
-
-        assert config["GEMINI_API_KEY"] == "quoted-key"
-        assert config["OUTPUT_DIR"] == "/tmp/notes"
-        assert config["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
-
-    def test_load_config_read_failure_raises_configuration_error(self, mocker):
-        """Config read failures should use the project error hierarchy."""
-        mocker.patch("pathlib.Path.exists", return_value=True)
-        mocker.patch("pathlib.Path.open", side_effect=OSError("denied"))
-
-        with (
-            pytest.raises(
-                ConfigurationError,
-                match="Failed to read configuration",
-            ),
-        ):
-            load_config()
-
-    def test_load_config_does_not_hide_unexpected_errors(self, mocker):
-        """Unexpected parser/runtime failures should remain visible."""
-        mocker.patch("pathlib.Path.exists", return_value=True)
-        mocker.patch("pathlib.Path.open", side_effect=RuntimeError("bug"))
-
-        with pytest.raises(RuntimeError, match="bug"):
-            load_config()
-
-    def test_save_config(self, mocker):
-        """Test saving configuration merges with existing."""
-        from pathlib import Path
-
-        mock_path = Path("dummy_path")
-        mocker.patch(
-            "notewise.ui.setup_wizard.load_config",
-            return_value={"OLD_KEY": "old_val"},
-        )
-        mock_mkstemp = mocker.patch(
-            "notewise.ui.setup_wizard.tempfile.mkstemp",
-            return_value=(3, "dummy_path.tmp"),
-        )
-        mock_fchmod = mocker.patch("notewise.ui.setup_wizard.os.fchmod", create=True)
-        mock_file = mocker.patch("notewise.ui.setup_wizard.os.fdopen", mock_open())
-        mock_replace = mocker.patch("notewise.ui.setup_wizard.os.replace")
-        mocker.patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path)
-
-        new_config = {"NEW_KEY": "new_val", "DEFAULT_MODEL": "new_model"}
-        save_config(new_config)
-
-        # Verify file write operations
-        handle = mock_file()
-        written_content = "".join(call.args[0] for call in handle.write.call_args_list)
-
-        assert "OLD_KEY=old_val" in written_content
-        assert "NEW_KEY=new_val" in written_content
-        assert "DEFAULT_MODEL=new_model" in written_content
-        mock_mkstemp.assert_called_once_with(
-            dir=mock_path.parent,
-            prefix=f"{CONFIG_FILENAME}.",
-            suffix=CONFIG_TEMP_SUFFIX,
-        )
-        mock_fchmod.assert_called_once_with(3, CONFIG_FILE_PERMISSION_MODE)
-        mock_replace.assert_called_once_with(Path("dummy_path.tmp"), mock_path)
-
-    def test_save_config_strips_legacy_youtube_auth_keys(self, mocker):
+    def test_save_config_strips_legacy_youtube_auth_keys(self, tmp_path, monkeypatch):
         """Saving config should remove legacy OAuth and cookie-era auth keys."""
-        from pathlib import Path
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
 
-        mock_path = Path("dummy_path")
-        mocker.patch(
-            "notewise.ui.setup_wizard.load_config",
-            return_value={
+        save_config(
+            {
                 "YOUTUBE_USE_OAUTH": "true",
                 "YOUTUBE_SAVE_OAUTH_TOKEN": "true",
                 "YOUTUBE_OAUTH_TOKEN_FILE": "/tmp/token.json",
                 "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN": "false",
                 "OLD_KEY": "old_val",
-            },
+            }
         )
-        mocker.patch(
-            "notewise.ui.setup_wizard.tempfile.mkstemp",
-            return_value=(3, "dummy_path.tmp"),
-        )
-        mocker.patch("notewise.ui.setup_wizard.os.fchmod", create=True)
-        mock_file = mocker.patch("notewise.ui.setup_wizard.os.fdopen", mock_open())
-        mocker.patch("notewise.ui.setup_wizard.os.replace")
-        mocker.patch("notewise.ui.setup_wizard.get_config_path", return_value=mock_path)
-
         save_config({"DEFAULT_MODEL": "new_model"})
 
-        written_content = "".join(
-            call.args[0] for call in mock_file().write.call_args_list
-        )
+        config = load_config()
+        assert config["OLD_KEY"] == "old_val"
+        assert config["DEFAULT_MODEL"] == "new_model"
+        assert "YOUTUBE_USE_OAUTH" not in config
+        assert "YOUTUBE_SAVE_OAUTH_TOKEN" not in config
+        assert "YOUTUBE_OAUTH_TOKEN_FILE" not in config
+        assert "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN" not in config
 
-        assert "OLD_KEY=old_val" in written_content
-        assert "DEFAULT_MODEL=new_model" in written_content
-        assert "YOUTUBE_USE_OAUTH" not in written_content
-        assert "YOUTUBE_SAVE_OAUTH_TOKEN" not in written_content
-        assert "YOUTUBE_OAUTH_TOKEN_FILE" not in written_content
-        assert "YOUTUBE_AUTO_REFRESH_OAUTH_TOKEN" not in written_content
-
-    def test_save_config_writes_real_file(self, tmp_path, monkeypatch):
-        """save_config should create the config file with expected content."""
+    def test_save_config_creates_config_db(self, tmp_path, monkeypatch):
+        """save_config should create config.db under NOTEWISE_HOME."""
         monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
         monkeypatch.delenv("DEFAULT_MODEL", raising=False)
 
@@ -210,23 +82,7 @@ class TestConfigIO:
 
         config_path = get_config_path()
         assert config_path.exists()
-        content = config_path.read_text(encoding="utf-8")
-        assert "# notewise Configuration" in content
-        assert "DEFAULT_MODEL=gemini/gemini-2.5-flash" in content
-
-    @pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits only")
-    def test_save_config_creates_owner_only_file(self, tmp_path, monkeypatch):
-        """Config file should be created owner-only (0o600), never world-readable."""
-        import stat
-
-        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / "state"))
-        monkeypatch.delenv("DEFAULT_MODEL", raising=False)
-
-        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
-
-        config_path = get_config_path()
-        mode = stat.S_IMODE(config_path.stat().st_mode)
-        assert mode == 0o600
+        assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
 
     def test_show_current_config_masks_api_keys(self):
         """Read-only config display should mask secret values."""

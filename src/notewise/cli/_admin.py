@@ -12,17 +12,22 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import structlog
+import typer
 
 from notewise._constants import (
     CLEAN_LOGS_SYMLINK_SKIPPED_EVENT,
     CLEAR_CACHE_SKIPPED_CONSOLE_MESSAGE,
     CLEAR_CACHE_SYMLINK_SKIPPED_EVENT,
-    CONFIG_FILENAME,
     SECONDS_PER_HOUR,
     SECONDS_PER_MINUTE,
     STATS_SINCE_DAYS_VALIDATION_MESSAGE,
 )
-from notewise.config import get_cache_db_path, get_state_dir
+from notewise.config import (
+    config_exists,
+    get_cache_db_path,
+    get_config_db_path,
+    get_state_dir,
+)
 from notewise.config import settings as app_settings
 from notewise.logging import get_log_dir, get_session_log_path, prune_log_files
 from notewise.utils import coerce_int as _coerce_int
@@ -220,7 +225,7 @@ def render_runtime_info(console: Console) -> None:
     from rich.table import Table
 
     settings = app_settings
-    config_path = get_state_dir() / CONFIG_FILENAME
+    config_path = get_config_db_path()
     db_path = get_cache_db_path()
 
     table = Table(box=None, show_header=False, padding=(0, 1))
@@ -360,7 +365,8 @@ def render_doctor(console: Console) -> None:
 
     settings = app_settings
     state_dir = get_state_dir()
-    config_path = state_dir / CONFIG_FILENAME
+    config_path = get_config_db_path()
+    config_ready = config_exists()
     db_path = get_cache_db_path()
     log_dir = get_log_dir(state_dir)
 
@@ -408,8 +414,8 @@ def render_doctor(console: Console) -> None:
     rows.add_column("Check", style="bold cyan", no_wrap=True)
     rows.add_column("Details")
     rows.add_row(
-        "OK" if config_path.exists() else "WARN",
-        "Config file",
+        "OK" if config_ready else "WARN",
+        "Config database",
         str(config_path),
     )
     rows.add_row(
@@ -432,7 +438,7 @@ def render_doctor(console: Console) -> None:
         rows.add_row("OK", "Latest log", str(latest_log))
 
     overall_ready = (
-        config_path.exists()
+        config_ready
         and (required_key_name is None or bool(required_key_value))
         and output_writable
         and db_ok
@@ -645,12 +651,46 @@ def clean_logs(console: Console, *, all_logs: bool, older_than_days: int) -> Non
 
 
 def edit_config(console: Console) -> None:
-    config_path = get_state_dir() / CONFIG_FILENAME
-    if not config_path.exists():
+    """Export config.db to a temp env-format file, edit it, then re-save."""
+    import tempfile
+
+    from notewise.storage import config_store
+    from notewise.utils import parse_config_env_lines
+
+    db_path = get_config_db_path()
+    if not config_exists():
         console.print(
-            f"[yellow]No configuration found yet at {config_path}.[/yellow]\n"
+            f"[yellow]No configuration found yet at {db_path}.[/yellow]\n"
             "[dim]Run `notewise setup` first, then use this command to edit it.[/dim]"
         )
         return
-    _open_in_editor(config_path)
-    console.print(f"[green]Opened {config_path}.[/green]")
+
+    current_config = config_store.load_config_db(db_path)
+    temp_fd, temp_name = tempfile.mkstemp(suffix=".env", prefix="notewise-config-")
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(temp_fd, "w", encoding="utf-8") as handle:
+            for key, value in sorted(current_config.items()):
+                handle.write(f"{key}={value}\n")
+
+        _open_in_editor(temp_path)
+        edited_config = parse_config_env_lines(
+            temp_path.read_text(encoding="utf-8").splitlines()
+        )
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+    # Optimistic concurrency check: the editor can stay open for minutes, so
+    # re-read the DB and refuse to overwrite if another process (a `config
+    # set`, `inference add`, etc.) committed a change while the file was
+    # open -- otherwise this would silently discard that change.
+    if config_store.load_config_db(db_path) != current_config:
+        console.print(
+            "[red]Configuration changed elsewhere while the editor was open; "
+            "your edits were discarded to avoid overwriting that change. "
+            "Run `notewise edit-config` again.[/red]"
+        )
+        raise typer.Exit(code=1)
+
+    config_store.replace_config_db(db_path, edited_config)
+    console.print(f"[green]Updated configuration at {db_path}.[/green]")

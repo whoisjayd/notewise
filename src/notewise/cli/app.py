@@ -10,7 +10,9 @@ from urllib.parse import urlparse
 import typer
 
 from notewise._constants import (
-    CONFIG_FILENAME,
+    DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
+    DEFAULT_HISTORY_LIMIT,
+    DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
     DEFAULT_TEMPERATURE,
@@ -24,8 +26,7 @@ from notewise._constants import (
     OAUTH_LOGIN_PROVIDER_LABELS,
     OAUTH_LOGIN_PROVIDER_PROMPT,
     OAUTH_LOGIN_UNSUPPORTED_PROVIDER_MESSAGE,
-    PROVIDER_SECRET_ENV_KEYS,
-    SENSITIVE_KEY_SUFFIXES,
+    SCHEMELESS_YOUTUBE_PREFIXES,
     SUPPORTED_NOTES_OUTPUT_FORMATS,
     TRANSCRIPT_COLLISION_SUFFIX_START,
     TRANSCRIPT_COMMAND_FILE_STEM_SUFFIX,
@@ -43,6 +44,7 @@ from notewise.errors import (
     VideoUnavailableError,
     format_user_error,
 )
+from notewise.logging import _is_sensitive_key
 
 
 if TYPE_CHECKING:
@@ -97,13 +99,10 @@ inference_app = typer.Typer(
     help="Manage saved OpenAI-compatible inference endpoints.",
     rich_markup_mode="rich",
 )
-
-_SCHEMELESS_YOUTUBE_PREFIXES = (
-    "youtube.com/",
-    "www.youtube.com/",
-    "m.youtube.com/",
-    "music.youtube.com/",
-    "youtu.be/",
+config_app = typer.Typer(
+    name="config",
+    help="View and manage persisted configuration.",
+    rich_markup_mode="rich",
 )
 
 
@@ -118,10 +117,10 @@ def _get_console() -> Any:
 
 
 def _get_config_file_path() -> Path:
-    """Return the canonical config file path."""
-    from notewise.config import get_state_dir
+    """Return the canonical config database path."""
+    from notewise.config import get_config_db_path
 
-    return get_state_dir() / CONFIG_FILENAME
+    return get_config_db_path()
 
 
 def _format_config_validation_error(error: Any) -> str:
@@ -134,21 +133,13 @@ def _format_config_validation_error(error: Any) -> str:
         value = item.get("input")
         if value is None:
             messages.append(f"{name}: {message}")
-        elif _is_sensitive_config_key(name):
+        elif _is_sensitive_key(name):
             messages.append(f"{name}=<redacted>: {message}")
         else:
             messages.append(f"{name}={value!r}: {message}")
 
     details = "; ".join(messages) if messages else str(error)
     return f"{details}. Invalid configuration value."
-
-
-def _is_sensitive_config_key(name: str) -> bool:
-    """Return whether a config key should never echo its value."""
-    normalized = "".join(character for character in name.casefold() if character != "_")
-    return name in PROVIDER_SECRET_ENV_KEYS or normalized.endswith(
-        SENSITIVE_KEY_SUFFIXES
-    )
 
 
 def _print_configuration_error(error: Exception) -> None:
@@ -161,6 +152,15 @@ def _print_configuration_error(error: Exception) -> None:
         str(error),
         item_label="Config",
     )
+
+
+def _get_config_or_exit() -> Any:
+    """Load shared settings, printing a clean error and exiting on failure."""
+    try:
+        return _get_config()
+    except ConfigurationError as error:
+        _print_configuration_error(error)
+        raise typer.Exit(code=1) from None
 
 
 def _get_config() -> Any:
@@ -179,6 +179,23 @@ def _get_config() -> Any:
 
         config = _config
     return config
+
+
+def _reload_and_validate_config() -> None:
+    """Force AppSettings to reload after a config write, surfacing validation errors."""
+    from pydantic import ValidationError as PydanticValidationError
+
+    from notewise.config import settings as _config
+
+    global config
+    try:
+        _config.reload()
+    except PydanticValidationError as error:
+        _print_configuration_error(
+            ConfigurationError(_format_config_validation_error(error))
+        )
+        raise typer.Exit(code=1) from None
+    config = _config
 
 
 def _load_process_dependencies() -> None:
@@ -326,7 +343,9 @@ def _select_oauth_provider(provider: str | None) -> str:
 
 def check_config_exists() -> bool:
     """Check if user configuration exists."""
-    return _get_config_file_path().exists()
+    from notewise.config import config_exists
+
+    return config_exists()
 
 
 def looks_like_batch_file_path(value: str) -> bool:
@@ -336,7 +355,7 @@ def looks_like_batch_file_path(value: str) -> bool:
         return False
 
     normalized = value.strip().lower().replace("\\", "/")
-    if normalized.startswith(_SCHEMELESS_YOUTUBE_PREFIXES):
+    if normalized.startswith(SCHEMELESS_YOUTUBE_PREFIXES):
         return False
 
     input_path = Path(value).expanduser()
@@ -949,6 +968,11 @@ def main(ctx: typer.Context) -> None:
 
     Convert YouTube content into structured Markdown notes.
     """
+    if ctx.invoked_subcommand not in (None, "process"):
+        from notewise.logging import configure_logging
+
+        configure_logging()
+
     if ctx.invoked_subcommand is None:
         console = _get_console()
         from notewise.cli._banner import print_banner
@@ -1004,41 +1028,145 @@ def setup(
     """
     Configure API keys and preferences interactively.
 
-    Runs a wizard to generate the [bold]~/.notewise/config.env[/bold] file.
+    Runs a wizard that saves your settings to the
+    [bold]~/.notewise/config.db[/bold] database.
     """
     _load_setup_dependencies()
     if show:
-        try:
-            _get_config()
-        except ConfigurationError as error:
-            _print_configuration_error(error)
-            raise typer.Exit(code=1) from None
+        _get_config_or_exit()
         show_current_config(console=_get_console())
         return
     run_setup_wizard(force=force)
 
 
-@app.command("config")
-def show_config_command() -> None:
-    """Show the current resolved configuration with secrets masked."""
+@config_app.callback(invoke_without_command=True)
+def config_command(ctx: typer.Context) -> None:
+    """Show, get, set, or unset persisted configuration values."""
+    if ctx.invoked_subcommand is not None:
+        return
     _load_setup_dependencies()
+    _get_config_or_exit()
+    show_current_config(console=_get_console())
+
+
+@config_app.command("keys")
+def config_keys() -> None:
+    """List every config key that get/set/unset accept."""
+    from notewise.config import allowed_config_keys
+
+    console = _get_console()
+    for key in sorted(allowed_config_keys()):
+        console.print(key)
+
+
+@config_app.command("get")
+def config_get(
+    key: Annotated[
+        str,
+        typer.Argument(
+            help="Config key to read, e.g. DEFAULT_MODEL. "
+            "Run `notewise config keys` for the full list."
+        ),
+    ],
+) -> None:
+    """Print one persisted configuration value."""
+    from notewise.ui.setup_wizard import load_config
+
+    normalized_key = key.strip().upper()
+    console = _get_console()
     try:
-        _get_config()
+        current_config = load_config()
     except ConfigurationError as error:
         _print_configuration_error(error)
         raise typer.Exit(code=1) from None
-    show_current_config(console=_get_console())
+
+    if normalized_key not in current_config:
+        console.print(f"[yellow]{normalized_key} is not set.[/yellow]")
+        raise typer.Exit(code=1)
+
+    value = current_config[normalized_key]
+    if _is_sensitive_key(normalized_key):
+        from notewise.utils import mask_secret
+
+        value = mask_secret(value, suffix=" (set)")
+    console.print(value)
+
+
+@config_app.command("set")
+def config_set(
+    key: Annotated[
+        str,
+        typer.Argument(
+            help="Config key to write, e.g. DEFAULT_MODEL. "
+            "Run `notewise config keys` for the full list."
+        ),
+    ],
+    value: Annotated[str, typer.Argument(help="Value to store for this key.")],
+) -> None:
+    """Set one persisted configuration value."""
+    import sqlite3
+
+    from notewise.config import allowed_config_keys
+    from notewise.errors import CustomEndpointError
+    from notewise.ui.setup_wizard import save_config
+
+    normalized_key = key.strip().upper()
+    if normalized_key not in allowed_config_keys():
+        _exit_inference_error(
+            f"{normalized_key!r} is not a recognized config key. "
+            "Run `notewise config keys` to see all supported keys."
+        )
+
+    try:
+        save_config({normalized_key: value}, console=_get_console())
+    except (CustomEndpointError, ConfigurationError, OSError, sqlite3.Error) as error:
+        _exit_inference_error(str(error))
+    _reload_and_validate_config()
+
+
+@config_app.command("unset")
+def config_unset(
+    key: Annotated[
+        str,
+        typer.Argument(
+            help="Config key to remove, e.g. TEMPERATURE. "
+            "Run `notewise config keys` for the full list."
+        ),
+    ],
+) -> None:
+    """Remove one persisted configuration value."""
+    from notewise.config import get_config_db_path
+    from notewise.storage import config_store
+
+    normalized_key = key.strip().upper()
+    console = _get_console()
+    db_path = get_config_db_path()
+
+    # A single atomic DELETE against the owning table, rather than a
+    # load-mutate-replace round trip, so this can't clobber a concurrent
+    # `config set`/`inference add` that commits in between.
+    if not config_store.remove_config_key(db_path, normalized_key):
+        console.print(f"[yellow]{normalized_key} is not set.[/yellow]")
+        raise typer.Exit(code=1)
+
+    _reload_and_validate_config()
+    console.print(f"[green]Removed {normalized_key} from configuration.[/green]")
 
 
 @app.command()
 def config_path() -> None:
-    """Show the path to the configuration file."""
+    """Show the path to the configuration database."""
     console = _get_console()
     config_file = _get_config_file_path()
 
-    if config_file.exists():
-        console.print(f"\n[cyan]Configuration file:[/cyan] {config_file}")
-        console.print("\n[dim]To edit: Open the file above in a text editor[/dim]")
+    if check_config_exists():
+        console.print(f"\n[cyan]Configuration database:[/cyan] {config_file}")
+        console.print(
+            "\n[dim]To view: Run[/dim] [cyan]notewise config[/cyan]\n"
+            "[dim]To change one value: Run[/dim] "
+            "[cyan]notewise config set KEY VALUE[/cyan]\n"
+            "[dim]To edit in your editor: Run[/dim] [cyan]notewise edit-config[/cyan]"
+        )
         console.print(
             "[dim]To reconfigure: Run[/dim] [cyan]notewise setup --force[/cyan]\n"
         )
@@ -1132,7 +1260,7 @@ def history(
             help="Maximum number of recent videos to show.",
             rich_help_panel="Display",
         ),
-    ] = 10,
+    ] = DEFAULT_HISTORY_LIMIT,
 ) -> None:
     """Show recently processed videos from the local cache."""
     from notewise.cli._admin import render_history
@@ -1153,11 +1281,7 @@ def info(
     """Show runtime info or inspect a YouTube source without processing it."""
     console = _get_console()
     if url is None:
-        try:
-            _get_config()
-        except ConfigurationError as error:
-            _print_configuration_error(error)
-            raise typer.Exit(code=1) from None
+        _get_config_or_exit()
 
         from notewise.cli._admin import render_runtime_info
 
@@ -1221,11 +1345,7 @@ def info(
 @app.command()
 def doctor() -> None:
     """Run a non-destructive health check for config, cache, and logs."""
-    try:
-        _get_config()
-    except ConfigurationError as error:
-        _print_configuration_error(error)
-        raise typer.Exit(code=1) from None
+    _get_config_or_exit()
 
     from notewise.cli._admin import render_doctor
 
@@ -1255,30 +1375,58 @@ def _exit_inference_error(message: str) -> NoReturn:
     raise typer.Exit(code=1)
 
 
-def _replace_inference_profile(
-    profiles: tuple[Any, ...], replacement: Any
-) -> tuple[Any, ...]:
-    """Replace an endpoint with the same normalized name or append it."""
-    if any(profile.name == replacement.name for profile in profiles):
-        return tuple(
-            replacement if profile.name == replacement.name else profile
-            for profile in profiles
+def _discover_and_verify_endpoint(profile: Any, model: str) -> None:
+    """Discover an endpoint's models, confirm `model` is one of them, then
+    verify it with a live request. Shared by `inference add` and `update`.
+    """
+    from notewise.llm.custom_endpoint import (
+        discover_openai_compatible_models,
+        verify_openai_compatible_model,
+    )
+
+    discovered_models = discover_openai_compatible_models(
+        profile.base_url, profile.api_key
+    )
+    if model not in discovered_models:
+        _exit_inference_error(
+            f"Model {model!r} was not returned by endpoint {profile.name!r}."
         )
-    return (*profiles, replacement)
+    asyncio.run(
+        verify_openai_compatible_model(profile.base_url, profile.api_key, model)
+    )
+
+
+def _default_model_endpoint_match(
+    current_config: dict[str, str], normalized_name: str
+) -> str | None:
+    """Return the model id if DEFAULT_MODEL selects this saved endpoint.
+
+    Shared by `inference update` (to pick a default model) and `inference
+    delete` (to block deleting an endpoint DEFAULT_MODEL still relies on).
+    """
+    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
+
+    default_prefix, separator, default_model_id = current_config.get(
+        "DEFAULT_MODEL", ""
+    ).partition("/")
+    if not separator or not default_model_id:
+        return None
+    if normalize_custom_model_prefix(default_prefix) != normalized_name:
+        return None
+    return default_model_id
 
 
 @inference_app.command("list")
 def inference_list() -> None:
     """List saved OpenAI-compatible endpoints without their credentials."""
-    from notewise.errors import ConfigurationError, CustomEndpointError
-    from notewise.llm.custom_endpoint import parse_custom_endpoint_profiles
-    from notewise.ui.setup_wizard import load_config
+    import sqlite3
+
+    from notewise.config import get_config_db_path
+    from notewise.storage import config_store
 
     try:
-        profiles = parse_custom_endpoint_profiles(
-            load_config().get("CUSTOM_LLM_ENDPOINTS")
-        )
-    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        profiles = config_store.list_custom_endpoints(get_config_db_path())
+    except sqlite3.Error as error:
         _exit_inference_error(str(error))
 
     if not profiles:
@@ -1309,17 +1457,16 @@ def inference_add(
     ],
 ) -> None:
     """Discover, verify, and save an OpenAI-compatible endpoint."""
+    import sqlite3
+
+    from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
-        discover_openai_compatible_models,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
-        parse_custom_endpoint_profiles,
-        serialize_custom_endpoint_profiles,
-        verify_openai_compatible_model,
     )
-    from notewise.ui.setup_wizard import load_config, save_config
+    from notewise.storage import config_store
 
     if not api_key.strip():
         raise typer.BadParameter(
@@ -1332,25 +1479,9 @@ def inference_add(
             base_url=normalize_openai_base_url(base_url),
             api_key=api_key,
         )
-        current_config = load_config()
-        profiles = parse_custom_endpoint_profiles(
-            current_config.get("CUSTOM_LLM_ENDPOINTS")
-        )
-        discovered_models = discover_openai_compatible_models(
-            profile.base_url, profile.api_key
-        )
-        if model not in discovered_models:
-            _exit_inference_error(
-                f"Model {model!r} was not returned by endpoint {profile.name!r}."
-            )
-        asyncio.run(
-            verify_openai_compatible_model(profile.base_url, profile.api_key, model)
-        )
-        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
-            _replace_inference_profile(profiles, profile)
-        )
-        save_config(current_config, console=_get_console())
-    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _discover_and_verify_endpoint(profile, model)
+        config_store.upsert_custom_endpoint(get_config_db_path(), profile)
+    except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
     _get_console().print(
@@ -1385,24 +1516,23 @@ def inference_update(
             "Custom endpoint API key is required.", param_hint="--api-key"
         )
 
+    import sqlite3
+
+    from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
-        discover_openai_compatible_models,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
-        parse_custom_endpoint_profiles,
-        serialize_custom_endpoint_profiles,
-        verify_openai_compatible_model,
     )
-    from notewise.ui.setup_wizard import load_config, save_config
+    from notewise.storage import config_store
+    from notewise.ui.setup_wizard import load_config
 
     try:
+        db_path = get_config_db_path()
         normalized_name = normalize_custom_model_prefix(name)
         current_config = load_config()
-        profiles = parse_custom_endpoint_profiles(
-            current_config.get("CUSTOM_LLM_ENDPOINTS")
-        )
+        profiles = config_store.list_custom_endpoints(db_path)
         existing_profile = next(
             (profile for profile in profiles if profile.name == normalized_name),
             None,
@@ -1414,17 +1544,10 @@ def inference_update(
 
         selected_model = model
         if selected_model is None:
-            default_prefix, separator, default_model_id = current_config.get(
-                "DEFAULT_MODEL", ""
-            ).partition("/")
-            default_uses_endpoint = False
-            if separator and default_model_id:
-                default_uses_endpoint = (
-                    normalize_custom_model_prefix(default_prefix) == normalized_name
-                )
-            if default_uses_endpoint:
-                selected_model = default_model_id
-            else:
+            selected_model = _default_model_endpoint_match(
+                current_config, normalized_name
+            )
+            if selected_model is None:
                 _exit_inference_error(
                     "--model is required unless DEFAULT_MODEL uses this endpoint."
                 )
@@ -1447,24 +1570,9 @@ def inference_update(
             base_url=selected_base_url,
             api_key=api_key if api_key is not None else existing_profile.api_key,
         )
-        discovered_models = discover_openai_compatible_models(
-            profile.base_url, profile.api_key
-        )
-        if selected_model not in discovered_models:
-            _exit_inference_error(
-                f"Model {selected_model!r} was not returned by endpoint "
-                f"{profile.name!r}."
-            )
-        asyncio.run(
-            verify_openai_compatible_model(
-                profile.base_url, profile.api_key, selected_model
-            )
-        )
-        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
-            _replace_inference_profile(profiles, profile)
-        )
-        save_config(current_config, console=_get_console())
-    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        _discover_and_verify_endpoint(profile, selected_model)
+        config_store.upsert_custom_endpoint(db_path, profile)
+    except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
     _get_console().print(
@@ -1478,43 +1586,31 @@ def inference_delete(
     name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
 ) -> None:
     """Remove a saved inference endpoint that is not the configured default."""
+    import sqlite3
+
+    from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
-    from notewise.llm.custom_endpoint import (
-        normalize_custom_model_prefix,
-        parse_custom_endpoint_profiles,
-        serialize_custom_endpoint_profiles,
-    )
-    from notewise.ui.setup_wizard import load_config, save_config
+    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
+    from notewise.storage import config_store
+    from notewise.ui.setup_wizard import load_config
 
     try:
+        db_path = get_config_db_path()
         normalized_name = normalize_custom_model_prefix(name)
         current_config = load_config()
-        profiles = parse_custom_endpoint_profiles(
-            current_config.get("CUSTOM_LLM_ENDPOINTS")
-        )
+        profiles = config_store.list_custom_endpoints(db_path)
         if not any(profile.name == normalized_name for profile in profiles):
             _exit_inference_error(
                 f"No saved inference endpoint is named {normalized_name!r}."
             )
 
-        default_prefix, separator, _default_model_id = current_config.get(
-            "DEFAULT_MODEL", ""
-        ).partition("/")
-        default_uses_endpoint = False
-        if separator:
-            default_uses_endpoint = (
-                normalize_custom_model_prefix(default_prefix) == normalized_name
-            )
-        if default_uses_endpoint:
+        if _default_model_endpoint_match(current_config, normalized_name) is not None:
             _exit_inference_error(
                 f"Cannot delete {normalized_name!r} while it is used by DEFAULT_MODEL."
             )
 
-        current_config["CUSTOM_LLM_ENDPOINTS"] = serialize_custom_endpoint_profiles(
-            profile for profile in profiles if profile.name != normalized_name
-        )
-        save_config(current_config, console=_get_console())
-    except (ConfigurationError, CustomEndpointError, OSError) as error:
+        config_store.delete_custom_endpoint(db_path, normalized_name)
+    except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
     _get_console().print(
@@ -1660,7 +1756,7 @@ def cache_prune(
             min=0,
             help="Remove cache entries older than this many days.",
         ),
-    ] = 30,
+    ] = DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
 ) -> None:
     """Prune stale cache entries by age."""
     from notewise.cli._admin import prune_cache
@@ -1719,7 +1815,7 @@ def logs_clean(
             help="Remove logs older than this many days.",
             rich_help_panel="Scope",
         ),
-    ] = 7,
+    ] = DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS,
 ) -> None:
     """Prune old log files."""
     from notewise.cli._admin import clean_logs
@@ -1731,6 +1827,7 @@ app.add_typer(cache_app, name="cache")
 app.add_typer(logs_app, name="logs")
 app.add_typer(auth_app, name="auth")
 app.add_typer(inference_app, name="inference")
+app.add_typer(config_app, name="config")
 
 
 if __name__ == "__main__":

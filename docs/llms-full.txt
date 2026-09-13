@@ -122,7 +122,7 @@ Create config:
 notewise setup
 ```
 
-The setup wizard writes supported keys to `~/.notewise/config.env` unless `NOTEWISE_HOME` points somewhere else.
+The setup wizard writes supported keys to `~/.notewise/config.db` unless `NOTEWISE_HOME` points somewhere else.
 
 Process one public YouTube video:
 
@@ -298,20 +298,20 @@ Persist `/home/notewise/.notewise` if you want cache, logs, config, and OAuth to
 
 ## Configuration
 
-NoteWise reads settings from code defaults, `config.env`, environment variables, and command flags.
+NoteWise reads settings from code defaults, `config.db`, environment variables, and command flags.
 
 By default, state lives under `~/.notewise`.
 
 | File or folder | Purpose |
 | --- | --- |
-| `~/.notewise/config.env` | User config written by `notewise setup`. |
+| `~/.notewise/config.db` | User config written by `notewise setup`. |
 | `~/.notewise/.notewise_cache.db` | SQLite cache and run history. |
 | `~/.notewise/logs/` | Session logs. |
 | `~/.notewise/oauth/` | Default OAuth token storage. |
 
 Set `NOTEWISE_HOME` to move the state root.
 
-For a command run, command-line flags win. Then environment variables, then `config.env`, then code defaults.
+For a command run, command-line flags win. Then environment variables, then `config.db`, then code defaults.
 
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
@@ -330,9 +330,9 @@ Common config keys:
 | `MAX_TOKENS` | unset | Optional LLM max output tokens. |
 | `YOUTUBE_COOKIE_FILE` | unset | Default Netscape cookies file path. |
 
-Provider API keys and provider auth keys are also accepted in `config.env` when they are listed in source constants.
+Provider API keys and provider auth keys are also accepted in `config.db` when they are listed in source constants.
 
-`chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.env` keys.
+`chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.db` keys.
 
 Saved custom endpoints use `<name>/<model-id>`. `notewise process --model <name>/<model-id>` automatically selects that profile's base URL and API key, then sends LiteLLM `openai/<model-id>`. Custom names cannot use LiteLLM provider prefixes; remote endpoints require HTTPS; and changing `--base-url` requires a new `--api-key` instead of reusing a saved credential. Manage profiles with `notewise inference list|add|update|delete`; never expose the secret-bearing `CUSTOM_LLM_ENDPOINTS` value.
 
@@ -394,7 +394,7 @@ When a model string has no explicit provider prefix, NoteWise can infer common k
 
 ## OAuth login
 
-ChatGPT subscription and GitHub Copilot use LiteLLM OAuth/device-flow login. They do not use static API keys in `config.env`. User configuration is stored at `~/.notewise/config.env`; do not create a repo-root `.env` file for OAuth setup.
+ChatGPT subscription and GitHub Copilot use LiteLLM OAuth/device-flow login. They do not use static API keys in `config.db`. User configuration is stored at `~/.notewise/config.db`; do not create a repo-root `.env` file for OAuth setup.
 
 Login commands:
 
@@ -599,7 +599,7 @@ Output formats:
 | --- | --- |
 | `md` | Raw Markdown notes. Default. |
 | `html` | Markdown rendered with built-in CSS. |
-| `pdf` | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
+| `pdf` | Uses `fpdf2` with a bundled Noto Sans font (Latin, Cyrillic, Greek, Vietnamese, Devanagari). Other scripts (e.g. Arabic, Hebrew, CJK), or any renderer failure, fall back to Markdown for that video instead of failing the run. |
 | `docx` | Uses `html2docx` and `python-docx`. |
 
 Example output layout:

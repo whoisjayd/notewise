@@ -3,6 +3,7 @@ set -eu
 
 API_URL="https://api.github.com/repos/whoisjayd/notewise/releases/latest"
 INSTALL_DIR="${NOTEWISE_INSTALL_DIR:-$HOME/.local/bin}"
+APP_DIR="${NOTEWISE_APP_DIR:-$HOME/.local/share/notewise}"
 PATH_EXPORT="export PATH=\"$INSTALL_DIR:\$PATH\""
 
 ensure_path() {
@@ -103,16 +104,26 @@ if [ -z "${EXPECTED_SUM:-}" ] || [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
   exit 1
 fi
 
-mkdir -p "$INSTALL_DIR"
+mkdir -p "$TMP_DIR/extracted"
 if printf '%s' "$ASSET_NAME" | grep -q '\.zip$'; then
   unzip -qo "$ARCHIVE_PATH" -d "$TMP_DIR/extracted"
 else
   tar -xzf "$ARCHIVE_PATH" -C "$TMP_DIR/extracted"
 fi
 
-install -m 755 "$TMP_DIR/extracted/notewise" "$INSTALL_DIR/notewise"
+# The release archive is a PyInstaller --onedir bundle: the notewise binary
+# plus its _internal/ support files, which must stay together on disk. Install
+# the whole bundle to a dedicated app directory and symlink the binary onto
+# PATH so INSTALL_DIR (often a shared bin dir) isn't polluted with support files.
+rm -rf "$APP_DIR"
+mkdir -p "$APP_DIR"
+cp -R "$TMP_DIR/extracted/." "$APP_DIR/"
+chmod 755 "$APP_DIR/notewise"
+
+mkdir -p "$INSTALL_DIR"
+ln -sf "$APP_DIR/notewise" "$INSTALL_DIR/notewise"
 ensure_path
 
-printf 'Installed NoteWise to %s/notewise\n' "$INSTALL_DIR"
+printf 'Installed NoteWise to %s\n' "$APP_DIR"
 printf 'Run: notewise version\n'
 printf 'Open a new shell or run: %s\n' "$PATH_EXPORT"
