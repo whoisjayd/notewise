@@ -22,6 +22,8 @@ import structlog
 from notewise._constants import (
     CONFIG_FILE_PERMISSION_MODE,
     GROQ_API_KEY_PATTERN,
+    LITELLM_LOG_DEFAULT_LEVEL,
+    LITELLM_LOG_ENV_VAR,
     LOGS_DIR_NAME,
     PROVIDER_SECRET_ENV_KEYS,
     SENSITIVE_KEY_SUFFIXES,
@@ -295,7 +297,7 @@ def configure_logging(
             return _SESSION_LOG_PATH
 
         # Keep terminal quiet via NullHandler while preserving file diagnostics.
-        os.environ.setdefault("LITELLM_LOG", "ERROR")
+        os.environ.setdefault(LITELLM_LOG_ENV_VAR, LITELLM_LOG_DEFAULT_LEVEL)
         diagnostic_level = logging.DEBUG if verbose else logging.WARNING
         for name in THIRD_PARTY_DIAGNOSTIC_LOGGERS:
             diagnostic_logger = logging.getLogger(name)

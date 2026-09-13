@@ -11,6 +11,11 @@ from sqlalchemy import create_engine, func, select
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
 
+from notewise._constants import (
+    DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
+    DEFAULT_HISTORY_LIMIT,
+)
+
 from .migrations import run_migrations
 from .models import Base, ExportRecord, RunStatsRecord, TranscriptRecord, VideoRecord
 from .schemas import (
@@ -131,7 +136,9 @@ class DatabaseRepository:
             )
             return [RunStatsSchema.model_validate(r) for r in records]
 
-    def get_recent_videos(self, limit: int = 10) -> list[RecentVideoSchema]:
+    def get_recent_videos(
+        self, limit: int = DEFAULT_HISTORY_LIMIT
+    ) -> list[RecentVideoSchema]:
         """Return recently processed videos joined with their latest run record."""
         latest_runs = (
             select(
@@ -279,7 +286,9 @@ class DatabaseRepository:
             )
             return [ExportRecordSchema.model_validate(r) for r in records]
 
-    def prune_old_entries(self, older_than_days: int = 30) -> int:
+    def prune_old_entries(
+        self, older_than_days: int = DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS
+    ) -> int:
         """Delete cached videos older than the provided age threshold."""
         cutoff = datetime.now(UTC) - timedelta(days=max(older_than_days, 0))
         with self._write_lock, Session(self._engine) as session:
