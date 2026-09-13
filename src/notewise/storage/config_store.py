@@ -74,7 +74,7 @@ def _select_endpoint_profiles(
     connection: sqlite3.Connection,
 ) -> tuple[CustomEndpointProfile, ...]:
     rows = connection.execute(
-        f"SELECT name, base_url, api_key FROM {CONFIG_ENDPOINTS_TABLE_NAME} "
+        f"SELECT name, base_url, api_key FROM {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
         "ORDER BY rowid"
     ).fetchall()
     return tuple(
@@ -93,7 +93,7 @@ def config_db_is_empty(db_path: Path) -> bool:
             CONFIG_API_KEYS_TABLE_NAME,
             CONFIG_ENDPOINTS_TABLE_NAME,
         ):
-            if connection.execute(f"SELECT 1 FROM {table_name} LIMIT 1").fetchone():
+            if connection.execute(f"SELECT 1 FROM {table_name} LIMIT 1").fetchone():  # nosec B608 -- table name is a module constant, not user input
                 return False
     return True
 
@@ -115,12 +115,12 @@ def load_config_db(db_path: Path) -> dict[str, str]:
         try:
             values = dict(
                 connection.execute(
-                    f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"
+                    f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
                 ).fetchall()
             )
             values.update(
                 connection.execute(
-                    f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"
+                    f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
                 ).fetchall()
             )
             profiles = _select_endpoint_profiles(connection)
@@ -145,7 +145,7 @@ def upsert_custom_endpoint(db_path: Path, profile: CustomEndpointProfile) -> Non
     """Atomically insert or replace one saved custom endpoint."""
     with closing(_connect(db_path)) as connection, connection:
         connection.execute(
-            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} (name, base_url, api_key) "
+            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} (name, base_url, api_key) "  # nosec B608 -- table name is a module constant, not user input
             "VALUES (?, ?, ?) "
             "ON CONFLICT(name) DO UPDATE SET base_url = excluded.base_url, "
             "api_key = excluded.api_key",
@@ -157,7 +157,8 @@ def delete_custom_endpoint(db_path: Path, name: str) -> bool:
     """Atomically remove one saved custom endpoint. Returns whether it existed."""
     with closing(_connect(db_path)) as connection, connection:
         cursor = connection.execute(
-            f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME} WHERE name = ?", (name,)
+            f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME} WHERE name = ?",  # nosec B608 -- table name is a module constant, not user input
+            (name,),
         )
         return cursor.rowcount > 0
 
@@ -169,7 +170,7 @@ def list_api_keys(db_path: Path) -> dict[str, str]:
     with closing(_connect(db_path)) as connection:
         return dict(
             connection.execute(
-                f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"
+                f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
             ).fetchall()
         )
 
@@ -178,7 +179,7 @@ def set_api_key(db_path: Path, provider: str, api_key: str) -> None:
     """Atomically insert or replace one provider's API key."""
     with closing(_connect(db_path)) as connection, connection:
         connection.execute(
-            f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "
+            f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "  # nosec B608 -- table name is a module constant, not user input
             "VALUES (?, ?) "
             "ON CONFLICT(provider) DO UPDATE SET api_key = excluded.api_key",
             (provider, api_key),
@@ -189,7 +190,7 @@ def delete_api_key(db_path: Path, provider: str) -> bool:
     """Atomically remove one provider's saved API key. Returns whether it existed."""
     with closing(_connect(db_path)) as connection, connection:
         cursor = connection.execute(
-            f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME} WHERE provider = ?",
+            f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME} WHERE provider = ?",  # nosec B608 -- table name is a module constant, not user input
             (provider,),
         )
         return cursor.rowcount > 0
@@ -238,20 +239,20 @@ def replace_config_db(db_path: Path, values: dict[str, str]) -> None:
     )
 
     with closing(_connect(db_path)) as connection, connection:
-        connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")
+        connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
         connection.executemany(
-            f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",
+            f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",  # nosec B608 -- table name is a module constant, not user input
             scalar_values.items(),
         )
-        connection.execute(f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME}")
+        connection.execute(f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
         connection.executemany(
-            f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "
+            f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "  # nosec B608 -- table name is a module constant, not user input
             "VALUES (?, ?)",
             api_key_values.items(),
         )
-        connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")
+        connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
         connection.executemany(
-            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "
+            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
             "(name, base_url, api_key) VALUES (?, ?, ?)",
             [(p.name, p.base_url, p.api_key) for p in profiles],
         )
@@ -268,13 +269,14 @@ def remove_config_key(db_path: Path, key: str) -> bool:
     table = _classify_key(key)
     if table == CONFIG_ENDPOINTS_TABLE_NAME:
         with closing(_connect(db_path)) as connection, connection:
-            cursor = connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")
+            cursor = connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
             return cursor.rowcount > 0
     if table == CONFIG_API_KEYS_TABLE_NAME:
         return delete_api_key(db_path, key)
     with closing(_connect(db_path)) as connection, connection:
         cursor = connection.execute(
-            f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME} WHERE key = ?", (key,)
+            f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME} WHERE key = ?",  # nosec B608 -- table name is a module constant, not user input
+            (key,),
         )
         return cursor.rowcount > 0
 
@@ -302,36 +304,36 @@ def update_config_db(
         connection.execute("BEGIN IMMEDIATE")
         current = dict(
             connection.execute(
-                f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"
+                f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
             ).fetchall()
         )
         current.update(scalar_updates)
         for key in drop_keys:
             current.pop(key, None)
-        connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")
+        connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
         connection.executemany(
-            f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",
+            f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",  # nosec B608 -- table name is a module constant, not user input
             current.items(),
         )
 
         for provider, api_key in api_key_updates.items():
             connection.execute(
-                f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "
+                f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "  # nosec B608 -- table name is a module constant, not user input
                 "VALUES (?, ?) "
                 "ON CONFLICT(provider) DO UPDATE SET api_key = excluded.api_key",
                 (provider, api_key),
             )
         current_api_keys = dict(
             connection.execute(
-                f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"
+                f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
             ).fetchall()
         )
 
         if endpoints_update is not None:
             profiles = parse_custom_endpoint_profiles(endpoints_update)
-            connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")
+            connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
             connection.executemany(
-                f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "
+                f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
                 "(name, base_url, api_key) VALUES (?, ?, ?)",
                 [(p.name, p.base_url, p.api_key) for p in profiles],
             )
