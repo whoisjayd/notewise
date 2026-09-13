@@ -186,6 +186,56 @@ class TestConfig:
         with pytest.raises(ValidationError):
             Config()
 
+    def test_max_concurrent_chapters_from_env(self, monkeypatch):
+        """MAX_CONCURRENT_CHAPTERS overrides the code default."""
+        monkeypatch.setenv("MAX_CONCURRENT_CHAPTERS", "7")
+        assert Config().max_concurrent_chapters == 7
+
+    def test_max_concurrent_chapters_lt_one(self, monkeypatch):
+        """A non-positive chapter worker count raises ValidationError."""
+        monkeypatch.setenv("MAX_CONCURRENT_CHAPTERS", "0")
+        with pytest.raises(ValidationError):
+            Config()
+
+    def test_chunk_size_and_overlap_from_env(self, monkeypatch):
+        """CHUNK_SIZE and CHUNK_OVERLAP override the code defaults."""
+        monkeypatch.setenv("CHUNK_SIZE", "6000")
+        monkeypatch.setenv("CHUNK_OVERLAP", "300")
+        cfg = Config()
+        assert cfg.chunk_size == 6000
+        assert cfg.chunk_overlap == 300
+
+    def test_chunk_overlap_must_be_smaller_than_chunk_size(self, monkeypatch):
+        """An overlap at or past chunk_size would stall the chunker."""
+        monkeypatch.setenv("CHUNK_SIZE", "1000")
+        monkeypatch.setenv("CHUNK_OVERLAP", "1000")
+        with pytest.raises(ValidationError):
+            Config()
+
+    def test_default_languages_from_json_env(self, monkeypatch):
+        """DEFAULT_LANGUAGES accepts a JSON array, matching CUSTOM_LLM_ENDPOINTS."""
+        monkeypatch.setenv("DEFAULT_LANGUAGES", '["en", "hi"]')
+        assert Config().default_languages == ["en", "hi"]
+
+    def test_default_languages_from_comma_separated_config_db(
+        self, tmp_path, monkeypatch
+    ):
+        """config.db also accepts a friendlier comma-separated string.
+
+        Only config.db, not a shell env var: pydantic-settings' built-in env
+        source JSON-decodes complex fields itself before any validator runs,
+        and fails outright on non-JSON input, so the comma-separated
+        shorthand can only reach ``_parse_default_languages`` through
+        ``UserConfigSource``, which hands off raw strings undecoded.
+        """
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        state_dir = tmp_path / ".notewise"
+        state_dir.mkdir()
+        (state_dir / "config.env").write_text(
+            "DEFAULT_LANGUAGES=en, hi , es\n", encoding="utf-8"
+        )
+        assert Config().default_languages == ["en", "hi", "es"]
+
     def test_load_from_user_config_strips_quotes_and_warns_for_unknown_keys(
         self, tmp_path, monkeypatch
     ):

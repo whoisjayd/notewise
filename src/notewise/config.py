@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import structlog
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -123,6 +123,10 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         OUTPUT_DIR_CONFIG_KEY,
         ALLOW_UNLISTED_MODELS_CONFIG_KEY,
         "MAX_CONCURRENT_VIDEOS",
+        "MAX_CONCURRENT_CHAPTERS",
+        "CHUNK_SIZE",
+        "CHUNK_OVERLAP",
+        "DEFAULT_LANGUAGES",
         "YOUTUBE_REQUESTS_PER_MINUTE",
         "TEMPERATURE",
         "MAX_TOKENS",
@@ -436,15 +440,17 @@ class AppSettings(BaseSettings):
     )
     max_tokens: int | None = Field(None, alias="MAX_TOKENS", gt=0)
 
-    # Chunking (code defaults only; not exposed in config.env)
-    chunk_size: int = DEFAULT_CHUNK_SIZE
-    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+    # Chunking
+    chunk_size: int = Field(DEFAULT_CHUNK_SIZE, alias="CHUNK_SIZE", gt=0)
+    chunk_overlap: int = Field(DEFAULT_CHUNK_OVERLAP, alias="CHUNK_OVERLAP", ge=0)
 
     # Concurrency
     max_concurrent_videos: int = Field(
         DEFAULT_MAX_CONCURRENT_VIDEOS, alias="MAX_CONCURRENT_VIDEOS", gt=0
     )
-    max_concurrent_chapters: int = DEFAULT_MAX_CONCURRENT_CHAPTERS
+    max_concurrent_chapters: int = Field(
+        DEFAULT_MAX_CONCURRENT_CHAPTERS, alias="MAX_CONCURRENT_CHAPTERS", gt=0
+    )
     youtube_requests_per_minute: int = Field(
         DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE, alias="YOUTUBE_REQUESTS_PER_MINUTE", gt=0
     )
@@ -454,7 +460,8 @@ class AppSettings(BaseSettings):
 
     # Transcript
     default_languages: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_LANGUAGES)
+        default_factory=lambda: list(DEFAULT_LANGUAGES),
+        alias="DEFAULT_LANGUAGES",
     )
     youtube_cookie_file: str | None = Field(None, alias="YOUTUBE_COOKIE_FILE")
 
@@ -468,6 +475,31 @@ class AppSettings(BaseSettings):
         alias="GITHUB_COPILOT_TOKEN_DIR",
     )
 
+    @field_validator("default_languages", mode="before")
+    @classmethod
+    def _parse_default_languages(cls, value: object) -> object:
+        """Decode a config.db string into a list.
+
+        Unlike pydantic-settings' built-in env source, ``UserConfigSource``
+        hands back plain strings with no complex-type decoding, so a
+        config.db value here would otherwise fail list validation outright.
+        Accepts JSON (``["en","hi"]``, matching CUSTOM_LLM_ENDPOINTS' style)
+        or a plain comma-separated list (``en,hi``) for a friendlier
+        ``config set DEFAULT_LANGUAGES en,hi``. A raw shell env var still
+        needs JSON: pydantic-settings' env source tries to JSON-decode any
+        complex-typed field itself before this validator ever runs, and
+        raises outright on non-JSON input rather than falling through here.
+        """
+        if not isinstance(value, str):
+            return value
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return [
+                language.strip() for language in value.split(",") if language.strip()
+            ]
+        return decoded
+
     @field_validator("custom_llm_endpoints")
     @classmethod
     def _validate_custom_llm_endpoints(cls, value: str | None) -> str | None:
@@ -477,6 +509,22 @@ class AppSettings(BaseSettings):
         except CustomEndpointError as error:
             raise ValueError(str(error)) from error
         return value
+
+    @model_validator(mode="after")
+    def _validate_chunk_overlap_fits_chunk_size(self) -> AppSettings:
+        """Reject an overlap that would stall or degenerate the chunker.
+
+        generation.py advances by ``chunk_size - chunk_overlap`` tokens per
+        chunk; an overlap at or past the chunk size stops that advance (or
+        reverses it), so this must be caught here rather than left to fail
+        confusingly mid-run.
+        """
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"CHUNK_OVERLAP ({self.chunk_overlap}) must be smaller than "
+                f"CHUNK_SIZE ({self.chunk_size})."
+            )
+        return self
 
     @classmethod
     def settings_customise_sources(

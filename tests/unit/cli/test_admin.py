@@ -267,6 +267,8 @@ def test_render_runtime_info(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) ->
         default_languages=["en", "hi"],
         max_concurrent_videos=3,
         max_concurrent_chapters=2,
+        chunk_size=4000,
+        chunk_overlap=200,
         youtube_requests_per_minute=10,
         youtube_cookie_file=None,
     )

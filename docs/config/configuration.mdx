@@ -75,18 +75,17 @@ copies its credentials into ambient environment variables.
 | `CUSTOM_LLM_ENDPOINTS`        | unset                     | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR`                  | `./output`                | Default output directory.           |
 | `MAX_CONCURRENT_VIDEOS`       | `5`                       | Batch/playlist video workers.       |
+| `MAX_CONCURRENT_CHAPTERS`     | `3`                       | Per-video chapter generation workers. |
+| `CHUNK_SIZE`                  | `4000`                    | Transcript chunk size, in tokens.   |
+| `CHUNK_OVERLAP`               | `200`                     | Overlap between chunks, in tokens. Must be smaller than `CHUNK_SIZE`. |
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10`                      | YouTube request limit.              |
 | `TEMPERATURE`                 | `0.7`                     | LLM temperature.                    |
 | `MAX_TOKENS`                  | unset                     | Optional LLM max output tokens.     |
+| `DEFAULT_LANGUAGES`           | `["en"]`                  | Preferred transcript languages. JSON array (`config set` also takes comma-separated). |
 | `YOUTUBE_COOKIE_FILE`         | unset                     | Default Netscape cookies file path. |
 | `ALLOW_UNLISTED_MODELS`       | `false`                   | Permit out-of-catalog models.       |
 
 Provider API keys and provider auth keys are also accepted in `config.db` (via `notewise config set KEY VALUE`) when they are listed in source constants. Omit `VALUE` for a sensitive key to be prompted for it with hidden input instead of typing it as a plain CLI argument.
-
-<Note>
-  `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default
-  settings, not normal `config.db` keys.
-</Note>
 
 ## Commands
 
