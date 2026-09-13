@@ -331,11 +331,13 @@ def select_model(
 
     page_size = SETUP_MODEL_SELECTION_PAGE_SIZE
     current_page = 0
+    filtered_models = models
+    search_query = ""
 
     while True:
         start_idx = current_page * page_size
-        end_idx = min(start_idx + page_size, len(models))
-        page_models = models[start_idx:end_idx]
+        end_idx = min(start_idx + page_size, len(filtered_models))
+        page_models = filtered_models[start_idx:end_idx]
 
         table = Table(show_header=True, header_style="bold magenta")
         table.add_column("#", style="dim", width=4)
@@ -356,37 +358,56 @@ def select_model(
 
         active_console.print(table)
 
-        total_pages = (len(models) + page_size - 1) // page_size
-        active_console.print(
-            f"\n[dim]Page {current_page + 1}/{total_pages} | "
-            f"Showing {start_idx + 1}-{end_idx} of {len(models)} "
-            f"models[/dim]"
-        )
-
-        if total_pages > 1:
+        total_pages = max(1, (len(filtered_models) + page_size - 1) // page_size)
+        if search_query:
             active_console.print(
-                "[dim]Type 'n' for next page, 'p' for previous page, "
-                "or model number to select[/dim]"
+                f"\n[dim]Search: '{search_query}' | Page {current_page + 1}/"
+                f"{total_pages} | Showing {start_idx + 1}-{end_idx} of "
+                f"{len(filtered_models)} matching models[/dim]"
+            )
+        else:
+            active_console.print(
+                f"\n[dim]Page {current_page + 1}/{total_pages} | "
+                f"Showing {start_idx + 1}-{end_idx} of {len(filtered_models)} "
+                f"models[/dim]"
             )
 
-        choice = Prompt.ask("\nSelect model (or n/p for navigation)")
+        hints = []
+        if total_pages > 1:
+            hints.append("'n'/'p' to navigate pages")
+        hints.append("type text to search")
+        if search_query:
+            hints.append("'c' to clear search")
+        active_console.print(f"[dim]{', '.join(hints).capitalize()}[/dim]")
 
-        if choice.lower() == "n" and current_page < total_pages - 1:
+        choice = Prompt.ask("\nSelect model (number, search text, or n/p/c)")
+        stripped = choice.strip()
+
+        if stripped.lower() == "n" and current_page < total_pages - 1:
             current_page += 1
             active_console.clear()
             active_console.print(
                 f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
             )
             continue
-        elif choice.lower() == "p" and current_page > 0:
+        elif stripped.lower() == "p" and current_page > 0:
             current_page -= 1
             active_console.clear()
             active_console.print(
                 f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
             )
             continue
-        elif choice.isdigit() and 1 <= int(choice) <= len(models):
-            selected = models[int(choice) - 1]
+        elif stripped.lower() == "c" and search_query:
+            filtered_models = models
+            search_query = ""
+            current_page = 0
+            active_console.clear()
+            active_console.print(
+                f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
+            )
+            continue
+        elif stripped.isdigit() and 1 <= int(stripped) <= len(filtered_models):
+            selected = filtered_models[int(stripped) - 1]
 
             if (
                 provider_key == "gemini"
@@ -396,9 +417,27 @@ def select_model(
                 return f"gemini/{selected}"
 
             return selected
+        elif stripped and not stripped.isdigit():
+            query = stripped.lower()
+            matches = [model for model in models if query in model.lower()]
+            if not matches:
+                active_console.print(
+                    f"[yellow]No models match '{stripped}'. Try a different "
+                    "search or 'c' to clear.[/yellow]"
+                )
+                continue
+            filtered_models = matches
+            search_query = stripped
+            current_page = 0
+            active_console.clear()
+            active_console.print(
+                f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
+            )
+            continue
 
         active_console.print(
-            "[red]Invalid choice. Enter a model number or use n/p to navigate.[/red]"
+            "[red]Invalid choice. Enter a model number, search text, "
+            "or n/p to navigate.[/red]"
         )
 
 

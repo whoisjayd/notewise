@@ -558,20 +558,62 @@ class TestInteractiveFlow:
             assert selected == "gemini/gemini-1.5-pro"
 
     def test_select_model_invalid_input_is_visible(self):
-        """Unexpected model input should print guidance and re-prompt."""
+        """Blank input should print guidance and re-prompt."""
         mock_console = MagicMock()
         models = {"p1": ["model-0"]}
 
         with (
             patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
-            patch("rich.prompt.Prompt.ask", side_effect=["wat", "1"]),
+            patch("rich.prompt.Prompt.ask", side_effect=["", "1"]),
         ):
             selected = select_model("p1", models, console=mock_console)
 
         assert selected == "model-0"
         mock_console.print.assert_any_call(
-            "[red]Invalid choice. Enter a model number or use n/p to navigate.[/red]"
+            "[red]Invalid choice. Enter a model number, search text, "
+            "or n/p to navigate.[/red]"
         )
+
+    def test_select_model_search_filters_by_substring(self):
+        """Typing non-numeric text should filter the list before selecting."""
+        models = {"p1": ["gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o-mini", "gpt-4o"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["gemini", "2"]),
+        ):
+            selected = select_model("p1", models)
+
+        assert selected == "gemini-2.5-pro"
+
+    def test_select_model_search_with_no_matches_reprompts(self):
+        """A search with no matches should warn and keep the prior list."""
+        mock_console = MagicMock()
+        models = {"p1": ["model-0", "model-1"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["zzz-no-match", "1"]),
+        ):
+            selected = select_model("p1", models, console=mock_console)
+
+        assert selected == "model-0"
+        assert any(
+            "No models match" in str(call.args[0])
+            for call in mock_console.print.call_args_list
+        )
+
+    def test_select_model_search_clear_restores_full_list(self):
+        """'c' after a search should restore the unfiltered model list."""
+        models = {"p1": ["model-0", "model-1", "other-2"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["model", "c", "3"]),
+        ):
+            selected = select_model("p1", models)
+
+        assert selected == "other-2"
 
     def test_get_api_key_new(self):
         """Test entering a new API key."""
