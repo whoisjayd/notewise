@@ -88,6 +88,7 @@ dependencies = [
     "html2docx>=1.6.0",
     "python-docx>=1.2.0",
     "fpdf2>=2.8.8",
+    "fonttools>=4.62.1",
     "defusedxml>=0.7.1",
 ]
 

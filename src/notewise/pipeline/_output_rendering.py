@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from notewise._constants import PDF_UNSUPPORTED_UNICODE_ERROR
+from notewise._constants import PDF_RENDER_FALLBACK_WARNING
 from notewise.pipeline._documents import render_notes_documents
 
 
@@ -27,7 +27,5 @@ def render_notes_with_warning(
     if rendered_output_targets.get("pdf") is not None and (
         rendered_output_targets["pdf"].suffix.lower() == ".md"
     ):
-        return rendered_output_targets, PDF_UNSUPPORTED_UNICODE_ERROR.format(
-            target_language=target_language
-        )
+        return rendered_output_targets, PDF_RENDER_FALLBACK_WARNING
     return rendered_output_targets, None

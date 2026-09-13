@@ -43,7 +43,7 @@ Videos with YouTube chapters use chapter-aware generation. Without `--chapter-di
 | ------ | -------------------------------------------------------------------------------- |
 | `md`   | Raw Markdown notes. Default.                                                     |
 | `html` | Markdown rendered with built-in CSS.                                             |
-| `pdf`  | Uses `fpdf`; Latin-script text only. Unsupported Unicode falls back to Markdown. |
+| `pdf`  | Uses `fpdf2` with a bundled Noto Sans font (Latin, Cyrillic, Greek, Vietnamese, Devanagari). Other scripts (e.g. Arabic, Hebrew, CJK), or any renderer failure, fall back to Markdown for that video instead of failing the run. |
 | `docx` | Uses `html2docx` and `python-docx`.                                              |
 
 ## File layout
