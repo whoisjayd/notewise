@@ -674,6 +674,47 @@ class TestInteractiveFlow:
             "[red]Invalid choice. Enter a number 1-1.[/red]"
         )
 
+    def test_run_custom_endpoint_manager_add_selects_model_from_list(self):
+        """Confirming model selection should list discovered models by index."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+                return_value=["vendor/model-a", "vendor/model-b"],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ) as verify,
+            patch("rich.prompt.Confirm.ask", return_value=True),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "2",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        verify.assert_awaited_once_with(
+            "https://new.example/v1", "new-secret", "vendor/model-b"
+        )
+        saved = config_store.list_custom_endpoints(get_config_db_path())
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="new-secret",
+            ),
+        )
+
     def test_run_custom_endpoint_manager_adds_new_endpoint(self):
         """'a' should discover, verify, and persist a brand-new endpoint."""
         from notewise.config import get_config_db_path
@@ -688,6 +729,7 @@ class TestInteractiveFlow:
                 "notewise.llm.custom_endpoint.verify_openai_compatible_model",
                 new_callable=AsyncMock,
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch(
                 "rich.prompt.Prompt.ask",
                 side_effect=[
@@ -733,6 +775,7 @@ class TestInteractiveFlow:
                 "notewise.llm.custom_endpoint.verify_openai_compatible_model",
                 new_callable=AsyncMock,
             ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
             patch(
                 "rich.prompt.Prompt.ask",
                 side_effect=[

@@ -244,6 +244,70 @@ def _select_endpoint_by_index(
     return None
 
 
+def _select_or_enter_model(console: Console, base_url: str, api_key: str) -> str:
+    """Offer to discover and list the endpoint's models, or take one by hand.
+
+    `base_url`/`api_key` must already reflect the values this endpoint will
+    actually be saved with (e.g. the new base URL when one was entered
+    during an update, falling back to the existing one otherwise) so the
+    discovered list matches what verification will run against.
+    """
+    from rich.prompt import Confirm, Prompt
+
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import discover_openai_compatible_models
+
+    if Confirm.ask("Select the model from the endpoint's list?", default=True):
+        try:
+            models = discover_openai_compatible_models(base_url, api_key)
+        except CustomEndpointError as error:
+            console.print(f"[yellow]Could not list models ({error}).[/yellow]")
+            models = []
+
+        if models:
+            # Reuses the same paginated, search-filterable picker as the
+            # setup wizard's provider model selection.
+            return select_model(
+                "custom_openai_compatible",
+                {"custom_openai_compatible": models},
+                console=console,
+            )
+        console.print("[yellow]No models discovered; enter one manually.[/yellow]")
+
+    return Prompt.ask("Model ID returned by this endpoint").strip()
+
+
+def _pick_model_and_save_endpoint(
+    console: Console,
+    db_path: Path,
+    name: str,
+    base_url: str,
+    api_key: str,
+    *,
+    success_verb: str,
+) -> None:
+    """Shared tail of add/update: pick a model, then build, verify, and save.
+
+    `name`/`base_url`/`api_key` must already be normalized/resolved by the
+    caller (add collects them fresh; update merges new values over the
+    existing profile) -- this only handles the part both flows share.
+    """
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+    model = _select_or_enter_model(console, base_url, api_key)
+    if not model:
+        console.print("[red]A model ID is required.[/red]")
+        return
+    try:
+        profile = CustomEndpointProfile(name=name, base_url=base_url, api_key=api_key)
+    except CustomEndpointError as error:
+        console.print(f"[red]{error}[/red]")
+        return
+    if _verify_and_save_endpoint(console, db_path, profile, model):
+        console.print(f"[green]{success_verb} endpoint {profile.name!r}.[/green]")
+
+
 def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
     """Interactively add, update, and delete saved custom endpoints.
 
@@ -259,7 +323,6 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
 
     from notewise.errors import CustomEndpointError
     from notewise.llm.custom_endpoint import (
-        CustomEndpointProfile,
         normalize_custom_model_prefix,
         normalize_openai_base_url,
     )
@@ -301,21 +364,26 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             name = Prompt.ask("Name for this endpoint").strip()
             base_url = Prompt.ask("Base URL").strip()
             api_key = Prompt.ask("API key", password=True).strip()
-            model = Prompt.ask("Model ID returned by this endpoint").strip()
-            if not (name and base_url and api_key and model):
-                active_console.print("[red]All fields are required.[/red]")
+            if not (name and base_url and api_key):
+                active_console.print(
+                    "[red]Name, base URL, and API key are required.[/red]"
+                )
                 continue
             try:
-                profile = CustomEndpointProfile(
-                    name=normalize_custom_model_prefix(name),
-                    base_url=normalize_openai_base_url(base_url),
-                    api_key=api_key,
-                )
+                normalized_base_url = normalize_openai_base_url(base_url)
+                normalized_name = normalize_custom_model_prefix(name)
             except CustomEndpointError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
-            if _verify_and_save_endpoint(active_console, db_path, profile, model):
-                active_console.print(f"[green]Saved endpoint {profile.name!r}.[/green]")
+
+            _pick_model_and_save_endpoint(
+                active_console,
+                db_path,
+                normalized_name,
+                normalized_base_url,
+                api_key,
+                success_verb="Saved",
+            )
             continue
 
         if action in ("u", "update"):
@@ -334,27 +402,25 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             new_api_key = Prompt.ask(
                 "API key (blank to keep current)", password=True, default=""
             ).strip()
-            model = Prompt.ask("Model ID (required to re-verify the update)").strip()
-            if not model:
-                active_console.print("[red]Model ID is required to verify.[/red]")
-                continue
             try:
-                profile = CustomEndpointProfile(
-                    name=normalized,
-                    base_url=(
-                        normalize_openai_base_url(new_base_url)
-                        if new_base_url
-                        else existing.base_url
-                    ),
-                    api_key=new_api_key or existing.api_key,
+                effective_base_url = (
+                    normalize_openai_base_url(new_base_url)
+                    if new_base_url
+                    else existing.base_url
                 )
             except CustomEndpointError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
-            if _verify_and_save_endpoint(active_console, db_path, profile, model):
-                active_console.print(
-                    f"[green]Updated endpoint {profile.name!r}.[/green]"
-                )
+            effective_api_key = new_api_key or existing.api_key
+
+            _pick_model_and_save_endpoint(
+                active_console,
+                db_path,
+                normalized,
+                effective_base_url,
+                effective_api_key,
+                success_verb="Updated",
+            )
             continue
 
         if action in ("d", "delete"):
