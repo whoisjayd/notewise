@@ -70,6 +70,17 @@ Provider truth:
 - Cloudflare needs `CLOUDFLARE_API_KEY` and `CLOUDFLARE_ACCOUNT_ID`
 - Databricks needs `DATABRICKS_API_KEY` and `DATABRICKS_API_BASE`
 - Bedrock uses the AWS credential chain
+- AI21 `AI21_API_KEY`
+- Cerebras `CEREBRAS_API_KEY`
+- DashScope `DASHSCOPE_API_KEY`
+- DeepInfra `DEEPINFRA_API_KEY`
+- Hugging Face `HUGGINGFACE_API_KEY`
+- Jina AI `JINA_API_KEY`
+- Novita AI `NOVITA_API_KEY`
+- NVIDIA NIM `NVIDIA_NIM_API_KEY`
+- Replicate `REPLICATE_API_KEY`
+- SambaNova `SAMBANOVA_API_KEY`
+- Voyage AI `VOYAGE_API_KEY`
 
 OAuth truth:
 
