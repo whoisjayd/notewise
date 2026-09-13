@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from notewise.ui.setup_wizard import get_config_path, save_config
+from notewise.ui.setup_wizard import get_config_path, load_config, save_config
 
 
 def test_save_config_does_not_truncate_symlink_target(tmp_path, monkeypatch):
@@ -24,7 +24,5 @@ def test_save_config_does_not_truncate_symlink_target(tmp_path, monkeypatch):
     save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
 
     assert victim.read_text(encoding="utf-8") == "VICTIM=keep-me\n"
-    assert "DEFAULT_MODEL=gemini/gemini-2.5-flash" in config_path.read_text(
-        encoding="utf-8"
-    )
+    assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
     assert config_path.is_symlink() is False
