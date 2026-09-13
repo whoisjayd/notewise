@@ -355,6 +355,9 @@ edit` is an interactive, category-grouped editor (Model & Generation,
 Concurrency & Performance, Output & Transcripts, Custom Endpoints, OAuth
 Token Directories, Provider API Keys, Provider Auth & Cloud Credentials)
 for browsing and setting/unsetting keys without knowing their exact names.
+Its Custom Endpoints category is a table-based add/update/delete manager
+over saved endpoint rows, the same as `notewise inference
+list|add|update|delete`, not a raw-JSON editor.
 
 ## Models and providers
 

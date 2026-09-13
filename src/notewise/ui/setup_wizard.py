@@ -55,6 +55,7 @@ class RunOAuthLoginProto(Protocol):
 
 LEGACY_CONFIG_KEYS = set(APP_LEGACY_CONFIG_KEYS)
 run_oauth_login: RunOAuthLoginProto | None = None
+_CUSTOM_ENDPOINTS_CATEGORY = "Custom Endpoints"
 
 
 def _load_oauth_dependencies() -> None:
@@ -170,6 +171,221 @@ def select_config_category(
         )
 
 
+def _default_model_uses_endpoint(
+    current_config: dict[str, str], name: str
+) -> str | None:
+    """Return the model id if DEFAULT_MODEL selects this saved endpoint."""
+    from notewise.llm.custom_endpoint import normalize_custom_model_prefix
+
+    default_prefix, separator, default_model_id = current_config.get(
+        "DEFAULT_MODEL", ""
+    ).partition("/")
+    if not separator or not default_model_id:
+        return None
+    if normalize_custom_model_prefix(default_prefix) != name:
+        return None
+    return default_model_id
+
+
+def _verify_and_save_endpoint(
+    console: Console,
+    db_path: Path,
+    profile: CustomEndpointProfile,
+    model: str,
+) -> bool:
+    """Discover, verify, and persist one endpoint. Returns True on success."""
+    import sqlite3
+
+    from notewise.errors import ConfigurationError, CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        discover_openai_compatible_models,
+        verify_openai_compatible_model,
+    )
+
+    try:
+        discovered_models = discover_openai_compatible_models(
+            profile.base_url, profile.api_key
+        )
+        if model not in discovered_models:
+            console.print(
+                f"[red]Model {model!r} was not returned by endpoint "
+                f"{profile.name!r}.[/red]"
+            )
+            return False
+
+        import asyncio
+
+        asyncio.run(
+            verify_openai_compatible_model(profile.base_url, profile.api_key, model)
+        )
+        config_store.upsert_custom_endpoint(db_path, profile)
+    except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
+        console.print(f"[red]{error}[/red]")
+        return False
+    return True
+
+
+def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
+    """Interactively add, update, and delete saved custom endpoints.
+
+    Mirrors `notewise inference add|update|delete`, so the interactive
+    editor manages the same one-row-per-endpoint config.db table instead of
+    exposing the CUSTOM_LLM_ENDPOINTS whole-registry override as one opaque
+    JSON string to overwrite.
+    """
+    import sqlite3
+
+    from rich.prompt import Confirm, Prompt
+    from rich.table import Table
+
+    from notewise.errors import CustomEndpointError
+    from notewise.llm.custom_endpoint import (
+        CustomEndpointProfile,
+        normalize_custom_model_prefix,
+        normalize_openai_base_url,
+    )
+
+    active_console = _resolve_console(console)
+    db_path = get_config_db_path()
+
+    while True:
+        try:
+            profiles = config_store.list_custom_endpoints(db_path)
+        except sqlite3.Error as error:
+            active_console.print(f"[red]{error}[/red]")
+            return
+
+        table = Table(
+            show_header=True, header_style="bold magenta", title="Custom Endpoints"
+        )
+        table.add_column("#", style="dim", width=4)
+        table.add_column("Name", style="bold cyan")
+        table.add_column("Base URL")
+        for i, profile in enumerate(profiles, 1):
+            table.add_row(str(i), profile.name, profile.base_url)
+
+        active_console.print("\n[bold cyan]Custom Endpoints:[/bold cyan]\n")
+        active_console.print(
+            table if profiles else "[dim]No saved endpoints yet.[/dim]"
+        )
+
+        action = (
+            Prompt.ask("\n'a' to add, 'u' to update, 'd' to delete, or 'q' to quit")
+            .strip()
+            .lower()
+        )
+
+        if action in ("q", "quit", "exit"):
+            return
+
+        if action in ("a", "add"):
+            name = Prompt.ask("Name for this endpoint").strip()
+            base_url = Prompt.ask("Base URL").strip()
+            api_key = Prompt.ask("API key", password=True).strip()
+            model = Prompt.ask("Model ID returned by this endpoint").strip()
+            if not (name and base_url and api_key and model):
+                active_console.print("[red]All fields are required.[/red]")
+                continue
+            try:
+                profile = CustomEndpointProfile(
+                    name=normalize_custom_model_prefix(name),
+                    base_url=normalize_openai_base_url(base_url),
+                    api_key=api_key,
+                )
+            except CustomEndpointError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            if _verify_and_save_endpoint(active_console, db_path, profile, model):
+                active_console.print(f"[green]Saved endpoint {profile.name!r}.[/green]")
+            continue
+
+        if action in ("u", "update"):
+            if not profiles:
+                active_console.print("[yellow]No endpoints to update.[/yellow]")
+                continue
+            target = Prompt.ask("Name of endpoint to update").strip()
+            try:
+                normalized = normalize_custom_model_prefix(target)
+            except CustomEndpointError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            existing = next((p for p in profiles if p.name == normalized), None)
+            if existing is None:
+                active_console.print(
+                    f"[red]No saved endpoint named {normalized!r}.[/red]"
+                )
+                continue
+
+            active_console.print("[dim]Leave blank to keep the current value.[/dim]")
+            new_base_url = Prompt.ask(
+                f"Base URL [{existing.base_url}]", default=""
+            ).strip()
+            new_api_key = Prompt.ask(
+                "API key (blank to keep current)", password=True, default=""
+            ).strip()
+            model = Prompt.ask("Model ID (required to re-verify the update)").strip()
+            if not model:
+                active_console.print("[red]Model ID is required to verify.[/red]")
+                continue
+            try:
+                profile = CustomEndpointProfile(
+                    name=normalized,
+                    base_url=(
+                        normalize_openai_base_url(new_base_url)
+                        if new_base_url
+                        else existing.base_url
+                    ),
+                    api_key=new_api_key or existing.api_key,
+                )
+            except CustomEndpointError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            if _verify_and_save_endpoint(active_console, db_path, profile, model):
+                active_console.print(
+                    f"[green]Updated endpoint {profile.name!r}.[/green]"
+                )
+            continue
+
+        if action in ("d", "delete"):
+            if not profiles:
+                active_console.print("[yellow]No endpoints to delete.[/yellow]")
+                continue
+            target = Prompt.ask("Name of endpoint to delete").strip()
+            try:
+                normalized = normalize_custom_model_prefix(target)
+            except CustomEndpointError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            if not any(p.name == normalized for p in profiles):
+                active_console.print(
+                    f"[red]No saved endpoint named {normalized!r}.[/red]"
+                )
+                continue
+
+            try:
+                current_config = load_config()
+            except ConfigurationError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            if _default_model_uses_endpoint(current_config, normalized) is not None:
+                active_console.print(
+                    f"[red]Cannot delete {normalized!r} while DEFAULT_MODEL "
+                    "uses it.[/red]"
+                )
+                continue
+            if not Confirm.ask(f"Delete endpoint {normalized!r}?", default=False):
+                continue
+            try:
+                config_store.delete_custom_endpoint(db_path, normalized)
+            except sqlite3.Error as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            active_console.print(f"[green]Deleted endpoint {normalized!r}.[/green]")
+            continue
+
+        active_console.print("[red]Invalid choice. Enter 'a', 'u', 'd', or 'q'.[/red]")
+
+
 def run_config_editor(*, console: Console | None = None) -> None:
     """Interactively browse and edit persisted config, grouped by category."""
     import sqlite3
@@ -195,6 +411,15 @@ def run_config_editor(*, console: Console | None = None) -> None:
         if category is None:
             active_console.print("[dim]Exiting config editor.[/dim]")
             return
+
+        if category == _CUSTOM_ENDPOINTS_CATEGORY:
+            # Saved endpoints live one-per-row in config.db, not as the
+            # single CUSTOM_LLM_ENDPOINTS override key -- editing that raw
+            # key as one opaque JSON string is unusable. Manage the real
+            # rows with add/update/delete instead, exactly like `notewise
+            # inference add|update|delete` does.
+            run_custom_endpoint_manager(console=active_console)
+            continue
 
         while True:
             try:

@@ -13,6 +13,7 @@ from notewise.ui.setup_wizard import (
     get_available_models,
     get_config_path,
     load_config,
+    run_custom_endpoint_manager,
     run_setup_wizard,
     save_config,
     select_config_category,
@@ -646,6 +647,136 @@ class TestInteractiveFlow:
         mock_console.print.assert_any_call(
             "[red]Invalid choice. Enter a category number or 'q'.[/red]"
         )
+
+    def test_run_custom_endpoint_manager_adds_new_endpoint(self):
+        """'a' should discover, verify, and persist a brand-new endpoint."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+                return_value=["vendor/new-model"],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        saved = config_store.list_custom_endpoints(get_config_db_path())
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="new-secret",
+            ),
+        )
+
+    def test_run_custom_endpoint_manager_updates_existing_endpoint(self):
+        """'u' should re-verify and replace only the targeted endpoint."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+                return_value=["vendor/new-model"],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "u",
+                    "office",
+                    "https://new.example/",
+                    "",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        saved = config_store.list_custom_endpoints(db_path)
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="old-key",
+            ),
+        )
+
+    def test_run_custom_endpoint_manager_delete_blocked_by_default_model(self):
+        """Deleting the endpoint DEFAULT_MODEL uses must be refused, not applied."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "office/vendor-model"})
+
+        mock_console = MagicMock()
+        with patch("rich.prompt.Prompt.ask", side_effect=["d", "office", "q"]):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]Cannot delete 'office' while DEFAULT_MODEL uses it.[/red]"
+        )
+
+    def test_run_custom_endpoint_manager_deletes_after_confirmation(self):
+        """Confirmed 'd' should remove the endpoint from config.db."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        with (
+            patch("rich.prompt.Prompt.ask", side_effect=["d", "office", "q"]),
+            patch("rich.prompt.Confirm.ask", return_value=True),
+        ):
+            run_custom_endpoint_manager()
+
+        assert config_store.list_custom_endpoints(db_path) == ()
 
     def test_get_api_key_new(self):
         """Test entering a new API key."""

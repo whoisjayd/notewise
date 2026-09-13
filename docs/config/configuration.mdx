@@ -115,6 +115,9 @@ Performance, Output & Transcripts, Custom Endpoints, OAuth Token
 Directories, Provider API Keys, Provider Auth & Cloud Credentials) — pick a
 category, pick a key, then set or unset it, without needing to already know
 its exact name; secrets stay masked and prompt with hidden input, same as
-`set`. `edit-config`
+`set`. The **Custom Endpoints** category is a table-based add/update/delete
+manager over the same saved endpoint rows as `notewise inference
+list|add|update|delete`, not a raw-JSON editor for `CUSTOM_LLM_ENDPOINTS`.
+`edit-config`
 opens the current settings as an editable env-style file in your `$EDITOR`, then
 re-saves whatever you leave in it — including removing lines you delete.

@@ -170,6 +170,9 @@ _CONFIG_CATEGORY_FIXED_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (OUTPUT_DIR_CONFIG_KEY, "YOUTUBE_COOKIE_FILE", "DEFAULT_LANGUAGES"),
     ),
     (
+        # Name must match setup_wizard._CUSTOM_ENDPOINTS_CATEGORY: the
+        # interactive editor special-cases this category to manage real
+        # saved endpoint rows instead of editing this raw override key.
         "Custom Endpoints",
         (CUSTOM_LLM_ENDPOINTS_ENV_VAR,),
     ),
