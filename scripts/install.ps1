@@ -5,7 +5,7 @@ $installDir = if ($env:NOTEWISE_INSTALL_DIR) {
     $env:NOTEWISE_INSTALL_DIR
 }
 else {
-    Join-Path $env:LOCALAPPDATA "Programs\\NoteWise"
+    Join-Path $env:LOCALAPPDATA "Programs\NoteWise"
 }
 
 $architecture = switch ([System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture) {
@@ -71,7 +71,7 @@ try {
 
     Write-Host "Installed NoteWise to $installDir"
     Write-Host "Run: notewise version"
-    Write-Host "Open a new terminal if `notewise` is not immediately available."
+    Write-Host "Open a new terminal if ``notewise`` is not immediately available."
 }
 finally {
     Remove-Item -LiteralPath $tempDir -Recurse -Force -ErrorAction SilentlyContinue
