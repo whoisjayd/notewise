@@ -37,21 +37,49 @@ try {
     $archivePath = Join-Path $tempDir $asset.name
     $checksumPath = Join-Path $tempDir $checksumAsset.name
 
-    Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archivePath
-    Invoke-WebRequest -Uri $checksumAsset.browser_download_url -OutFile $checksumPath
+    # True in-process async downloads: both requests are in flight
+    # concurrently on .NET's thread pool, with no extra PowerShell
+    # processes/runspaces spun up (unlike Start-Job).
+    $httpClient = [System.Net.Http.HttpClient]::new()
+    try {
+        $httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("NoteWise-Installer")
+        $archiveTask = $httpClient.GetByteArrayAsync($asset.browser_download_url)
+        $checksumTask = $httpClient.GetByteArrayAsync($checksumAsset.browser_download_url)
+
+        $archiveBytes = $archiveTask.GetAwaiter().GetResult()
+        $checksumBytes = $checksumTask.GetAwaiter().GetResult()
+    }
+    finally {
+        $httpClient.Dispose()
+    }
+
+    # Hash the in-memory bytes directly, no extra disk read required.
+    $sha256 = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $hashBytes = $sha256.ComputeHash($archiveBytes)
+    }
+    finally {
+        $sha256.Dispose()
+    }
+    $actualChecksum = -join ($hashBytes | ForEach-Object { $_.ToString("x2") })
+
+    [System.IO.File]::WriteAllBytes($archivePath, $archiveBytes)
+    [System.IO.File]::WriteAllBytes($checksumPath, $checksumBytes)
 
     $expectedChecksum = Get-Content $checksumPath |
         Where-Object { $_ -match [regex]::Escape($asset.name) } |
         ForEach-Object { ($_ -split "\s+")[0] } |
         Select-Object -First 1
 
-    $actualChecksum = (Get-FileHash -Algorithm SHA256 -Path $archivePath).Hash.ToLowerInvariant()
     if (-not $expectedChecksum -or $expectedChecksum.ToLowerInvariant() -ne $actualChecksum) {
         throw "Checksum verification failed for $($asset.name)."
     }
 
     $extractDir = Join-Path $tempDir "extracted"
-    Expand-Archive -LiteralPath $archivePath -DestinationPath $extractDir -Force
+    # ZipFile.ExtractToDirectory skips Expand-Archive's cmdlet/progress-stream
+    # overhead, which is significant on large archives.
+    Add-Type -AssemblyName System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::ExtractToDirectory($archivePath, $extractDir)
 
     # The release archive is a PyInstaller --onedir bundle: notewise.exe plus
     # its _internal/ support files, which must stay together on disk.
