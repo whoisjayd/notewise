@@ -599,6 +599,8 @@ class PipelineDashboard:
         table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[3], style="magenta", ratio=3)
         table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[4], style="dim", ratio=1)
         for index, snapshot in enumerate(self.worker_snapshots, start=1):
+            if not snapshot.is_active:
+                continue
             table.add_row(
                 f"{DASHBOARD_WORKER_VIDEO_PREFIX}{index}",
                 self._safe_cell(snapshot.phase),
@@ -669,7 +671,10 @@ class PipelineDashboard:
                 ]
             )
 
-        if self.worker_tasks:
+        has_active_video_workers = any(
+            snapshot.is_active for snapshot in self.worker_snapshots
+        )
+        if self.worker_tasks and has_active_video_workers:
             elements.extend(
                 [
                     Text(DASHBOARD_SECTION_WORKERS_HEADING, style="bold white"),
@@ -678,14 +683,22 @@ class PipelineDashboard:
                 ]
             )
 
-        has_active_chapter_workers = any(
-            key is not None for key in self._chapter_slot_keys
-        )
-        if self.chapter_tasks and has_active_chapter_workers:
+        active_chapter_tasks = [
+            self.chapter_tasks[slot_index]
+            for slot_index, key in enumerate(self._chapter_slot_keys)
+            if key is not None
+        ]
+        if active_chapter_tasks:
             elements.extend(
                 [
                     Text(DASHBOARD_SECTION_CHAPTER_TASKS_HEADING, style="bold white"),
-                    self.chapter_progress,
+                    self.chapter_progress.make_tasks_table(
+                        [
+                            task
+                            for task in self.chapter_progress.tasks
+                            if task.id in active_chapter_tasks
+                        ]
+                    ),
                     Rule(style="dim"),
                 ]
             )

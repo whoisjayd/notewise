@@ -71,38 +71,46 @@ check_for_updates: Any = None
 run_oauth_login: Any = None
 
 
+_HELP_OPTION_NAMES = ["-h", "--help"]
+
 app = typer.Typer(
     name="notewise",
     help=("Convert YouTube videos and playlists into structured study materials."),
     add_completion=True,
     rich_markup_mode="rich",
     pretty_exceptions_show_locals=False,
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 cache_app = typer.Typer(
     name="cache",
     help="Inspect and manage the local SQLite cache.",
     rich_markup_mode="rich",
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 logs_app = typer.Typer(
     name="logs",
     help="Inspect and manage session logs.",
     rich_markup_mode="rich",
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 auth_app = typer.Typer(
     name="auth",
     help="Authenticate OAuth/device-flow LLM providers.",
     rich_markup_mode="rich",
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 
 inference_app = typer.Typer(
     name="inference",
     help="Manage saved OpenAI-compatible inference endpoints.",
     rich_markup_mode="rich",
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 config_app = typer.Typer(
     name="config",
     help="View and manage persisted configuration.",
     rich_markup_mode="rich",
+    context_settings={"help_option_names": _HELP_OPTION_NAMES},
 )
 
 

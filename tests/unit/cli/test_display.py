@@ -179,6 +179,7 @@ def test_build_dashboard_config_items_redacts_sensitive_values() -> None:
     assert "Cookies: configured: youtube-cookies.txt" in rendered
     assert "API key: present" in rendered
     assert "sk-secret-cookie-dir" not in rendered
+    assert any(item.label == "Log" for item in items)
 
 
 def test_build_dashboard_config_items_shows_effective_gpt5_temperature() -> None:
