@@ -114,9 +114,16 @@ def test_is_setup_safe_model_rejects_deprecated_non_text_or_excluded_models():
         "gpt-4o-mini",
         {**base_metadata, "mode": "embedding"},
     )
-    assert not is_setup_safe_model(
+    # A model that supports text alongside another modality (e.g. gpt-5.1's
+    # ["text", "image"]) is still a legitimate text chat model -- notewise
+    # never requests the other modality. Only reject when text isn't offered.
+    assert is_setup_safe_model(
         "gpt-4o-mini",
         {**base_metadata, "supported_output_modalities": ["text", "image"]},
+    )
+    assert not is_setup_safe_model(
+        "gpt-4o-mini",
+        {**base_metadata, "supported_output_modalities": ["image"]},
     )
 
 
