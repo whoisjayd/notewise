@@ -29,7 +29,6 @@ update between two concurrent writers).
 
 from __future__ import annotations
 
-import contextlib
 import os
 import sqlite3
 from contextlib import closing
@@ -85,8 +84,11 @@ def _ensure_secure_db_file(db_path: Path) -> None:
 
 def _connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    with contextlib.suppress(OSError):
-        db_path.parent.chmod(0o700)
+    # A failed chmod here must not be swallowed: the credentials this file
+    # holds are only as safe as this directory's permissions, so silently
+    # continuing on to open the (possibly still world-readable) db would
+    # undermine the whole point of hardening it in the first place.
+    db_path.parent.chmod(0o700)
     _ensure_secure_db_file(db_path)
     connection = sqlite3.connect(db_path, timeout=30, isolation_level="DEFERRED")
     connection.execute(
