@@ -648,6 +648,32 @@ class TestInteractiveFlow:
             "[red]Invalid choice. Enter a category number or 'q'.[/red]"
         )
 
+    def test_run_custom_endpoint_manager_update_rejects_invalid_index(self):
+        """An out-of-range or non-numeric index should warn and cancel, not crash."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        mock_console = MagicMock()
+        with patch("rich.prompt.Prompt.ask", side_effect=["u", "99", "q"]):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]Invalid choice. Enter a number 1-1.[/red]"
+        )
+
     def test_run_custom_endpoint_manager_adds_new_endpoint(self):
         """'a' should discover, verify, and persist a brand-new endpoint."""
         from notewise.config import get_config_db_path
@@ -711,7 +737,7 @@ class TestInteractiveFlow:
                 "rich.prompt.Prompt.ask",
                 side_effect=[
                     "u",
-                    "office",
+                    "1",
                     "https://new.example/",
                     "",
                     "vendor/new-model",
@@ -745,7 +771,7 @@ class TestInteractiveFlow:
         save_config({"DEFAULT_MODEL": "office/vendor-model"})
 
         mock_console = MagicMock()
-        with patch("rich.prompt.Prompt.ask", side_effect=["d", "office", "q"]):
+        with patch("rich.prompt.Prompt.ask", side_effect=["d", "1", "q"]):
             run_custom_endpoint_manager(console=mock_console)
 
         assert config_store.list_custom_endpoints(db_path) == (
@@ -771,7 +797,7 @@ class TestInteractiveFlow:
         )
 
         with (
-            patch("rich.prompt.Prompt.ask", side_effect=["d", "office", "q"]),
+            patch("rich.prompt.Prompt.ask", side_effect=["d", "1", "q"]),
             patch("rich.prompt.Confirm.ask", return_value=True),
         ):
             run_custom_endpoint_manager()

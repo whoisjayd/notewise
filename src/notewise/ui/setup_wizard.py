@@ -225,6 +225,25 @@ def _verify_and_save_endpoint(
     return True
 
 
+def _select_endpoint_by_index(
+    profiles: tuple[CustomEndpointProfile, ...],
+    console: Console,
+    action_label: str,
+) -> CustomEndpointProfile | None:
+    """Prompt for the # shown in the endpoint table. Returns None to cancel."""
+    from rich.prompt import Prompt
+
+    choice = Prompt.ask(
+        f"\nSelect endpoint # to {action_label} (or 'c' to cancel)"
+    ).strip()
+    if choice.lower() in ("c", "cancel"):
+        return None
+    if choice.isdigit() and 1 <= int(choice) <= len(profiles):
+        return profiles[int(choice) - 1]
+    console.print(f"[red]Invalid choice. Enter a number 1-{len(profiles)}.[/red]")
+    return None
+
+
 def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
     """Interactively add, update, and delete saved custom endpoints.
 
@@ -303,18 +322,10 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             if not profiles:
                 active_console.print("[yellow]No endpoints to update.[/yellow]")
                 continue
-            target = Prompt.ask("Name of endpoint to update").strip()
-            try:
-                normalized = normalize_custom_model_prefix(target)
-            except CustomEndpointError as error:
-                active_console.print(f"[red]{error}[/red]")
-                continue
-            existing = next((p for p in profiles if p.name == normalized), None)
+            existing = _select_endpoint_by_index(profiles, active_console, "update")
             if existing is None:
-                active_console.print(
-                    f"[red]No saved endpoint named {normalized!r}.[/red]"
-                )
                 continue
+            normalized = existing.name
 
             active_console.print("[dim]Leave blank to keep the current value.[/dim]")
             new_base_url = Prompt.ask(
@@ -350,17 +361,12 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             if not profiles:
                 active_console.print("[yellow]No endpoints to delete.[/yellow]")
                 continue
-            target = Prompt.ask("Name of endpoint to delete").strip()
-            try:
-                normalized = normalize_custom_model_prefix(target)
-            except CustomEndpointError as error:
-                active_console.print(f"[red]{error}[/red]")
+            target_profile = _select_endpoint_by_index(
+                profiles, active_console, "delete"
+            )
+            if target_profile is None:
                 continue
-            if not any(p.name == normalized for p in profiles):
-                active_console.print(
-                    f"[red]No saved endpoint named {normalized!r}.[/red]"
-                )
-                continue
+            normalized = target_profile.name
 
             try:
                 current_config = load_config()
