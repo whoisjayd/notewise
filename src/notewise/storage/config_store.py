@@ -29,6 +29,8 @@ update between two concurrent writers).
 
 from __future__ import annotations
 
+import contextlib
+import os
 import sqlite3
 from contextlib import closing
 from typing import TYPE_CHECKING
@@ -52,14 +54,40 @@ if TYPE_CHECKING:
     from pathlib import Path
 
 
+def _ensure_secure_db_file(db_path: Path) -> None:
+    """Ensure db_path is an owner-only regular file, never a followed symlink.
+
+    A planted symlink must never be followed -- sqlite3.connect() would
+    happily open (and rewrite) whatever it points to, and the credentials in
+    this database make that a real path-traversal/exposure risk, not just a
+    correctness one. On POSIX, O_NOFOLLOW makes the initial open atomic
+    against a symlink swap: if one is already there the open fails and we
+    remove it and retry once, so there is no separate check-then-unlink
+    window for an attacker to race. Windows has no O_NOFOLLOW; planting a
+    symlink there already requires privileges this local-attacker model
+    doesn't assume, so a plain check-then-create is an acceptable fallback.
+    """
+    flags = os.O_RDWR | os.O_CREAT
+    nofollow = getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(db_path, flags | nofollow, 0o600)
+    except OSError:
+        if not db_path.is_symlink():
+            raise
+        db_path.unlink()
+        fd = os.open(db_path, flags | nofollow, 0o600)
+    try:
+        if hasattr(os, "fchmod"):
+            os.fchmod(fd, 0o600)
+    finally:
+        os.close(fd)
+
+
 def _connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    # A symlink planted at db_path must never be followed -- sqlite3.connect
-    # would happily open (and rewrite) whatever it points to. Unlinking it
-    # first makes sqlite3.connect create a fresh regular file in its place,
-    # leaving any symlink target untouched.
-    if db_path.is_symlink():
-        db_path.unlink()
+    with contextlib.suppress(OSError):
+        db_path.parent.chmod(0o700)
+    _ensure_secure_db_file(db_path)
     connection = sqlite3.connect(db_path, timeout=30, isolation_level="DEFERRED")
     connection.execute(
         f"CREATE TABLE IF NOT EXISTS {CONFIG_SETTINGS_TABLE_NAME} "
@@ -104,6 +132,26 @@ def config_db_is_empty(db_path: Path) -> bool:
     return True
 
 
+def _read_merged_config(connection: sqlite3.Connection) -> dict[str, str]:
+    """Read the merged settings view within the caller's open transaction."""
+    values = dict(
+        connection.execute(
+            f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
+        ).fetchall()
+    )
+    values.update(
+        connection.execute(
+            f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
+        ).fetchall()
+    )
+    profiles = _select_endpoint_profiles(connection)
+    if profiles:
+        values[CUSTOM_LLM_ENDPOINTS_ENV_VAR] = serialize_custom_endpoint_profiles(
+            profiles
+        )
+    return values
+
+
 def load_config_db(db_path: Path) -> dict[str, str]:
     """Return the merged settings view: scalar keys, provider API keys, and a
     synthesized ``CUSTOM_LLM_ENDPOINTS`` value when any endpoints are saved.
@@ -119,24 +167,9 @@ def load_config_db(db_path: Path) -> dict[str, str]:
         # torn merge of old and new state.
         connection.execute("BEGIN")
         try:
-            values = dict(
-                connection.execute(
-                    f"SELECT key, value FROM {CONFIG_SETTINGS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
-                ).fetchall()
-            )
-            values.update(
-                connection.execute(
-                    f"SELECT provider, api_key FROM {CONFIG_API_KEYS_TABLE_NAME}"  # nosec B608 -- table name is a module constant, not user input
-                ).fetchall()
-            )
-            profiles = _select_endpoint_profiles(connection)
+            return _read_merged_config(connection)
         finally:
             connection.rollback()
-    if profiles:
-        values[CUSTOM_LLM_ENDPOINTS_ENV_VAR] = serialize_custom_endpoint_profiles(
-            profiles
-        )
-    return values
 
 
 def list_custom_endpoints(db_path: Path) -> tuple[CustomEndpointProfile, ...]:
@@ -232,6 +265,34 @@ def _partition_by_table(
     return scalar_values, api_key_values, values.get(CUSTOM_LLM_ENDPOINTS_ENV_VAR)
 
 
+def _replace_config_locked(
+    connection: sqlite3.Connection, values: dict[str, str]
+) -> None:
+    """Replace the stored config within the caller's open transaction."""
+    scalar_values, api_key_values, endpoints_value = _partition_by_table(values)
+    profiles = (
+        parse_custom_endpoint_profiles(endpoints_value) if endpoints_value else ()
+    )
+
+    connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
+    connection.executemany(
+        f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",  # nosec B608 -- table name is a module constant, not user input
+        scalar_values.items(),
+    )
+    connection.execute(f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
+    connection.executemany(
+        f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "  # nosec B608 -- table name is a module constant, not user input
+        "VALUES (?, ?)",
+        api_key_values.items(),
+    )
+    connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
+    connection.executemany(
+        f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
+        "(name, base_url, api_key) VALUES (?, ?, ?)",
+        [(p.name, p.base_url, p.api_key) for p in profiles],
+    )
+
+
 def replace_config_db(db_path: Path, values: dict[str, str]) -> None:
     """Atomically replace the entire stored config with ``values``.
 
@@ -239,29 +300,38 @@ def replace_config_db(db_path: Path, values: dict[str, str]) -> None:
     rather than preserved -- this is what `notewise edit-config` needs, since
     a line deleted in the editor should delete that setting.
     """
-    scalar_values, api_key_values, endpoints_value = _partition_by_table(values)
-    profiles = (
-        parse_custom_endpoint_profiles(endpoints_value) if endpoints_value else ()
-    )
-
     with closing(_connect(db_path)) as connection, connection:
-        connection.execute(f"DELETE FROM {CONFIG_SETTINGS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
-        connection.executemany(
-            f"INSERT INTO {CONFIG_SETTINGS_TABLE_NAME} (key, value) VALUES (?, ?)",  # nosec B608 -- table name is a module constant, not user input
-            scalar_values.items(),
-        )
-        connection.execute(f"DELETE FROM {CONFIG_API_KEYS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
-        connection.executemany(
-            f"INSERT INTO {CONFIG_API_KEYS_TABLE_NAME} (provider, api_key) "  # nosec B608 -- table name is a module constant, not user input
-            "VALUES (?, ?)",
-            api_key_values.items(),
-        )
-        connection.execute(f"DELETE FROM {CONFIG_ENDPOINTS_TABLE_NAME}")  # nosec B608 -- table name is a module constant, not user input
-        connection.executemany(
-            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
-            "(name, base_url, api_key) VALUES (?, ?, ?)",
-            [(p.name, p.base_url, p.api_key) for p in profiles],
-        )
+        _replace_config_locked(connection, values)
+
+
+def compare_and_replace_config_db(
+    db_path: Path, expected: dict[str, str], values: dict[str, str]
+) -> bool:
+    """Atomically replace the stored config with ``values`` iff it still
+    equals ``expected``. Returns whether the replacement happened.
+
+    `edit-config` loads the current config, waits on an external editor that
+    can stay open for minutes, then must recheck nothing else committed in
+    the meantime before overwriting -- otherwise it would silently discard a
+    concurrent `config set`/`inference add`. Doing the compare and the
+    replace inside one ``BEGIN IMMEDIATE`` transaction (rather than a
+    separate read-then-write pair, however carefully app-level-compared)
+    closes the window where another process commits between the two.
+    """
+    connection = _connect(db_path)
+    try:
+        connection.execute("BEGIN IMMEDIATE")
+        if _read_merged_config(connection) != expected:
+            connection.rollback()
+            return False
+        _replace_config_locked(connection, values)
+        connection.commit()
+    except BaseException:
+        connection.rollback()
+        raise
+    finally:
+        connection.close()
+    return True
 
 
 def remove_config_key(db_path: Path, key: str) -> bool:

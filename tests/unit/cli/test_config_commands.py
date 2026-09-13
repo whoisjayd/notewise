@@ -48,6 +48,29 @@ def test_config_get_missing_key_exits_nonzero():
     assert "is not set" in result.output
 
 
+def test_config_set_prompts_with_hidden_input_when_value_omitted(mocker):
+    """Omitting VALUE for a sensitive key must prompt rather than error, so
+    the secret never has to appear in shell history.
+
+    ``Prompt.ask(..., password=True)`` is mocked rather than driven through
+    CliRunner's ``input=`` pipe: that pipe isn't a real TTY, so the actual
+    hidden-input codepath falls back to a visible read and warns -- this
+    test only needs to verify *that* hidden input is requested, which the
+    call assertion below covers.
+    """
+    ask = mocker.patch("rich.prompt.Prompt.ask", return_value="gk-from-prompt")
+
+    result = runner.invoke(cli_app.app, ["config", "set", "GEMINI_API_KEY"])
+
+    assert result.exit_code == 0
+    ask.assert_called_once_with("Enter value for GEMINI_API_KEY", password=True)
+    result_get = runner.invoke(cli_app.app, ["config", "get", "GEMINI_API_KEY"])
+    assert "gk-from-prompt" not in result_get.output  # masked, but round-tripped
+    assert config_store.load_config_db(get_config_db_path())["GEMINI_API_KEY"] == (
+        "gk-from-prompt"
+    )
+
+
 def test_config_set_rejects_unrecognized_key():
     result = runner.invoke(cli_app.app, ["config", "set", "NOT_A_REAL_KEY", "value"])
 
@@ -60,6 +83,16 @@ def test_config_set_surfaces_validation_errors_immediately():
 
     assert result.exit_code == 1
     assert "TEMPERATURE" in result.output
+
+
+def test_config_set_rejecting_invalid_value_does_not_persist_it():
+    """A rejected value must never reach config.db -- otherwise it breaks
+    every later AppSettings load, including the very next CLI command.
+    """
+    result = runner.invoke(cli_app.app, ["config", "set", "TEMPERATURE", "5.0"])
+
+    assert result.exit_code == 1
+    assert "TEMPERATURE" not in config_store.load_config_db(get_config_db_path())
 
 
 def test_config_unset_removes_key():

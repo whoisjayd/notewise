@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import os
-from pathlib import Path
 
 import pytest
 from pydantic import ValidationError
@@ -350,14 +349,15 @@ class TestConfig:
         )
 
         read_calls = 0
-        original_read_text = Path.read_text
+        original_open = os.open
 
-        def _counting_read_text(path: Path, *args, **kwargs):
+        def _counting_open(path, *args, **kwargs):
             nonlocal read_calls
-            read_calls += 1
-            return original_read_text(path, *args, **kwargs)
+            if os.fspath(path) == os.fspath(config_path):
+                read_calls += 1
+            return original_open(path, *args, **kwargs)
 
-        monkeypatch.setattr(Path, "read_text", _counting_read_text)
+        monkeypatch.setattr(config_module.os, "open", _counting_open)
 
         source = UserConfigSource(Config)
         source.get_field_value(None, "default_model")
@@ -379,7 +379,7 @@ class TestConfig:
         def _raise_os_error(*_args, **_kwargs):
             raise OSError("cannot read")
 
-        mocker.patch.object(Path, "read_text", _raise_os_error)
+        mocker.patch.object(config_module.os, "open", _raise_os_error)
 
         assert UserConfigSource(Config)() == {}
         warning.assert_called_once_with(
@@ -400,10 +400,28 @@ class TestConfig:
         def _raise_runtime_error(*_args, **_kwargs):
             raise RuntimeError("bug")
 
-        mocker.patch.object(Path, "read_text", _raise_runtime_error)
+        mocker.patch.object(config_module.os, "open", _raise_runtime_error)
 
         with pytest.raises(RuntimeError, match="bug"):
             UserConfigSource(Config)()
+
+    @pytest.mark.skipif(os.name == "nt", reason="symlink creation is not available")
+    def test_user_config_source_never_follows_a_symlinked_legacy_config(
+        self, tmp_path, monkeypatch
+    ):
+        """A symlinked config.env must not have its target's content imported."""
+        monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+        config_dir = tmp_path / ".notewise"
+        config_dir.mkdir()
+        victim = tmp_path / "victim.env"
+        victim.write_text("DEFAULT_MODEL=stolen-from-victim\n", encoding="utf-8")
+        (config_dir / "config.env").symlink_to(victim)
+
+        assert UserConfigSource(Config)() == {}
+        assert (
+            victim.read_text(encoding="utf-8") == "DEFAULT_MODEL=stolen-from-victim\n"
+        )
+        assert (config_dir / "config.env").is_symlink()
 
 
 class TestGetApiKeyNameForModel:

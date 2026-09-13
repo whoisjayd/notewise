@@ -654,6 +654,9 @@ def edit_config(console: Console) -> None:
     """Export config.db to a temp env-format file, edit it, then re-save."""
     import tempfile
 
+    from pydantic import ValidationError as PydanticValidationError
+
+    from notewise.config import validate_candidate_config
     from notewise.storage import config_store
     from notewise.utils import parse_config_env_lines
 
@@ -680,11 +683,26 @@ def edit_config(console: Console) -> None:
     finally:
         temp_path.unlink(missing_ok=True)
 
-    # Optimistic concurrency check: the editor can stay open for minutes, so
-    # re-read the DB and refuse to overwrite if another process (a `config
-    # set`, `inference add`, etc.) committed a change while the file was
-    # open -- otherwise this would silently discard that change.
-    if config_store.load_config_db(db_path) != current_config:
+    try:
+        validate_candidate_config(edited_config)
+    except PydanticValidationError as error:
+        from notewise.cli.app import _format_config_validation_error
+
+        console.print(f"[red]{_format_config_validation_error(error)}[/red]")
+        console.print(
+            "[dim]Your edits were discarded; the previous configuration is "
+            "unchanged.[/dim]"
+        )
+        raise typer.Exit(code=1) from None
+
+    # The editor can stay open for minutes, so compare-and-replace inside one
+    # transaction rather than a separate read-then-write pair: otherwise a
+    # concurrent `config set`/`inference add` could commit in the window
+    # between the check and the write, and this would silently discard it.
+    replaced = config_store.compare_and_replace_config_db(
+        db_path, current_config, edited_config
+    )
+    if not replaced:
         console.print(
             "[red]Configuration changed elsewhere while the editor was open; "
             "your edits were discarded to avoid overwriting that change. "
@@ -692,5 +710,4 @@ def edit_config(console: Console) -> None:
         )
         raise typer.Exit(code=1)
 
-    config_store.replace_config_db(db_path, edited_config)
     console.print(f"[green]Updated configuration at {db_path}.[/green]")

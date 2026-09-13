@@ -2,6 +2,12 @@
 
 from __future__ import annotations
 
+import os
+import stat
+from pathlib import Path
+
+import pytest
+
 from notewise.llm.custom_endpoint import CustomEndpointProfile
 from notewise.storage import config_store
 
@@ -162,3 +168,79 @@ def test_remove_config_key_leaves_unrelated_keys_intact(tmp_path):
     assert "DEFAULT_MODEL" not in result
     assert result["GEMINI_API_KEY"] == "gk-1"
     assert config_store.list_custom_endpoints(db_path) != ()
+
+
+@pytest.mark.skipif(os.name == "nt", reason="POSIX permission bits only")
+def test_connect_creates_owner_only_directory_and_file(tmp_path):
+    """Credentials in config.db must not be group/world-readable, even under
+    a permissive umask.
+    """
+    db_path = tmp_path / "state" / "config.db"
+    previous_umask = os.umask(0)
+    try:
+        config_store.update_config_db(db_path, {"DEFAULT_MODEL": "a"})
+    finally:
+        os.umask(previous_umask)
+
+    dir_mode = stat.S_IMODE(db_path.parent.stat().st_mode)
+    file_mode = stat.S_IMODE(db_path.stat().st_mode)
+    assert dir_mode == 0o700
+    assert file_mode == 0o600
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlink creation is not available")
+def test_connect_replaces_a_symlink_swapped_in_after_unlink(tmp_path, monkeypatch):
+    """A symlink planted back into db_path's slot during the retry-open must
+    not be silently followed either.
+    """
+    victim = tmp_path / "victim.env"
+    victim.write_text("VICTIM=keep-me\n", encoding="utf-8")
+    db_path = tmp_path / "state" / "config.db"
+    db_path.parent.mkdir(parents=True)
+    db_path.symlink_to(victim)
+
+    real_unlink = Path.unlink
+
+    def swap_and_unlink(self: Path, *args: object, **kwargs: object) -> None:
+        real_unlink(self, *args, **kwargs)
+        self.symlink_to(victim)
+
+    monkeypatch.setattr(Path, "unlink", swap_and_unlink)
+
+    with pytest.raises(OSError):
+        config_store.update_config_db(db_path, {"DEFAULT_MODEL": "a"})
+
+    assert victim.read_text(encoding="utf-8") == "VICTIM=keep-me\n"
+
+
+def test_compare_and_replace_config_db_replaces_on_match(tmp_path):
+    db_path = tmp_path / "config.db"
+    config_store.update_config_db(db_path, {"DEFAULT_MODEL": "a"})
+    snapshot = config_store.load_config_db(db_path)
+
+    replaced = config_store.compare_and_replace_config_db(
+        db_path, snapshot, {"DEFAULT_MODEL": "b"}
+    )
+
+    assert replaced is True
+    assert config_store.load_config_db(db_path) == {"DEFAULT_MODEL": "b"}
+
+
+def test_compare_and_replace_config_db_aborts_on_concurrent_change(tmp_path):
+    """A snapshot taken before a concurrent writer commits must not be used
+    to blindly overwrite that writer's change.
+    """
+    db_path = tmp_path / "config.db"
+    config_store.update_config_db(db_path, {"DEFAULT_MODEL": "a"})
+    stale_snapshot = config_store.load_config_db(db_path)
+
+    config_store.update_config_db(db_path, {"MAX_TOKENS": "500"})
+
+    replaced = config_store.compare_and_replace_config_db(
+        db_path, stale_snapshot, {"DEFAULT_MODEL": "b"}
+    )
+
+    assert replaced is False
+    current = config_store.load_config_db(db_path)
+    assert current["DEFAULT_MODEL"] == "a"
+    assert current["MAX_TOKENS"] == "500"

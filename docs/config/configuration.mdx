@@ -81,7 +81,7 @@ copies its credentials into ambient environment variables.
 | `YOUTUBE_COOKIE_FILE`         | unset                     | Default Netscape cookies file path. |
 | `ALLOW_UNLISTED_MODELS`       | `false`                   | Permit out-of-catalog models.       |
 
-Provider API keys and provider auth keys are also accepted in `config.db` (via `notewise config set KEY VALUE`) when they are listed in source constants.
+Provider API keys and provider auth keys are also accepted in `config.db` (via `notewise config set KEY VALUE`) when they are listed in source constants. Omit `VALUE` for a sensitive key to be prompted for it with hidden input instead of typing it as a plain CLI argument.
 
 <Note>
   `chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default

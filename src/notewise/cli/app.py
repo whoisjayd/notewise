@@ -1101,14 +1101,23 @@ def config_set(
             "Run `notewise config keys` for the full list."
         ),
     ],
-    value: Annotated[str, typer.Argument(help="Value to store for this key.")],
+    value: Annotated[
+        str | None,
+        typer.Argument(
+            help="Value to store for this key. Omit for a sensitive key "
+            "(e.g. an API key) to be prompted with hidden input instead of "
+            "leaving it in shell history."
+        ),
+    ] = None,
 ) -> None:
     """Set one persisted configuration value."""
     import sqlite3
 
-    from notewise.config import allowed_config_keys
+    from pydantic import ValidationError as PydanticValidationError
+
+    from notewise.config import allowed_config_keys, validate_candidate_config
     from notewise.errors import CustomEndpointError
-    from notewise.ui.setup_wizard import save_config
+    from notewise.ui.setup_wizard import load_config, save_config
 
     normalized_key = key.strip().upper()
     if normalized_key not in allowed_config_keys():
@@ -1116,6 +1125,23 @@ def config_set(
             f"{normalized_key!r} is not a recognized config key. "
             "Run `notewise config keys` to see all supported keys."
         )
+
+    if value is None:
+        from rich.prompt import Prompt
+
+        value = Prompt.ask(
+            f"Enter value for {normalized_key}",
+            password=_is_sensitive_key(normalized_key),
+        )
+
+    try:
+        candidate = {**load_config(suppress_errors=True), normalized_key: value}
+        validate_candidate_config(candidate)
+    except PydanticValidationError as error:
+        _print_configuration_error(
+            ConfigurationError(_format_config_validation_error(error))
+        )
+        raise typer.Exit(code=1) from None
 
     try:
         save_config({normalized_key: value}, console=_get_console())

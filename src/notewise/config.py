@@ -11,6 +11,7 @@ Load order:
 
 from __future__ import annotations
 
+import contextvars
 import json
 import os
 import re
@@ -274,12 +275,27 @@ def _import_legacy_config_file(db_path: Path) -> None:
     the DB becomes the sole source of truth from then on.
     """
     legacy_path = get_state_dir() / CONFIG_FILENAME
-    if not legacy_path.exists():
+    # O_NOFOLLOW makes the existence check and the read a single atomic
+    # syscall: a local attacker who can write to the state directory could
+    # otherwise swap in a symlink between an `exists()` check and a
+    # `read_text()` call, getting arbitrary file content imported into
+    # config.db. A plain "file not found" is the common, silent case; any
+    # other failure (including a planted symlink) is worth a warning.
+    flags = os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0)
+    try:
+        fd = os.open(legacy_path, flags)
+    except FileNotFoundError:
+        return
+    except OSError:
+        logger.warning(
+            "UserConfigSource failed to import legacy config.env",
+            config_path=str(legacy_path),
+            exc_info=True,
+        )
         return
     try:
-        parsed = parse_config_env_lines(
-            legacy_path.read_text(encoding="utf-8").splitlines()
-        )
+        with os.fdopen(fd, encoding="utf-8") as handle:
+            parsed = parse_config_env_lines(handle.read().splitlines())
     except (OSError, UnicodeError):
         logger.warning(
             "UserConfigSource failed to import legacy config.env",
@@ -379,6 +395,11 @@ class UserOutputDirConfigSource(UserConfigSource):
         return {OUTPUT_DIR_CONFIG_KEY: output_dir} if output_dir is not None else {}
 
 
+_VALIDATION_ONLY: contextvars.ContextVar[bool] = contextvars.ContextVar(
+    "_VALIDATION_ONLY", default=False
+)
+
+
 class AppSettings(BaseSettings):
     """Global application configuration."""
 
@@ -476,6 +497,11 @@ class AppSettings(BaseSettings):
 
     def model_post_init(self, __context: object) -> None:
         """Sync provider API keys back to os.environ for env-driven libraries."""
+        if _VALIDATION_ONLY.get():
+            # validate_candidate_config() builds an instance purely to run
+            # field validation; it must not mutate os.environ or touch the
+            # oauth token directories as a side effect of that check.
+            return
         default_token_dirs = get_oauth_token_storage_paths()
         if _is_managed_oauth_token_dir_env("CHATGPT_TOKEN_DIR"):
             object.__setattr__(self, "chatgpt_token_dir", default_token_dirs["chatgpt"])
@@ -706,6 +732,26 @@ class _LazyAppSettings:
 
     def __repr__(self) -> str:
         return repr(self._get_instance())
+
+
+def validate_candidate_config(candidate: dict[str, str]) -> None:
+    """Validate a full candidate config dict the way AppSettings would, but
+    without persisting it or running any of its side effects.
+
+    `config set` and `edit-config` currently commit to config.db first and
+    only validate afterward (via a reload), so an invalid value -- e.g.
+    ``TEMPERATURE=not-a-number`` -- lands in storage anyway. Every later
+    AppSettings load then fails the same way, including the very next CLI
+    command, with no way back in except editing config.db by hand. Calling
+    this before the commit lets the caller reject the value and leave the
+    previously persisted configuration untouched. Raises
+    ``pydantic.ValidationError`` on an invalid candidate.
+    """
+    token = _VALIDATION_ONLY.set(True)
+    try:
+        AppSettings.model_validate(candidate)
+    finally:
+        _VALIDATION_ONLY.reset(token)
 
 
 settings = _LazyAppSettings()
