@@ -232,6 +232,7 @@ def _usage_context(provider: Any) -> Any:
     try:
         candidate = usage_collector()
     except AttributeError:
+        logger.warning("pipeline.usage_collector_call_failed", exc_info=True)
         return fallback
     if hasattr(candidate, "__enter__") and hasattr(candidate, "__exit__"):
         return candidate
@@ -634,6 +635,12 @@ async def run_pipeline(
             except Exception as error:
                 err_msg = format_user_error(error)
                 pipeline.errors[vid] = err_msg
+                logger.warning(
+                    "pipeline.video_worker_failed",
+                    video_id=vid,
+                    error=err_msg,
+                    exc_info=True,
+                )
                 emit(EventType.VIDEO_FAILED, vid, error=err_msg)
                 results[index] = False
             else:

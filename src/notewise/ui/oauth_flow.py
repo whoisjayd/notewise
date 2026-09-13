@@ -5,6 +5,8 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
+import structlog
+
 from notewise._constants import (
     LLM_NUM_RETRIES,
     OAUTH_LOGIN_FAILURE_MESSAGE,
@@ -25,6 +27,9 @@ from notewise.config import configure_oauth_token_storage, get_oauth_token_stora
 from notewise.errors import OAuthError
 from notewise.llm.provider import summarize_provider_error
 from notewise.logging import redact_sensitive_text
+
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 if TYPE_CHECKING:
@@ -107,11 +112,18 @@ async def run_oauth_login_async(
                 num_retries=LLM_NUM_RETRIES,
             )
     except Exception as error:
+        error_summary = summarize_provider_error(error)
+        logger.warning(
+            "oauth_flow.login_verification_failed",
+            provider=provider,
+            error_type=type(error).__name__,
+            error=error_summary,
+        )
         active_console.print(
             "[red]"
             + OAUTH_LOGIN_FAILURE_MESSAGE.format(
                 provider_label=provider_label,
-                error=summarize_provider_error(error),
+                error=error_summary,
             )
             + "[/red]"
         )

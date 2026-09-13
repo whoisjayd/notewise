@@ -174,6 +174,12 @@ def _transcript_via_innertube_player(
                 client_override=override,
             )
         except Exception:
+            logger.warning(
+                "transport.innertube_player_override_failed",
+                video_id=video_id,
+                client_override=(override or {}).get("clientName"),
+                exc_info=True,
+            )
             continue
         captions = (player.get("captions") or {}).get(
             "playerCaptionsTracklistRenderer"
@@ -207,6 +213,11 @@ def _transcript_via_innertube_player(
                 },
             }
         except Exception:
+            logger.warning(
+                "transport.innertube_track_fetch_failed",
+                video_id=video_id,
+                exc_info=True,
+            )
             continue
     return None
 
@@ -228,6 +239,11 @@ def _player_response_from_innertube(
             ),
         )
     except Exception:
+        logger.warning(
+            "transport.innertube_player_response_failed",
+            video_id=video_id,
+            exc_info=True,
+        )
         return None
 
 

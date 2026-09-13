@@ -10,6 +10,8 @@ from dataclasses import dataclass
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+import structlog
+
 from notewise import __version__
 from notewise._constants import (
     LATEST_RELEASE_API_URL,
@@ -35,6 +37,8 @@ from notewise._constants import (
 )
 from notewise.errors import UpdateError
 
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 _PRERELEASE_MARKER_RE = re.compile(
     VERSION_PRERELEASE_MARKER_PATTERN,
@@ -123,10 +127,20 @@ def _request_json(url: str) -> dict[str, object]:
             f"GitHub returned HTTP {error.code} while checking for updates."
         ) from error
     except URLError as error:
+        logger.warning(
+            "updater.request_failed",
+            error_type=type(error).__name__,
+            reason=str(error.reason),
+        )
         raise UpdateError(
             "Could not reach GitHub Releases while checking for updates."
         ) from error
     except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        logger.warning(
+            "updater.metadata_parse_failed",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
         raise UpdateError(UPDATE_METADATA_PARSE_ERROR) from error
 
     if not isinstance(payload, dict):

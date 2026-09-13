@@ -3,7 +3,8 @@
 import asyncio
 import json
 import zipfile
-from unittest.mock import AsyncMock, MagicMock, patch
+from pathlib import Path
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -408,6 +409,72 @@ async def test_bundled_chapter_failure_does_not_leak_temporary_chapter_artifacts
     assert not list(temp_output_dir.glob("Partial Video_chapter_*.md"))
     assert not (temp_output_dir / "Partial Video.md").exists()
     assert not (temp_output_dir / ".working").exists()
+
+
+async def test_chapter_generation_failure_cleans_up_temporary_directory(
+    temp_output_dir, mock_llm_provider
+):
+    """A raise from chapter-note generation must not leak the TemporaryDirectory."""
+    import notewise.pipeline._chapter_outputs as chapter_outputs_module
+
+    p = _make_pipeline(temp_output_dir, mock_llm_provider)
+    p.timestamps = False
+    p.export_transcript_format = None
+    p.generator.generate_chapter_notes_concurrent = AsyncMock(
+        side_effect=RuntimeError("chapter generation stopped")
+    )
+
+    created_dirs: list[Path] = []
+    real_temporary_directory = chapter_outputs_module.TemporaryDirectory
+
+    def _tracking_temporary_directory(*args, **kwargs):
+        instance = real_temporary_directory(*args, **kwargs)
+        created_dirs.append(Path(instance.name))
+        return instance
+
+    chapter_meta = [
+        VideoChapter(title="Intro", start_seconds=0, end_seconds=30),
+        VideoChapter(title="Deep Dive", start_seconds=30, end_seconds=60),
+    ]
+
+    with (
+        patch.object(
+            chapter_outputs_module,
+            "TemporaryDirectory",
+            side_effect=_tracking_temporary_directory,
+        ),
+        patch(
+            _COMMON_PATCHES["metadata"],
+            new=AsyncMock(
+                return_value=VideoMetadata(
+                    video_id="vid-leak",
+                    title="Leak Video",
+                    duration=60,
+                    chapters=chapter_meta,
+                )
+            ),
+        ),
+        patch(_COMMON_PATCHES["fetch"], new_callable=AsyncMock) as mock_fetch,
+        patch(
+            "notewise.pipeline._execution.split_transcript_by_chapters_with_metadata",
+            return_value={
+                "Intro": ChapterTranscript(
+                    title="Intro", text="intro transcript", start_seconds=0
+                ),
+                "Deep Dive": ChapterTranscript(
+                    title="Deep Dive", text="deep dive transcript", start_seconds=30
+                ),
+            },
+        ),
+        patch(_COMMON_PATCHES["api_key"], return_value=True),
+    ):
+        mock_fetch.return_value = _make_transcript(video_id="vid-leak")
+
+        result = await p.run(["vid-leak"])
+
+    assert result.failure_count == 1
+    assert created_dirs, "expected a TemporaryDirectory to be created"
+    assert not any(created_dir.exists() for created_dir in created_dirs)
 
 
 async def test_bundled_chapter_retry_ignores_stale_temporary_artifacts_with_force(
@@ -1158,6 +1225,29 @@ async def test_run_ip_block_error_emits_video_failed_event(pipeline):
     failed_event = next(e for e in events if e.event_type == EventType.VIDEO_FAILED)
     assert failed_event.video_id == "vid123"
     assert "temporarily blocking requests" in failed_event.error
+
+
+async def test_run_worker_exception_is_logged(pipeline):
+    """Exceptions escaping process_single_video must leave a log trail."""
+    with (
+        patch(
+            "notewise.pipeline._execution.process_single_video",
+            new=AsyncMock(side_effect=RuntimeError("unexpected worker crash")),
+        ),
+        patch("notewise.pipeline._execution.logger.warning") as mock_warning,
+    ):
+        result = await pipeline.run(["vid123"])
+
+    assert result.success_count == 0
+    assert result.failure_count == 1
+    assert "vid123" in result.errors
+
+    mock_warning.assert_called_once_with(
+        "pipeline.video_worker_failed",
+        video_id="vid123",
+        error=ANY,
+        exc_info=True,
+    )
 
 
 async def test_run_generic_error_emits_video_failed_event(pipeline):

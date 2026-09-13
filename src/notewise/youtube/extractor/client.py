@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 from urllib.request import HTTPCookieProcessor, build_opener
 
+import structlog
+
 from notewise._constants import DEFAULT_LANGUAGES
 from notewise.errors import ExtractionError
 
@@ -20,6 +22,9 @@ from ._video import _VideoMixin
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+
+
+logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
@@ -178,6 +183,11 @@ class YouTubeExtractorClient(
                 }
             except Exception as exc:
                 native_error = exc
+                logger.warning(
+                    "client.native_caption_fetch_failed",
+                    video_id=video["id"],
+                    exc_info=True,
+                )
 
         if not segments:
             fallback = self._transcript_via_innertube_player(
