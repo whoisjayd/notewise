@@ -345,11 +345,16 @@ notewise setup
 notewise setup --show
 notewise setup --force
 notewise config
+notewise config edit
 notewise config-path
 notewise edit-config
 ```
 
-`notewise config` masks secrets before printing settings.
+`notewise config` masks secrets before printing settings. `notewise config
+edit` is an interactive, category-grouped editor (Model & Generation,
+Concurrency & Performance, Output & Transcripts, Custom Endpoints, OAuth
+Token Directories, Provider API Keys, Provider Auth & Cloud Credentials)
+for browsing and setting/unsetting keys without knowing their exact names.
 
 ## Models and providers
 
@@ -453,6 +458,7 @@ Main commands:
 | `notewise process URL` | Generate notes from one video, playlist, or batch file. |
 | `notewise setup` | Run the interactive config wizard. |
 | `notewise config` | Print masked effective config. |
+| `notewise config edit` | Interactively browse and edit config by category. |
 | `notewise config-path` | Print the active config path. |
 | `notewise edit-config` | Open the config file in an editor. |
 | `notewise auth login PROVIDER` | Login to OAuth providers. |

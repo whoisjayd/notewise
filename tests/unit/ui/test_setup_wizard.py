@@ -15,6 +15,7 @@ from notewise.ui.setup_wizard import (
     load_config,
     run_setup_wizard,
     save_config,
+    select_config_category,
     select_model,
     select_provider,
     show_current_config,
@@ -614,6 +615,37 @@ class TestInteractiveFlow:
             selected = select_model("p1", models)
 
         assert selected == "other-2"
+
+    def test_select_config_category_returns_chosen_name(self):
+        categories = {
+            "Model & Generation": ("DEFAULT_MODEL",),
+            "Output": ("OUTPUT_DIR",),
+        }
+
+        with patch("rich.prompt.Prompt.ask", return_value="2"):
+            selected = select_config_category(categories)
+
+        assert selected == "Output"
+
+    def test_select_config_category_quit_returns_none(self):
+        categories = {"Model & Generation": ("DEFAULT_MODEL",)}
+
+        with patch("rich.prompt.Prompt.ask", return_value="q"):
+            selected = select_config_category(categories)
+
+        assert selected is None
+
+    def test_select_config_category_invalid_input_reprompts(self):
+        mock_console = MagicMock()
+        categories = {"Model & Generation": ("DEFAULT_MODEL",)}
+
+        with patch("rich.prompt.Prompt.ask", side_effect=["nope", "1"]):
+            selected = select_config_category(categories, console=mock_console)
+
+        assert selected == "Model & Generation"
+        mock_console.print.assert_any_call(
+            "[red]Invalid choice. Enter a category number or 'q'.[/red]"
+        )
 
     def test_get_api_key_new(self):
         """Test entering a new API key."""

@@ -98,6 +98,7 @@ notewise config keys
 notewise config get DEFAULT_MODEL
 notewise config set DEFAULT_MODEL gemini/gemini-2.5-flash
 notewise config unset MAX_TOKENS
+notewise config edit
 notewise config-path
 notewise edit-config
 ```
@@ -108,6 +109,12 @@ full set (provider API keys, provider auth keys, and core settings) isn't
 obvious up front. `notewise config get/set/unset` read or write one key at a
 time; `set` validates the new value immediately and reports an error without
 leaving the process in a broken state if it's invalid (e.g. `TEMPERATURE` out
-of range). `edit-config`
+of range). `notewise config edit` is an interactive, category-grouped
+browser/editor over the same keys (Model & Generation, Concurrency &
+Performance, Output & Transcripts, Custom Endpoints, OAuth Token
+Directories, Provider API Keys, Provider Auth & Cloud Credentials) — pick a
+category, pick a key, then set or unset it, without needing to already know
+its exact name; secrets stay masked and prompt with hidden input, same as
+`set`. `edit-config`
 opens the current settings as an editable env-style file in your `$EDITOR`, then
 re-saves whatever you leave in it — including removing lines you delete.

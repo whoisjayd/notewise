@@ -128,6 +128,176 @@ def save_config(
     )
 
 
+def _masked_value_display(key: str, value: str | None) -> str:
+    """Return the display string for one config value, masked if sensitive."""
+    if value is None:
+        return "[dim]not set[/dim]"
+    if _is_sensitive_key(key):
+        return mask_secret(value, suffix=" (set)")
+    return value
+
+
+def select_config_category(
+    categories: dict[str, tuple[str, ...]],
+    *,
+    console: Console | None = None,
+) -> str | None:
+    """Prompt the user to pick a config category. Returns None to exit."""
+    from rich.prompt import Prompt
+    from rich.table import Table
+
+    active_console = _resolve_console(console)
+    names = list(categories)
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Category", style="cyan")
+    table.add_column("Keys", style="dim", justify="right")
+    for i, name in enumerate(names, 1):
+        table.add_row(str(i), name, str(len(categories[name])))
+
+    active_console.print("\n[bold cyan]Configuration Categories:[/bold cyan]\n")
+    active_console.print(table)
+
+    while True:
+        choice = Prompt.ask("\nSelect category number (or 'q' to quit)").strip()
+        if choice.lower() in ("q", "quit", "exit"):
+            return None
+        if choice.isdigit() and 1 <= int(choice) <= len(names):
+            return names[int(choice) - 1]
+        active_console.print(
+            "[red]Invalid choice. Enter a category number or 'q'.[/red]"
+        )
+
+
+def run_config_editor(*, console: Console | None = None) -> None:
+    """Interactively browse and edit persisted config, grouped by category."""
+    import sqlite3
+
+    from pydantic import ValidationError as PydanticValidationError
+    from rich.prompt import Prompt
+    from rich.table import Table
+
+    from notewise.config import categorize_config_keys, validate_candidate_config
+    from notewise.config import settings as app_settings
+    from notewise.errors import CustomEndpointError
+    from notewise.storage import config_store
+
+    active_console = _resolve_console(console)
+    categories = categorize_config_keys()
+
+    if not categories:
+        active_console.print("[yellow]No configurable keys are available.[/yellow]")
+        return
+
+    while True:
+        category = select_config_category(categories, console=active_console)
+        if category is None:
+            active_console.print("[dim]Exiting config editor.[/dim]")
+            return
+
+        while True:
+            try:
+                current_config = load_config()
+            except ConfigurationError as error:
+                active_console.print(f"[red]{error}[/red]")
+                return
+
+            keys_in_category = categories[category]
+            table = Table(show_header=True, header_style="bold magenta", title=category)
+            table.add_column("#", style="dim", width=4)
+            table.add_column("Key", style="bold cyan")
+            table.add_column("Value")
+            for i, key in enumerate(keys_in_category, 1):
+                display = _masked_value_display(key, current_config.get(key))
+                table.add_row(str(i), key, display)
+
+            active_console.print(f"\n[bold cyan]{category}:[/bold cyan]\n")
+            active_console.print(table)
+
+            choice = Prompt.ask(
+                "\nSelect key number to edit, 'b' for categories, or 'q' to quit"
+            ).strip()
+            if choice.lower() in ("q", "quit", "exit"):
+                active_console.print("[dim]Exiting config editor.[/dim]")
+                return
+            if choice.lower() in ("b", "back"):
+                break
+            if not (choice.isdigit() and 1 <= int(choice) <= len(keys_in_category)):
+                active_console.print(
+                    "[red]Invalid choice. Enter a key number, 'b', or 'q'.[/red]"
+                )
+                continue
+
+            selected_key = keys_in_category[int(choice) - 1]
+            existing_value = current_config.get(selected_key)
+            active_console.print(
+                f"\n[bold]{selected_key}[/bold]: "
+                f"{_masked_value_display(selected_key, existing_value)}"
+            )
+
+            action = (
+                Prompt.ask(
+                    "Set new value ('s'), unset ('u'), or cancel ('c')",
+                    default="c",
+                )
+                .strip()
+                .lower()
+            )
+
+            if action in ("u", "unset"):
+                if existing_value is None:
+                    active_console.print(f"[yellow]{selected_key} is not set.[/yellow]")
+                    continue
+                db_path = get_config_db_path()
+                if config_store.remove_config_key(db_path, selected_key):
+                    active_console.print(
+                        f"[green]Removed {selected_key} from configuration.[/green]"
+                    )
+                    try:
+                        app_settings.reload()
+                    except PydanticValidationError as error:
+                        active_console.print(f"[red]{error}[/red]")
+                continue
+
+            if action in ("s", "set"):
+                new_value = Prompt.ask(
+                    f"Enter value for {selected_key}",
+                    password=_is_sensitive_key(selected_key),
+                )
+                try:
+                    candidate = {
+                        **load_config(suppress_errors=True),
+                        selected_key: new_value,
+                    }
+                    validate_candidate_config(candidate)
+                except PydanticValidationError as error:
+                    active_console.print(
+                        f"[red]Invalid value for {selected_key}: {error}[/red]"
+                    )
+                    continue
+
+                try:
+                    save_config({selected_key: new_value}, console=active_console)
+                except (
+                    CustomEndpointError,
+                    ConfigurationError,
+                    OSError,
+                    sqlite3.Error,
+                ) as error:
+                    active_console.print(f"[red]{error}[/red]")
+                    continue
+
+                try:
+                    app_settings.reload()
+                except PydanticValidationError as error:
+                    active_console.print(f"[red]{error}[/red]")
+                continue
+
+            # Any other input (including the 'c'/'cancel' default) cancels
+            # back to the key list without changes.
+
+
 def show_current_config(*, console: Console | None = None) -> dict[str, str]:
     """Display the current config in a read-only, masked form."""
     from rich.table import Table

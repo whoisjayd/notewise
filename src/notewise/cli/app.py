@@ -1067,6 +1067,15 @@ def config_keys() -> None:
         console.print(key)
 
 
+@config_app.command("edit")
+def config_edit() -> None:
+    """Interactively browse and edit config, grouped by category."""
+    from notewise.ui.setup_wizard import run_config_editor
+
+    _get_config_or_exit()
+    run_config_editor(console=_get_console())
+
+
 @config_app.command("get")
 def config_get(
     key: Annotated[

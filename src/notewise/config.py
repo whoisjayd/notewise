@@ -145,6 +145,71 @@ def allowed_config_keys() -> frozenset[str]:
     return _ALLOWED_KEYS
 
 
+_CONFIG_CATEGORY_FIXED_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Model & Generation",
+        (
+            "DEFAULT_MODEL",
+            "TEMPERATURE",
+            "MAX_TOKENS",
+            ALLOW_UNLISTED_MODELS_CONFIG_KEY,
+        ),
+    ),
+    (
+        "Concurrency & Performance",
+        ("MAX_CONCURRENT_VIDEOS", "YOUTUBE_REQUESTS_PER_MINUTE"),
+    ),
+    (
+        "Output & Transcripts",
+        (OUTPUT_DIR_CONFIG_KEY, "YOUTUBE_COOKIE_FILE"),
+    ),
+    (
+        "Custom Endpoints",
+        (CUSTOM_LLM_ENDPOINTS_ENV_VAR,),
+    ),
+)
+
+
+def categorize_config_keys() -> dict[str, tuple[str, ...]]:
+    """Group every allowed config key into a human-friendly category.
+
+    Built from the same membership sets used by `_ALLOWED_KEYS` so this
+    can't silently drift out of sync with what `config set/unset` accepts.
+    """
+    keys = allowed_config_keys()
+    oauth_dir_keys = frozenset(OAUTH_TOKEN_DIR_ENV_VARS.values())
+
+    categorized: dict[str, tuple[str, ...]] = {}
+    seen: set[str] = set()
+
+    for category, category_keys in _CONFIG_CATEGORY_FIXED_KEYS:
+        present = tuple(key for key in category_keys if key in keys)
+        if present:
+            categorized[category] = present
+            seen.update(present)
+
+    oauth_present = tuple(sorted(keys & oauth_dir_keys - seen))
+    if oauth_present:
+        categorized["OAuth Token Directories"] = oauth_present
+        seen.update(oauth_present)
+
+    api_key_present = tuple(sorted(keys & CONFIG_API_KEY_ENV_KEYS - seen))
+    if api_key_present:
+        categorized["Provider API Keys"] = api_key_present
+        seen.update(api_key_present)
+
+    auth_present = tuple(sorted(keys & PROVIDER_AUTH_ENV_KEYS - seen))
+    if auth_present:
+        categorized["Provider Auth & Cloud Credentials"] = auth_present
+        seen.update(auth_present)
+
+    remaining = tuple(sorted(keys - seen))
+    if remaining:
+        categorized["Other"] = remaining
+
+    return categorized
+
+
 def get_state_dir() -> Path:
     """Return the base directory for NoteWise persistent state files."""
     override = os.getenv("NOTEWISE_HOME")

@@ -2,10 +2,16 @@
 
 from __future__ import annotations
 
+from unittest.mock import patch
+
 from typer.testing import CliRunner
 
 from notewise.cli import app as cli_app
-from notewise.config import allowed_config_keys, get_config_db_path
+from notewise.config import (
+    allowed_config_keys,
+    categorize_config_keys,
+    get_config_db_path,
+)
 from notewise.storage import config_store
 
 
@@ -123,3 +129,74 @@ def test_config_unset_missing_key_exits_nonzero():
 
     assert result.exit_code == 1
     assert "is not set" in result.output
+
+
+def test_categorize_config_keys_covers_every_allowed_key_exactly_once():
+    """Every key `config keys` lists must land in exactly one category."""
+    categories = categorize_config_keys()
+    seen: set[str] = set()
+    for keys in categories.values():
+        overlap = seen & set(keys)
+        assert not overlap, f"keys assigned to multiple categories: {overlap}"
+        seen.update(keys)
+
+    assert seen == allowed_config_keys()
+
+
+def test_config_edit_lists_categories_then_exits():
+    with patch("rich.prompt.Prompt.ask", side_effect=["q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Configuration Categories" in result.output
+    assert "Model & Generation" in result.output
+    assert "Exiting config editor" in result.output
+
+
+def test_config_edit_can_set_a_value():
+    with patch("rich.prompt.Prompt.ask", side_effect=["1", "2", "s", "0.3", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert config_store.load_config_db(get_config_db_path())["TEMPERATURE"] == "0.3"
+
+
+def test_config_edit_set_rejects_invalid_value_without_persisting():
+    with patch(
+        "rich.prompt.Prompt.ask", side_effect=["1", "2", "s", "5.0", "c", "q", "q"]
+    ):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Invalid value for TEMPERATURE" in result.output
+    assert "TEMPERATURE" not in config_store.load_config_db(get_config_db_path())
+
+
+def test_config_edit_can_unset_a_value():
+    runner.invoke(cli_app.app, ["config", "set", "MAX_TOKENS", "1000"])
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["1", "3", "u", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Removed MAX_TOKENS" in result.output
+    assert "MAX_TOKENS" not in config_store.load_config_db(get_config_db_path())
+
+
+def test_config_edit_masks_secret_values_in_table():
+    runner.invoke(cli_app.app, ["config", "set", "GEMINI_API_KEY", "gk-super-secret"])
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["6", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "gk-super-secret" not in result.output
+
+
+def test_config_edit_handles_invalid_category_and_key_choices():
+    with patch("rich.prompt.Prompt.ask", side_effect=["nope", "1", "nope", "b", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Invalid choice. Enter a category number or 'q'." in result.output
+    assert "Invalid choice. Enter a key number, 'b', or 'q'." in result.output
