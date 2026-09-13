@@ -17,6 +17,7 @@ from notewise._constants import (
 )
 from notewise.config import settings as config
 from notewise.domain.events import EventType
+from notewise.errors import PartialChapterGenerationError
 from notewise.pipeline._artifacts import prefix_chapter_heading_with_timestamp
 from notewise.pipeline._documents import build_chapter_bundle, get_output_extension
 from notewise.pipeline._output_rendering import render_notes_with_warning
@@ -330,6 +331,36 @@ async def generate_missing_chapter_notes(
     )
 
 
+def persist_completed_chapter_files(
+    pipeline: PipelineProtocol,
+    plan: ChapterGenerationPlan,
+    completed_chapter_notes: dict[str, str],
+) -> None:
+    """Write whatever chapters finished generating to their chapter_file.
+
+    Called from the partial-failure path so a chapter that timed out (or hit
+    a transient provider error) doesn't also cost its already-completed
+    siblings: with these written, a rerun's existing chapter_file.exists()
+    skip-check (see build_chapter_generation_plan) picks them back up
+    instead of regenerating -- and repaying -- them. Deliberately does not
+    render/bundle a final output from partial data; that only happens once
+    every chapter is present.
+    """
+    for chapter_title, start_seconds, chapter_file in plan.chapter_targets:
+        if chapter_file is None:
+            continue
+        notes = completed_chapter_notes.get(chapter_title)
+        if notes is None:
+            continue
+        if pipeline.timestamps:
+            notes = prefix_chapter_heading_with_timestamp(
+                notes,
+                chapter_title,
+                start_seconds,
+            )
+        chapter_file.write_text(notes, encoding="utf-8")
+
+
 def write_chapter_outputs_and_collect_bundle(
     pipeline: PipelineProtocol,
     plan: ChapterGenerationPlan,
@@ -477,6 +508,15 @@ async def generate_chapter_outputs(
             output_targets.transcript_output_dir,
             chapter_directory_output,
         )
+    except PartialChapterGenerationError as partial_error:
+        # Persist whatever finished before re-raising: for
+        # --chapter-directory-output (a real, persistent directory), this is
+        # what lets a rerun's existing chapter_file.exists() skip-check pick
+        # these back up instead of regenerating -- and repaying for -- them.
+        persist_completed_chapter_files(pipeline, plan, partial_error.completed)
+        if output_targets.temporary_chapter_directory is not None:
+            output_targets.temporary_chapter_directory.cleanup()
+        raise
     except BaseException:
         if output_targets.temporary_chapter_directory is not None:
             output_targets.temporary_chapter_directory.cleanup()

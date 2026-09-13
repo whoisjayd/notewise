@@ -22,6 +22,7 @@ from notewise._constants import (
     TRANSCRIPT_CHUNK_SEPARATOR_TOKENS,
 )
 from notewise.config import settings as config
+from notewise.errors import PartialChapterGenerationError
 from notewise.llm.prompts.chapter_notes import (
     get_chapter_prompt,
 )
@@ -631,13 +632,21 @@ class StudyMaterialGenerator:
             asyncio.create_task(_generate_one(i, title, text))
             for i, (title, text) in enumerate(chapter_transcripts.items(), 1)
         ]
+        titles = list(chapter_transcripts)
         raw = await asyncio.gather(*tasks, return_exceptions=True)
         result: dict[str, str] = {}
-        for item in raw:
+        failures: list[tuple[str, BaseException]] = []
+        for title, item in zip(titles, raw, strict=True):
             if isinstance(item, BaseException):
-                raise item
+                failures.append((title, item))
+                continue
             ch_title, notes = item
             result[ch_title] = notes
+        if failures:
+            # A single stuck chapter must not throw away every sibling that
+            # already finished generating (and was already paid for) --
+            # the caller persists `completed` before propagating failure.
+            raise PartialChapterGenerationError(result, failures)
         return result
 
     async def generate_quiz(

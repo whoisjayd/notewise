@@ -31,7 +31,7 @@ Source truth:
 - Temperature: `0.7`
 - Max concurrent videos: `5`
 - YouTube requests per minute: `10`
-- Chunk size / overlap: `4000` / `200`
+- Chunk size / overlap: `12000` / `1500`
 - Max concurrent chapters: `3`
 
 CLI commands:

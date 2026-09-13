@@ -7,6 +7,7 @@ import pytest
 
 from notewise._constants import DEFAULT_TARGET_LANGUAGE
 from notewise.config import settings as config
+from notewise.errors import PartialChapterGenerationError
 from notewise.llm.prompts.quiz import get_quiz_combine_prompt, get_quiz_prompt
 from notewise.llm.prompts.study_notes import get_stitch_prompt
 from notewise.pipeline.generation import (
@@ -410,7 +411,7 @@ class TestStudyMaterialGenerator:
         two_chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             await generator.generate_single_chapter_notes("Ch1", "very long text")
         # 2 chunk calls + 1 combine call = 3
@@ -431,7 +432,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             result = await generator.generate_single_chapter_notes("Ch1", "very long")
 
@@ -492,7 +493,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -510,7 +511,7 @@ class TestStudyMaterialGenerator:
         """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             await generator.generate_single_chapter_notes("Ch1", "big text")
         # 1 chunk call only — combine is skipped when there is a single chunk
@@ -537,6 +538,42 @@ class TestStudyMaterialGenerator:
         assert list(result.keys()) == ["Intro", "Body", "Wrap"]
         assert result["Intro"] == "notes for Intro"
         assert result["Wrap"] == "notes for Wrap"
+
+    async def test_generate_chapter_notes_concurrent_preserves_successes_on_failure(
+        self, generator
+    ):
+        """One stuck/failing chapter must not discard its finished siblings.
+
+        Regression test for a real data-loss bug: a bare `raise item` inside
+        the old result-collection loop discarded every successfully
+        generated chapter the moment any other chapter in the same batch
+        raised, forcing a full (paid-for-twice) regeneration on retry.
+        """
+
+        async def _generate_single(chapter_title, chapter_text, **kwargs):
+            del chapter_text, kwargs
+            if chapter_title == "Body":
+                raise TimeoutError("Upstream idle timeout exceeded")
+            return f"notes for {chapter_title}"
+
+        generator.generate_single_chapter_notes = AsyncMock(
+            side_effect=_generate_single
+        )
+
+        with pytest.raises(PartialChapterGenerationError) as exc_info:
+            await generator.generate_chapter_notes_concurrent(
+                {"Intro": "intro text", "Body": "body text", "Wrap": "wrap text"},
+                max_concurrent=3,
+            )
+
+        error = exc_info.value
+        assert error.completed == {
+            "Intro": "notes for Intro",
+            "Wrap": "notes for Wrap",
+        }
+        assert len(error.failures) == 1
+        assert error.failures[0][0] == "Body"
+        assert isinstance(error.failures[0][1], TimeoutError)
 
     async def test_generate_chapter_notes_concurrent_respects_max_concurrency(
         self, generator
@@ -658,7 +695,7 @@ class TestStudyMaterialGenerator:
         chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             result = await generator.generate_quiz("very long transcript")
 
@@ -681,7 +718,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             await generator.generate_quiz("very long transcript")
 
@@ -698,7 +735,7 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -715,7 +752,7 @@ class TestStudyMaterialGenerator:
         """When the chunker returns exactly one chunk no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=9999),
+            patch("notewise.pipeline.generation.token_counter", return_value=99999),
         ):
             result = await generator.generate_quiz("big transcript")
 

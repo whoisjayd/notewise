@@ -41,6 +41,7 @@ from notewise._constants import (
     DEFAULT_LANGUAGES,
     DEFAULT_MAX_CONCURRENT_CHAPTERS,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_TEMPERATURE,
@@ -438,7 +439,7 @@ class AppSettings(BaseSettings):
         ge=MIN_TEMPERATURE,
         le=MAX_TEMPERATURE,
     )
-    max_tokens: int | None = Field(None, alias="MAX_TOKENS", gt=0)
+    max_tokens: int | None = Field(DEFAULT_MAX_TOKENS, alias="MAX_TOKENS", gt=0)
 
     # Chunking
     chunk_size: int = Field(DEFAULT_CHUNK_SIZE, alias="CHUNK_SIZE", gt=0)

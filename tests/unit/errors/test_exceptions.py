@@ -9,6 +9,7 @@ from notewise.errors import (
     LLMError,
     LLMGenerationError,
     NoteWiseError,
+    PartialChapterGenerationError,
     PersistenceError,
     PlaylistError,
     TranscriptUnavailableError,
@@ -145,6 +146,27 @@ class TestFormatUserError:
     def test_timeout_message(self):
         msg = format_user_error(RuntimeError("connection timed out"))
         assert "timed out" in msg.lower() or "timeout" in msg.lower()
+
+    def test_idle_timeout_message_names_the_model_and_suggests_a_fix(self):
+        msg = format_user_error(
+            LLMGenerationError(
+                "Failed to generate with openrouter/free-model: "
+                "litellm.Timeout: Upstream idle timeout exceeded"
+            )
+        )
+        assert "openrouter/free-model" in msg
+        assert "timed out" in msg.lower() or "timeout" in msg.lower()
+        assert "MAX_CONCURRENT_CHAPTERS" in msg
+
+    def test_partial_chapter_generation_message_reports_progress(self):
+        error = PartialChapterGenerationError(
+            completed={"Intro": "notes", "Wrap": "notes"},
+            failures=[("Body", TimeoutError("Upstream idle timeout exceeded"))],
+        )
+        msg = format_user_error(error)
+        assert "2/3" in msg
+        assert "Body" in msg
+        assert "saved" in msg.lower()
 
     def test_rate_limit_message(self):
         msg = format_user_error(Exception("429 too many requests"))
