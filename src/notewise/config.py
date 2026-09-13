@@ -152,16 +152,22 @@ _CONFIG_CATEGORY_FIXED_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "DEFAULT_MODEL",
             "TEMPERATURE",
             "MAX_TOKENS",
+            "CHUNK_SIZE",
+            "CHUNK_OVERLAP",
             ALLOW_UNLISTED_MODELS_CONFIG_KEY,
         ),
     ),
     (
         "Concurrency & Performance",
-        ("MAX_CONCURRENT_VIDEOS", "YOUTUBE_REQUESTS_PER_MINUTE"),
+        (
+            "MAX_CONCURRENT_VIDEOS",
+            "MAX_CONCURRENT_CHAPTERS",
+            "YOUTUBE_REQUESTS_PER_MINUTE",
+        ),
     ),
     (
         "Output & Transcripts",
-        (OUTPUT_DIR_CONFIG_KEY, "YOUTUBE_COOKIE_FILE"),
+        (OUTPUT_DIR_CONFIG_KEY, "YOUTUBE_COOKIE_FILE", "DEFAULT_LANGUAGES"),
     ),
     (
         "Custom Endpoints",
