@@ -290,10 +290,21 @@ def format_user_error(error: Exception) -> str:
             f"model{model_suffix}. Check your connection and try again."
         )
 
+    if any(
+        kw in text for kw in ("per-day", "per day", "daily limit", "requests per day")
+    ):
+        return (
+            f"The model{model_suffix} hit its free-tier daily request quota. "
+            "Waiting for the quota to reset won't help within the same day -- "
+            "switch to a different (often paid) model, or add credits with "
+            "the provider to raise the daily limit."
+        )
+
     if any(kw in text for kw in ("rate limit", "too many requests", " 429")):
         return (
-            "The upstream service is rate-limiting requests right now. "
-            "Please try again later."
+            f"The request to the model{model_suffix} was rate-limited. Wait "
+            "a moment and try again, or switch to a less-throttled model if "
+            "this keeps happening."
         )
 
     if any(

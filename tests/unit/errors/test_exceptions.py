@@ -158,6 +158,29 @@ class TestFormatUserError:
         assert "timed out" in msg.lower() or "timeout" in msg.lower()
         assert "MAX_CONCURRENT_CHAPTERS" in msg
 
+    def test_daily_quota_message_names_model_and_explains_why_retry_wont_help(self):
+        msg = format_user_error(
+            LLMGenerationError(
+                "Failed to generate with opentest/nvidia/free-model: "
+                "litellm.RateLimitError: RateLimitError: OpenAIException - "
+                "Rate limit exceeded: free-models-per-day. Add 5 credits to "
+                "unlock 1000 free model requests per day"
+            )
+        )
+        assert "opentest/nvidia/free-model" in msg
+        assert "daily" in msg.lower()
+        assert "won't help" in msg.lower()
+
+    def test_generic_rate_limit_message_names_model_and_suggests_retry(self):
+        msg = format_user_error(
+            LLMGenerationError(
+                "Failed to generate with openrouter/some-model: "
+                "litellm.RateLimitError: 429 Too Many Requests"
+            )
+        )
+        assert "openrouter/some-model" in msg
+        assert "rate-limited" in msg.lower() or "rate limit" in msg.lower()
+
     def test_partial_chapter_generation_message_reports_progress(self):
         error = PartialChapterGenerationError(
             completed={"Intro": "notes", "Wrap": "notes"},
