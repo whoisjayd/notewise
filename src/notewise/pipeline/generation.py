@@ -466,6 +466,34 @@ class StudyMaterialGenerator:
         logger.info(f"Created {len(chunks)} chunks")
         return chunks
 
+    async def _generate_chunk_notes(
+        self,
+        chunks: list[str],
+        *,
+        system_prompt: str,
+        build_user_prompt: Callable[[str], str],
+        log_message: Callable[[int, int], str],
+        on_chunk: Callable[[int, int], None] | None,
+    ) -> list[str]:
+        """Generate one note per chunk in order, logging and reporting progress.
+
+        Shared by generate_study_notes, generate_single_chapter_notes, and
+        generate_quiz, which differ only in the prompt builder, system
+        prompt, and per-chunk log message.
+        """
+        notes: list[str] = []
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(log_message(i, len(chunks)))
+            if on_chunk:
+                on_chunk(i, len(chunks))
+            notes.append(
+                await self._generate_text(
+                    system_prompt=system_prompt,
+                    user_prompt=build_user_prompt(chunk),
+                )
+            )
+        return notes
+
     async def generate_study_notes(
         self,
         transcript: str,
@@ -498,20 +526,15 @@ class StudyMaterialGenerator:
             return notes
 
         logger.info(f"{video_title}: Generating notes for {len(chunks)} chunks...")
-        chunk_notes = []
-
-        for i, chunk in enumerate(chunks, 1):
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            logger.info(f"{video_title}: Chunk {i}/{len(chunks)}")
-            note = await self._generate_text(
-                system_prompt=get_system_prompt(self.target_language),
-                user_prompt=get_chunk_prompt(
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            chunk_notes.append(note)
+        chunk_notes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_chunk_prompt(
+                chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: f"{video_title}: Chunk {i}/{total}",
+            on_chunk=on_chunk,
+        )
 
         logger.info(
             f"{video_title}: Finalizing {len(chunk_notes)} chunks via stitching..."
@@ -565,23 +588,17 @@ class StudyMaterialGenerator:
             " chunking before generation..."
         )
         chunks = self._chunk_transcript(chapter_text)
-        chunk_notes: list[str] = []
-
-        for i, chunk in enumerate(chunks, 1):
-            logger.info(
-                f"Chapter '{chapter_title[:40]}': generating part {i}/{len(chunks)}"
-            )
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            note = await self._generate_text(
-                system_prompt=get_system_prompt(self.target_language),
-                user_prompt=get_chapter_prompt(
-                    chapter_title,
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            chunk_notes.append(note)
+        chunk_notes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_chapter_prompt(
+                chapter_title, chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: (
+                f"Chapter '{chapter_title[:40]}': generating part {i}/{total}"
+            ),
+            on_chunk=on_chunk,
+        )
 
         logger.info(
             f"Chapter '{chapter_title[:40]}': finalizing {len(chunk_notes)} parts "
@@ -691,19 +708,15 @@ class StudyMaterialGenerator:
             " — chunking before generation."
         )
         chunks = self._chunk_transcript(transcript)
-        partial_quizzes: list[str] = []
-        for i, chunk in enumerate(chunks, 1):
-            logger.info(f"Quiz: generating part {i}/{len(chunks)}")
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            partial = await self._generate_text(
-                system_prompt=get_quiz_system_prompt(self.target_language),
-                user_prompt=get_quiz_prompt(
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            partial_quizzes.append(partial)
+        partial_quizzes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_quiz_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_quiz_prompt(
+                chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: f"Quiz: generating part {i}/{total}",
+            on_chunk=on_chunk,
+        )
 
         if len(partial_quizzes) == 1:
             return partial_quizzes[0]
