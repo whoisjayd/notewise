@@ -111,6 +111,44 @@ def test_inference_add_accepts_short_flag_aliases(mocker) -> None:
     )
 
 
+def test_inference_add_prompts_for_missing_arguments(mocker) -> None:
+    """Omitted add arguments should be collected via interactive prompts."""
+    db_path = get_config_db_path()
+
+    discover = mocker.patch(
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/new-model"}],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=AsyncMock,
+    )
+    mocker.patch(
+        "notewise.ui.setup_wizard._select_or_enter_model",
+        return_value="vendor/new-model",
+    )
+
+    result = runner.invoke(
+        cli_app.app,
+        ["inference", "add"],
+        input="office\nhttps://new.example/\nnew-secret\n",
+    )
+
+    assert result.exit_code == 0
+    discover.assert_called_once_with("https://new.example/v1", "new-secret")
+    verify.assert_awaited_once_with(
+        "https://new.example/v1", "new-secret", "vendor/new-model"
+    )
+    assert config_store.list_custom_endpoints(db_path) == (
+        CustomEndpointProfile(
+            name="office",
+            base_url="https://new.example/v1",
+            api_key="new-secret",
+        ),
+    )
+    assert "new-secret" not in result.output
+
+
 def test_inference_update_accepts_short_flag_aliases(mocker) -> None:
     """-b/-k/-m should behave identically to --base-url/--api-key/--model."""
     db_path = get_config_db_path()
@@ -291,6 +329,39 @@ def test_inference_update_requires_endpoint_change_before_io(mocker) -> None:
     discover.assert_not_called()
 
 
+def test_inference_update_prompts_when_name_is_omitted(mocker) -> None:
+    """Omitting the name should list saved endpoints and prompt for an index."""
+    db_path = get_config_db_path()
+    office = CustomEndpointProfile(
+        name="office",
+        base_url="https://office.example/v1",
+        api_key="old-secret",
+    )
+    config_store.upsert_custom_endpoint(db_path, office)
+
+    discover = mocker.patch(
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/model"}],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=AsyncMock,
+    )
+    mocker.patch(
+        "notewise.ui.setup_wizard._select_or_enter_model",
+        return_value="vendor/model",
+    )
+
+    result = runner.invoke(cli_app.app, ["inference", "update"], input="1\n\n\n")
+
+    assert result.exit_code == 0
+    discover.assert_called_once_with("https://office.example/v1", "old-secret")
+    verify.assert_awaited_once_with(
+        "https://office.example/v1", "old-secret", "vendor/model"
+    )
+    assert config_store.list_custom_endpoints(db_path) == (office,)
+
+
 def test_inference_delete_refuses_normalized_default_endpoint(mocker) -> None:
     """Deletion is blocked when DEFAULT_MODEL selects the endpoint by case variant."""
     db_path = get_config_db_path()
@@ -326,6 +397,24 @@ def test_inference_delete_rejects_invalid_default_model_prefix(mocker) -> None:
     assert result.exit_code == 1
     assert "Custom endpoint name" in result.output
     assert config_store.list_custom_endpoints(db_path) == (office,)
+
+
+def test_inference_delete_prompts_when_name_is_omitted(mocker) -> None:
+    """Omitting the name should list saved endpoints and prompt for an index."""
+    db_path = get_config_db_path()
+    office = CustomEndpointProfile(
+        name="office",
+        base_url="https://office.example/v1",
+        api_key="hidden-secret",
+    )
+    config_store.upsert_custom_endpoint(db_path, office)
+
+    result = runner.invoke(cli_app.app, ["inference", "delete"], input="1\n")
+
+    assert result.exit_code == 0
+    assert config_store.list_custom_endpoints(db_path) == ()
+    assert "office" in result.output
+    assert "hidden-secret" not in result.output
 
 
 def test_inference_list_and_delete_never_render_api_keys(mocker) -> None:

@@ -1443,21 +1443,28 @@ def inference_list() -> None:
 
 @inference_app.command("add")
 def inference_add(
-    name: Annotated[str, typer.Argument(help="Name for this saved endpoint.")],
+    name: Annotated[
+        str | None, typer.Argument(help="Name for this saved endpoint.")
+    ] = None,
     base_url: Annotated[
-        str,
+        str | None,
         typer.Option("--base-url", "-b", help="OpenAI-compatible endpoint URL."),
-    ],
+    ] = None,
     api_key: Annotated[
-        str, typer.Option("--api-key", "-k", help="API key for this endpoint.")
-    ],
+        str | None, typer.Option("--api-key", "-k", help="API key for this endpoint.")
+    ] = None,
     model: Annotated[
-        str,
+        str | None,
         typer.Option("--model", "-m", help="Model ID returned by this endpoint."),
-    ],
+    ] = None,
 ) -> None:
-    """Discover, verify, and save an OpenAI-compatible endpoint."""
+    """Discover, verify, and save an OpenAI-compatible endpoint.
+
+    Any option left out is prompted for interactively.
+    """
     import sqlite3
+
+    from rich.prompt import Prompt
 
     from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
@@ -1468,7 +1475,15 @@ def inference_add(
         normalize_openai_base_url,
     )
     from notewise.storage import config_store
+    from notewise.ui.setup_wizard import _select_or_enter_model
 
+    console = _get_console()
+    if name is None:
+        name = Prompt.ask("Name for this endpoint").strip()
+    if base_url is None:
+        base_url = Prompt.ask("Base URL").strip()
+    if api_key is None:
+        api_key = Prompt.ask("API key", password=True).strip()
     if not api_key.strip():
         raise typer.BadParameter(
             "Custom endpoint API key is required.", param_hint="--api-key"
@@ -1477,6 +1492,8 @@ def inference_add(
     try:
         normalized_name = normalize_custom_model_prefix(name)
         normalized_base_url = normalize_openai_base_url(base_url)
+        if model is None:
+            model = _select_or_enter_model(console, normalized_base_url, api_key)
         pricing = discover_and_verify_model(
             normalized_base_url, api_key, model, endpoint_name=normalized_name
         )
@@ -1490,7 +1507,7 @@ def inference_add(
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
-    _get_console().print(
+    console.print(
         f"[green]Saved inference endpoint {profile.name!r} "
         f"for model {profile.name}/{model}.[/green]"
     )
@@ -1498,7 +1515,9 @@ def inference_add(
 
 @inference_app.command("update")
 def inference_update(
-    name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
+    name: Annotated[
+        str | None, typer.Argument(help="Name of the saved endpoint.")
+    ] = None,
     base_url: Annotated[
         str | None,
         typer.Option(
@@ -1516,8 +1535,12 @@ def inference_update(
         typer.Option("--model", "-m", help="Model ID returned by the endpoint."),
     ] = None,
 ) -> None:
-    """Discover, verify, and replace one saved inference endpoint."""
-    if base_url is None and api_key is None:
+    """Discover, verify, and replace one saved inference endpoint.
+
+    Any option left out is prompted for interactively (blank keeps the
+    current value for base URL and API key).
+    """
+    if name is not None and base_url is None and api_key is None:
         raise typer.BadParameter(
             "Provide --base-url, --api-key, or both when updating an endpoint."
         )
@@ -1527,6 +1550,8 @@ def inference_update(
         )
 
     import sqlite3
+
+    from rich.prompt import Prompt
 
     from notewise.config import get_config_db_path
     from notewise.errors import ConfigurationError, CustomEndpointError
@@ -1538,49 +1563,78 @@ def inference_update(
         normalize_openai_base_url,
     )
     from notewise.storage import config_store
-    from notewise.ui.setup_wizard import load_config
+    from notewise.ui.setup_wizard import (
+        _select_endpoint_by_index,
+        _select_or_enter_model,
+        load_config,
+    )
 
+    console = _get_console()
     try:
         db_path = get_config_db_path()
-        normalized_name = normalize_custom_model_prefix(name)
-        current_config = load_config()
         profiles = config_store.list_custom_endpoints(db_path)
-        existing_profile = next(
-            (profile for profile in profiles if profile.name == normalized_name),
-            None,
-        )
-        if existing_profile is None:
-            _exit_inference_error(
-                f"No saved inference endpoint is named {normalized_name!r}."
+        if name is None:
+            if not profiles:
+                _exit_inference_error("No saved inference endpoints to update.")
+            existing_profile = _select_endpoint_by_index(profiles, console, "update")
+            if existing_profile is None:
+                raise typer.Exit(code=1)
+            normalized_name = existing_profile.name
+            if base_url is None:
+                base_url = Prompt.ask(
+                    f"Base URL [{existing_profile.base_url}]", default=""
+                ).strip()
+            if api_key is None:
+                api_key = Prompt.ask(
+                    "API key (blank to keep current)", password=True, default=""
+                ).strip()
+        else:
+            normalized_name = normalize_custom_model_prefix(name)
+            existing_profile = next(
+                (profile for profile in profiles if profile.name == normalized_name),
+                None,
             )
-
-        selected_model = model
-        if selected_model is None:
-            selected_model = default_model_endpoint_match(
-                current_config, normalized_name
-            )
-            if selected_model is None:
+            if existing_profile is None:
                 _exit_inference_error(
-                    "--model is required unless DEFAULT_MODEL uses this endpoint."
+                    f"No saved inference endpoint is named {normalized_name!r}."
                 )
 
         selected_base_url = (
             normalize_openai_base_url(base_url)
-            if base_url is not None
+            if base_url
             else existing_profile.base_url
         )
         if (
-            base_url is not None
+            name is not None
+            and base_url is not None
             and api_key is None
             and selected_base_url != existing_profile.base_url
         ):
             _exit_inference_error(
                 "--api-key is required when --base-url changes a saved endpoint."
             )
+        selected_api_key = api_key or existing_profile.api_key
+
+        current_config = load_config()
+        selected_model = model
+        if selected_model is None:
+            selected_model = default_model_endpoint_match(
+                current_config, normalized_name
+            )
+        if selected_model is None:
+            if name is None:
+                selected_model = _select_or_enter_model(
+                    console, selected_base_url, selected_api_key
+                )
+            else:
+                _exit_inference_error(
+                    "--model is required unless DEFAULT_MODEL uses this endpoint."
+                )
+
         profile = CustomEndpointProfile(
             name=normalized_name,
             base_url=selected_base_url,
-            api_key=api_key if api_key is not None else existing_profile.api_key,
+            api_key=selected_api_key,
         )
         pricing = discover_and_verify_model(
             profile.base_url,
@@ -1595,7 +1649,7 @@ def inference_update(
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
-    _get_console().print(
+    console.print(
         f"[green]Updated inference endpoint {profile.name!r} "
         f"for model {profile.name}/{selected_model}.[/green]"
     )
@@ -1603,7 +1657,9 @@ def inference_update(
 
 @inference_app.command("delete")
 def inference_delete(
-    name: Annotated[str, typer.Argument(help="Name of the saved endpoint.")],
+    name: Annotated[
+        str | None, typer.Argument(help="Name of the saved endpoint.")
+    ] = None,
 ) -> None:
     """Remove a saved inference endpoint that is not the configured default."""
     import sqlite3
@@ -1615,18 +1671,27 @@ def inference_delete(
         normalize_custom_model_prefix,
     )
     from notewise.storage import config_store
-    from notewise.ui.setup_wizard import load_config
+    from notewise.ui.setup_wizard import _select_endpoint_by_index, load_config
 
+    console = _get_console()
     try:
         db_path = get_config_db_path()
-        normalized_name = normalize_custom_model_prefix(name)
-        current_config = load_config()
         profiles = config_store.list_custom_endpoints(db_path)
-        if not any(profile.name == normalized_name for profile in profiles):
-            _exit_inference_error(
-                f"No saved inference endpoint is named {normalized_name!r}."
-            )
+        if name is None:
+            if not profiles:
+                _exit_inference_error("No saved inference endpoints to delete.")
+            target_profile = _select_endpoint_by_index(profiles, console, "delete")
+            if target_profile is None:
+                raise typer.Exit(code=1)
+            normalized_name = target_profile.name
+        else:
+            normalized_name = normalize_custom_model_prefix(name)
+            if not any(profile.name == normalized_name for profile in profiles):
+                _exit_inference_error(
+                    f"No saved inference endpoint is named {normalized_name!r}."
+                )
 
+        current_config = load_config()
         if default_model_endpoint_match(current_config, normalized_name) is not None:
             _exit_inference_error(
                 f"Cannot delete {normalized_name!r} while it is used by DEFAULT_MODEL."
@@ -1636,9 +1701,7 @@ def inference_delete(
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
 
-    _get_console().print(
-        f"[green]Deleted inference endpoint {normalized_name!r}.[/green]"
-    )
+    console.print(f"[green]Deleted inference endpoint {normalized_name!r}.[/green]")
 
 
 @app.command("edit-config")
