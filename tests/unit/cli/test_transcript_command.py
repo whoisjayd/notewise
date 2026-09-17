@@ -103,6 +103,30 @@ def test_transcript_writes_txt_file_by_default(mocker, tmp_path, fake_transcript
     )
 
 
+def test_transcript_prompts_for_url_when_omitted(mocker, tmp_path, fake_transcript):
+    """Omitting the URL argument should prompt for one instead of erroring."""
+    _patch_video_layer(mocker, fake_transcript)
+
+    result = runner.invoke(
+        cli_app.app,
+        ["transcript", "--output", str(tmp_path)],
+        input=f"{VIDEO_URL}\n",
+    )
+
+    assert result.exit_code == 0
+    assert (tmp_path / f"{VIDEO_TITLE}-transcript.txt").exists()
+
+
+def test_transcript_rejects_blank_url_from_prompt(mocker, tmp_path):
+    """A blank prompt response should fail cleanly, not proceed silently."""
+    result = runner.invoke(
+        cli_app.app, ["transcript", "--output", str(tmp_path)], input="\n"
+    )
+
+    assert result.exit_code == 1
+    assert "required" in result.output
+
+
 def test_transcript_writes_json_file(mocker, tmp_path, fake_transcript):
     """JSON format serializes metadata plus timed segments."""
     _patch_video_layer(mocker, fake_transcript)

@@ -366,14 +366,14 @@ def looks_like_batch_file_path(value: str) -> bool:
 @app.command()
 def process(
     url: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help=(
                 "YouTube video or playlist URL, or path to a text file containing URLs."
             ),
             show_default=False,
         ),
-    ],
+    ] = None,
     model: Annotated[
         str | None,
         typer.Option(
@@ -582,6 +582,14 @@ def process(
       [cyan]notewise process batch_urls.txt -o ./course-notes[/cyan]
     """
     console = _get_console()
+    if url is None:
+        from rich.prompt import Prompt
+
+        url = Prompt.ask("YouTube video/playlist URL, or path to a batch file").strip()
+        if not url:
+            console.print("[red]A URL or batch file path is required.[/red]")
+            raise typer.Exit(code=1)
+
     runner: CliProcessRunner | None = None
 
     try:
@@ -809,12 +817,12 @@ def _write_transcript_artifact(
 @app.command()
 def transcript(
     url: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="YouTube video URL to download the transcript for.",
             show_default=False,
         ),
-    ],
+    ] = None,
     export_format: Annotated[
         str,
         typer.Option(
@@ -876,6 +884,13 @@ def transcript(
       [cyan]notewise transcript "URL" --format json -o ./exports[/cyan]
     """
     console = _get_console()
+    if url is None:
+        from rich.prompt import Prompt
+
+        url = Prompt.ask("YouTube video URL").strip()
+        if not url:
+            console.print("[red]A URL is required.[/red]")
+            raise typer.Exit(code=1)
 
     try:
         from notewise.cli._formatters import print_single_failure
@@ -1055,6 +1070,28 @@ def config_keys() -> None:
         console.print(key)
 
 
+def _select_config_key(console: Any) -> str:
+    """List every allowed config key and prompt for one by index."""
+    from rich.prompt import Prompt
+    from rich.table import Table
+
+    from notewise.config import allowed_config_keys
+
+    keys = sorted(allowed_config_keys())
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Key", style="cyan")
+    for index, key in enumerate(keys, 1):
+        table.add_row(str(index), key)
+    console.print(table)
+
+    choice = Prompt.ask("\nSelect config key number").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(keys):
+        return keys[int(choice) - 1]
+    console.print("[red]Invalid choice.[/red]")
+    raise typer.Exit(code=1)
+
+
 @config_app.command("edit")
 def config_edit() -> None:
     """Interactively browse and edit config, grouped by category."""
@@ -1067,18 +1104,21 @@ def config_edit() -> None:
 @config_app.command("get")
 def config_get(
     key: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Config key to read, e.g. DEFAULT_MODEL. "
-            "Run `notewise config keys` for the full list."
+            "Run `notewise config keys` for the full list. "
+            "Omit to pick from a list."
         ),
-    ],
+    ] = None,
 ) -> None:
     """Print one persisted configuration value."""
     from notewise.ui.setup_wizard import load_config
 
-    normalized_key = key.strip().upper()
     console = _get_console()
+    if key is None:
+        key = _select_config_key(console)
+    normalized_key = key.strip().upper()
     try:
         current_config = load_config()
     except ConfigurationError as error:
@@ -1100,12 +1140,13 @@ def config_get(
 @config_app.command("set")
 def config_set(
     key: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Config key to write, e.g. DEFAULT_MODEL. "
-            "Run `notewise config keys` for the full list."
+            "Run `notewise config keys` for the full list. "
+            "Omit to pick from a list."
         ),
-    ],
+    ] = None,
     value: Annotated[
         str | None,
         typer.Argument(
@@ -1124,6 +1165,9 @@ def config_set(
     from notewise.errors import CustomEndpointError
     from notewise.ui.setup_wizard import load_config, save_config
 
+    console = _get_console()
+    if key is None:
+        key = _select_config_key(console)
     normalized_key = key.strip().upper()
     if normalized_key not in allowed_config_keys():
         _exit_inference_error(
@@ -1149,7 +1193,7 @@ def config_set(
         raise typer.Exit(code=1) from None
 
     try:
-        save_config({normalized_key: value}, console=_get_console())
+        save_config({normalized_key: value}, console=console)
     except (CustomEndpointError, ConfigurationError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))
     _reload_and_validate_config()
@@ -1158,19 +1202,22 @@ def config_set(
 @config_app.command("unset")
 def config_unset(
     key: Annotated[
-        str,
+        str | None,
         typer.Argument(
             help="Config key to remove, e.g. TEMPERATURE. "
-            "Run `notewise config keys` for the full list."
+            "Run `notewise config keys` for the full list. "
+            "Omit to pick from a list."
         ),
-    ],
+    ] = None,
 ) -> None:
     """Remove one persisted configuration value."""
     from notewise.config import get_config_db_path
     from notewise.storage import config_store
 
-    normalized_key = key.strip().upper()
     console = _get_console()
+    if key is None:
+        key = _select_config_key(console)
+    normalized_key = key.strip().upper()
     db_path = get_config_db_path()
 
     # A single atomic DELETE against the owning table, rather than a
@@ -1798,17 +1845,54 @@ def cache(
     cache_info()
 
 
+def _select_cached_video_id(console: Any) -> str:
+    """List recently cached videos and prompt for one by index."""
+    from rich.prompt import Prompt
+    from rich.table import Table
+
+    from notewise.cli._admin import _load_repository
+
+    repository, _db_path = _load_repository()
+    if repository is None:
+        console.print("[yellow]No cache database found yet.[/yellow]")
+        raise typer.Exit(code=1)
+
+    rows = repository.get_recent_videos(limit=DEFAULT_HISTORY_LIMIT)
+    if not rows:
+        console.print("[yellow]No cached videos found.[/yellow]")
+        raise typer.Exit(code=1)
+
+    table = Table(show_header=True, header_style="bold magenta")
+    table.add_column("#", style="dim", width=4)
+    table.add_column("Title", style="cyan")
+    table.add_column("Video ID", style="dim")
+    for index, row in enumerate(rows, 1):
+        table.add_row(str(index), row.title, row.id)
+    console.print(table)
+
+    choice = Prompt.ask("\nSelect video # to inspect").strip()
+    if choice.isdigit() and 1 <= int(choice) <= len(rows):
+        return rows[int(choice) - 1].id
+    console.print("[red]Invalid choice.[/red]")
+    raise typer.Exit(code=1)
+
+
 @cache_app.command("show")
 def cache_show(
     video_id: Annotated[
-        str,
-        typer.Argument(help="Video ID to inspect in the cache."),
-    ],
+        str | None,
+        typer.Argument(
+            help="Video ID to inspect in the cache. Omit to pick from a list."
+        ),
+    ] = None,
 ) -> None:
     """Show cached metadata for a specific video."""
     from notewise.cli._admin import render_cache_entry
 
-    render_cache_entry(_get_console(), video_id=video_id)
+    console = _get_console()
+    if video_id is None:
+        video_id = _select_cached_video_id(console)
+    render_cache_entry(console, video_id=video_id)
 
 
 @cache_app.command("clear")
