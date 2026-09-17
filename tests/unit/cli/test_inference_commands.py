@@ -127,12 +127,12 @@ def test_inference_add_prompts_for_missing_arguments(mocker) -> None:
         "notewise.ui.setup_wizard._select_or_enter_model",
         return_value="vendor/new-model",
     )
-
-    result = runner.invoke(
-        cli_app.app,
-        ["inference", "add"],
-        input="office\nhttps://new.example/\nnew-secret\n",
+    mocker.patch(
+        "rich.prompt.Prompt.ask",
+        side_effect=["office", "https://new.example/", "new-secret"],
     )
+
+    result = runner.invoke(cli_app.app, ["inference", "add"])
 
     assert result.exit_code == 0
     discover.assert_called_once_with("https://new.example/v1", "new-secret")
@@ -351,8 +351,9 @@ def test_inference_update_prompts_when_name_is_omitted(mocker) -> None:
         "notewise.ui.setup_wizard._select_or_enter_model",
         return_value="vendor/model",
     )
+    mocker.patch("rich.prompt.Prompt.ask", side_effect=["1", "", ""])
 
-    result = runner.invoke(cli_app.app, ["inference", "update"], input="1\n\n\n")
+    result = runner.invoke(cli_app.app, ["inference", "update"])
 
     assert result.exit_code == 0
     discover.assert_called_once_with("https://office.example/v1", "old-secret")
