@@ -90,6 +90,7 @@ dependencies = [
     "fpdf2>=2.8.8",
     "fonttools>=4.62.1",
     "defusedxml>=0.7.1",
+    "readchar>=4.2.2",
 ]
 
 [project.urls]

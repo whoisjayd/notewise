@@ -2,6 +2,9 @@
 
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+import pytest
+import readchar
+
 from notewise.errors import ConfigurationError, CustomEndpointError
 from notewise.llm.custom_endpoint import (
     CustomEndpointProfile,
@@ -9,6 +12,7 @@ from notewise.llm.custom_endpoint import (
     serialize_custom_endpoint_profiles,
 )
 from notewise.ui.setup_wizard import (
+    _prompt_with_page_keys,
     get_api_key,
     get_available_models,
     get_config_path,
@@ -1511,3 +1515,105 @@ class TestWizardOrchestration:
             },
             console=mock_console,
         )
+
+
+class TestPromptWithPageKeys:
+    """Tests for the raw-key reader behind select_model's arrow-key paging."""
+
+    def test_falls_back_to_prompt_ask_when_not_a_tty(self, mocker):
+        """Piped input / CI (no real terminal) must keep using line input."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=False)
+        mock_ask = mocker.patch("rich.prompt.Prompt.ask", return_value="hello")
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("hello", None)
+        mock_ask.assert_called_once_with("Prompt")
+
+    def test_left_arrow_returns_page_signal_without_enter(self, mocker):
+        """Left arrow should page back instantly, with no line to submit."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.LEFT])
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("", "left")
+
+    def test_right_arrow_returns_page_signal_without_enter(self, mocker):
+        """Right arrow should page forward instantly, with no line to submit."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.RIGHT])
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("", "right")
+
+    def test_typed_text_with_backspace_then_enter_returns_text(self, mocker):
+        """Typed characters and backspace edits build the line as normal."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch(
+            "readchar.readkey",
+            side_effect=["v", "1", readchar.key.BACKSPACE, "2", readchar.key.ENTER],
+        )
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("v2", None)
+
+    def test_ctrl_c_raises_keyboard_interrupt(self, mocker):
+        """Ctrl+C during raw key reading should abort like any other prompt."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.CTRL_C])
+
+        with pytest.raises(KeyboardInterrupt):
+            _prompt_with_page_keys(Console(), "Prompt")
+
+
+class TestSelectModelArrowPaging:
+    """select_model should page via arrow keys the same as typed n/p."""
+
+    def test_right_arrow_advances_to_next_page(self, mocker):
+        """A lone Right arrow press should move to page 2 without Enter."""
+        from rich.console import Console
+
+        models = [f"vendor/model-{i}" for i in range(1, 40)]
+        mocker.patch(
+            "notewise.ui.setup_wizard._prompt_with_page_keys",
+            side_effect=[("", "right"), ("25", None)],
+        )
+
+        selected = select_model(
+            "custom_openai_compatible",
+            {"custom_openai_compatible": models},
+            console=Console(),
+        )
+
+        assert selected == models[24]
+
+    def test_left_arrow_returns_to_previous_page(self, mocker):
+        """Right then Left should land back on page 1."""
+        from rich.console import Console
+
+        models = [f"vendor/model-{i}" for i in range(1, 40)]
+        mocker.patch(
+            "notewise.ui.setup_wizard._prompt_with_page_keys",
+            side_effect=[("", "right"), ("", "left"), ("1", None)],
+        )
+
+        selected = select_model(
+            "custom_openai_compatible",
+            {"custom_openai_compatible": models},
+            console=Console(),
+        )
+
+        assert selected == models[0]

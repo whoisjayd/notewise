@@ -817,6 +817,51 @@ def select_provider(
         return providers_list[int(choice) - 1]
 
 
+def _prompt_with_page_keys(console: Console, prompt: str) -> tuple[str, str | None]:
+    """Read a line of input, but let Left/Right arrow keys page instantly.
+
+    Returns `(text, page_signal)`: `page_signal` is `"left"`/`"right"` when
+    an arrow key was pressed (no Enter needed; `text` is whatever had been
+    typed so far), or `None` after a normal Enter-terminated line.
+
+    Raw key reading needs a real interactive terminal, so this falls back
+    to a plain `Prompt.ask` (page_signal always `None`) when stdin isn't a
+    tty -- piped input, tests, and CI keep working exactly as before.
+    """
+    import sys
+
+    from rich.prompt import Prompt
+
+    if not sys.stdin.isatty():
+        return Prompt.ask(prompt).strip(), None
+
+    import readchar
+
+    console.print(prompt, end=": ")
+    buffer: list[str] = []
+    while True:
+        key = readchar.readkey()
+        if key == readchar.key.LEFT:
+            console.print()
+            return "".join(buffer), "left"
+        if key == readchar.key.RIGHT:
+            console.print()
+            return "".join(buffer), "right"
+        if key in (readchar.key.ENTER, "\r", "\n"):
+            console.print()
+            return "".join(buffer), None
+        if key == readchar.key.CTRL_C:
+            raise KeyboardInterrupt
+        if key in (readchar.key.BACKSPACE, "\x7f", "\x08"):
+            if buffer:
+                buffer.pop()
+                console.print("\b \b", end="")
+            continue
+        if len(key) == 1 and key.isprintable():
+            buffer.append(key)
+            console.print(key, end="")
+
+
 def select_model(
     provider_key: str,
     available_models: dict[str, list[str]],
@@ -824,7 +869,6 @@ def select_model(
     console: Console | None = None,
 ) -> str:
     """Interactive model selection."""
-    from rich.prompt import Prompt
     from rich.table import Table
 
     active_console = _resolve_console(console)
@@ -888,23 +932,27 @@ def select_model(
 
         hints = []
         if total_pages > 1:
-            hints.append("'n'/'p' to navigate pages")
+            hints.append("'n'/'p' or Left/Right to navigate pages")
         hints.append("type text to search")
         if search_query:
             hints.append("'c' to clear search")
         active_console.print(f"[dim]{', '.join(hints).capitalize()}[/dim]")
 
-        choice = Prompt.ask("\nSelect model (number, search text, or n/p/c)")
+        choice, page_signal = _prompt_with_page_keys(
+            active_console, "\nSelect model (number, search text, or n/p/c)"
+        )
         stripped = choice.strip()
 
-        if stripped.lower() == "n" and current_page < total_pages - 1:
+        if (
+            page_signal == "right" or stripped.lower() == "n"
+        ) and current_page < total_pages - 1:
             current_page += 1
             active_console.clear()
             active_console.print(
                 f"\n[bold cyan]Select {provider_name} Model:[/bold cyan]\n"
             )
             continue
-        elif stripped.lower() == "p" and current_page > 0:
+        elif (page_signal == "left" or stripped.lower() == "p") and current_page > 0:
             current_page -= 1
             active_console.clear()
             active_console.print(
