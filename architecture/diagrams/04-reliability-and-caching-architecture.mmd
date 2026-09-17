@@ -1,34 +1,65 @@
 flowchart TB
-    Request["Incoming video processing request"]
-    CacheLookup{"Cached result exists\nwith all requested artifacts?"}
-    Skip["Skip processing, reuse cached artifacts"]
-    Fetch["Fetch metadata and transcript"]
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
 
-    subgraph NetworkResilience["Network Resilience"]
-        RetryFetch["Retry with exponential backoff and jitter\n(transient HTTP/network failures)"]
-    end
+    TITLE(["NoteWise Reliability and Caching Architecture<br/>How the system avoids repeated work and degrades gracefully"])
+    class TITLE title
 
-    subgraph GenerationResilience["Generation Resilience"]
-        RetryGen["Retry generation calls\n(provider-side transient failures)"]
-        PartialFailure["Partial-Failure Handling\n(one failing chapter does not discard completed siblings)"]
-        ResumeCache["Chapter Resume Cache\n(persists completed chapters across reruns)"]
-    end
+    REQUEST["Incoming Request"]
+    class REQUEST component
 
-    subgraph OutputResilience["Output Resilience"]
-        RenderAttempt{"Requested format\nrenders successfully?"}
-        Degrade["Graceful Degradation\n(fall back to Markdown on renderer failure)"]
-        WriteFinal["Write final artifact(s) to disk"]
-    end
+    CACHELOOKUP{"Already cached with<br/>all requested artifacts?"}
+    class CACHELOOKUP decision
 
-    Request --> CacheLookup
-    CacheLookup -- "Yes" --> Skip
-    CacheLookup -- "No" --> Fetch
-    Fetch --> RetryFetch
-    RetryFetch --> GenerationResilience
-    RetryGen --> PartialFailure
-    PartialFailure -- "some chapters failed" --> ResumeCache
-    ResumeCache -. "next run skips completed chapters" .-> CacheLookup
-    PartialFailure -- "all chapters completed" --> RenderAttempt
-    RenderAttempt -- "Yes" --> WriteFinal
-    RenderAttempt -- "No" --> Degrade --> WriteFinal
-    WriteFinal --> PersistCache["Persist run stats and cache entry"]
+    REUSE["Reuse Cached Output<br/>no network or generation cost"]
+    class REUSE store
+
+    FETCH["Fetch Metadata + Transcript<br/>rate-limited"]
+    RETRY["Retry with Backoff"]
+    PERMFAIL["Report Permanent Failure<br/>classified: unavailable, blocked, etc."]
+    class FETCH,RETRY,PERMFAIL component
+
+    GENPHASE["Generate Notes<br/>per chunk or chapter"]
+    class GENPHASE component
+
+    CHAPTERCHECK{"All chapters<br/>succeeded?"}
+    class CHAPTERCHECK decision
+
+    RESUME["Persist Completed Chapters<br/>resumable on next run"]
+    class RESUME store
+
+    LOCK["Reserve Output Path<br/>avoid collisions across videos"]
+    class LOCK component
+
+    RENDERCHECK{"Requested format<br/>renders successfully?"}
+    class RENDERCHECK decision
+
+    DEGRADE["Fall Back to Markdown"]
+    class DEGRADE component
+
+    WRITE["Write Final Artifacts"]
+    STATS["Persist Run Stats<br/>tokens, cost, timing"]
+    class WRITE,STATS store
+
+    TITLE -.-> REQUEST --> CACHELOOKUP
+
+    CACHELOOKUP -- "Yes" --> REUSE
+    CACHELOOKUP -- "No" --> FETCH
+
+    FETCH -- "transient failure" --> RETRY -.-> FETCH
+    FETCH -- "permanent failure" --> PERMFAIL
+    FETCH -- "success" --> GENPHASE
+
+    GENPHASE --> CHAPTERCHECK
+    CHAPTERCHECK -- "No, some failed" --> RESUME
+    RESUME -. "resumed on next run" .-> CACHELOOKUP
+    CHAPTERCHECK -- "Yes" --> LOCK
+
+    LOCK --> RENDERCHECK
+    RENDERCHECK -- "Yes" --> WRITE
+    RENDERCHECK -- "No" --> DEGRADE --> WRITE
+    WRITE --> STATS

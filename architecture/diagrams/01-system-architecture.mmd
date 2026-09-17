@@ -1,39 +1,61 @@
-flowchart TB
-    subgraph UserSurface["User Surface"]
-        CLI["Command-Line Interface\n(command parsing, interactive wizards)"]
-        Dashboard["Live Progress Dashboard\n(terminal UI)"]
-    end
+flowchart LR
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
 
-    subgraph Orchestration["Processing Orchestration"]
-        Pipeline["Video Processing Pipeline\n(orchestrator + concurrency control)"]
-        Generation["Study Material Generation\n(chunking, chapter handling, stitching)"]
-    end
+    TITLE(["NoteWise System Architecture<br/>High-level system design, not a code map"])
+    class TITLE title
 
-    subgraph External["External Data Sources"]
-        YouTubeExtraction["YouTube Extraction Layer\n(metadata, transcript, playlist, cookie auth)"]
-        ProviderLayer["AI Provider Abstraction\n(model-agnostic completion layer)"]
-    end
+    USER["User"]
+    class USER actor
 
-    subgraph Storage["Local Storage"]
-        CacheDB["Local Cache Database\n(videos, transcripts, run stats, exports)"]
-        ConfigDB["Local Configuration Database\n(settings, credentials, saved endpoints)"]
-    end
+    INPUT["Video, Playlist,<br/>or Batch of URLs"]
+    class INPUT component
 
-    subgraph Outputs["Generated Artifacts"]
-        Documents["Rendered Study Documents\n(Markdown / HTML / PDF / DOCX)"]
-        Quiz["Generated Quiz"]
-        TranscriptExport["Transcript Export"]
-    end
+    ORCHESTRATOR["Processing Orchestrator<br/>bounded concurrency, config-driven"]
+    class ORCHESTRATOR component
 
-    CLI --> Pipeline
-    CLI --> Dashboard
-    Pipeline -- "progress events" --> Dashboard
-    Pipeline --> YouTubeExtraction
-    Pipeline --> Generation
-    Generation --> ProviderLayer
-    Pipeline --> CacheDB
-    Pipeline --> Outputs
-    ProviderLayer --> ConfigDB
-    CLI --> ConfigDB
-    YouTubeExtraction -. "video platform" .-> Internet(("Public Internet"))
-    ProviderLayer -. "chosen AI provider" .-> Internet
+    CACHE[("Local Cache<br/>videos, transcripts, run stats")]
+    class CACHE store
+
+    CONFIGDB[("Local Configuration<br/>settings, credentials")]
+    class CONFIGDB store
+
+    TRANSCRIPT["Transcript Acquisition<br/>rate-limited, retried"]
+    class TRANSCRIPT component
+
+    YOUTUBE(("YouTube"))
+    class YOUTUBE external
+
+    GENERATION["AI Generation<br/>chunking, chapters, stitching"]
+    class GENERATION component
+
+    GATEWAY["Model Gateway"]
+    class GATEWAY component
+
+    PROVIDER(("Chosen LLM Provider"))
+    class PROVIDER external
+
+    RENDERING["Document Rendering"]
+    class RENDERING component
+
+    OUTPUT["Markdown, HTML, PDF, DOCX,<br/>Quiz, Transcript Export"]
+    class OUTPUT store
+
+    TITLE -.-> USER
+    USER --> INPUT --> ORCHESTRATOR
+
+    ORCHESTRATOR <--> CACHE
+    ORCHESTRATOR --> CONFIGDB
+
+    ORCHESTRATOR --> TRANSCRIPT --> YOUTUBE
+    TRANSCRIPT --> GENERATION
+
+    ORCHESTRATOR --> GENERATION
+    GENERATION --> GATEWAY --> PROVIDER
+    PROVIDER --> GATEWAY --> GENERATION
+
+    GENERATION --> RENDERING --> OUTPUT

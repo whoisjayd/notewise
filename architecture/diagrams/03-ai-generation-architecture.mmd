@@ -1,39 +1,65 @@
 flowchart TB
-    Transcript["Full Video Transcript"]
-    HasChapters{"Video has\npublisher chapter markers?"}
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
 
-    subgraph SinglePass["Single-Pass Path"]
-        FitsWindow{"Fits in one\ngeneration call?"}
-        DirectGen["Single generation call\n(whole transcript)"]
-        ChunkSplit["Transcript Chunking\n(sentence/boundary aware, with overlap)"]
-        PerChunkGen["Per-chunk generation\n(sequential, in order)"]
-        Stitching["Boundary Stitching\n(merge chunk edges into one coherent document)"]
-    end
+    TITLE(["NoteWise AI Generation Architecture<br/>Chunking, concurrency, and stitching for arbitrarily long videos"])
+    class TITLE title
 
-    subgraph ChapterPath["Chapter-Aware Path"]
-        ChapterSplit["Split transcript by chapter boundaries"]
-        ConcurrentChapters["Concurrent per-chapter generation\n(bounded parallelism)"]
-        ChapterChunking["Per-chapter chunking + stitching\n(for oversized chapters)"]
-        Bundle["Bundle chapter notes into one document\nor per-chapter files"]
-    end
+    TRANSCRIPT["Video Transcript"]
+    class TRANSCRIPT component
 
-    FinalNotes["Final Study Notes Document"]
+    HASCHAPTERS{"Chapter markers<br/>present?"}
+    SIZECHECK{"Fits one<br/>generation call?"}
+    MULTI{"More than<br/>one chunk?"}
+    class HASCHAPTERS,SIZECHECK,MULTI decision
 
-    subgraph QuizPath["Quiz Generation (parallel concern)"]
-        QuizFits{"Fits in one\ngeneration call?"}
-        QuizDirect["Single quiz generation call"]
-        QuizChunks["Per-chunk partial quiz generation"]
-        QuizCombine["Combine partial quizzes into one quiz"]
-    end
+    SINGLE["Single generation call"]
+    PERCHAPTER["Per-chapter generation<br/>bounded concurrency, each chapter<br/>chunked the same way if oversized"]
+    class SINGLE,PERCHAPTER component
 
-    Transcript --> HasChapters
-    HasChapters -- "No" --> FitsWindow
-    FitsWindow -- "Yes" --> DirectGen --> FinalNotes
-    FitsWindow -- "No" --> ChunkSplit --> PerChunkGen --> Stitching --> FinalNotes
+    CHUNKING["Token-Bounded Chunking<br/>prefers sentence, then line, then word,<br/>then hard split as last resort, with<br/>bounded overlap between adjacent chunks"]
+    class CHUNKING component
 
-    HasChapters -- "Yes" --> ChapterSplit --> ConcurrentChapters
-    ConcurrentChapters --> ChapterChunking --> Bundle --> FinalNotes
+    THROTTLE["Parallel Chunk Generation<br/>request starts throttled, retried with<br/>backoff on transient provider failures"]
+    class THROTTLE component
 
-    Transcript -. "when quiz requested" .-> QuizFits
-    QuizFits -- "Yes" --> QuizDirect
-    QuizFits -- "No" --> QuizChunks --> QuizCombine
+    GATEWAY["Model Gateway"]
+    class GATEWAY component
+    PROVIDER(("Chosen LLM Provider"))
+    class PROVIDER external
+
+    RESULTS["Generated Sections"]
+    class RESULTS component
+
+    STITCH["Boundary-Aware Stitching<br/>merge using tail/head context,<br/>normalize duplicate headings"]
+    class STITCH component
+
+    FINAL["Final Study Notes"]
+    class FINAL store
+
+    QUIZFLOW["Quiz Generation<br/>same single-pass or<br/>chunk-and-combine strategy"]
+    QUIZFINAL["Quiz Document"]
+    class QUIZFLOW component
+    class QUIZFINAL store
+
+    TRANSCRIPT --> HASCHAPTERS
+
+    HASCHAPTERS -- "No" --> SIZECHECK
+    HASCHAPTERS -- "Yes" --> PERCHAPTER --> FINAL
+
+    SIZECHECK -- "Yes" --> SINGLE --> FINAL
+    SIZECHECK -- "No" --> CHUNKING
+
+    CHUNKING --> THROTTLE
+    THROTTLE --> GATEWAY --> PROVIDER
+    PROVIDER --> GATEWAY --> RESULTS
+
+    RESULTS --> MULTI
+    MULTI -- "No" --> FINAL
+    MULTI -- "Yes" --> STITCH --> FINAL
+
+    TRANSCRIPT -- "when quiz requested" --> QUIZFLOW --> QUIZFINAL

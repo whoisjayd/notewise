@@ -1,29 +1,43 @@
-flowchart TB
-    subgraph Machine["User's Machine (everything here stays local)"]
-        CLIApp["Command-Line Application"]
+flowchart LR
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
 
-        subgraph LocalState["Local State Directory"]
-            CacheDB["Cache Database\n(video metadata, transcripts, run stats, export records)"]
-            ConfigDB["Configuration Database\n(settings, provider API keys, saved custom endpoints)"]
-            OAuthTokens["OAuth / Subscription Tokens"]
-            Logs["Session Log Files"]
-            OutputFiles["Generated Study Documents,\nQuizzes, Transcript Exports"]
-        end
+    TITLE(["NoteWise Local-First Architecture and Data Boundaries<br/>What stays on the machine vs. what leaves it"])
+    class TITLE title
 
-        CLIApp --> CacheDB
-        CLIApp --> ConfigDB
-        CLIApp --> OAuthTokens
-        CLIApp --> Logs
-        CLIApp --> OutputFiles
+    USER["User"]
+    class USER actor
+
+    subgraph MACHINE["User's Machine, everything here stays local"]
+        CLIAPP["NoteWise Application"]
+        class CLIAPP component
+
+        CACHEDB[("Cache Database<br/>video metadata, transcripts, run stats")]
+        CONFIGDB[("Config Database<br/>settings, API keys, saved endpoints")]
+        TOKENS[("OAuth / Subscription Tokens")]
+        LOGS[("Session Logs")]
+        OUTPUTS[("Study Documents,<br/>Quizzes, Transcript Exports")]
+        class CACHEDB,CONFIGDB,TOKENS,LOGS,OUTPUTS store
     end
 
-    subgraph Network["Leaves the Machine (only these two calls)"]
-        YouTubePlatform["YouTube\n(video metadata, captions/transcript)"]
-        ChosenProvider["The one AI provider the user configured\n(transcript text sent for generation)"]
-    end
+    NOTELEMETRY["No telemetry, analytics,<br/>or cloud backend of any kind"]
+    class NOTELEMETRY component
 
-    CLIApp -- "read-only content requests" --> YouTubePlatform
-    CLIApp -- "generation requests\n(transcript + prompts)" --> ChosenProvider
+    YOUTUBE(("YouTube"))
+    PROVIDER(("Chosen AI Provider"))
+    class YOUTUBE,PROVIDER external
 
-    NoTelemetry["No telemetry, analytics,\nor cloud backend of any kind"]
-    Machine -.-> NoTelemetry
+    TITLE -.-> USER --> CLIAPP
+
+    CLIAPP --> CACHEDB
+    CLIAPP --> CONFIGDB
+    CLIAPP --> TOKENS
+    CLIAPP --> LOGS
+    CLIAPP --> OUTPUTS
+    CLIAPP -.-> NOTELEMETRY
+
+    CLIAPP -- "read-only content request" --> YOUTUBE
+    CLIAPP -- "transcript + prompt" --> PROVIDER
