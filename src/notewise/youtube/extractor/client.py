@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
-from urllib.request import HTTPCookieProcessor, build_opener
 
+import requests
 import structlog
 
 from notewise._constants import DEFAULT_LANGUAGES
@@ -42,7 +42,12 @@ class YouTubeExtractorClient(
     def __init__(self, config: YouTubeExtractorConfig | None = None) -> None:
         self.config = config or YouTubeExtractorConfig()
         self._cookie_jar = self._load_cookie_jar(self.config.cookie_file)
-        self._opener = build_opener(HTTPCookieProcessor(self._cookie_jar))
+        # A Session keeps a pooled, keep-alive connection per host across
+        # every request this client makes, instead of the fresh TCP/TLS
+        # handshake urllib.request's opener pays for on every single call.
+        self._session = requests.Session()
+        for cookie in self._cookie_jar:
+            self._session.cookies.set_cookie(cookie)
 
     def metadata(self, target: str) -> dict[str, Any]:
         if _looks_like_playlist_url(target):

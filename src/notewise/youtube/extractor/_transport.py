@@ -6,12 +6,10 @@ import copy
 import json
 import random
 import time
-from http.client import RemoteDisconnected
 from typing import Any, cast
-from urllib.error import HTTPError, URLError
 from urllib.parse import urlsplit, urlunsplit
-from urllib.request import Request
 
+import requests
 import structlog
 
 from notewise._constants import HTTP_BACKOFF_BASE, HTTP_MAX_RETRIES
@@ -38,37 +36,19 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 def _is_retryable_transport_error(exc: Exception) -> bool:
-    """Return whether the opener exception is safe to retry."""
-    if isinstance(exc, HTTPError):
-        return exc.code in {429, 500, 502, 503, 504}
-    if isinstance(exc, (TimeoutError, ConnectionResetError, ConnectionAbortedError)):
-        return True
-    if isinstance(exc, RemoteDisconnected):
-        return True
-    if isinstance(exc, URLError):
-        reason = exc.reason
-        if isinstance(
-            reason,
-            (
-                TimeoutError,
-                ConnectionResetError,
-                ConnectionAbortedError,
-                RemoteDisconnected,
-            ),
-        ):
-            return True
-        lowered = str(reason).lower()
-        return any(
-            token in lowered
-            for token in (
-                "timed out",
-                "timeout",
-                "connection reset",
-                "connection aborted",
-                "remote end closed connection",
-            )
-        )
-    return False
+    """Return whether the request exception is safe to retry."""
+    if isinstance(exc, requests.exceptions.HTTPError):
+        response = exc.response
+        return response is not None and response.status_code in {
+            429,
+            500,
+            502,
+            503,
+            504,
+        }
+    return isinstance(
+        exc, (requests.exceptions.Timeout, requests.exceptions.ConnectionError)
+    )
 
 
 def _sanitize_url_for_logging(url: str) -> str:
@@ -106,18 +86,37 @@ def _fetch_with_retry(
             time.sleep(backoff_seconds)
 
 
+def _do_request(
+    client: Any,
+    method: str,
+    url: str,
+    *,
+    headers: dict[str, str],
+    data: bytes | None = None,
+) -> requests.Response:
+    """Issue one request on the client's pooled session and raise on 4xx/5xx.
+
+    Unlike urllib.request's opener, requests does not raise for a bad status
+    by itself, so `raise_for_status` makes non-2xx responses an exception
+    the retry loop can classify the same way HTTPError used to be.
+    """
+    response = client._session.request(
+        method, url, headers=headers, data=data, timeout=REQUEST_TIMEOUT_SECONDS
+    )
+    response.raise_for_status()
+    return response
+
+
 def _fetch_text(client: Any, url: str) -> str:
-    req = Request(url=url, headers=_auth_ops._default_headers(), method="GET")
     log_url = _sanitize_url_for_logging(url)
     try:
-        with _fetch_with_retry(
-            lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
+        resp = _fetch_with_retry(
+            lambda: _do_request(
+                client, "GET", url, headers=_auth_ops._default_headers()
+            ),
             url=log_url,
-        ) as resp:
-            body = resp.read()
-            if isinstance(body, bytes):
-                return body.decode("utf-8", errors="replace")
-            return str(body)
+        )
+        return resp.content.decode("utf-8", errors="replace")
     except Exception as exc:
         raise ExtractionError(f"Request failed for {log_url}: {exc}", url=url) from exc
 
@@ -129,20 +128,19 @@ def _fetch_json(
     headers: dict[str, str],
     sanitized_url: str | None = None,
 ) -> dict[str, Any]:
-    req = Request(
-        url=url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers=headers,
-        method="POST",
-    )
     log_url = sanitized_url if sanitized_url is not None else url
     try:
-        with _fetch_with_retry(
-            lambda: client._opener.open(req, timeout=REQUEST_TIMEOUT_SECONDS),
+        resp = _fetch_with_retry(
+            lambda: _do_request(
+                client,
+                "POST",
+                url,
+                headers=headers,
+                data=json.dumps(payload).encode("utf-8"),
+            ),
             url=log_url,
-        ) as resp:
-            body = resp.read().decode("utf-8", errors="replace")
-        data = json.loads(body)
+        )
+        data = json.loads(resp.content.decode("utf-8", errors="replace"))
         if not isinstance(data, dict):
             raise ExtractionError(f"Unexpected JSON response type for {log_url}")
         return data

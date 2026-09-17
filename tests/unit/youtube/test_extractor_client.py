@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import http.cookiejar
-from urllib.error import HTTPError
 
 import pytest
+import requests
 
 from notewise.errors import ExtractionError as ExtractorError
 from notewise.youtube.extractor._helpers import (
@@ -30,6 +30,20 @@ from notewise.youtube.extractor.async_client import (
 from notewise.youtube.extractor.client import (
     YouTubeExtractorClient as ExtractorClient,
 )
+
+
+class _FakeResponse:
+    """Minimal stand-in for requests.Response used by transport tests."""
+
+    def __init__(self, content: bytes = b"", status_code: int = 200):
+        self.content = content
+        self.status_code = status_code
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            error = requests.exceptions.HTTPError(f"{self.status_code} error")
+            error.response = self
+            raise error
 
 
 def _make_cookie(
@@ -742,23 +756,11 @@ class TestDeeperExtractorBranches:
 
     def test_fetch_json_unexpected_type_raises(self, monkeypatch):
         client = ExtractorClient()
-
-        class _Resp:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
-                return b"[]"
-
-        class _Opener:
-            def open(self, req, timeout=30):
-                _ = (req, timeout)
-                return _Resp()
-
-        monkeypatch.setattr(client, "_opener", _Opener())
+        monkeypatch.setattr(
+            client._session,
+            "request",
+            lambda *_args, **_kwargs: _FakeResponse(b"[]"),
+        )
 
         with pytest.raises(ExtractorError, match="Unexpected JSON response type"):
             client._fetch_json("https://x", {"a": 1}, {"h": "v"})
@@ -1081,30 +1083,17 @@ class TestDeeperExtractorBranches:
     def test_fetch_text_success_and_error(self, monkeypatch):
         client = ExtractorClient()
 
-        class _Resp:
-            def __enter__(self):
-                return self
-
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
-                return b"hello"
-
-        class _GoodOpener:
-            def open(self, req, timeout=30):
-                _ = (req, timeout)
-                return _Resp()
-
-        class _BadOpener:
-            def open(self, req, timeout=30):
-                _ = (req, timeout)
-                raise RuntimeError("boom")
-
-        monkeypatch.setattr(client, "_opener", _GoodOpener())
+        monkeypatch.setattr(
+            client._session,
+            "request",
+            lambda *_args, **_kwargs: _FakeResponse(b"hello"),
+        )
         assert client._fetch_text("https://x") == "hello"
 
-        monkeypatch.setattr(client, "_opener", _BadOpener())
+        def _raise(*_args, **_kwargs):
+            raise RuntimeError("boom")
+
+        monkeypatch.setattr(client._session, "request", _raise)
         with pytest.raises(ExtractorError, match="Request failed"):
             client._fetch_text("https://x")
 
@@ -1112,25 +1101,13 @@ class TestDeeperExtractorBranches:
         client = ExtractorClient()
         calls = {"count": 0}
 
-        class _Resp:
-            def __enter__(self):
-                return self
+        def _request(*_args, **_kwargs):
+            calls["count"] += 1
+            if calls["count"] < 3:
+                return _FakeResponse(status_code=503)
+            return _FakeResponse(b"hello")
 
-            def __exit__(self, exc_type, exc, tb):
-                return False
-
-            def read(self):
-                return b"hello"
-
-        class _Opener:
-            def open(self, req, timeout=30):
-                _ = timeout
-                calls["count"] += 1
-                if calls["count"] < 3:
-                    raise HTTPError(req.full_url, 503, "busy", hdrs=None, fp=None)
-                return _Resp()
-
-        monkeypatch.setattr(client, "_opener", _Opener())
+        monkeypatch.setattr(client._session, "request", _request)
         monkeypatch.setattr(
             "notewise.youtube.extractor._transport.time.sleep",
             lambda _seconds: None,
@@ -1147,13 +1124,11 @@ class TestDeeperExtractorBranches:
         client = ExtractorClient()
         calls = {"count": 0}
 
-        class _Opener:
-            def open(self, req, timeout=30):
-                _ = timeout
-                calls["count"] += 1
-                raise HTTPError(req.full_url, 404, "missing", hdrs=None, fp=None)
+        def _request(*_args, **_kwargs):
+            calls["count"] += 1
+            return _FakeResponse(status_code=404)
 
-        monkeypatch.setattr(client, "_opener", _Opener())
+        monkeypatch.setattr(client._session, "request", _request)
         monkeypatch.setattr(
             "notewise.youtube.extractor._transport.time.sleep",
             lambda _seconds: None,
@@ -1167,12 +1142,10 @@ class TestDeeperExtractorBranches:
     def test_fetch_json_wraps_generic_exceptions(self, monkeypatch):
         client = ExtractorClient()
 
-        class _BadOpener:
-            def open(self, req, timeout=30):
-                _ = (req, timeout)
-                raise RuntimeError("boom")
+        def _raise(*_args, **_kwargs):
+            raise RuntimeError("boom")
 
-        monkeypatch.setattr(client, "_opener", _BadOpener())
+        monkeypatch.setattr(client._session, "request", _raise)
         with pytest.raises(ExtractorError, match="Request failed"):
             client._fetch_json("https://x", {"a": 1}, {"h": "v"})
 
