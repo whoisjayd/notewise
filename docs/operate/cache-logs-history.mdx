@@ -26,6 +26,8 @@ notewise cache prune --older-than 30
 notewise cache clear --yes
 ```
 
+Omit `VIDEO_ID` from `cache show` and NoteWise lists recently cached videos with a number and prompts for a pick.
+
 <Warning>
   `cache clear` deletes the local SQLite DB and sidecars. It does not delete
   generated notes, quizzes, transcripts, HTML, PDF, or DOCX output files.
@@ -54,3 +56,5 @@ notewise logs clean --all
 ```
 
 Logs are structlog key-value logs, not JSON. They should not include raw prompts, provider payloads, OAuth tokens, API keys, or cookies.
+
+The active session log path is also shown directly in the [live dashboard](/use/process#live-dashboard) header while `notewise process` is running.

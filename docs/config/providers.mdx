@@ -89,5 +89,25 @@ profile. When `--base-url` changes a saved endpoint, supply `--api-key` so the
 saved credential is never sent to a different origin.
 
 Use `notewise inference list`, `add`, `update`, and `delete` to manage the
-saved profiles. See [Configuration](/config/configuration#custom-openai-compatible-endpoints)
+saved profiles. `add` and `update` are interactive: any argument left out is
+prompted for, and an omitted `--model` opens the same paginated, searchable
+model picker used by `notewise setup`. See
+[Commands](/operate/commands#inference-endpoints) for the exact prompted
+flags, and [Configuration](/config/configuration#custom-openai-compatible-endpoints)
 for the registry format and setup behavior.
+
+### Per-token pricing for custom endpoints
+
+When NoteWise discovers and verifies a model during `notewise setup`,
+`notewise inference add`, or `notewise inference update`, it also reads the
+endpoint's `/v1/models` response for per-token prompt/completion pricing,
+trying several real-world response conventions. Any pricing found is saved
+per endpoint and model alongside the profile in `config.db`.
+
+At generation time, NoteWise always tries LiteLLM's own built-in cost catalog
+first. Only when that catalog has no entry for the model does it fall back to
+this saved pricing, routed through LiteLLM's own cost calculation so a custom
+rate is priced the same way as any other model. This means `notewise stats`
+and `notewise history` can show real costs for custom or gateway models that
+previously always showed `$0`. Endpoints that don't advertise pricing keep
+showing `$0` estimated cost, exactly as before.

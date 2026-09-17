@@ -30,6 +30,7 @@ notewise logs --tail 100
 | OAuth expired        | `notewise auth login ...` | Re-run login in an interactive terminal.                            |
 | Docker loses auth    | Container mounts          | Persist `/home/notewise/.notewise`.                                 |
 | Provider rate limits | Logs                      | Add `--throttle`, reduce batch size, or use another model/provider. |
+| Free-tier daily quota exhausted | Error message   | NoteWise distinguishes this from an ordinary rate limit. Waiting won't help until the next day — switch to a different (often paid) model, or add credits with the provider. |
 
 ## YouTube failures
 

@@ -107,9 +107,11 @@ notewise edit-config
 `notewise config keys` lists every key `get`/`set`/`unset` accept, since the
 full set (provider API keys, provider auth keys, and core settings) isn't
 obvious up front. `notewise config get/set/unset` read or write one key at a
-time; `set` validates the new value immediately and reports an error without
-leaving the process in a broken state if it's invalid (e.g. `TEMPERATURE` out
-of range). `notewise config edit` is an interactive, category-grouped
+time; the `KEY` argument is optional on all three — omit it and NoteWise
+lists every allowed key with a number and prompts for a pick. `set` validates
+the new value immediately and reports an error without leaving the process in
+a broken state if it's invalid (e.g. `TEMPERATURE` out of range). `notewise
+config edit` is an interactive, category-grouped
 browser/editor over the same keys (Model & Generation, Concurrency &
 Performance, Output & Transcripts, Custom Endpoints, OAuth Token
 Directories, Provider API Keys, Provider Auth & Cloud Credentials) — pick a
@@ -118,6 +120,12 @@ its exact name; secrets stay masked and prompt with hidden input, same as
 `set`. The **Custom Endpoints** category is a table-based add/update/delete
 manager over the same saved endpoint rows as `notewise inference
 list|add|update|delete`, not a raw-JSON editor for `CUSTOM_LLM_ENDPOINTS`.
-`edit-config`
+Adding or updating an endpoint here immediately syncs `DEFAULT_MODEL` to
+match, without an extra confirmation, whenever `DEFAULT_MODEL` is unset or
+already points at that endpoint. The same paginated, searchable model picker
+backs model selection in `notewise setup`, this `DEFAULT_MODEL` category, and
+`notewise inference add|update` — type a number, search text, `n`/`p` to page,
+or press the Left/Right arrow keys to jump pages instantly without pressing
+Enter. `edit-config`
 opens the current settings as an editable env-style file in your `$EDITOR`, then
 re-saves whatever you leave in it — including removing lines you delete.
