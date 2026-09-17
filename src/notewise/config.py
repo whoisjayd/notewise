@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import structlog
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import (
     BaseSettings,
     PydanticBaseSettingsSource,
@@ -41,6 +41,7 @@ from notewise._constants import (
     DEFAULT_LANGUAGES,
     DEFAULT_MAX_CONCURRENT_CHAPTERS,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_TEMPERATURE,
@@ -123,6 +124,10 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
         OUTPUT_DIR_CONFIG_KEY,
         ALLOW_UNLISTED_MODELS_CONFIG_KEY,
         "MAX_CONCURRENT_VIDEOS",
+        "MAX_CONCURRENT_CHAPTERS",
+        "CHUNK_SIZE",
+        "CHUNK_OVERLAP",
+        "DEFAULT_LANGUAGES",
         "YOUTUBE_REQUESTS_PER_MINUTE",
         "TEMPERATURE",
         "MAX_TOKENS",
@@ -135,9 +140,109 @@ _ALLOWED_KEYS: frozenset[str] = frozenset(
 )
 
 
+def format_settings_validation_error(error: Any) -> str:
+    """Return a user-facing summary for AppSettings validation failures.
+
+    Shared by the CLI's `config set` and the interactive config editor's
+    'set' flow so both report the same clean, one-line summary instead of
+    pydantic's raw multi-line `ValidationError` dump.
+    """
+    from notewise.logging import _is_sensitive_key
+
+    messages: list[str] = []
+    for item in error.errors():
+        location = item.get("loc") or ("configuration",)
+        name = str(location[0]).upper()
+        message = str(item.get("msg") or "Invalid value")
+        value = item.get("input")
+        if value is None:
+            messages.append(f"{name}: {message}")
+        elif _is_sensitive_key(name):
+            messages.append(f"{name}=<redacted>: {message}")
+        else:
+            messages.append(f"{name}={value!r}: {message}")
+
+    details = "; ".join(messages) if messages else str(error)
+    return f"{details}. Invalid configuration value."
+
+
 def allowed_config_keys() -> frozenset[str]:
     """Return the config keys `notewise config set/unset` may read or write."""
     return _ALLOWED_KEYS
+
+
+_CONFIG_CATEGORY_FIXED_KEYS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    (
+        "Model & Generation",
+        (
+            "DEFAULT_MODEL",
+            "TEMPERATURE",
+            "MAX_TOKENS",
+            "CHUNK_SIZE",
+            "CHUNK_OVERLAP",
+            ALLOW_UNLISTED_MODELS_CONFIG_KEY,
+        ),
+    ),
+    (
+        "Concurrency & Performance",
+        (
+            "MAX_CONCURRENT_VIDEOS",
+            "MAX_CONCURRENT_CHAPTERS",
+            "YOUTUBE_REQUESTS_PER_MINUTE",
+        ),
+    ),
+    (
+        "Output & Transcripts",
+        (OUTPUT_DIR_CONFIG_KEY, "YOUTUBE_COOKIE_FILE", "DEFAULT_LANGUAGES"),
+    ),
+    (
+        # Name must match setup_wizard._CUSTOM_ENDPOINTS_CATEGORY: the
+        # interactive editor special-cases this category to manage real
+        # saved endpoint rows instead of editing this raw override key.
+        "Custom Endpoints",
+        (CUSTOM_LLM_ENDPOINTS_ENV_VAR,),
+    ),
+)
+
+
+def categorize_config_keys() -> dict[str, tuple[str, ...]]:
+    """Group every allowed config key into a human-friendly category.
+
+    Built from the same membership sets used by `_ALLOWED_KEYS` so this
+    can't silently drift out of sync with what `config set/unset` accepts.
+    """
+    keys = allowed_config_keys()
+    oauth_dir_keys = frozenset(OAUTH_TOKEN_DIR_ENV_VARS.values())
+
+    categorized: dict[str, tuple[str, ...]] = {}
+    seen: set[str] = set()
+
+    for category, category_keys in _CONFIG_CATEGORY_FIXED_KEYS:
+        present = tuple(key for key in category_keys if key in keys)
+        if present:
+            categorized[category] = present
+            seen.update(present)
+
+    oauth_present = tuple(sorted(keys & oauth_dir_keys - seen))
+    if oauth_present:
+        categorized["OAuth Token Directories"] = oauth_present
+        seen.update(oauth_present)
+
+    api_key_present = tuple(sorted(keys & CONFIG_API_KEY_ENV_KEYS - seen))
+    if api_key_present:
+        categorized["Provider API Keys"] = api_key_present
+        seen.update(api_key_present)
+
+    auth_present = tuple(sorted(keys & PROVIDER_AUTH_ENV_KEYS - seen))
+    if auth_present:
+        categorized["Provider Auth & Cloud Credentials"] = auth_present
+        seen.update(auth_present)
+
+    remaining = tuple(sorted(keys - seen))
+    if remaining:
+        categorized["Other"] = remaining
+
+    return categorized
 
 
 def get_state_dir() -> Path:
@@ -434,17 +539,19 @@ class AppSettings(BaseSettings):
         ge=MIN_TEMPERATURE,
         le=MAX_TEMPERATURE,
     )
-    max_tokens: int | None = Field(None, alias="MAX_TOKENS", gt=0)
+    max_tokens: int | None = Field(DEFAULT_MAX_TOKENS, alias="MAX_TOKENS", gt=0)
 
-    # Chunking (code defaults only; not exposed in config.env)
-    chunk_size: int = DEFAULT_CHUNK_SIZE
-    chunk_overlap: int = DEFAULT_CHUNK_OVERLAP
+    # Chunking
+    chunk_size: int = Field(DEFAULT_CHUNK_SIZE, alias="CHUNK_SIZE", gt=0)
+    chunk_overlap: int = Field(DEFAULT_CHUNK_OVERLAP, alias="CHUNK_OVERLAP", ge=0)
 
     # Concurrency
     max_concurrent_videos: int = Field(
         DEFAULT_MAX_CONCURRENT_VIDEOS, alias="MAX_CONCURRENT_VIDEOS", gt=0
     )
-    max_concurrent_chapters: int = DEFAULT_MAX_CONCURRENT_CHAPTERS
+    max_concurrent_chapters: int = Field(
+        DEFAULT_MAX_CONCURRENT_CHAPTERS, alias="MAX_CONCURRENT_CHAPTERS", gt=0
+    )
     youtube_requests_per_minute: int = Field(
         DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE, alias="YOUTUBE_REQUESTS_PER_MINUTE", gt=0
     )
@@ -454,7 +561,8 @@ class AppSettings(BaseSettings):
 
     # Transcript
     default_languages: list[str] = Field(
-        default_factory=lambda: list(DEFAULT_LANGUAGES)
+        default_factory=lambda: list(DEFAULT_LANGUAGES),
+        alias="DEFAULT_LANGUAGES",
     )
     youtube_cookie_file: str | None = Field(None, alias="YOUTUBE_COOKIE_FILE")
 
@@ -468,6 +576,31 @@ class AppSettings(BaseSettings):
         alias="GITHUB_COPILOT_TOKEN_DIR",
     )
 
+    @field_validator("default_languages", mode="before")
+    @classmethod
+    def _parse_default_languages(cls, value: object) -> object:
+        """Decode a config.db string into a list.
+
+        Unlike pydantic-settings' built-in env source, ``UserConfigSource``
+        hands back plain strings with no complex-type decoding, so a
+        config.db value here would otherwise fail list validation outright.
+        Accepts JSON (``["en","hi"]``, matching CUSTOM_LLM_ENDPOINTS' style)
+        or a plain comma-separated list (``en,hi``) for a friendlier
+        ``config set DEFAULT_LANGUAGES en,hi``. A raw shell env var still
+        needs JSON: pydantic-settings' env source tries to JSON-decode any
+        complex-typed field itself before this validator ever runs, and
+        raises outright on non-JSON input rather than falling through here.
+        """
+        if not isinstance(value, str):
+            return value
+        try:
+            decoded = json.loads(value)
+        except ValueError:
+            return [
+                language.strip() for language in value.split(",") if language.strip()
+            ]
+        return decoded
+
     @field_validator("custom_llm_endpoints")
     @classmethod
     def _validate_custom_llm_endpoints(cls, value: str | None) -> str | None:
@@ -477,6 +610,22 @@ class AppSettings(BaseSettings):
         except CustomEndpointError as error:
             raise ValueError(str(error)) from error
         return value
+
+    @model_validator(mode="after")
+    def _validate_chunk_overlap_fits_chunk_size(self) -> AppSettings:
+        """Reject an overlap that would stall or degenerate the chunker.
+
+        generation.py advances by ``chunk_size - chunk_overlap`` tokens per
+        chunk; an overlap at or past the chunk size stops that advance (or
+        reverses it), so this must be caught here rather than left to fail
+        confusingly mid-run.
+        """
+        if self.chunk_overlap >= self.chunk_size:
+            raise ValueError(
+                f"CHUNK_OVERLAP ({self.chunk_overlap}) must be smaller than "
+                f"CHUNK_SIZE ({self.chunk_size})."
+            )
+        return self
 
     @classmethod
     def settings_customise_sources(

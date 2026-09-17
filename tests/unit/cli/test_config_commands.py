@@ -2,10 +2,18 @@
 
 from __future__ import annotations
 
+from unittest.mock import MagicMock, patch
+
+import pytest
+import typer
 from typer.testing import CliRunner
 
 from notewise.cli import app as cli_app
-from notewise.config import allowed_config_keys, get_config_db_path
+from notewise.config import (
+    allowed_config_keys,
+    categorize_config_keys,
+    get_config_db_path,
+)
 from notewise.storage import config_store
 
 
@@ -123,3 +131,135 @@ def test_config_unset_missing_key_exits_nonzero():
 
     assert result.exit_code == 1
     assert "is not set" in result.output
+
+
+def test_select_config_key_returns_key_at_chosen_index():
+    """Picking index 1 should return the first key in sorted order."""
+    console = MagicMock()
+    with patch("rich.prompt.Prompt.ask", return_value="1"):
+        key = cli_app._select_config_key(console)
+
+    assert key == sorted(allowed_config_keys())[0]
+
+
+def test_select_config_key_rejects_invalid_choice():
+    """An out-of-range index should exit rather than crash."""
+    console = MagicMock()
+    with (
+        patch("rich.prompt.Prompt.ask", return_value="0"),
+        pytest.raises(typer.Exit),
+    ):
+        cli_app._select_config_key(console)
+
+
+def test_config_get_prompts_for_key_when_omitted(mocker):
+    """Omitting KEY should list allowed keys and prompt for an index."""
+    runner.invoke(
+        cli_app.app, ["config", "set", "DEFAULT_MODEL", "gemini/gemini-2.5-flash"]
+    )
+    mocker.patch("notewise.cli.app._select_config_key", return_value="DEFAULT_MODEL")
+
+    result = runner.invoke(cli_app.app, ["config", "get"])
+
+    assert result.exit_code == 0
+    assert "gemini/gemini-2.5-flash" in result.output
+
+
+def test_config_set_prompts_for_key_when_omitted(mocker):
+    """Omitting KEY should list allowed keys and prompt for an index."""
+    mocker.patch("notewise.cli.app._select_config_key", return_value="MAX_TOKENS")
+
+    result = runner.invoke(cli_app.app, ["config", "set"], input="1500\n")
+
+    assert result.exit_code == 0
+    assert config_store.load_config_db(get_config_db_path())["MAX_TOKENS"] == "1500"
+
+
+def test_config_unset_prompts_for_key_when_omitted(mocker):
+    """Omitting KEY should list allowed keys and prompt for an index."""
+    runner.invoke(cli_app.app, ["config", "set", "MAX_TOKENS", "1000"])
+    mocker.patch("notewise.cli.app._select_config_key", return_value="MAX_TOKENS")
+
+    result = runner.invoke(cli_app.app, ["config", "unset"])
+
+    assert result.exit_code == 0
+    assert "MAX_TOKENS" not in config_store.load_config_db(get_config_db_path())
+
+
+def test_categorize_config_keys_covers_every_allowed_key_exactly_once():
+    """Every key `config keys` lists must land in exactly one category."""
+    categories = categorize_config_keys()
+    seen: set[str] = set()
+    for keys in categories.values():
+        overlap = seen & set(keys)
+        assert not overlap, f"keys assigned to multiple categories: {overlap}"
+        seen.update(keys)
+
+    assert seen == allowed_config_keys()
+
+
+def test_config_edit_lists_categories_then_exits():
+    with patch("rich.prompt.Prompt.ask", side_effect=["q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Configuration Categories" in result.output
+    assert "Model & Generation" in result.output
+    assert "Exiting config editor" in result.output
+
+
+def test_config_edit_can_set_a_value():
+    with patch("rich.prompt.Prompt.ask", side_effect=["1", "2", "s", "0.3", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert config_store.load_config_db(get_config_db_path())["TEMPERATURE"] == "0.3"
+
+
+def test_config_edit_set_rejects_invalid_value_without_persisting():
+    # Note: this only asserts the behavioral guarantee (nothing persisted),
+    # not the exact rendered message -- Click 8.2+'s CliRunner has a known
+    # flush-timing issue (pallets/click #2913/#2682) that can drop
+    # mid-invocation Rich console output from a *second* CliRunner.invoke()
+    # call in the same test process, unrelated to notewise's own behavior.
+    # The exact message text is covered reliably by
+    # test_run_config_editor_set_shows_clean_validation_message in
+    # test_setup_wizard.py, which calls run_config_editor() directly
+    # instead of through CliRunner.
+    with patch(
+        "rich.prompt.Prompt.ask", side_effect=["1", "2", "s", "5.0", "c", "q", "q"]
+    ):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "TEMPERATURE" not in config_store.load_config_db(get_config_db_path())
+
+
+def test_config_edit_can_unset_a_value():
+    runner.invoke(cli_app.app, ["config", "set", "MAX_TOKENS", "1000"])
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["1", "3", "u", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Removed MAX_TOKENS" in result.output
+    assert "MAX_TOKENS" not in config_store.load_config_db(get_config_db_path())
+
+
+def test_config_edit_masks_secret_values_in_table():
+    runner.invoke(cli_app.app, ["config", "set", "GEMINI_API_KEY", "gk-super-secret"])
+
+    with patch("rich.prompt.Prompt.ask", side_effect=["6", "q", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "gk-super-secret" not in result.output
+
+
+def test_config_edit_handles_invalid_category_and_key_choices():
+    with patch("rich.prompt.Prompt.ask", side_effect=["nope", "1", "nope", "b", "q"]):
+        result = runner.invoke(cli_app.app, ["config", "edit"])
+
+    assert result.exit_code == 0
+    assert "Invalid choice. Enter a category number or 'q'." in result.output
+    assert "Invalid choice. Enter a key number, 'b', or 'q'." in result.output

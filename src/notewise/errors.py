@@ -6,7 +6,12 @@ all application code. Never define project-specific exceptions elsewhere.
 
 from __future__ import annotations
 
+import re
+
 from notewise._constants import OAUTH_FALLBACK_MESSAGE
+
+
+_MODEL_FROM_GENERATION_FAILURE = re.compile(r"Failed to generate with ([^:]+):")
 
 
 class NoteWiseError(Exception):
@@ -82,6 +87,31 @@ class LLMError(NoteWiseError):
 
 class LLMGenerationError(LLMError):
     """Raised when the LLM returns an error or empty result."""
+
+
+class PartialChapterGenerationError(LLMError):
+    """Raised when some chapters in a concurrent batch generated fine but at
+    least one failed.
+
+    Carries the notes that *did* complete so the caller can still persist
+    them to their chapter_file targets before propagating failure -- without
+    this, a single stuck chapter (a slow free-tier model, a transient
+    timeout) would otherwise discard every sibling chapter's already-paid-for
+    generation, forcing a full-video regeneration on retry.
+    """
+
+    def __init__(
+        self,
+        completed: dict[str, str],
+        failures: list[tuple[str, BaseException]],
+    ) -> None:
+        self.completed = completed
+        self.failures = failures
+        summary = "; ".join(f"{title!r}: {error}" for title, error in failures)
+        super().__init__(
+            f"{len(failures)} of {len(completed) + len(failures)} chapters "
+            f"failed to generate: {summary}"
+        )
 
 
 class OAuthError(LLMError):
@@ -187,6 +217,18 @@ def format_user_error(error: Exception) -> str:
     if isinstance(error, VideoUnavailableError):
         return str(error).split(" [")[0]
 
+    if isinstance(error, PartialChapterGenerationError):
+        total = len(error.completed) + len(error.failures)
+        failed_titles = ", ".join(title for title, _ in error.failures[:3])
+        if len(error.failures) > 3:
+            failed_titles += f", and {len(error.failures) - 3} more"
+        return (
+            f"{len(error.completed)}/{total} chapters generated; "
+            f"{len(error.failures)} failed ({failed_titles}). Completed "
+            "chapters were saved -- rerunning will skip them and only "
+            "retry what failed."
+        )
+
     if isinstance(error, IPBlockError):
         return (
             "YouTube is temporarily blocking requests from this network. "
@@ -214,10 +256,25 @@ def format_user_error(error: Exception) -> str:
     if isinstance(error, CustomEndpointError):
         return str(error).split(" [")[0]
 
-    text = str(error).strip().lower()
+    raw_text = str(error)
+    text = raw_text.strip().lower()
+    model_match = _MODEL_FROM_GENERATION_FAILURE.search(raw_text)
+    model_suffix = f" ({model_match.group(1)})" if model_match else ""
+
+    if "idle timeout" in text:
+        return (
+            f"The model{model_suffix} stopped responding mid-generation and "
+            "timed out after retrying. This is usually a slow or overloaded "
+            "(often free-tier) model -- try a different/paid model, or lower "
+            "MAX_CONCURRENT_CHAPTERS if you're running several chapters at once."
+        )
 
     if "timeout" in text or "timed out" in text:
-        return "The request timed out while processing this video. Please try again."
+        return (
+            f"The request to the model{model_suffix} timed out while "
+            "processing this video. Try again, or switch to a faster model "
+            "if this keeps happening."
+        )
 
     if any(
         kw in text
@@ -228,12 +285,26 @@ def format_user_error(error: Exception) -> str:
             "connection refused",
         )
     ):
-        return "A network problem interrupted processing. Please try again."
+        return (
+            f"A network problem interrupted the request to the "
+            f"model{model_suffix}. Check your connection and try again."
+        )
+
+    if any(
+        kw in text for kw in ("per-day", "per day", "daily limit", "requests per day")
+    ):
+        return (
+            f"The model{model_suffix} hit its free-tier daily request quota. "
+            "Waiting for the quota to reset won't help within the same day -- "
+            "switch to a different (often paid) model, or add credits with "
+            "the provider to raise the daily limit."
+        )
 
     if any(kw in text for kw in ("rate limit", "too many requests", " 429")):
         return (
-            "The upstream service is rate-limiting requests right now. "
-            "Please try again later."
+            f"The request to the model{model_suffix} was rate-limited. Wait "
+            "a moment and try again, or switch to a less-throttled model if "
+            "this keeps happening."
         )
 
     if any(
@@ -274,6 +345,7 @@ __all__ = [
     "LLMGenerationError",
     "NoteWiseError",
     "OAuthError",
+    "PartialChapterGenerationError",
     "PersistenceError",
     "PlaylistError",
     "TranscriptUnavailableError",

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from inspect import signature
 from pathlib import Path
@@ -11,7 +12,12 @@ from typer.models import OptionInfo
 
 from notewise._constants import (
     AUTH_TYPE_API_KEY,
+    DEFAULT_CHUNK_OVERLAP,
+    DEFAULT_CHUNK_SIZE,
+    DEFAULT_LANGUAGES,
+    DEFAULT_MAX_CONCURRENT_CHAPTERS,
     DEFAULT_MAX_CONCURRENT_VIDEOS,
+    DEFAULT_MAX_TOKENS,
     DEFAULT_MODEL,
     DEFAULT_OUTPUT_DIR,
     DEFAULT_TEMPERATURE,
@@ -93,9 +99,13 @@ def test_configuration_doc_common_defaults_match_source_constants():
         "CUSTOM_LLM_ENDPOINTS": "unset",
         "OUTPUT_DIR": f"`{DEFAULT_OUTPUT_DIR}`",
         "MAX_CONCURRENT_VIDEOS": f"`{DEFAULT_MAX_CONCURRENT_VIDEOS}`",
+        "MAX_CONCURRENT_CHAPTERS": f"`{DEFAULT_MAX_CONCURRENT_CHAPTERS}`",
+        "CHUNK_SIZE": f"`{DEFAULT_CHUNK_SIZE}`",
+        "CHUNK_OVERLAP": f"`{DEFAULT_CHUNK_OVERLAP}`",
         "YOUTUBE_REQUESTS_PER_MINUTE": f"`{DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE}`",
         "TEMPERATURE": f"`{DEFAULT_TEMPERATURE}`",
-        "MAX_TOKENS": "unset",
+        "MAX_TOKENS": f"`{DEFAULT_MAX_TOKENS}`",
+        "DEFAULT_LANGUAGES": f"`{json.dumps(DEFAULT_LANGUAGES)}`",
         "YOUTUBE_COOKIE_FILE": "unset",
         "ALLOW_UNLISTED_MODELS": "`false`",
     }

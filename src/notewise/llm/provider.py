@@ -23,6 +23,7 @@ from notewise._constants import (
     LLM_API_KEY_KWARG,
     LLM_ERROR_PAYLOAD_MARKERS,
     LLM_ERROR_SUMMARY_LIMIT,
+    LLM_IDENTIFYING_HEADERS,
     LLM_NUM_RETRIES,
     LLM_PAYLOAD_ERROR_SUMMARY,
     PYDANTIC_RESPONSE_USAGE_WARNING_PATTERN,
@@ -167,6 +168,11 @@ class LLMProvider:
         self.model = model
         self.api_base = api_base
         self.api_key = api_key
+        # Pricing is invariant for the life of this instance (self.model is
+        # fixed), so it's looked up from config.db at most once instead of
+        # on every generation call.
+        self._custom_endpoint_pricing_looked_up = False
+        self._custom_endpoint_pricing_cache: tuple[float, float] | None = None
         self._validate_config()
 
     @staticmethod
@@ -268,6 +274,7 @@ class LLMProvider:
                 "temperature": provider_temperature,
                 # LiteLLM handles exponential backoff for RateLimitError
                 "num_retries": LLM_NUM_RETRIES,
+                "extra_headers": dict(LLM_IDENTIFYING_HEADERS),
             }
 
             if max_tokens is not None:
@@ -402,6 +409,7 @@ class LLMProvider:
             "input": [{"role": "user", "content": user_prompt}],
             "temperature": temperature,
             "num_retries": LLM_NUM_RETRIES,
+            "extra_headers": dict(LLM_IDENTIFYING_HEADERS),
         }
         if max_tokens is not None:
             kwargs["max_output_tokens"] = max_tokens
@@ -524,7 +532,87 @@ class LLMProvider:
                 continue
             if cost_value > 0:
                 return cost_value
+
+        saved_cost = self._custom_endpoint_saved_cost(usage_payload, call_type)
+        if saved_cost is not None:
+            return saved_cost
         return 0.0
+
+    def _custom_endpoint_saved_pricing(self) -> tuple[float, float] | None:
+        """Look up saved per-token pricing for this custom endpoint's model.
+
+        Pricing was captured at discovery time (see
+        notewise.llm.custom_endpoint.discover_openai_compatible_model_pricing)
+        and saved alongside the endpoint profile. Cached on this instance
+        after the first lookup: self.model is fixed for the instance's
+        lifetime, so the result can't change, and this avoids a fresh
+        config.db connection on every generation call.
+        """
+        if self._custom_endpoint_pricing_looked_up:
+            return self._custom_endpoint_pricing_cache
+
+        self._custom_endpoint_pricing_looked_up = True
+        endpoint_name, separator, model_id = self.model.partition("/")
+        if not separator or not model_id:
+            return None
+        try:
+            from notewise.config import get_config_db_path
+            from notewise.storage import config_store
+
+            profiles = config_store.list_custom_endpoints(get_config_db_path())
+        except Exception:
+            return None
+        profile = next((p for p in profiles if p.name == endpoint_name), None)
+        if profile is None:
+            return None
+        if self.api_base is not None:
+            from notewise.errors import CustomEndpointError
+            from notewise.llm.custom_endpoint import normalize_openai_base_url
+
+            try:
+                api_base_matches = normalize_openai_base_url(
+                    self.api_base
+                ) == normalize_openai_base_url(profile.base_url)
+            except CustomEndpointError:
+                return None
+            if not api_base_matches:
+                return None
+        self._custom_endpoint_pricing_cache = profile.model_pricing.get(model_id)
+        return self._custom_endpoint_pricing_cache
+
+    def _custom_endpoint_saved_cost(
+        self, usage_payload: dict[str, int], call_type: str
+    ) -> float | None:
+        """Cost this response using saved custom-endpoint pricing, if any.
+
+        Last resort after LiteLLM's own catalog lookup finds nothing --
+        covers custom/gateway models LiteLLM doesn't know about yet. Routes
+        through LiteLLM's own `completion_cost(custom_cost_per_token=...)`
+        override rather than computing cost by hand, so a saved custom rate
+        is priced exactly the same way LiteLLM prices every other model
+        (same rounding, same cache-token handling, etc.). Returns None (not
+        0.0) when no saved pricing applies, so the caller can fall back to
+        the existing "$0, unmapped" behavior unchanged.
+        """
+        pricing = self._custom_endpoint_saved_pricing()
+        if pricing is None:
+            return None
+        prompt_price, completion_price = pricing
+        try:
+            from litellm.types.utils import CostPerToken
+
+            cost = completion_cost(
+                completion_response={"usage": usage_payload},
+                model=self.model,
+                call_type=call_type,
+                custom_cost_per_token=CostPerToken(
+                    input_cost_per_token=prompt_price,
+                    output_cost_per_token=completion_price,
+                ),
+            )
+        except Exception:
+            return None
+        return max(0.0, float(cost or 0.0))
 
     def _cost_model_candidates(self) -> tuple[str, ...]:
         """Return LiteLLM model names to try for cost lookup."""

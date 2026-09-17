@@ -2,6 +2,9 @@
 
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
+import pytest
+import readchar
+
 from notewise.errors import ConfigurationError, CustomEndpointError
 from notewise.llm.custom_endpoint import (
     CustomEndpointProfile,
@@ -9,12 +12,16 @@ from notewise.llm.custom_endpoint import (
     serialize_custom_endpoint_profiles,
 )
 from notewise.ui.setup_wizard import (
+    _prompt_with_page_keys,
     get_api_key,
     get_available_models,
     get_config_path,
     load_config,
+    run_config_editor,
+    run_custom_endpoint_manager,
     run_setup_wizard,
     save_config,
+    select_config_category,
     select_model,
     select_provider,
     show_current_config,
@@ -558,20 +565,470 @@ class TestInteractiveFlow:
             assert selected == "gemini/gemini-1.5-pro"
 
     def test_select_model_invalid_input_is_visible(self):
-        """Unexpected model input should print guidance and re-prompt."""
+        """Blank input should print guidance and re-prompt."""
         mock_console = MagicMock()
         models = {"p1": ["model-0"]}
 
         with (
             patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
-            patch("rich.prompt.Prompt.ask", side_effect=["wat", "1"]),
+            patch("rich.prompt.Prompt.ask", side_effect=["", "1"]),
         ):
             selected = select_model("p1", models, console=mock_console)
 
         assert selected == "model-0"
         mock_console.print.assert_any_call(
-            "[red]Invalid choice. Enter a model number or use n/p to navigate.[/red]"
+            "[red]Invalid choice. Enter a model number, search text, "
+            "or n/p to navigate.[/red]"
         )
+
+    def test_select_model_search_filters_by_substring(self):
+        """Typing non-numeric text should filter the list before selecting."""
+        models = {"p1": ["gemini-2.5-flash", "gemini-2.5-pro", "gpt-4o-mini", "gpt-4o"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["gemini", "2"]),
+        ):
+            selected = select_model("p1", models)
+
+        assert selected == "gemini-2.5-pro"
+
+    def test_select_model_search_with_no_matches_reprompts(self):
+        """A search with no matches should warn and keep the prior list."""
+        mock_console = MagicMock()
+        models = {"p1": ["model-0", "model-1"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["zzz-no-match", "1"]),
+        ):
+            selected = select_model("p1", models, console=mock_console)
+
+        assert selected == "model-0"
+        assert any(
+            "No models match" in str(call.args[0])
+            for call in mock_console.print.call_args_list
+        )
+
+    def test_select_model_search_clear_restores_full_list(self):
+        """'c' after a search should restore the unfiltered model list."""
+        models = {"p1": ["model-0", "model-1", "other-2"]}
+
+        with (
+            patch("notewise.ui.setup_wizard.PROVIDER_CONFIG", {"p1": {"name": "P1"}}),
+            patch("rich.prompt.Prompt.ask", side_effect=["model", "c", "3"]),
+        ):
+            selected = select_model("p1", models)
+
+        assert selected == "other-2"
+
+    def test_select_config_category_returns_chosen_name(self):
+        categories = {
+            "Model & Generation": ("DEFAULT_MODEL",),
+            "Output": ("OUTPUT_DIR",),
+        }
+
+        with patch("rich.prompt.Prompt.ask", return_value="2"):
+            selected = select_config_category(categories)
+
+        assert selected == "Output"
+
+    def test_select_config_category_quit_returns_none(self):
+        categories = {"Model & Generation": ("DEFAULT_MODEL",)}
+
+        with patch("rich.prompt.Prompt.ask", return_value="q"):
+            selected = select_config_category(categories)
+
+        assert selected is None
+
+    def test_select_config_category_invalid_input_reprompts(self):
+        mock_console = MagicMock()
+        categories = {"Model & Generation": ("DEFAULT_MODEL",)}
+
+        with patch("rich.prompt.Prompt.ask", side_effect=["nope", "1"]):
+            selected = select_config_category(categories, console=mock_console)
+
+        assert selected == "Model & Generation"
+        mock_console.print.assert_any_call(
+            "[red]Invalid choice. Enter a category number or 'q'.[/red]"
+        )
+
+    def test_run_config_editor_set_shows_clean_validation_message(self):
+        """An invalid value must show a clean summary, not pydantic's raw dump."""
+        mock_console = MagicMock()
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["1", "2", "s", "20000", "q"],
+        ):
+            run_config_editor(console=mock_console)
+
+        rendered = "\n".join(
+            str(call.args[0]) for call in mock_console.print.call_args_list
+        )
+        assert "Invalid configuration value" in rendered
+        assert "validation error for AppSettings" not in rendered
+
+    def test_run_config_editor_set_rejects_unrecognized_action_with_message(self):
+        """Typing a value straight into the action prompt must not silently no-op."""
+        mock_console = MagicMock()
+
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["1", "5", "800", "q"],
+        ):
+            run_config_editor(console=mock_console)
+
+        rendered = "\n".join(
+            str(call.args[0]) for call in mock_console.print.call_args_list
+        )
+        assert "not understood" in rendered
+        assert load_config().get("CHUNK_OVERLAP") is None
+
+    def test_run_config_editor_set_default_model_uses_interactive_picker(self):
+        """Setting DEFAULT_MODEL must use the provider/model picker, not free text."""
+        mock_console = MagicMock()
+
+        with (
+            patch(
+                "notewise.ui.setup_wizard._select_default_model_interactively",
+                return_value="gemini/gemini-2.5-flash",
+            ) as picker,
+            patch("rich.prompt.Prompt.ask", side_effect=["1", "1", "s", "q"]),
+        ):
+            run_config_editor(console=mock_console)
+
+        picker.assert_called_once()
+        assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
+
+    def test_run_custom_endpoint_manager_update_rejects_invalid_index(self):
+        """An out-of-range or non-numeric index should warn and cancel, not crash."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        mock_console = MagicMock()
+        with patch("rich.prompt.Prompt.ask", side_effect=["u", "99", "q"]):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]Invalid choice. Enter a number 1-1.[/red]"
+        )
+
+    def test_run_custom_endpoint_manager_add_selects_model_from_list(self):
+        """Confirming model selection should list discovered models by index."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/model-a"}, {"id": "vendor/model-b"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ) as verify,
+            patch("rich.prompt.Confirm.ask", return_value=True),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "2",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        verify.assert_awaited_once_with(
+            "https://new.example/v1", "new-secret", "vendor/model-b"
+        )
+        saved = config_store.list_custom_endpoints(get_config_db_path())
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="new-secret",
+            ),
+        )
+
+    def test_run_custom_endpoint_manager_adds_new_endpoint(self):
+        """'a' should discover, verify, and persist a brand-new endpoint."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        saved = config_store.list_custom_endpoints(get_config_db_path())
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="new-secret",
+            ),
+        )
+        assert load_config()["DEFAULT_MODEL"] == "office/vendor/new-model"
+
+    def test_run_custom_endpoint_manager_add_leaves_existing_default_model(self):
+        """Adding a new endpoint must not clobber an already-configured default."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        save_config({"DEFAULT_MODEL": "gemini/gemini-2.5-flash"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "a",
+                    "Office",
+                    "https://new.example/",
+                    "new-secret",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert config_store.list_custom_endpoints(get_config_db_path())
+        assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
+
+    def test_run_custom_endpoint_manager_update_rejects_blank_key_on_url_change(self):
+        """A blank API key must not silently carry over to a changed base URL."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        mock_console = MagicMock()
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["u", "1", "https://new.example/", "", "q"],
+        ):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]API key is required when the base URL changes.[/red]"
+        )
+
+    def test_run_custom_endpoint_manager_updates_existing_endpoint(self):
+        """'u' should re-verify and replace both base URL and API key together."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=[
+                    "u",
+                    "1",
+                    "https://new.example/",
+                    "new-secret",
+                    "vendor/new-model",
+                    "q",
+                ],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        saved = config_store.list_custom_endpoints(db_path)
+        assert saved == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://new.example/v1",
+                api_key="new-secret",
+            ),
+        )
+
+    def test_run_custom_endpoint_manager_update_syncs_default_model(self):
+        """Updating the endpoint DEFAULT_MODEL already uses must sync it."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "office/vendor-old-model"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["u", "1", "", "", "vendor/new-model", "q"],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert load_config()["DEFAULT_MODEL"] == "office/vendor/new-model"
+
+    def test_run_custom_endpoint_manager_update_leaves_unrelated_default_model(self):
+        """Updating an endpoint DEFAULT_MODEL doesn't use must not touch it."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "lab-server/some-model"})
+
+        with (
+            patch(
+                "notewise.llm.custom_endpoint._fetch_model_list_payload",
+                return_value=[{"id": "vendor/new-model"}],
+            ),
+            patch(
+                "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+                new_callable=AsyncMock,
+            ),
+            patch("rich.prompt.Confirm.ask", return_value=False),
+            patch(
+                "rich.prompt.Prompt.ask",
+                side_effect=["u", "1", "", "", "vendor/new-model", "q"],
+            ),
+        ):
+            run_custom_endpoint_manager()
+
+        assert load_config()["DEFAULT_MODEL"] == "lab-server/some-model"
+
+    def test_run_custom_endpoint_manager_delete_blocked_by_default_model(self):
+        """Deleting the endpoint DEFAULT_MODEL uses must be refused, not applied."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        save_config({"DEFAULT_MODEL": "office/vendor-model"})
+
+        mock_console = MagicMock()
+        with patch("rich.prompt.Prompt.ask", side_effect=["d", "1", "q"]):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]Cannot delete 'office' while DEFAULT_MODEL uses it.[/red]"
+        )
+
+    def test_run_custom_endpoint_manager_deletes_after_confirmation(self):
+        """Confirmed 'd' should remove the endpoint from config.db."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        with (
+            patch("rich.prompt.Prompt.ask", side_effect=["d", "1", "q"]),
+            patch("rich.prompt.Confirm.ask", return_value=True),
+        ):
+            run_custom_endpoint_manager()
+
+        assert config_store.list_custom_endpoints(db_path) == ()
 
     def test_get_api_key_new(self):
         """Test entering a new API key."""
@@ -1087,3 +1544,105 @@ class TestWizardOrchestration:
             },
             console=mock_console,
         )
+
+
+class TestPromptWithPageKeys:
+    """Tests for the raw-key reader behind select_model's arrow-key paging."""
+
+    def test_falls_back_to_prompt_ask_when_not_a_tty(self, mocker):
+        """Piped input / CI (no real terminal) must keep using line input."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=False)
+        mock_ask = mocker.patch("rich.prompt.Prompt.ask", return_value="hello")
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("hello", None)
+        mock_ask.assert_called_once_with("Prompt")
+
+    def test_left_arrow_returns_page_signal_without_enter(self, mocker):
+        """Left arrow should page back instantly, with no line to submit."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.LEFT])
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("", "left")
+
+    def test_right_arrow_returns_page_signal_without_enter(self, mocker):
+        """Right arrow should page forward instantly, with no line to submit."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.RIGHT])
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("", "right")
+
+    def test_typed_text_with_backspace_then_enter_returns_text(self, mocker):
+        """Typed characters and backspace edits build the line as normal."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch(
+            "readchar.readkey",
+            side_effect=["v", "1", readchar.key.BACKSPACE, "2", readchar.key.ENTER],
+        )
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("v2", None)
+
+    def test_ctrl_c_raises_keyboard_interrupt(self, mocker):
+        """Ctrl+C during raw key reading should abort like any other prompt."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("readchar.readkey", side_effect=[readchar.key.CTRL_C])
+
+        with pytest.raises(KeyboardInterrupt):
+            _prompt_with_page_keys(Console(), "Prompt")
+
+
+class TestSelectModelArrowPaging:
+    """select_model should page via arrow keys the same as typed n/p."""
+
+    def test_right_arrow_advances_to_next_page(self, mocker):
+        """A lone Right arrow press should move to page 2 without Enter."""
+        from rich.console import Console
+
+        models = [f"vendor/model-{i}" for i in range(1, 40)]
+        mocker.patch(
+            "notewise.ui.setup_wizard._prompt_with_page_keys",
+            side_effect=[("", "right"), ("25", None)],
+        )
+
+        selected = select_model(
+            "custom_openai_compatible",
+            {"custom_openai_compatible": models},
+            console=Console(),
+        )
+
+        assert selected == models[24]
+
+    def test_left_arrow_returns_to_previous_page(self, mocker):
+        """Right then Left should land back on page 1."""
+        from rich.console import Console
+
+        models = [f"vendor/model-{i}" for i in range(1, 40)]
+        mocker.patch(
+            "notewise.ui.setup_wizard._prompt_with_page_keys",
+            side_effect=[("", "right"), ("", "left"), ("1", None)],
+        )
+
+        selected = select_model(
+            "custom_openai_compatible",
+            {"custom_openai_compatible": models},
+            console=Console(),
+        )
+
+        assert selected == models[0]

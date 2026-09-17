@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import shutil
 import time
 from contextlib import nullcontext
 from dataclasses import dataclass
@@ -51,7 +52,6 @@ from notewise.youtube.transcript import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable
-    from tempfile import TemporaryDirectory
 
 
 logger = structlog.get_logger(__name__)
@@ -74,7 +74,7 @@ class _GeneratedOutputs:
     output_target: Path | None
     transcript_output_dir: Path
     chapter_directory_output: bool
-    temporary_chapter_directory: TemporaryDirectory[str] | None
+    bundled_chapter_cache_dir: Path | None
 
 
 def _notes_artifact_exists(target: Path, output_format: str) -> bool:
@@ -370,7 +370,7 @@ async def _generate_video_outputs(
             render_warning,
             output_target,
             transcript_output_dir,
-            temporary_chapter_directory,
+            bundled_chapter_cache_dir,
         ) = await generate_chapter_outputs(
             pipeline,
             video_id,
@@ -386,7 +386,7 @@ async def _generate_video_outputs(
             output_target=output_target,
             transcript_output_dir=transcript_output_dir,
             chapter_directory_output=pipeline.chapter_directory_output,
-            temporary_chapter_directory=temporary_chapter_directory,
+            bundled_chapter_cache_dir=bundled_chapter_cache_dir,
         )
 
     (
@@ -409,7 +409,7 @@ async def _generate_video_outputs(
         output_target=output_target,
         transcript_output_dir=transcript_output_dir,
         chapter_directory_output=False,
-        temporary_chapter_directory=None,
+        bundled_chapter_cache_dir=None,
     )
 
 
@@ -462,7 +462,7 @@ async def process_single_video(
     emit = pipeline._emit_event(on_event)
     async with pipeline.semaphore:
         reserved_targets: list[Path] = []
-        temporary_chapter_directory: TemporaryDirectory[str] | None = None
+        bundled_chapter_cache_dir: Path | None = None
         try:
             emit(EventType.METADATA_START, video_id)
 
@@ -506,7 +506,7 @@ async def process_single_video(
                     reserved_targets,
                     emit,
                 )
-                temporary_chapter_directory = outputs.temporary_chapter_directory
+                bundled_chapter_cache_dir = outputs.bundled_chapter_cache_dir
                 await _write_optional_artifacts(
                     pipeline,
                     video_id,
@@ -535,6 +535,12 @@ async def process_single_video(
                 output_path=outputs.output_target,
             )
             emit(EventType.VIDEO_SUCCESS, video_id, title=title)
+            # Only remove the bundled-mode chapter cache once the video is
+            # fully done (chapters generated, artifacts written, cache
+            # recorded) -- on any earlier failure it deliberately survives
+            # so a rerun can skip chapters this run already finished.
+            if bundled_chapter_cache_dir is not None:
+                shutil.rmtree(bundled_chapter_cache_dir, ignore_errors=True)
             return True
 
         except IPBlockError as error:
@@ -561,8 +567,6 @@ async def process_single_video(
             emit(EventType.VIDEO_FAILED, video_id, error=error_msg)
             return False
         finally:
-            if temporary_chapter_directory is not None:
-                temporary_chapter_directory.cleanup()
             for target in reserved_targets:
                 await pipeline._release_output_target(target)
 

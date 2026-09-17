@@ -1,0 +1,61 @@
+flowchart LR
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
+
+    TITLE(["NoteWise System Architecture<br/>High-level system design, not a code map"])
+    class TITLE title
+
+    USER["User"]
+    class USER actor
+
+    INPUT["Video, Playlist,<br/>or Batch of URLs"]
+    class INPUT component
+
+    ORCHESTRATOR["Processing Orchestrator<br/>bounded concurrency, config-driven"]
+    class ORCHESTRATOR component
+
+    CACHE[("Local Cache<br/>videos, transcripts, run stats")]
+    class CACHE store
+
+    CONFIGDB[("Local Configuration<br/>settings, credentials")]
+    class CONFIGDB store
+
+    TRANSCRIPT["Transcript Acquisition<br/>rate-limited, retried"]
+    class TRANSCRIPT component
+
+    YOUTUBE(("YouTube"))
+    class YOUTUBE external
+
+    GENERATION["AI Generation<br/>chunking, chapters, stitching"]
+    class GENERATION component
+
+    GATEWAY["Model Gateway"]
+    class GATEWAY component
+
+    PROVIDER(("Chosen LLM Provider"))
+    class PROVIDER external
+
+    RENDERING["Document Rendering"]
+    class RENDERING component
+
+    OUTPUT["Markdown, HTML, PDF, DOCX,<br/>Quiz, Transcript Export"]
+    class OUTPUT store
+
+    TITLE -.-> USER
+    USER --> INPUT --> ORCHESTRATOR
+
+    ORCHESTRATOR <--> CACHE
+    ORCHESTRATOR --> CONFIGDB
+
+    ORCHESTRATOR --> TRANSCRIPT --> YOUTUBE
+    TRANSCRIPT --> GENERATION
+
+    ORCHESTRATOR --> GENERATION
+    GENERATION --> GATEWAY --> PROVIDER
+    PROVIDER --> GATEWAY --> GENERATION
+
+    GENERATION --> RENDERING --> OUTPUT

@@ -12,6 +12,10 @@ from notewise._constants import CUSTOM_ENDPOINT_HTTP_TIMEOUT_SECONDS
 from notewise.errors import CustomEndpointError
 from notewise.llm.custom_endpoint import (
     CustomEndpointProfile,
+    _coerce_price,
+    default_model_endpoint_match,
+    discover_and_verify_model,
+    discover_openai_compatible_model_pricing,
     discover_openai_compatible_models,
     normalize_custom_model_prefix,
     normalize_openai_base_url,
@@ -347,3 +351,214 @@ async def test_verify_model_forwards_selected_model_base_and_key(mocker) -> None
     assert kwargs["api_key"] == "test-api-key"
     assert kwargs["max_tokens"] == 4
     assert kwargs["num_retries"] == 0
+    assert kwargs["extra_headers"]["X-Title"] == "NoteWise"
+    assert kwargs["extra_headers"]["HTTP-Referer"] == "https://notewise.click"
+
+
+def test_discover_models_sends_identifying_headers(mocker) -> None:
+    """Model discovery must identify notewise too, not just verification.
+
+    Regression test: discovery previously sent only Accept/Authorization,
+    so it never showed up as notewise on a gateway's usage dashboard even
+    though generation and verification calls did.
+    """
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(b'{"data": [{"id": "vendor/model-1"}]}')
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    discover_openai_compatible_models("https://models.example.test", "test-api-key")
+
+    request = opener.open.call_args.args[0]
+    assert request.get_header("X-title") == "NoteWise"
+    assert request.get_header("Http-referer") == "https://notewise.click"
+
+
+def test_discover_model_pricing_parses_openrouter_convention(mocker) -> None:
+    """OpenRouter's `pricing.prompt`/`pricing.completion` convention."""
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(
+        b'{"data": [{"id": "vendor/model-1", '
+        b'"pricing": {"prompt": "0.0000002", "completion": "0.0000008"}}]}'
+    )
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    pricing = discover_openai_compatible_model_pricing(
+        "https://models.example.test", "test-api-key"
+    )
+
+    assert pricing == {"vendor/model-1": (0.0000002, 0.0000008)}
+
+
+def test_discover_model_pricing_parses_vercel_ai_gateway_convention(mocker) -> None:
+    """Vercel AI Gateway's `pricing.input`/`pricing.output` convention."""
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(
+        b'{"data": [{"id": "vendor/model-1", '
+        b'"pricing": {"input": "0.00000012", "output": "0.00000024"}}]}'
+    )
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    pricing = discover_openai_compatible_model_pricing(
+        "https://models.example.test", "test-api-key"
+    )
+
+    assert pricing == {"vendor/model-1": (0.00000012, 0.00000024)}
+
+
+def test_discover_model_pricing_parses_litellm_flat_convention(mocker) -> None:
+    """LiteLLM-style flat `input_cost_per_token`/`output_cost_per_token`."""
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(
+        b'{"data": [{"id": "vendor/model-1", '
+        b'"input_cost_per_token": 0.0000015, "output_cost_per_token": 0.000006}]}'
+    )
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    pricing = discover_openai_compatible_model_pricing(
+        "https://models.example.test", "test-api-key"
+    )
+
+    assert pricing == {"vendor/model-1": (0.0000015, 0.000006)}
+
+
+def test_discover_model_pricing_skips_models_with_no_recognizable_pricing(
+    mocker,
+) -> None:
+    """Self-hosted servers (vLLM, Ollama, ...) advertise no pricing at all --
+    that must not raise or fabricate a cost, just skip the model.
+    """
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(
+        b'{"data": [{"id": "meta-llama/Llama-3-8B-Instruct", '
+        b'"object": "model", "owned_by": "vllm"}]}'
+    )
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    pricing = discover_openai_compatible_model_pricing(
+        "https://models.example.test", "test-api-key"
+    )
+
+    assert pricing == {}
+
+
+def test_discover_model_pricing_rejects_negative_or_malformed_values(
+    mocker,
+) -> None:
+    """Malformed/negative pricing must be skipped, not crash or return junk."""
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(
+        b'{"data": ['
+        b'{"id": "bad-negative", "pricing": {"prompt": "-1", "completion": "0.001"}},'
+        b'{"id": "bad-type", "pricing": {"prompt": null, "completion": "0.001"}}'
+        b"]}"
+    )
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    pricing = discover_openai_compatible_model_pricing(
+        "https://models.example.test", "test-api-key"
+    )
+
+    assert pricing == {}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("0.002", 0.002),
+        (0, 0.0),
+        (0.001, 0.001),
+    ],
+)
+def test_coerce_price_accepts_valid_numeric_and_string_prices(
+    value: object, expected: float
+) -> None:
+    """Valid non-negative numeric or numeric-string prices coerce correctly."""
+    assert _coerce_price(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [True, False, float("inf"), float("-inf"), float("nan"), -1, "not-a-number"],
+)
+def test_coerce_price_rejects_bools_and_non_finite_values(value: object) -> None:
+    """Booleans (int subclass) and non-finite floats must not coerce to a price."""
+    assert _coerce_price(value) is None
+
+
+def test_default_model_endpoint_match_returns_model_id_for_matching_prefix() -> None:
+    """DEFAULT_MODEL pointing at this endpoint's prefix returns its model id."""
+    config = {"DEFAULT_MODEL": "office/vendor-model"}
+
+    assert default_model_endpoint_match(config, "office") == "vendor-model"
+
+
+def test_default_model_endpoint_match_returns_none_for_other_endpoint() -> None:
+    """A DEFAULT_MODEL naming a different saved endpoint must not match."""
+    config = {"DEFAULT_MODEL": "lab-server/vendor-model"}
+
+    assert default_model_endpoint_match(config, "office") is None
+
+
+def test_default_model_endpoint_match_returns_none_when_unset() -> None:
+    """A missing/empty DEFAULT_MODEL must not match any endpoint."""
+    assert default_model_endpoint_match({}, "office") is None
+
+
+def test_default_model_endpoint_match_handles_builtin_provider_prefix() -> None:
+    """A DEFAULT_MODEL using a real LiteLLM provider prefix (e.g. Gemini)
+    must return None instead of raising -- a provider prefix can never be a
+    saved custom endpoint name, so it's simply not a match, not an error.
+    """
+    config = {"DEFAULT_MODEL": "gemini/gemini-2.5-flash"}
+
+    assert default_model_endpoint_match(config, "office") is None
+
+
+def test_discover_and_verify_model_succeeds_when_model_is_listed(mocker) -> None:
+    """A discovered model should be verified with a live request.
+
+    `discover_and_verify_model` is synchronous (it drives verification via
+    its own internal `asyncio.run`), so this test must stay a plain `def`,
+    not `async def` -- calling it from an already-running event loop would
+    raise.
+    """
+    mocker.patch(
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/model-1"}],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=mocker.AsyncMock,
+    )
+
+    discover_and_verify_model(
+        "https://models.example.test/v1", "test-api-key", "vendor/model-1"
+    )
+
+    verify.assert_awaited_once_with(
+        "https://models.example.test/v1", "test-api-key", "vendor/model-1"
+    )
+
+
+def test_discover_and_verify_model_rejects_model_missing_from_discovery(
+    mocker,
+) -> None:
+    """A model absent from discovery must raise before any verification call."""
+    mocker.patch(
+        "notewise.llm.custom_endpoint._fetch_model_list_payload",
+        return_value=[{"id": "vendor/model-1"}],
+    )
+    verify = mocker.patch(
+        "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+        new_callable=mocker.AsyncMock,
+    )
+
+    with pytest.raises(CustomEndpointError, match="was not returned"):
+        discover_and_verify_model(
+            "https://models.example.test/v1",
+            "test-api-key",
+            "vendor/missing-model",
+            endpoint_name="office",
+        )
+
+    verify.assert_not_awaited()

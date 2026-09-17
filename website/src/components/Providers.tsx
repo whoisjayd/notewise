@@ -176,13 +176,20 @@ export function Providers() {
               <div className="border-t border-[var(--rule)] bg-card px-5 py-3.5">
                 <p className="t-meta">
                   Point NoteWise at any OpenAI-compatible base URL — llama.cpp, vLLM, Ollama, a
-                  private gateway — and save it under a name you pick.
+                  private gateway — and save it under a name you pick. Even without LiteLLM's
+                  built-in pricing for that endpoint, NoteWise reads its{" "}
+                  <code className="t-code">/v1/models</code> response and uses that to estimate cost
+                  per run.
                 </p>
                 <pre className="mt-3 overflow-x-auto rounded-md border border-[var(--rule)] bg-muted px-3.5 py-2.5 t-code whitespace-pre">
                   <span className="text-stamp">›</span> notewise inference add{" "}
                   <span className="text-azure">local</span>{" "}
                   <span className="text-thread">--base-url http://localhost:8000/v1</span>
                 </pre>
+                <p className="mt-3 t-mono-meta">
+                  ¶ Leave off a flag and it's asked for interactively — including a numbered,
+                  arrow-key model picker.
+                </p>
               </div>
             </div>
           </div>

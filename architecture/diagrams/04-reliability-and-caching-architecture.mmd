@@ -1,0 +1,65 @@
+flowchart TB
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
+
+    TITLE(["NoteWise Reliability and Caching Architecture<br/>How the system avoids repeated work and degrades gracefully"])
+    class TITLE title
+
+    REQUEST["Incoming Request"]
+    class REQUEST component
+
+    CACHELOOKUP{"Already cached with<br/>all requested artifacts?"}
+    class CACHELOOKUP decision
+
+    REUSE["Reuse Cached Output<br/>no network or generation cost"]
+    class REUSE store
+
+    FETCH["Fetch Metadata + Transcript<br/>rate-limited"]
+    RETRY["Retry with Backoff"]
+    PERMFAIL["Report Permanent Failure<br/>classified: unavailable, blocked, etc."]
+    class FETCH,RETRY,PERMFAIL component
+
+    GENPHASE["Generate Notes<br/>per chunk or chapter"]
+    class GENPHASE component
+
+    CHAPTERCHECK{"All chapters<br/>succeeded?"}
+    class CHAPTERCHECK decision
+
+    RESUME["Persist Completed Chapters<br/>resumable on next run"]
+    class RESUME store
+
+    LOCK["Reserve Output Path<br/>avoid collisions across videos"]
+    class LOCK component
+
+    RENDERCHECK{"Requested format<br/>renders successfully?"}
+    class RENDERCHECK decision
+
+    DEGRADE["Fall Back to Markdown"]
+    class DEGRADE component
+
+    WRITE["Write Final Artifacts"]
+    STATS["Persist Run Stats<br/>tokens, cost, timing"]
+    class WRITE,STATS store
+
+    TITLE -.-> REQUEST --> CACHELOOKUP
+
+    CACHELOOKUP -- "Yes" --> REUSE
+    CACHELOOKUP -- "No" --> FETCH
+
+    FETCH -- "transient failure" --> RETRY -.-> FETCH
+    FETCH -- "permanent failure" --> PERMFAIL
+    FETCH -- "success" --> GENPHASE
+
+    GENPHASE --> CHAPTERCHECK
+    CHAPTERCHECK -- "No, some failed" --> RESUME
+    RESUME -. "resumed on next run" .-> CACHELOOKUP
+    CHAPTERCHECK -- "Yes" --> LOCK
+
+    LOCK --> RENDERCHECK
+    RENDERCHECK -- "Yes" --> WRITE
+    RENDERCHECK -- "No" --> DEGRADE --> WRITE
+    WRITE --> STATS

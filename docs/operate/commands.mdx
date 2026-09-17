@@ -12,27 +12,41 @@ Run `notewise COMMAND --help` for command-specific flags. The command set is def
 
 | Command                        | Purpose                                                       |
 | ------------------------------ | ------------------------------------------------------------- |
-| `notewise process URL`         | Generate notes from one video, playlist, or batch file.       |
+| `notewise process [URL]`       | Generate notes from one video, playlist, or batch file. Omit `URL` to be prompted. |
 | `notewise setup`               | Run the interactive config wizard.                            |
 | `notewise config`              | Print masked effective config.                                |
 | `notewise config keys`         | List every key `get`/`set`/`unset` accept.                     |
-| `notewise config get KEY`      | Print one config value (masked if secret).                    |
-| `notewise config set KEY VAL`  | Set one config value.                                         |
-| `notewise config unset KEY`    | Remove one config value.                                       |
+| `notewise config get [KEY]`    | Print one config value (masked if secret). Omit `KEY` to pick from a numbered list. |
+| `notewise config set [KEY] [VAL]` | Set one config value. Omit `KEY` to pick from a list; omit `VAL` for a sensitive key to be prompted with hidden input. |
+| `notewise config unset [KEY]`  | Remove one config value. Omit `KEY` to pick from a numbered list. |
+| `notewise config edit`         | Interactively browse and edit config, grouped by category.    |
 | `notewise config-path`         | Print the active config database path.                        |
 | `notewise edit-config`         | Edit config as an env-style file in your editor.               |
 | `notewise auth login PROVIDER` | Login to OAuth providers.                                     |
 | `notewise info`                | Show runtime config and state paths.                          |
 | `notewise info URL`            | Inspect YouTube metadata and cache status without generation. |
-| `notewise transcript URL`      | Download one video's transcript (txt/json) without AI generation. |
+| `notewise transcript [URL]`    | Download one video's transcript (txt/json) without AI generation. Omit `URL` to be prompted. |
 | `notewise inference`           | List and manage saved inference endpoints.                    |
 | `notewise doctor`              | Check config, provider readiness, output, cache, and logs.    |
 | `notewise stats`               | Show processing totals and model breakdown.                   |
 | `notewise history`             | Show recent processed videos.                                 |
 | `notewise cache`               | Inspect or maintain the SQLite cache.                         |
+| `notewise cache show [VIDEO_ID]` | Show cached metadata for a video. Omit `VIDEO_ID` to pick from a list of recently cached videos. |
 | `notewise logs`                | Inspect or clean session logs.                                |
 | `notewise update`              | Check whether a newer release is available.                   |
 | `notewise version`             | Show the installed version.                                   |
+| `notewise help`                | Show the same output as `notewise --help`/`-h`.                |
+
+## Prompted arguments
+
+Several commands accept their main argument as optional: leave it out and NoteWise
+prints a numbered list (when there's a list to choose from) or a plain prompt, then
+reads your answer instead of failing with a usage error. This applies to
+`notewise process`, `notewise transcript`, `notewise config get/set/unset`,
+`notewise cache show`, and `notewise inference add/update/delete` (see
+[Inference endpoints](#inference-endpoints) below). Sensitive values, such as
+`config set` for an API key or `inference add/update --api-key`, are always
+prompted with hidden input rather than left in shell history.
 
 ## Process command
 
@@ -65,30 +79,38 @@ Manage those profiles with the `inference` command group:
 
 ```bash
 notewise inference list
-notewise inference add <name> --base-url <url> --api-key <api-key> --model <model-id>
-notewise inference update <name> [--base-url <url>] [--api-key <api-key>] [--model <model-id>]
-notewise inference delete <name>
+notewise inference add [<name>] [--base-url <url>] [--api-key <api-key>] [--model <model-id>]
+notewise inference update [<name>] [--base-url <url>] [--api-key <api-key>] [--model <model-id>]
+notewise inference delete [<name>]
 ```
 
 `list` displays each saved endpoint's name and base URL, never its API key.
 
-`add` requires every shown option. It normalizes the URL, discovers models from
-the live endpoint, and accepts `<model-id>` only when discovery returns it. It
-then verifies the endpoint before atomically adding or replacing the named
-profile.
+`add` and `delete` are fully interactive: any argument or option left out is
+prompted for instead of erroring. `update` is interactive when `<name>` is
+omitted; when `<name>` is passed on the command line, it still requires
+`--base-url`, `--api-key`, or both.
 
-`update` requires `--base-url`, `--api-key`, or both. Omitted URL and key values
-come from the saved profile, except changing `--base-url` also requires a new
-`--api-key`. If `--model` is omitted, NoteWise uses the suffix of the current
-default model only when it is named `<name>/<model-id>`; otherwise, `--model` is
-required. The resulting endpoint is live-discovered and verified before its saved
-profile is replaced.
-
-`delete` removes a saved profile without prompting, but refuses to remove a
-profile while the default model begins with `<name>/`.
+- `add` prompts for a name, base URL, and (hidden-input) API key when they're
+  omitted. If `--model` is omitted, it launches the same paginated,
+  searchable model picker described in [Configuration](/config/configuration#custom-openai-compatible-endpoints)
+  against the live endpoint. It then discovers pricing (see
+  [Providers](/config/providers#saved-custom-endpoints)), verifies the model, and
+  atomically adds or replaces the named profile.
+- `update` and `delete` list saved endpoints with a number next to each and
+  prompt for a pick when `<name>` is omitted. For `update`, a blank answer at
+  the base URL or API key prompt keeps the current saved value; changing the
+  base URL still requires a new API key. If `--model` is omitted, NoteWise
+  reuses the suffix of the current default model when it's named
+  `<name>/<model-id>`; otherwise it opens the model picker (when `<name>` was
+  omitted) or requires `--model` explicitly (when `<name>` was passed on the
+  command line).
+- `delete` refuses to remove a profile while the default model begins with
+  `<name>/`.
 
 API keys supplied on a command line can be retained in shell history. Prefer
-`notewise setup` or direct configuration for persistent secrets.
+`notewise setup`, the prompted flow above, or direct configuration for
+persistent secrets.
 
 ## Transcript command
 

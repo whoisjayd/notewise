@@ -1,0 +1,50 @@
+flowchart LR
+    classDef actor fill:#FEF3C7,stroke:#D97706,color:#78350F,stroke-width:2px
+    classDef component fill:#DBEAFE,stroke:#2563EB,color:#1E3A8A,stroke-width:2px
+    classDef store fill:#DCFCE7,stroke:#16A34A,color:#14532D,stroke-width:2px
+    classDef external fill:#FEE2E2,stroke:#DC2626,color:#7F1D1D,stroke-width:2px
+    classDef decision fill:#EDE9FE,stroke:#7C3AED,color:#4C1D95,stroke-width:2px
+    classDef title fill:#F3F4F6,stroke:#6B7280,color:#111827,stroke-width:1px,stroke-dasharray: 4 3
+
+    TITLE(["NoteWise Multi-Provider AI Architecture<br/>Staying provider-agnostic instead of locked to one vendor"])
+    class TITLE title
+
+    MODEL["Configured Model<br/>provider-prefixed identifier"]
+    class MODEL component
+
+    GATEWAY["Unified Generation Interface<br/>same call shape for every provider"]
+    class GATEWAY component
+
+    CREDS["Credential Resolution<br/>explicit key, then saved config, then environment"]
+    class CREDS component
+
+    HOSTED(("Built-in Hosted Providers"))
+    OAUTH(("Subscription / OAuth Providers"))
+    class HOSTED,OAUTH external
+
+    DISCOVERY["Discover Endpoint Models"]
+    VERIFY["Verify Endpoint Live"]
+    PRICING["Discover Endpoint Pricing<br/>optional"]
+    class DISCOVERY,VERIFY,PRICING component
+
+    PROFILE[("Saved Custom Endpoint<br/>name, base URL, credential, pricing")]
+    class PROFILE store
+
+    COSTCHECK{"Model in provider's<br/>cost catalog?"}
+    class COSTCHECK decision
+
+    CATALOGPRICE["Use catalog pricing"]
+    FALLBACKPRICE["Use saved endpoint pricing,<br/>else estimate as zero"]
+    class CATALOGPRICE,FALLBACKPRICE component
+
+    TITLE -.-> MODEL
+    MODEL --> GATEWAY --> CREDS
+
+    CREDS --> HOSTED
+    CREDS --> OAUTH
+    CREDS --> DISCOVERY --> VERIFY --> PRICING --> PROFILE
+    PROFILE -.-> GATEWAY
+
+    GATEWAY --> COSTCHECK
+    COSTCHECK -- "Yes" --> CATALOGPRICE
+    COSTCHECK -- "No" --> FALLBACKPRICE

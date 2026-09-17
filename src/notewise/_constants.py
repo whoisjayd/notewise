@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from notewise import __version__ as _NOTEWISE_VERSION
+
 
 # ── Cache ─────────────────────────────────────────────────────────────────────
 CACHE_DB_FILENAME = ".notewise_cache.db"
@@ -82,6 +84,21 @@ VERSION_KEY_PRERELEASE_FLAG = 0
 
 # ── CLI & logging messages ────────────────────────────────────────────────────
 LLM_API_KEY_KWARG = "api_key"
+# Identify notewise to LLM gateways so usage dashboards (e.g. OpenRouter's
+# "App" attribution) show the app name instead of "unknown". HTTP-Referer and
+# X-Title are OpenRouter-specific conventions; User-Agent is the generic,
+# widely-supported fallback nearly every OpenAI-compatible endpoint accepts.
+LLM_APP_REFERER_URL = "https://notewise.click"
+LLM_APP_TITLE = "NoteWise"
+# Sent on every provider request (built-in, custom-endpoint generation, and
+# custom-endpoint verification alike) so usage dashboards attribute traffic
+# to notewise instead of "unknown". Centralized here so no call site can
+# accidentally skip it.
+LLM_IDENTIFYING_HEADERS: dict[str, str] = {
+    "HTTP-Referer": LLM_APP_REFERER_URL,
+    "X-Title": LLM_APP_TITLE,
+    "User-Agent": f"notewise/{_NOTEWISE_VERSION}",
+}
 TRANSCRIPT_STATUS_MESSAGE = "Fetching transcript..."
 TRANSCRIPT_SAVED_PREFIX = "Transcript saved:"
 TRANSCRIPT_COLLISION_SUFFIX_START = 2
@@ -97,6 +114,9 @@ STATS_SINCE_DAYS_VALIDATION_MESSAGE = (
 )
 DEFAULT_HISTORY_LIMIT = 10
 DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS = 30
+# Caps the number of IDs per DELETE ... IN (...) chunk so pruning stays
+# safely under SQLite's pre-3.32 999-host-parameter-per-statement limit.
+PRUNE_DELETE_BATCH_SIZE = 500
 DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS = 7
 SCHEMELESS_YOUTUBE_PREFIXES = (
     "youtube.com/",
@@ -644,8 +664,9 @@ MIN_VIDEO_WORKER_COUNT = 1
 DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE = 10
 DEFAULT_THROTTLE_SECONDS = 0.0
 MIN_THROTTLE_SECONDS = 0.0
-DEFAULT_CHUNK_SIZE = 4000  # tokens
-DEFAULT_CHUNK_OVERLAP = 200  # tokens
+DEFAULT_CHUNK_SIZE = 12000  # tokens
+DEFAULT_CHUNK_OVERLAP = 1500  # tokens
+DEFAULT_MAX_TOKENS = 20000  # tokens
 DEFAULT_MAX_CONCURRENT_CHAPTERS = 3
 DEFAULT_STITCH_SECTION_BOUNDARY_COUNT = 2
 DEFAULT_STITCH_CHAR_BOUNDARY = 6000
@@ -774,7 +795,9 @@ NOTES_OUTPUT_EXTENSIONS = {
     "pdf": ".pdf",
     "docx": ".docx",
 }
-CHAPTER_TEMPORARY_DIRECTORY_PREFIX = "notewise-chapters-"
+# Deterministic (per video_id) so a rerun after a crash/interrupt can find and
+# skip already-generated chapters even in bundled (non-directory-output) mode.
+CHAPTER_RESUME_CACHE_DIR_NAME = "chapter_cache"
 CHAPTER_MARKDOWN_FILE_EXTENSION = NOTES_OUTPUT_EXTENSIONS[DEFAULT_NOTES_OUTPUT_FORMAT]
 QUIZ_MARKDOWN_FILE_SUFFIX = f"_quiz{CHAPTER_MARKDOWN_FILE_EXTENSION}"
 HTML_LANGUAGE_ALIASES = {
@@ -992,6 +1015,7 @@ DELAY_LABEL = "Throttle"
 CACHE_LABEL = "Force"
 COOKIES_LABEL = "Cookies"
 API_LABEL = "API key"
+LOG_LABEL = "Log"
 QUIZ_LABEL = "Quiz"
 TIMESTAMPS_LABEL = "Timestamps"
 EXPORT_TRANSCRIPT_LABEL = "Export transcript"

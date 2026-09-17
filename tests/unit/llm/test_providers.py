@@ -7,6 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from notewise import __version__ as notewise_version
 from notewise.errors import ConfigurationError, LLMGenerationError
 from notewise.llm import provider as provider_mod
 from notewise.llm.provider import (
@@ -110,6 +111,48 @@ class TestLLMProvider:
                 {"role": "system", "content": "sys"},
                 {"role": "user", "content": "user"},
             ]
+
+    async def test_generate_sends_identifying_headers(self):
+        """Every request should identify notewise to the provider/gateway."""
+        from notewise import __version__
+
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider("gpt-4o")
+            await provider.generate("sys", "user")
+
+            _args, kwargs = mock_acompletion.call_args
+            headers = kwargs["extra_headers"]
+            assert headers["X-Title"] == "NoteWise"
+            assert headers["HTTP-Referer"] == "https://notewise.click"
+            assert headers["User-Agent"] == f"notewise/{__version__}"
+
+    async def test_generate_sends_identifying_headers_for_custom_endpoint(self):
+        """Custom OpenAI-compatible endpoints should also get identifying headers."""
+        with (
+            patch("notewise.llm.provider.acompletion") as mock_acompletion,
+            patch("notewise.llm.provider.completion_cost", return_value=0.0),
+        ):
+            mock_response = MagicMock()
+            mock_response.choices[0].message.content = "Generated content"
+            mock_acompletion.return_value = mock_response
+
+            provider = LLMProvider(
+                "team-gateway/gpt-4o",
+                api_base="https://gateway.example.test/v1",
+                api_key="test-key",
+            )
+            await provider.generate("sys", "user")
+
+            _args, kwargs = mock_acompletion.call_args
+            assert "extra_headers" in kwargs
+            assert kwargs["extra_headers"]["X-Title"] == "NoteWise"
 
     async def test_generate_cleanup_markdown(self):
         """Test cleaning of markdown code blocks from response."""
@@ -446,6 +489,11 @@ class TestLLMProvider:
             input=[{"role": "user", "content": "user"}],
             temperature=1.0,
             num_retries=3,
+            extra_headers={
+                "HTTP-Referer": "https://notewise.click",
+                "X-Title": "NoteWise",
+                "User-Agent": f"notewise/{notewise_version}",
+            },
             max_output_tokens=128,
         )
         assert usage == UsageTotals(
@@ -495,6 +543,11 @@ class TestLLMProvider:
             input=[{"role": "user", "content": "user"}],
             temperature=1.0,
             num_retries=3,
+            extra_headers={
+                "HTTP-Referer": "https://notewise.click",
+                "X-Title": "NoteWise",
+                "User-Agent": f"notewise/{notewise_version}",
+            },
             stream=True,
         )
         assert usage == UsageTotals(
@@ -650,6 +703,68 @@ class TestLLMProvider:
             side_effect=RuntimeError("missing price map"),
         ):
             assert provider._extract_cost(response) == 0.0
+
+    def test_custom_endpoint_saved_pricing_is_looked_up_once_and_cached(self):
+        """Pricing lookup must hit config.db at most once per provider instance."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider("myendpoint/model-a")
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ) as list_endpoints:
+            first = provider._custom_endpoint_saved_pricing()
+            second = provider._custom_endpoint_saved_pricing()
+
+        assert first == (0.000001, 0.000002)
+        assert second == (0.000001, 0.000002)
+        list_endpoints.assert_called_once()
+
+    def test_custom_endpoint_saved_pricing_applies_when_api_base_matches(self):
+        """Saved pricing applies when explicit api_base normalizes to same URL."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider("myendpoint/model-a", api_base="https://example.com/v1/")
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ):
+            pricing = provider._custom_endpoint_saved_pricing()
+
+        assert pricing == (0.000001, 0.000002)
+
+    def test_custom_endpoint_saved_pricing_skipped_when_api_base_overridden(self):
+        """Saved pricing must not apply when api_base points elsewhere."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider(
+            "myendpoint/model-a", api_base="https://override.example.com/v1"
+        )
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ):
+            pricing = provider._custom_endpoint_saved_pricing()
+
+        assert pricing is None
 
     def test_validate_config_logs_debug_for_unknown_provider(self):
         """Unmapped models should log a debug hint instead of requiring a known key."""

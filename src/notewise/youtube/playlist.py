@@ -12,7 +12,7 @@ from notewise.errors import (
     raise_if_video_unavailable,
 )
 from notewise.youtube._constants import YOUTUBE_PLAYLIST_URL
-from notewise.youtube.parser import extract_video_id
+from notewise.youtube.parser import extract_video_id, is_valid_video_id
 
 from .extractor.async_client import AsyncYouTubeExtractorClient
 from .extractor.client import YouTubeExtractorConfig
@@ -22,6 +22,27 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 
 # PlaylistError is imported from notewise.errors
+
+
+_client_cache: dict[str | None, AsyncYouTubeExtractorClient] = {}
+
+
+def _client(cookie_file: str | None = None) -> AsyncYouTubeExtractorClient:
+    """Return a cached extractor client for this cookie file.
+
+    Building a client re-parses the cookie file and builds a fresh HTTP
+    opener; an instance is safe to reuse across many concurrent requests
+    (see AsyncYouTubeExtractorClient's docstring), and cookie_file is
+    invariant for a pipeline run, so this avoids repeating that setup on
+    every retry attempt.
+    """
+    client = _client_cache.get(cookie_file)
+    if client is None:
+        client = AsyncYouTubeExtractorClient(
+            YouTubeExtractorConfig(cookie_file=cookie_file)
+        )
+        _client_cache[cookie_file] = client
+    return client
 
 
 async def extract_playlist_videos(
@@ -89,9 +110,7 @@ async def _extract_async(
 ) -> list[str]:
     """Async helper to extract playlist videos with the async extractor."""
     playlist_url = YOUTUBE_PLAYLIST_URL.format(playlist_id=playlist_id)
-    client = AsyncYouTubeExtractorClient(
-        YouTubeExtractorConfig(cookie_file=cookie_file)
-    )
+    client = _client(cookie_file)
 
     try:
         payload = await client.playlist(playlist_url)
@@ -114,8 +133,9 @@ async def _extract_async(
 
     entries = payload.get("entries") or []
     for entry in entries:
+        raw_id = entry.get("id")
         url = entry.get("url") or ""
-        video_id = entry.get("id") or extract_video_id(url)
+        video_id = raw_id if is_valid_video_id(raw_id) else extract_video_id(url)
         if video_id:
             video_ids.append(video_id)
 

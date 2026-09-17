@@ -2,7 +2,7 @@
 
 NoteWise is a Python CLI (`>=3.11`) that converts YouTube videos, playlists, and batch files into local study materials. It reads metadata and transcripts, sends content through a LiteLLM-backed model, and writes files the user controls: Markdown notes by default, with optional HTML, PDF, DOCX, quizzes, and transcript exports.
 
-Current documented version: `1.6.0`.
+Current documented version: `1.7.0`.
 
 Canonical public docs base: `https://notewise.click/docs`
 
@@ -51,8 +51,8 @@ Source-backed defaults:
 - Temperature: `0.7`
 - Max concurrent videos: `5`
 - YouTube requests per minute: `10`
-- Chunk size: `4000`
-- Chunk overlap: `200`
+- Chunk size: `12000`
+- Chunk overlap: `1500`
 - Max concurrent chapters: `3`
 
 ## Install NoteWise
@@ -325,14 +325,16 @@ Common config keys:
 | `CUSTOM_LLM_ENDPOINTS` | unset | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR` | `./output` | Default output directory. |
 | `MAX_CONCURRENT_VIDEOS` | `5` | Batch/playlist video workers. |
+| `MAX_CONCURRENT_CHAPTERS` | `3` | Per-video chapter generation workers. |
+| `CHUNK_SIZE` | `12000` | Transcript chunk size, in tokens. |
+| `CHUNK_OVERLAP` | `1500` | Overlap between chunks, in tokens. Must be smaller than `CHUNK_SIZE`. |
 | `YOUTUBE_REQUESTS_PER_MINUTE` | `10` | YouTube request limit. |
 | `TEMPERATURE` | `0.7` | LLM temperature. |
-| `MAX_TOKENS` | unset | Optional LLM max output tokens. |
+| `MAX_TOKENS` | `20000` | LLM max output tokens. |
+| `DEFAULT_LANGUAGES` | `["en"]` | Preferred transcript languages. JSON array (`config set` also takes comma-separated). |
 | `YOUTUBE_COOKIE_FILE` | unset | Default Netscape cookies file path. |
 
 Provider API keys and provider auth keys are also accepted in `config.db` when they are listed in source constants.
-
-`chunk_size`, `chunk_overlap`, and `max_concurrent_chapters` are code-default settings, not normal `config.db` keys.
 
 Saved custom endpoints use `<name>/<model-id>`. `notewise process --model <name>/<model-id>` automatically selects that profile's base URL and API key, then sends LiteLLM `openai/<model-id>`. Custom names cannot use LiteLLM provider prefixes; remote endpoints require HTTPS; and changing `--base-url` requires a new `--api-key` instead of reusing a saved credential. Manage profiles with `notewise inference list|add|update|delete`; never expose the secret-bearing `CUSTOM_LLM_ENDPOINTS` value.
 
@@ -343,11 +345,19 @@ notewise setup
 notewise setup --show
 notewise setup --force
 notewise config
+notewise config edit
 notewise config-path
 notewise edit-config
 ```
 
-`notewise config` masks secrets before printing settings.
+`notewise config` masks secrets before printing settings. `notewise config
+edit` is an interactive, category-grouped editor (Model & Generation,
+Concurrency & Performance, Output & Transcripts, Custom Endpoints, OAuth
+Token Directories, Provider API Keys, Provider Auth & Cloud Credentials)
+for browsing and setting/unsetting keys without knowing their exact names.
+Its Custom Endpoints category is a table-based add/update/delete manager
+over saved endpoint rows, the same as `notewise inference
+list|add|update|delete`, not a raw-JSON editor.
 
 ## Models and providers
 
@@ -451,6 +461,7 @@ Main commands:
 | `notewise process URL` | Generate notes from one video, playlist, or batch file. |
 | `notewise setup` | Run the interactive config wizard. |
 | `notewise config` | Print masked effective config. |
+| `notewise config edit` | Interactively browse and edit config by category. |
 | `notewise config-path` | Print the active config path. |
 | `notewise edit-config` | Open the config file in an editor. |
 | `notewise auth login PROVIDER` | Login to OAuth providers. |
@@ -465,6 +476,7 @@ Main commands:
 | `notewise logs` | Inspect or clean session logs. |
 | `notewise update` | Check whether a newer release is available. |
 | `notewise version` | Show the installed version. |
+| `notewise help` | Show the same output as `notewise --help`/`-h`. |
 
 Process command example:
 
@@ -598,7 +610,7 @@ Processing flow:
 
 1. Cache check: unless `--force` is set, NoteWise checks the SQLite cache before metadata or transcript work.
 2. Metadata and transcript: NoteWise resolves YouTube metadata, captions, transcript segments, chapters, and playlist context when applicable.
-3. Generation: transcript text is chunked with source defaults `4000` size and `200` overlap, then sent to the configured LiteLLM model.
+3. Generation: transcript text is chunked with source defaults `12000` size and `1500` overlap, then sent to the configured LiteLLM model.
 4. Artifacts: NoteWise writes notes, optional quizzes, optional transcript exports, and rendered formats.
 5. Persistence: run stats, output paths, transcript content, tokens, costs, and timings are persisted to SQLite when possible.
 

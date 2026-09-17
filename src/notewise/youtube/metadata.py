@@ -129,9 +129,25 @@ def _coerce_raw_chapters(value: object | None) -> list[dict[str, object]]:
     return chapters
 
 
+_client_cache: dict[str | None, AsyncYouTubeExtractorClient] = {}
+
+
 def _client(cookie_file: str | None = None) -> AsyncYouTubeExtractorClient:
-    """Build a short-lived extractor client instance."""
-    return AsyncYouTubeExtractorClient(YouTubeExtractorConfig(cookie_file=cookie_file))
+    """Return a cached extractor client for this cookie file.
+
+    Building a client re-parses the cookie file and builds a fresh HTTP
+    opener; an instance is safe to reuse across many concurrent requests
+    (see AsyncYouTubeExtractorClient's docstring), and cookie_file is
+    invariant for a pipeline run, so this avoids repeating that setup for
+    every video/playlist lookup.
+    """
+    client = _client_cache.get(cookie_file)
+    if client is None:
+        client = AsyncYouTubeExtractorClient(
+            YouTubeExtractorConfig(cookie_file=cookie_file)
+        )
+        _client_cache[cookie_file] = client
+    return client
 
 
 def _video_url(video_id: str) -> str:

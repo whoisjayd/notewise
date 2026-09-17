@@ -2,9 +2,11 @@
 
 import asyncio
 import sys
+from types import SimpleNamespace
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
+import typer
 from typer.testing import CliRunner
 
 from notewise.cli import app as cli_app_module
@@ -532,6 +534,44 @@ def test_cache_show_shortcut_requires_video_id():
     assert result.exit_code == 2
 
 
+def test_cache_show_prompts_for_video_id_when_omitted(mocker):
+    """Omitting the video id should list cached videos and prompt for one."""
+    mocker.patch("notewise.cli.app._select_cached_video_id", return_value="dQw4w9WgXcQ")
+    render = mocker.patch("notewise.cli._admin.render_cache_entry")
+
+    result = runner.invoke(app, ["cache", "show"])
+
+    assert result.exit_code == 0
+    render.assert_called_once()
+    assert render.call_args.kwargs["video_id"] == "dQw4w9WgXcQ"
+
+
+def test_select_cached_video_id_returns_id_at_chosen_index(mocker):
+    """Picking index 1 should return the first row's video id."""
+    from notewise.cli.app import _select_cached_video_id
+
+    row = SimpleNamespace(id="dQw4w9WgXcQ", title="My Video")
+    repository = SimpleNamespace(get_recent_videos=lambda **_kwargs: [row])
+    mocker.patch(
+        "notewise.cli._admin._load_repository", return_value=(repository, None)
+    )
+    mocker.patch("rich.prompt.Prompt.ask", return_value="1")
+
+    video_id = _select_cached_video_id(MagicMock())
+
+    assert video_id == "dQw4w9WgXcQ"
+
+
+def test_select_cached_video_id_exits_when_cache_is_empty(mocker):
+    """No cache database should exit cleanly instead of crashing."""
+    from notewise.cli.app import _select_cached_video_id
+
+    mocker.patch("notewise.cli._admin._load_repository", return_value=(None, None))
+
+    with pytest.raises(typer.Exit):
+        _select_cached_video_id(MagicMock())
+
+
 # ---------------------------------------------------------------------------
 # process command — happy paths
 # ---------------------------------------------------------------------------
@@ -554,6 +594,24 @@ def test_process_bare_video_id_success(mock_config_exists, mock_pipeline):
 
     assert result.exit_code == 0
     pipeline_instance.run.assert_awaited_once()
+
+
+def test_process_prompts_for_url_when_omitted(mock_config_exists, mock_pipeline):
+    """Omitting the URL argument should prompt for one instead of erroring."""
+    _, pipeline_instance = mock_pipeline
+
+    result = runner.invoke(app, ["process"], input=f"{_VIDEO_URL}\n")
+
+    assert result.exit_code == 0
+    pipeline_instance.run.assert_awaited_once()
+
+
+def test_process_rejects_blank_url_from_prompt(mock_config_exists, mock_pipeline):
+    """A blank prompt response should fail cleanly, not proceed silently."""
+    result = runner.invoke(app, ["process"], input="\n")
+
+    assert result.exit_code == 1
+    assert "required" in result.output
 
 
 def test_process_batch_file(mock_config_exists, mock_pipeline, tmp_path):
@@ -610,6 +668,23 @@ def test_info_invalid_bare_id_shows_clean_error():
     assert result.exit_code == 1
     assert "Input Error" in result.stdout
     assert "Traceback" not in result.stdout
+
+
+def test_info_propagates_typer_exit_instead_of_reporting_unexpected_error():
+    """A typer.Exit raised inside info's try block must propagate as-is.
+
+    typer.Exit subclasses Exception, so a bare `except Exception` would
+    otherwise swallow it and misreport it as "Unexpected Error".
+    """
+
+    def _raise_exit(*_args, **_kwargs):
+        raise typer.Exit(3)
+
+    with patch("notewise.cli.app.parse_youtube_url", side_effect=_raise_exit):
+        result = runner.invoke(app, ["info", _VIDEO_URL])
+
+    assert result.exit_code == 3
+    assert "Unexpected Error" not in result.stdout
 
 
 def test_process_batch_file_success_prints_summary(

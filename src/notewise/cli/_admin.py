@@ -239,6 +239,9 @@ def render_runtime_info(console: Console) -> None:
     table.add_row("Video workers", str(settings.max_concurrent_videos))
     table.add_row("Chapter workers", str(settings.max_concurrent_chapters))
     table.add_row(
+        "Chunk size/overlap", f"{settings.chunk_size}/{settings.chunk_overlap}"
+    )
+    table.add_row(
         "YouTube requests/min",
         str(settings.youtube_requests_per_minute),
     )

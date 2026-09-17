@@ -17,7 +17,7 @@ def test_dashboard_initialization():
     )
 
     assert dash.playlist_name == "Test List"
-    assert len(dash.worker_tasks) == 3
+    assert len(dash.worker_snapshots) == 3
     assert dash.chapter_concurrency == 0
     assert dash.overall_progress.tasks[0].total == 10
 
@@ -29,9 +29,8 @@ def test_dashboard_updates():
     # Update worker 0
     dash.update_worker(0, "Processing...")
 
-    # Check if the task description was updated in the progress instance
-    task_id = dash.worker_tasks[0]
-    assert "Processing..." in dash.worker_progress.tasks[task_id].description
+    # Check the snapshot backing the rendered worker table was updated
+    assert "Processing..." in dash.worker_snapshots[0].detail
 
 
 def test_dashboard_update_worker_counts_legacy_status_as_running() -> None:
@@ -55,10 +54,7 @@ def test_dashboard_update_worker_keeps_preformatted_markup():
 
     dash.update_worker(0, "[cyan]Already styled[/cyan]")
 
-    task_id = dash.worker_tasks[0]
-    assert dash.worker_progress.tasks[task_id].description == (
-        "[cyan]Already styled[/cyan]"
-    )
+    assert dash.worker_snapshots[0].detail == "[cyan]Already styled[/cyan]"
 
 
 def test_dashboard_chapter_updates():
@@ -285,6 +281,78 @@ def test_dashboard_rendering_shows_structured_worker_state() -> None:
     assert "Generation" in output
     assert "Video A" in output
     assert "chunks 2/5" in output
+
+
+def test_dashboard_rendering_shows_log_path_config_item() -> None:
+    """The Log config item must actually render, not just be accepted.
+
+    Regression test: `_render_config_items` uses its own hardcoded label
+    groups to decide what to show, independent of what `config_items`
+    the caller passes in -- a label missing from those groups is silently
+    dropped even though it's present in `self.config_items`.
+    """
+    dash = PipelineDashboard(
+        10,
+        1,
+        "List",
+        "Model",
+        config_items=(DashboardConfigItem("Log", "/tmp/notewise.log"),),
+    )
+
+    console = Console(width=140)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert output.count("Log") == 1
+    assert "Log" in output
+    assert "notewise.log" in output
+
+
+def test_dashboard_rendering_hides_idle_workers() -> None:
+    """Idle video workers should not appear in the worker table."""
+    dash = PipelineDashboard(10, 3, "List", "Model")
+
+    dash.update_worker_state(0, phase="Generation", title="Video A", detail="")
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Video jobs" in output
+    assert "Video A" in output
+    assert "#2" not in output
+    assert "#3" not in output
+
+
+def test_dashboard_rendering_omits_worker_table_when_all_idle() -> None:
+    """The video-jobs section should be omitted entirely when nothing is active."""
+    dash = PipelineDashboard(10, 3, "List", "Model")
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Video jobs" not in output
+
+
+def test_dashboard_rendering_hides_idle_chapter_workers() -> None:
+    """Only assigned chapter slots should render in the chapter-jobs table."""
+    dash = PipelineDashboard(10, 1, "List", "Model", chapter_concurrency=3)
+
+    dash.start_chapter_worker("vid1:1", "vid1", "Chapter 1: generating")
+
+    console = Console(width=120)
+    with console.capture() as capture:
+        console.print(dash)
+
+    output = capture.get()
+    assert "Chapter jobs" in output
+    assert "Job 1" in output
+    assert "Job 2" not in output
+    assert "Job 3" not in output
 
 
 def test_dashboard_rendering():

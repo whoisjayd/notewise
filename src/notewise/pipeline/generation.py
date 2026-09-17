@@ -22,6 +22,7 @@ from notewise._constants import (
     TRANSCRIPT_CHUNK_SEPARATOR_TOKENS,
 )
 from notewise.config import settings as config
+from notewise.errors import PartialChapterGenerationError
 from notewise.llm.prompts.chapter_notes import (
     get_chapter_prompt,
 )
@@ -420,25 +421,36 @@ class StudyMaterialGenerator:
 
                     # Build overlap from tail of current chunk
                     overlap_chunk: list[str] = []
+                    overlap_token_counts: list[int] = []
                     overlap_tokens = 0
 
                     for prev_sent in reversed(current_chunk):
                         prev_tokens = self._count_tokens(prev_sent)
                         if overlap_tokens + prev_tokens <= config.chunk_overlap:
                             overlap_chunk.insert(0, prev_sent)
+                            overlap_token_counts.insert(0, prev_tokens)
                             overlap_tokens += prev_tokens
                         else:
                             break
 
-                    current_chunk = [*overlap_chunk, sentence]
-                    while (
-                        overlap_chunk
-                        and self._count_tokens(" ".join(current_chunk))
-                        > config.chunk_size
-                    ):
+                    # Tracks the joined chunk's token count incrementally
+                    # (per-sentence counts plus one separator per join, same
+                    # approximation already used above) instead of
+                    # re-tokenizing the whole joined string on every pop.
+                    running_tokens = overlap_tokens + term_tokens
+                    if overlap_chunk:
+                        running_tokens += TRANSCRIPT_CHUNK_SEPARATOR_TOKENS * len(
+                            overlap_chunk
+                        )
+                    while overlap_chunk and running_tokens > config.chunk_size:
+                        popped_tokens = overlap_token_counts.pop(0)
                         overlap_chunk.pop(0)
-                        current_chunk = [*overlap_chunk, sentence]
-                    current_tokens = self._count_tokens(" ".join(current_chunk))
+                        running_tokens -= (
+                            popped_tokens + TRANSCRIPT_CHUNK_SEPARATOR_TOKENS
+                        )
+
+                    current_chunk = [*overlap_chunk, sentence]
+                    current_tokens = running_tokens
                 else:
                     # Should be unreachable due to check above, but safe fallback
                     current_chunk.append(sentence)
@@ -453,6 +465,34 @@ class StudyMaterialGenerator:
 
         logger.info(f"Created {len(chunks)} chunks")
         return chunks
+
+    async def _generate_chunk_notes(
+        self,
+        chunks: list[str],
+        *,
+        system_prompt: str,
+        build_user_prompt: Callable[[str], str],
+        log_message: Callable[[int, int], str],
+        on_chunk: Callable[[int, int], None] | None,
+    ) -> list[str]:
+        """Generate one note per chunk in order, logging and reporting progress.
+
+        Shared by generate_study_notes, generate_single_chapter_notes, and
+        generate_quiz, which differ only in the prompt builder, system
+        prompt, and per-chunk log message.
+        """
+        notes: list[str] = []
+        for i, chunk in enumerate(chunks, 1):
+            logger.info(log_message(i, len(chunks)))
+            if on_chunk:
+                on_chunk(i, len(chunks))
+            notes.append(
+                await self._generate_text(
+                    system_prompt=system_prompt,
+                    user_prompt=build_user_prompt(chunk),
+                )
+            )
+        return notes
 
     async def generate_study_notes(
         self,
@@ -486,20 +526,15 @@ class StudyMaterialGenerator:
             return notes
 
         logger.info(f"{video_title}: Generating notes for {len(chunks)} chunks...")
-        chunk_notes = []
-
-        for i, chunk in enumerate(chunks, 1):
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            logger.info(f"{video_title}: Chunk {i}/{len(chunks)}")
-            note = await self._generate_text(
-                system_prompt=get_system_prompt(self.target_language),
-                user_prompt=get_chunk_prompt(
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            chunk_notes.append(note)
+        chunk_notes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_chunk_prompt(
+                chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: f"{video_title}: Chunk {i}/{total}",
+            on_chunk=on_chunk,
+        )
 
         logger.info(
             f"{video_title}: Finalizing {len(chunk_notes)} chunks via stitching..."
@@ -553,23 +588,17 @@ class StudyMaterialGenerator:
             " chunking before generation..."
         )
         chunks = self._chunk_transcript(chapter_text)
-        chunk_notes: list[str] = []
-
-        for i, chunk in enumerate(chunks, 1):
-            logger.info(
-                f"Chapter '{chapter_title[:40]}': generating part {i}/{len(chunks)}"
-            )
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            note = await self._generate_text(
-                system_prompt=get_system_prompt(self.target_language),
-                user_prompt=get_chapter_prompt(
-                    chapter_title,
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            chunk_notes.append(note)
+        chunk_notes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_chapter_prompt(
+                chapter_title, chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: (
+                f"Chapter '{chapter_title[:40]}': generating part {i}/{total}"
+            ),
+            on_chunk=on_chunk,
+        )
 
         logger.info(
             f"Chapter '{chapter_title[:40]}': finalizing {len(chunk_notes)} parts "
@@ -631,13 +660,21 @@ class StudyMaterialGenerator:
             asyncio.create_task(_generate_one(i, title, text))
             for i, (title, text) in enumerate(chapter_transcripts.items(), 1)
         ]
+        titles = list(chapter_transcripts)
         raw = await asyncio.gather(*tasks, return_exceptions=True)
         result: dict[str, str] = {}
-        for item in raw:
+        failures: list[tuple[str, BaseException]] = []
+        for title, item in zip(titles, raw, strict=True):
             if isinstance(item, BaseException):
-                raise item
+                failures.append((title, item))
+                continue
             ch_title, notes = item
             result[ch_title] = notes
+        if failures:
+            # A single stuck chapter must not throw away every sibling that
+            # already finished generating (and was already paid for) --
+            # the caller persists `completed` before propagating failure.
+            raise PartialChapterGenerationError(result, failures)
         return result
 
     async def generate_quiz(
@@ -671,19 +708,15 @@ class StudyMaterialGenerator:
             " — chunking before generation."
         )
         chunks = self._chunk_transcript(transcript)
-        partial_quizzes: list[str] = []
-        for i, chunk in enumerate(chunks, 1):
-            logger.info(f"Quiz: generating part {i}/{len(chunks)}")
-            if on_chunk:
-                on_chunk(i, len(chunks))
-            partial = await self._generate_text(
-                system_prompt=get_quiz_system_prompt(self.target_language),
-                user_prompt=get_quiz_prompt(
-                    chunk,
-                    target_language=self.target_language,
-                ),
-            )
-            partial_quizzes.append(partial)
+        partial_quizzes = await self._generate_chunk_notes(
+            chunks,
+            system_prompt=get_quiz_system_prompt(self.target_language),
+            build_user_prompt=lambda chunk: get_quiz_prompt(
+                chunk, target_language=self.target_language
+            ),
+            log_message=lambda i, total: f"Quiz: generating part {i}/{total}",
+            on_chunk=on_chunk,
+        )
 
         if len(partial_quizzes) == 1:
             return partial_quizzes[0]

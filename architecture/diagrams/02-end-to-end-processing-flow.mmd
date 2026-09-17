@@ -1,0 +1,64 @@
+sequenceDiagram
+    autonumber
+
+    actor User
+    participant CLI
+    participant Orchestrator
+    participant Cache as Local Cache
+    participant YouTube
+    participant Generator
+    participant Gateway as Model Gateway
+    participant Disk as Local Filesystem
+
+    Note over User,Disk: NoteWise End-to-End Processing Flow<br/>What happens after "notewise process URL"
+
+    User->>CLI: process URL
+    CLI->>Orchestrator: resolve input, submit video
+
+    Orchestrator->>Cache: check for cached result
+    alt already cached, not forced
+        Cache-->>Orchestrator: cached metadata + transcript
+        Note over Orchestrator: skip network fetch
+    else not cached or forced reprocessing
+        Orchestrator->>YouTube: fetch metadata (rate-limited)
+        YouTube-->>Orchestrator: title, duration, chapters
+        Orchestrator->>YouTube: fetch transcript (rate-limited)
+        alt transient failure
+            YouTube-->>Orchestrator: temporary error
+            Orchestrator->>YouTube: retry with backoff
+        end
+        YouTube-->>Orchestrator: transcript text
+        Orchestrator->>Cache: persist video + transcript
+    end
+
+    Orchestrator->>Orchestrator: check for chapter markers
+
+    alt chapters available
+        Orchestrator->>Generator: generate per chapter (bounded concurrency)
+    else no usable chapters
+        Orchestrator->>Generator: chunk transcript (token-bounded, with overlap)
+    end
+
+    loop each chunk or chapter
+        Generator->>Gateway: request generation
+        Gateway-->>Generator: text + token/cost usage
+    end
+
+    Generator->>Generator: stitch sections into one document
+    Generator-->>Orchestrator: finished study notes
+
+    par write requested formats
+        Orchestrator->>Disk: write Markdown
+    and
+        Orchestrator->>Disk: write HTML / PDF / DOCX
+    end
+
+    opt quiz requested
+        Orchestrator->>Generator: generate quiz
+        Generator->>Gateway: request generation
+        Gateway-->>Orchestrator: quiz document
+        Orchestrator->>Disk: write quiz
+    end
+
+    Orchestrator->>Cache: persist run stats (tokens, cost, timing)
+    Orchestrator-->>User: report cost and output paths

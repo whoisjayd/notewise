@@ -79,6 +79,7 @@ from notewise._constants import (
     FILES_GROUP,
     FORMATS_LABEL,
     LANGUAGES_LABEL,
+    LOG_LABEL,
     NOTES_LABEL,
     OUTPUT_LABEL,
     QUIZ_LABEL,
@@ -202,28 +203,7 @@ class PipelineDashboard:
         )
         self.overall_task = self.overall_progress.add_task("", total=total_videos)
 
-        # 2. Worker Progress Bars
-        self.worker_progress = Progress(
-            TextColumn("[bold cyan]{task.fields[label]}[/bold cyan]"),
-            SpinnerColumn(),
-            TextColumn("{task.description}"),
-            expand=True,
-        )
-
-        self.worker_tasks: list[TaskID] = []
-        for i in range(concurrency):
-            prefix = "`--" if i == concurrency - 1 else "|--"
-            tid = self.worker_progress.add_task(
-                DASHBOARD_IDLE_MARKUP,
-                label=DASHBOARD_WORKER_LABEL_TEMPLATE.format(
-                    prefix=prefix,
-                    number=i + 1,
-                ),
-                worker_id=i + 1,
-            )
-            self.worker_tasks.append(tid)
-
-        # 3. Chapter worker progress bars, partitioned under each video worker.
+        # 2. Chapter worker progress bars, partitioned under each video worker.
         self.chapter_progress = Progress(
             TextColumn("[bold magenta]{task.fields[label]}[/bold magenta]"),
             SpinnerColumn(),
@@ -293,12 +273,10 @@ class PipelineDashboard:
             index: Worker index (0-based).
             status: New status text.
         """
-        if 0 <= index < len(self.worker_tasks):
-            task_id = self.worker_tasks[index]
-            self._set_task_description(self.worker_progress, task_id, status)
+        if 0 <= index < len(self.worker_snapshots):
             if status == DASHBOARD_IDLE_MARKUP:
                 self.clear_worker_state(index)
-            elif 0 <= index < len(self.worker_snapshots):
+            else:
                 snapshot = self.worker_snapshots[index]
                 if snapshot.started_at is None:
                     snapshot.started_at = monotonic()
@@ -472,6 +450,19 @@ class PipelineDashboard:
                 f"[cyan]{safe_output_path}[/cyan]",
                 f"[dim]{DASHBOARD_HEADER_LIVE_LABEL}[/dim]",
             )
+        log_path = next(
+            (item.value for item in self.config_items if item.label == LOG_LABEL),
+            None,
+        )
+        if log_path:
+            # Shown alone (no second column) on its own row, unlike Output,
+            # so the full path has room to breathe instead of truncating at
+            # the same narrow width used for the small config-items table.
+            header.add_row(
+                f"[bold white]{LOG_LABEL}[/bold white] "
+                f"[dim]{self._safe_cell(log_path)}[/dim]",
+                "",
+            )
         return header
 
     def _render_progress_summary(self) -> Table:
@@ -599,6 +590,8 @@ class PipelineDashboard:
         table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[3], style="magenta", ratio=3)
         table.add_column(DASHBOARD_WORKER_TABLE_HEADERS[4], style="dim", ratio=1)
         for index, snapshot in enumerate(self.worker_snapshots, start=1):
+            if not snapshot.is_active:
+                continue
             table.add_row(
                 f"{DASHBOARD_WORKER_VIDEO_PREFIX}{index}",
                 self._safe_cell(snapshot.phase),
@@ -669,7 +662,10 @@ class PipelineDashboard:
                 ]
             )
 
-        if self.worker_tasks:
+        has_active_video_workers = any(
+            snapshot.is_active for snapshot in self.worker_snapshots
+        )
+        if has_active_video_workers:
             elements.extend(
                 [
                     Text(DASHBOARD_SECTION_WORKERS_HEADING, style="bold white"),
@@ -678,14 +674,22 @@ class PipelineDashboard:
                 ]
             )
 
-        has_active_chapter_workers = any(
-            key is not None for key in self._chapter_slot_keys
-        )
-        if self.chapter_tasks and has_active_chapter_workers:
+        active_chapter_tasks = [
+            self.chapter_tasks[slot_index]
+            for slot_index, key in enumerate(self._chapter_slot_keys)
+            if key is not None
+        ]
+        if active_chapter_tasks:
             elements.extend(
                 [
                     Text(DASHBOARD_SECTION_CHAPTER_TASKS_HEADING, style="bold white"),
-                    self.chapter_progress,
+                    self.chapter_progress.make_tasks_table(
+                        [
+                            task
+                            for task in self.chapter_progress.tasks
+                            if task.id in active_chapter_tasks
+                        ]
+                    ),
                     Rule(style="dim"),
                 ]
             )

@@ -7,7 +7,11 @@ import sys
 
 def _is_help_invocation(argv: list[str]) -> bool:
     """Return True when the current argv explicitly asks for help output."""
-    return any(arg in {"--help", "-h"} for arg in argv)
+    if any(arg in {"--help", "-h"} for arg in argv):
+        return True
+    # `notewise help` (no flag) is a plain top-level command, not an option,
+    # so it only counts here in the first argv position.
+    return bool(argv) and argv[0] == "help"
 
 
 def main() -> None:

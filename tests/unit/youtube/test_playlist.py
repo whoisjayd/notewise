@@ -104,6 +104,36 @@ class TestPlaylistExtraction:
         video_ids = await extract_playlist_videos("pl123")
         assert video_ids == ["dQw4w9WgXcQ", "J---aiyznGQ"]
 
+    async def test_extract_playlist_rejects_path_traversal_entry_id(
+        self, mock_extractor_client
+    ):
+        """A malicious/malformed entry `id` must not be trusted verbatim.
+
+        `_extract_async` used to join `entry.get("id")` straight into a
+        filesystem path (see `prepare_chapter_output_targets`) without
+        validating it looks like a real 11-char YouTube video ID. A crafted
+        `id` containing path-traversal components must be rejected and the
+        video ID re-derived from the entry's `url` instead.
+        """
+        client = mock_extractor_client["playlist"].return_value
+        client.playlist.return_value = {
+            "entries": [
+                {
+                    "id": "../../etc/passwd",
+                    "url": "https://youtube.com/watch?v=dQw4w9WgXcQ",
+                },
+                {
+                    "id": "has/slash/oops",
+                    "url": "https://broken.com/video",
+                },
+            ]
+        }
+
+        video_ids = await extract_playlist_videos("pl123")
+
+        assert video_ids == ["dQw4w9WgXcQ"]
+        assert all("/" not in video_id for video_id in video_ids)
+
     async def test_extract_async_logs_playlist_title_on_first_attempt(
         self, mock_extractor_client
     ):

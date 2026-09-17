@@ -10,7 +10,9 @@ from notewise import __main__ as main_mod
 def test_is_help_invocation() -> None:
     assert main_mod._is_help_invocation(["--help"]) is True
     assert main_mod._is_help_invocation(["setup", "-h"]) is True
+    assert main_mod._is_help_invocation(["help"]) is True
     assert main_mod._is_help_invocation(["version"]) is False
+    assert main_mod._is_help_invocation(["config", "set", "SOME_KEY", "help"]) is False
 
 
 def test_main_prints_banner_for_help(monkeypatch) -> None:

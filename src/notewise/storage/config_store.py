@@ -29,6 +29,7 @@ update between two concurrent writers).
 
 from __future__ import annotations
 
+import json
 import os
 import sqlite3
 from contextlib import closing
@@ -103,19 +104,65 @@ def _connect(db_path: Path) -> sqlite3.Connection:
         f"CREATE TABLE IF NOT EXISTS {CONFIG_ENDPOINTS_TABLE_NAME} "
         "(name TEXT PRIMARY KEY, base_url TEXT NOT NULL, api_key TEXT NOT NULL)"
     )
+    _add_model_pricing_column_if_missing(connection)
     return connection
+
+
+def _add_model_pricing_column_if_missing(connection: sqlite3.Connection) -> None:
+    """Additive migration: add the model_pricing column to existing rows.
+
+    config.db has no versioned migration runner (unlike cache.db); this
+    table predates the column, so existing installs need it added once,
+    defaulting existing rows to an empty JSON object (no saved pricing).
+    """
+    existing_columns = {
+        row[1]
+        for row in connection.execute(
+            f"PRAGMA table_info({CONFIG_ENDPOINTS_TABLE_NAME})"  # nosec B608 -- table name is a module constant, not user input
+        ).fetchall()
+    }
+    if "model_pricing" not in existing_columns:
+        connection.execute(
+            f"ALTER TABLE {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
+            "ADD COLUMN model_pricing TEXT NOT NULL DEFAULT '{}'"
+        )
+
+
+def _decode_model_pricing(raw: str) -> dict[str, tuple[float, float]]:
+    """Decode a stored model_pricing JSON blob, tolerating old/corrupt rows."""
+    try:
+        decoded = json.loads(raw)
+    except (TypeError, ValueError):
+        return {}
+    if not isinstance(decoded, dict):
+        return {}
+    pricing: dict[str, tuple[float, float]] = {}
+    for model_id, prices in decoded.items():
+        if (
+            isinstance(model_id, str)
+            and isinstance(prices, list)
+            and len(prices) == 2
+            and all(isinstance(price, (int, float)) for price in prices)
+        ):
+            pricing[model_id] = (float(prices[0]), float(prices[1]))
+    return pricing
 
 
 def _select_endpoint_profiles(
     connection: sqlite3.Connection,
 ) -> tuple[CustomEndpointProfile, ...]:
     rows = connection.execute(
-        f"SELECT name, base_url, api_key FROM {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
-        "ORDER BY rowid"
+        f"SELECT name, base_url, api_key, model_pricing "  # nosec B608 -- table name is a module constant, not user input
+        f"FROM {CONFIG_ENDPOINTS_TABLE_NAME} ORDER BY rowid"
     ).fetchall()
     return tuple(
-        CustomEndpointProfile(name=name, base_url=base_url, api_key=api_key)
-        for name, base_url, api_key in rows
+        CustomEndpointProfile(
+            name=name,
+            base_url=base_url,
+            api_key=api_key,
+            model_pricing=_decode_model_pricing(model_pricing),
+        )
+        for name, base_url, api_key, model_pricing in rows
     )
 
 
@@ -183,14 +230,28 @@ def list_custom_endpoints(db_path: Path) -> tuple[CustomEndpointProfile, ...]:
 
 
 def upsert_custom_endpoint(db_path: Path, profile: CustomEndpointProfile) -> None:
-    """Atomically insert or replace one saved custom endpoint."""
+    """Atomically insert or replace one saved custom endpoint.
+
+    An empty `model_pricing` on the incoming profile means "the caller
+    didn't (re)discover pricing this time", not "clear whatever pricing
+    this endpoint already had" -- so updating base_url/api_key without
+    also re-running pricing discovery preserves the previously saved
+    pricing instead of silently wiping it.
+    """
+    encoded_pricing = json.dumps(
+        {model_id: list(prices) for model_id, prices in profile.model_pricing.items()},
+        sort_keys=True,
+    )
     with closing(_connect(db_path)) as connection, connection:
         connection.execute(
-            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} (name, base_url, api_key) "  # nosec B608 -- table name is a module constant, not user input
-            "VALUES (?, ?, ?) "
+            f"INSERT INTO {CONFIG_ENDPOINTS_TABLE_NAME} "  # nosec B608 -- table name is a module constant, not user input
+            "(name, base_url, api_key, model_pricing) "
+            "VALUES (?, ?, ?, ?) "
             "ON CONFLICT(name) DO UPDATE SET base_url = excluded.base_url, "
-            "api_key = excluded.api_key",
-            (profile.name, profile.base_url, profile.api_key),
+            "api_key = excluded.api_key, "
+            "model_pricing = CASE WHEN excluded.model_pricing = '{}' "
+            "THEN model_pricing ELSE excluded.model_pricing END",
+            (profile.name, profile.base_url, profile.api_key, encoded_pricing),
         )
 
 

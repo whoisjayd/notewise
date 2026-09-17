@@ -7,7 +7,11 @@ from contextlib import closing
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
+from notewise._constants import PRUNE_DELETE_BATCH_SIZE
+from notewise.storage.models import VideoRecord
 from notewise.storage.repository import DatabaseRepository
 
 
@@ -252,6 +256,40 @@ def test_prune_old_entries_removes_only_stale_cache_rows(tmp_path):
     assert db.get_transcript("old-video") is None
     assert db.get_run_stats("old-video") == []
     assert db.get_video("new-video") is not None
+
+
+def test_prune_old_entries_deletes_across_multiple_delete_batches(tmp_path):
+    """Pruning more stale rows than one batch should still delete every row.
+
+    Regression test for DELETE ... IN (...) statements built from the full
+    stale-id list in one shot, which fails once the id count exceeds
+    SQLite's bound-parameter limit per statement.
+    """
+    db_path = tmp_path / "cache.db"
+    db = DatabaseRepository.get_instance(db_path)
+    engine = create_engine(f"sqlite:///{db_path}")
+
+    stale_count = PRUNE_DELETE_BATCH_SIZE + 5
+    old_time = datetime.now(UTC) - timedelta(days=45)
+    new_time = datetime.now(UTC) - timedelta(days=2)
+    with Session(engine) as session:
+        session.add_all(
+            VideoRecord(
+                id=f"stale-{i}", title=f"stale-{i}", duration=1, cached_at=old_time
+            )
+            for i in range(stale_count)
+        )
+        session.add(
+            VideoRecord(id="fresh-video", title="fresh", duration=1, cached_at=new_time)
+        )
+        session.commit()
+
+    deleted = db.prune_old_entries(older_than_days=30)
+
+    assert deleted == stale_count
+    with Session(engine) as session:
+        assert session.query(VideoRecord).count() == 1
+    assert db.get_video("fresh-video") is not None
 
 
 def test_get_cache_summary_reports_counts_and_bounds(tmp_path):

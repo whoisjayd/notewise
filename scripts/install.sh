@@ -93,11 +93,51 @@ fi
 ARCHIVE_PATH="$TMP_DIR/$ASSET_NAME"
 CHECKSUM_PATH="$TMP_DIR/SHA256SUMS.txt"
 
-fetch "$ASSET_URL" > "$ARCHIVE_PATH"
-fetch "$CHECKSUM_URL" > "$CHECKSUM_PATH"
+if command -v curl >/dev/null 2>&1; then
+  DOWNLOAD_CMD=curl
+elif command -v wget >/dev/null 2>&1; then
+  DOWNLOAD_CMD=wget
+else
+  echo "error: curl or wget is required" >&2
+  exit 1
+fi
+
+# Background the downloader binary directly (not a shell function call) so
+# $! is the actual curl/wget PID and can be reliably killed below.
+if [ "$DOWNLOAD_CMD" = curl ]; then
+  curl -fsSL "$ASSET_URL" -o "$ARCHIVE_PATH" &
+else
+  wget -qO "$ARCHIVE_PATH" "$ASSET_URL" &
+fi
+archive_pid=$!
+if [ "$DOWNLOAD_CMD" = curl ]; then
+  curl -fsSL "$CHECKSUM_URL" -o "$CHECKSUM_PATH" &
+else
+  wget -qO "$CHECKSUM_PATH" "$CHECKSUM_URL" &
+fi
+checksum_pid=$!
+
+archive_status=0
+wait "$archive_pid" || archive_status=$?
+if [ "$archive_status" -ne 0 ]; then
+  kill "$checksum_pid" 2>/dev/null || true
+  wait "$checksum_pid" 2>/dev/null || true
+  echo "error: failed to download release archive" >&2
+  exit 1
+fi
+
+# Hash the archive now, while the checksum-file download still runs in the
+# background, instead of waiting on it first.
+ACTUAL_SUM="$(sha256_file "$ARCHIVE_PATH")"
+
+checksum_status=0
+wait "$checksum_pid" || checksum_status=$?
+if [ "$checksum_status" -ne 0 ]; then
+  echo "error: failed to download checksum file" >&2
+  exit 1
+fi
 
 EXPECTED_SUM="$(awk -v target="$ASSET_NAME" '$2 == target || $2 == "*" target { print $1 }' "$CHECKSUM_PATH" | head -n1)"
-ACTUAL_SUM="$(sha256_file "$ARCHIVE_PATH")"
 
 if [ -z "${EXPECTED_SUM:-}" ] || [ "$EXPECTED_SUM" != "$ACTUAL_SUM" ]; then
   echo "error: checksum verification failed for $ASSET_NAME" >&2
