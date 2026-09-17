@@ -1398,6 +1398,8 @@ def info(
     except ConfigurationError as error:
         _print_configuration_error(error)
         raise typer.Exit(code=1) from None
+    except typer.Exit:
+        raise
     except (ValidationError, ValueError) as error:
         print_single_failure(
             console,

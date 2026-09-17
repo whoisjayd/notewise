@@ -670,6 +670,23 @@ def test_info_invalid_bare_id_shows_clean_error():
     assert "Traceback" not in result.stdout
 
 
+def test_info_propagates_typer_exit_instead_of_reporting_unexpected_error():
+    """A typer.Exit raised inside info's try block must propagate as-is.
+
+    typer.Exit subclasses Exception, so a bare `except Exception` would
+    otherwise swallow it and misreport it as "Unexpected Error".
+    """
+
+    def _raise_exit(*_args, **_kwargs):
+        raise typer.Exit(3)
+
+    with patch("notewise.cli.app.parse_youtube_url", side_effect=_raise_exit):
+        result = runner.invoke(app, ["info", _VIDEO_URL])
+
+    assert result.exit_code == 3
+    assert "Unexpected Error" not in result.stdout
+
+
 def test_process_batch_file_success_prints_summary(
     mock_config_exists,
     mock_pipeline,
