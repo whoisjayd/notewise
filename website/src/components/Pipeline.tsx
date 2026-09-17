@@ -18,7 +18,7 @@ const steps = [
     n: "02",
     title: "Cache check",
     icon: "cache",
-    body: "Hit? Skip the rest entirely. Otherwise pulls captions from YouTube, rate-limited (default 10/min) and stored verbatim under ~/.notewise.",
+    body: "Hit? Skip the rest entirely. Otherwise pulls captions from YouTube over a reused connection, rate-limited (default 10/min) and stored verbatim under ~/.notewise.",
   },
   {
     n: "03",
@@ -30,7 +30,7 @@ const steps = [
     n: "04",
     title: "Generate",
     icon: "quill",
-    body: "LiteLLM routes the chunks through your provider. Concurrency tunable; defaults to 5 parallel videos.",
+    body: "LiteLLM routes the chunks through your provider. Concurrency tunable; defaults to 5 parallel videos. Per-token cost is tracked as it goes, with pricing discovered from the endpoint itself for custom or self-hosted setups.",
   },
   {
     n: "05",

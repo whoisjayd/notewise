@@ -9,7 +9,11 @@ const items = [
   },
   {
     q: "Will it cost me money?",
-    a: "NoteWise itself is free, MIT-licensed, and always will be. What the model call costs depends entirely on your provider's pricing and your usage — check their docs before you point it at a 40-video playlist.",
+    a: "NoteWise itself is free, MIT-licensed, and always will be. What the model call costs depends entirely on your provider's pricing and your usage — check their docs before you point it at a 40-video playlist. NoteWise tracks and estimates that per-run cost as it works, even for self-hosted or custom endpoints without built-in LiteLLM pricing.",
+  },
+  {
+    q: "Do I have to remember every flag?",
+    a: "No. Commands for managing saved endpoints, reading or writing config keys, and inspecting a cached video will prompt you for anything you leave out — including a numbered, arrow-key picker for choosing a model.",
   },
   {
     q: "Can I use private or members-only videos?",
