@@ -841,8 +841,37 @@ class TestInteractiveFlow:
         assert config_store.list_custom_endpoints(get_config_db_path())
         assert load_config()["DEFAULT_MODEL"] == "gemini/gemini-2.5-flash"
 
+    def test_run_custom_endpoint_manager_update_rejects_blank_key_on_url_change(self):
+        """A blank API key must not silently carry over to a changed base URL."""
+        from notewise.config import get_config_db_path
+        from notewise.storage import config_store
+
+        db_path = get_config_db_path()
+        config_store.upsert_custom_endpoint(
+            db_path,
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+
+        mock_console = MagicMock()
+        with patch(
+            "rich.prompt.Prompt.ask",
+            side_effect=["u", "1", "https://new.example/", "", "q"],
+        ):
+            run_custom_endpoint_manager(console=mock_console)
+
+        assert config_store.list_custom_endpoints(db_path) == (
+            CustomEndpointProfile(
+                name="office", base_url="https://old.example/v1", api_key="old-key"
+            ),
+        )
+        mock_console.print.assert_any_call(
+            "[red]API key is required when the base URL changes.[/red]"
+        )
+
     def test_run_custom_endpoint_manager_updates_existing_endpoint(self):
-        """'u' should re-verify and replace only the targeted endpoint."""
+        """'u' should re-verify and replace both base URL and API key together."""
         from notewise.config import get_config_db_path
         from notewise.storage import config_store
 
@@ -870,7 +899,7 @@ class TestInteractiveFlow:
                     "u",
                     "1",
                     "https://new.example/",
-                    "",
+                    "new-secret",
                     "vendor/new-model",
                     "q",
                 ],
@@ -883,7 +912,7 @@ class TestInteractiveFlow:
             CustomEndpointProfile(
                 name="office",
                 base_url="https://new.example/v1",
-                api_key="old-key",
+                api_key="new-secret",
             ),
         )
 

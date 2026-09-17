@@ -12,7 +12,7 @@ from notewise.errors import (
     raise_if_video_unavailable,
 )
 from notewise.youtube._constants import YOUTUBE_PLAYLIST_URL
-from notewise.youtube.parser import extract_video_id
+from notewise.youtube.parser import extract_video_id, is_valid_video_id
 
 from .extractor.async_client import AsyncYouTubeExtractorClient
 from .extractor.client import YouTubeExtractorConfig
@@ -133,8 +133,9 @@ async def _extract_async(
 
     entries = payload.get("entries") or []
     for entry in entries:
+        raw_id = entry.get("id")
         url = entry.get("url") or ""
-        video_id = entry.get("id") or extract_video_id(url)
+        video_id = raw_id if is_valid_video_id(raw_id) else extract_video_id(url)
         if video_id:
             video_ids.append(video_id)
 

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import ipaddress
 import json
+import math
 import re
 from dataclasses import dataclass, field
 from functools import cache
@@ -385,13 +386,13 @@ _FLAT_PRICING_FIELD_PAIR = ("input_cost_per_token", "output_cost_per_token")
 
 def _coerce_price(value: object) -> float | None:
     """Parse one pricing value (str or number), rejecting anything negative."""
-    if not isinstance(value, (str, int, float)):
+    if isinstance(value, bool) or not isinstance(value, (str, int, float)):
         return None
     try:
         price = float(value)
     except (TypeError, ValueError):
         return None
-    return price if price >= 0 else None
+    return price if math.isfinite(price) and price >= 0 else None
 
 
 def _extract_model_pricing(model: dict[str, object]) -> tuple[float, float] | None:

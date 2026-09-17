@@ -2,10 +2,14 @@
 
 from __future__ import annotations
 
+import os
 from types import SimpleNamespace
+
+import pytest
 
 from notewise.pipeline._chapter_outputs import (
     ChapterGenerationPlan,
+    _atomic_write_text,
     persist_completed_chapter_files,
 )
 
@@ -63,3 +67,63 @@ def test_persist_completed_chapter_files_skips_chapters_with_no_file_target():
 
     # Must not raise despite chapter_file being None.
     persist_completed_chapter_files(pipeline, plan, {"Intro": "# Intro notes"})
+
+
+def test_atomic_write_text_writes_full_content(tmp_path):
+    """Normal case: the target file exists with the exact written content."""
+    target = tmp_path / "chapter.md"
+
+    _atomic_write_text(target, "# Chapter\nBody text")
+
+    assert target.read_text(encoding="utf-8") == "# Chapter\nBody text"
+
+
+def test_atomic_write_text_leaves_no_partial_file_on_mid_write_failure(
+    tmp_path, monkeypatch
+):
+    """A failure mid-write must never leave a truncated file at the target path.
+
+    Simulates a crash after the temp file is opened but before it is
+    replaced into place: the original write path is only ever a fresh temp
+    file, so a mid-write failure must leave the target path untouched
+    (absent here, since it never existed) and must not leak the temp file.
+    """
+    target = tmp_path / "chapter.md"
+
+    original_fdopen = os.fdopen
+
+    def _boom_fdopen(*args, **kwargs):
+        handle = original_fdopen(*args, **kwargs)
+        try:
+            handle.write("this is a partial write that should never land")
+            handle.flush()
+        finally:
+            handle.close()
+        raise OSError("simulated crash mid-write")
+
+    monkeypatch.setattr(os, "fdopen", _boom_fdopen)
+
+    with pytest.raises(OSError, match="simulated crash mid-write"):
+        _atomic_write_text(target, "# Full notes")
+
+    assert not target.exists()
+    leftover_temp_files = list(tmp_path.glob(".chapter.md.*.tmp"))
+    assert leftover_temp_files == []
+
+
+def test_atomic_write_text_does_not_truncate_existing_file_on_failure(
+    tmp_path, monkeypatch
+):
+    """An existing complete file must survive a failed rewrite attempt untouched."""
+    target = tmp_path / "chapter.md"
+    target.write_text("# Original complete notes", encoding="utf-8")
+
+    def _boom_fdopen(*args, **kwargs):
+        raise OSError("simulated crash mid-write")
+
+    monkeypatch.setattr(os, "fdopen", _boom_fdopen)
+
+    with pytest.raises(OSError, match="simulated crash mid-write"):
+        _atomic_write_text(target, "# New notes that never finish writing")
+
+    assert target.read_text(encoding="utf-8") == "# Original complete notes"

@@ -86,8 +86,10 @@ notewise inference delete [<name>]
 
 `list` displays each saved endpoint's name and base URL, never its API key.
 
-`add`, `update`, and `delete` are fully interactive: any argument or option left
-out is prompted for instead of erroring.
+`add` and `delete` are fully interactive: any argument or option left out is
+prompted for instead of erroring. `update` is interactive when `<name>` is
+omitted; when `<name>` is passed on the command line, it still requires
+`--base-url`, `--api-key`, or both.
 
 - `add` prompts for a name, base URL, and (hidden-input) API key when they're
   omitted. If `--model` is omitted, it launches the same paginated,

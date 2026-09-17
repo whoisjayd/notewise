@@ -14,6 +14,7 @@ from sqlalchemy.pool import NullPool
 from notewise._constants import (
     DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
     DEFAULT_HISTORY_LIMIT,
+    PRUNE_DELETE_BATCH_SIZE,
 )
 
 from .migrations import run_migrations
@@ -31,7 +32,14 @@ from .schemas import (
 
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
+
+
+def _chunked(items: list[str], size: int) -> Iterator[list[str]]:
+    """Yield successive slices of items no larger than size."""
+    for start in range(0, len(items), size):
+        yield items[start : start + size]
 
 
 class DatabaseRepository:
@@ -304,17 +312,21 @@ class DatabaseRepository:
             # VideoRecord and letting ORM cascade emit per-row deletes across
             # its three related tables -- avoids an N+1 delete cascade when
             # pruning many entries at once. Children are deleted before the
-            # parent to satisfy the foreign keys.
-            session.execute(
-                delete(TranscriptRecord).where(TranscriptRecord.video_id.in_(stale_ids))
-            )
-            session.execute(
-                delete(RunStatsRecord).where(RunStatsRecord.video_id.in_(stale_ids))
-            )
-            session.execute(
-                delete(ExportRecord).where(ExportRecord.video_id.in_(stale_ids))
-            )
-            session.execute(delete(VideoRecord).where(VideoRecord.id.in_(stale_ids)))
+            # parent to satisfy the foreign keys. IDs are chunked because
+            # SQLite caps the number of bound parameters per statement, and
+            # an unchunked IN (...) over stale_ids would fail once a prune
+            # run exceeds that limit.
+            for chunk in _chunked(stale_ids, PRUNE_DELETE_BATCH_SIZE):
+                session.execute(
+                    delete(TranscriptRecord).where(TranscriptRecord.video_id.in_(chunk))
+                )
+                session.execute(
+                    delete(RunStatsRecord).where(RunStatsRecord.video_id.in_(chunk))
+                )
+                session.execute(
+                    delete(ExportRecord).where(ExportRecord.video_id.in_(chunk))
+                )
+                session.execute(delete(VideoRecord).where(VideoRecord.id.in_(chunk)))
             session.commit()
         return len(stale_ids)
 

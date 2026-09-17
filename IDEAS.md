@@ -15,7 +15,7 @@ This is a **living backlog of potential features and improvements**, not a chang
 
 ### 1. Resumable/checkpointed chapter generation across process restarts
 Persist per-chapter completion state so an interrupted `process` run (Ctrl-C, crash, network drop) on a long chaptered video/playlist can resume from the last completed chapter instead of restarting the whole video.
-**Why:** `pipeline/_chapter_outputs.py` already writes completed chapter files incrementally and `_execution.py` checks for existing artifacts (`_cached_video_has_requested_artifacts`), but there's no resumption at the chapter-worker level if the process itself dies mid-run on a large multi-hour course video — the user must rerun `process` and rely on file-existence checks alone, which don't cover partially-flushed state.
+**Why:** `pipeline/_chapter_outputs.py` already writes completed chapter files incrementally (via `persist_completed_chapter_files`) and `build_chapter_generation_plan` skips chapters whose `chapter_file` already exists on a rerun, so most interrupted runs already resume for free. The remaining gap was that those writes used a plain truncating `write_text`, so a crash mid-write could leave a partial chapter file that the skip-check would wrongly treat as complete (now fixed with an atomic write-then-`os.replace`). What's still missing is resumption *within* an in-flight chapter worker itself, and a CLI-visible way to report/resume progress rather than relying purely on file existence.
 **Effort: M / Impact: M**
 
 ### 2. Configurable output post-processing hooks (e.g. auto-open, auto-copy, webhook)

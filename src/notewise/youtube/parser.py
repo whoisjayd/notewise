@@ -177,6 +177,11 @@ def _is_video_id(candidate: str | None) -> bool:
     return bool(candidate and _VIDEO_ID_PATTERN.fullmatch(candidate))
 
 
+def is_valid_video_id(candidate: str | None) -> bool:
+    """Return True when a candidate string looks like a YouTube video ID."""
+    return _is_video_id(candidate)
+
+
 def _looks_like_playlist_id(candidate: str) -> bool:
     """Return True when a bare string looks like a YouTube playlist id."""
     return len(candidate) >= 12 and candidate.startswith(_PLAYLIST_ID_PREFIXES)

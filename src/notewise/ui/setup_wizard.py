@@ -291,7 +291,11 @@ def _pick_model_and_save_endpoint(
     current_default = current_config.get("DEFAULT_MODEL", "")
     if current_default == target:
         return
-    matched_model = default_model_endpoint_match(current_config, name)
+    try:
+        matched_model = default_model_endpoint_match(current_config, name)
+    except CustomEndpointError as error:
+        console.print(f"[yellow]{error}[/yellow]")
+        matched_model = None
     if matched_model is not None or not current_default:
         save_config({"DEFAULT_MODEL": target}, console=console)
 
@@ -400,6 +404,11 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             except CustomEndpointError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
+            if not new_api_key and effective_base_url != existing.base_url:
+                active_console.print(
+                    "[red]API key is required when the base URL changes.[/red]"
+                )
+                continue
             effective_api_key = new_api_key or existing.api_key
 
             _pick_model_and_save_endpoint(
@@ -428,7 +437,14 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             except ConfigurationError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
-            if default_model_endpoint_match(current_config, normalized) is not None:
+            try:
+                blocks_delete = (
+                    default_model_endpoint_match(current_config, normalized) is not None
+                )
+            except CustomEndpointError as error:
+                active_console.print(f"[red]{error}[/red]")
+                continue
+            if blocks_delete:
                 active_console.print(
                     f"[red]Cannot delete {normalized!r} while DEFAULT_MODEL "
                     "uses it.[/red]"
@@ -979,7 +995,11 @@ def select_model(
                 return f"gemini/{selected}"
 
             return selected
-        elif stripped and not stripped.isdigit():
+        elif (
+            stripped
+            and not stripped.isdigit()
+            and stripped.lower() not in ("n", "p", "c")
+        ):
             query = stripped.lower()
             matches = [model for model in models if query in model.lower()]
             if not matches:

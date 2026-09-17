@@ -12,6 +12,7 @@ from notewise._constants import CUSTOM_ENDPOINT_HTTP_TIMEOUT_SECONDS
 from notewise.errors import CustomEndpointError
 from notewise.llm.custom_endpoint import (
     CustomEndpointProfile,
+    _coerce_price,
     default_model_endpoint_match,
     discover_and_verify_model,
     discover_openai_compatible_model_pricing,
@@ -458,6 +459,30 @@ def test_discover_model_pricing_rejects_negative_or_malformed_values(
     )
 
     assert pricing == {}
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("0.002", 0.002),
+        (0, 0.0),
+        (0.001, 0.001),
+    ],
+)
+def test_coerce_price_accepts_valid_numeric_and_string_prices(
+    value: object, expected: float
+) -> None:
+    """Valid non-negative numeric or numeric-string prices coerce correctly."""
+    assert _coerce_price(value) == expected
+
+
+@pytest.mark.parametrize(
+    "value",
+    [True, False, float("inf"), float("-inf"), float("nan"), -1, "not-a-number"],
+)
+def test_coerce_price_rejects_bools_and_non_finite_values(value: object) -> None:
+    """Booleans (int subclass) and non-finite floats must not coerce to a price."""
+    assert _coerce_price(value) is None
 
 
 def test_default_model_endpoint_match_returns_model_id_for_matching_prefix() -> None:

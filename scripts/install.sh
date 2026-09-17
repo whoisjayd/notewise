@@ -93,14 +93,34 @@ fi
 ARCHIVE_PATH="$TMP_DIR/$ASSET_NAME"
 CHECKSUM_PATH="$TMP_DIR/SHA256SUMS.txt"
 
-fetch "$ASSET_URL" > "$ARCHIVE_PATH" &
+if command -v curl >/dev/null 2>&1; then
+  DOWNLOAD_CMD=curl
+elif command -v wget >/dev/null 2>&1; then
+  DOWNLOAD_CMD=wget
+else
+  echo "error: curl or wget is required" >&2
+  exit 1
+fi
+
+# Background the downloader binary directly (not a shell function call) so
+# $! is the actual curl/wget PID and can be reliably killed below.
+if [ "$DOWNLOAD_CMD" = curl ]; then
+  curl -fsSL "$ASSET_URL" -o "$ARCHIVE_PATH" &
+else
+  wget -qO "$ARCHIVE_PATH" "$ASSET_URL" &
+fi
 archive_pid=$!
-fetch "$CHECKSUM_URL" > "$CHECKSUM_PATH" &
+if [ "$DOWNLOAD_CMD" = curl ]; then
+  curl -fsSL "$CHECKSUM_URL" -o "$CHECKSUM_PATH" &
+else
+  wget -qO "$CHECKSUM_PATH" "$CHECKSUM_URL" &
+fi
 checksum_pid=$!
 
 archive_status=0
 wait "$archive_pid" || archive_status=$?
 if [ "$archive_status" -ne 0 ]; then
+  kill "$checksum_pid" 2>/dev/null || true
   wait "$checksum_pid" 2>/dev/null || true
   echo "error: failed to download release archive" >&2
   exit 1

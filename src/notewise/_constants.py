@@ -114,6 +114,9 @@ STATS_SINCE_DAYS_VALIDATION_MESSAGE = (
 )
 DEFAULT_HISTORY_LIMIT = 10
 DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS = 30
+# Caps the number of IDs per DELETE ... IN (...) chunk so pruning stays
+# safely under SQLite's pre-3.32 999-host-parameter-per-statement limit.
+PRUNE_DELETE_BATCH_SIZE = 500
 DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS = 7
 SCHEMELESS_YOUTUBE_PREFIXES = (
     "youtube.com/",

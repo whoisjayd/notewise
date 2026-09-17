@@ -1653,14 +1653,9 @@ def inference_update(
             if base_url
             else existing_profile.base_url
         )
-        if (
-            name is not None
-            and base_url is not None
-            and api_key is None
-            and selected_base_url != existing_profile.base_url
-        ):
+        if not api_key and selected_base_url != existing_profile.base_url:
             _exit_inference_error(
-                "--api-key is required when --base-url changes a saved endpoint."
+                "--api-key is required when the base URL changes for a saved endpoint."
             )
         selected_api_key = api_key or existing_profile.api_key
 

@@ -197,7 +197,7 @@ def build_dashboard_config_items(
             "API key",
             _format_api_key_status(context.api_key_checked),
         ),
-        DashboardConfigItem(LOG_LABEL, str(get_session_log_path())),
+        DashboardConfigItem(LOG_LABEL, str(get_session_log_path() or "")),
     )
 
 

@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import os
 import re
+import tempfile
 from dataclasses import dataclass
+from pathlib import Path
 from typing import TYPE_CHECKING, Protocol
 
 import structlog
@@ -25,7 +28,6 @@ from notewise.utils import sanitize_filename
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-    from pathlib import Path
 
 
 logger = structlog.get_logger(__name__)
@@ -99,6 +101,31 @@ class ChapterGenerationPlan:
     chapters_to_generate: dict[str, str]
     chapter_targets: list[tuple[str, int, Path | None]]
     chapter_output_files: dict[str, Path]
+
+
+def _atomic_write_text(path: Path, text: str) -> None:
+    """Write text to path atomically.
+
+    Writes to a sibling temp file, then os.replace()s it into place, so a
+    crash mid-write can never leave a truncated file that a later run's
+    resume-skip check (see build_chapter_generation_plan) treats as complete.
+    """
+    fd, tmp_path = tempfile.mkstemp(
+        dir=path.parent, prefix=f".{path.name}.", suffix=".tmp"
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            handle.write(text)
+            handle.flush()
+            os.fsync(handle.fileno())
+        Path(tmp_path).replace(path)
+    except BaseException:
+        try:
+            os.close(fd)
+        except OSError:
+            pass
+        Path(tmp_path).unlink(missing_ok=True)
+        raise
 
 
 def _chapter_file_has_timestamps(chapter_file: Path) -> bool:
@@ -362,7 +389,7 @@ def persist_completed_chapter_files(
                 chapter_title,
                 start_seconds,
             )
-        chapter_file.write_text(notes, encoding="utf-8")
+        _atomic_write_text(chapter_file, notes)
 
 
 def write_chapter_outputs_and_collect_bundle(
@@ -393,7 +420,7 @@ def write_chapter_outputs_and_collect_bundle(
         if chapter_file is None:
             continue
 
-        chapter_file.write_text(notes, encoding="utf-8")
+        _atomic_write_text(chapter_file, notes)
 
     return bundled_chapter_notes
 

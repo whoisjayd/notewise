@@ -726,6 +726,46 @@ class TestLLMProvider:
         assert second == (0.000001, 0.000002)
         list_endpoints.assert_called_once()
 
+    def test_custom_endpoint_saved_pricing_applies_when_api_base_matches(self):
+        """Saved pricing applies when explicit api_base normalizes to same URL."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider("myendpoint/model-a", api_base="https://example.com/v1/")
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ):
+            pricing = provider._custom_endpoint_saved_pricing()
+
+        assert pricing == (0.000001, 0.000002)
+
+    def test_custom_endpoint_saved_pricing_skipped_when_api_base_overridden(self):
+        """Saved pricing must not apply when api_base points elsewhere."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider(
+            "myendpoint/model-a", api_base="https://override.example.com/v1"
+        )
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ):
+            pricing = provider._custom_endpoint_saved_pricing()
+
+        assert pricing is None
+
     def test_validate_config_logs_debug_for_unknown_provider(self):
         """Unmapped models should log a debug hint instead of requiring a known key."""
         with (
