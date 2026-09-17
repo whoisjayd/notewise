@@ -1,0 +1,39 @@
+flowchart TB
+    subgraph UserSurface["User Surface"]
+        CLI["Command-Line Interface\n(command parsing, interactive wizards)"]
+        Dashboard["Live Progress Dashboard\n(terminal UI)"]
+    end
+
+    subgraph Orchestration["Processing Orchestration"]
+        Pipeline["Video Processing Pipeline\n(orchestrator + concurrency control)"]
+        Generation["Study Material Generation\n(chunking, chapter handling, stitching)"]
+    end
+
+    subgraph External["External Data Sources"]
+        YouTubeExtraction["YouTube Extraction Layer\n(metadata, transcript, playlist, cookie auth)"]
+        ProviderLayer["AI Provider Abstraction\n(model-agnostic completion layer)"]
+    end
+
+    subgraph Storage["Local Storage"]
+        CacheDB["Local Cache Database\n(videos, transcripts, run stats, exports)"]
+        ConfigDB["Local Configuration Database\n(settings, credentials, saved endpoints)"]
+    end
+
+    subgraph Outputs["Generated Artifacts"]
+        Documents["Rendered Study Documents\n(Markdown / HTML / PDF / DOCX)"]
+        Quiz["Generated Quiz"]
+        TranscriptExport["Transcript Export"]
+    end
+
+    CLI --> Pipeline
+    CLI --> Dashboard
+    Pipeline -- "progress events" --> Dashboard
+    Pipeline --> YouTubeExtraction
+    Pipeline --> Generation
+    Generation --> ProviderLayer
+    Pipeline --> CacheDB
+    Pipeline --> Outputs
+    ProviderLayer --> ConfigDB
+    CLI --> ConfigDB
+    YouTubeExtraction -. "video platform" .-> Internet(("Public Internet"))
+    ProviderLayer -. "chosen AI provider" .-> Internet

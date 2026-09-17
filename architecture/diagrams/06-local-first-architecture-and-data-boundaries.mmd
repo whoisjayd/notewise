@@ -1,0 +1,29 @@
+flowchart TB
+    subgraph Machine["User's Machine (everything here stays local)"]
+        CLIApp["Command-Line Application"]
+
+        subgraph LocalState["Local State Directory"]
+            CacheDB["Cache Database\n(video metadata, transcripts, run stats, export records)"]
+            ConfigDB["Configuration Database\n(settings, provider API keys, saved custom endpoints)"]
+            OAuthTokens["OAuth / Subscription Tokens"]
+            Logs["Session Log Files"]
+            OutputFiles["Generated Study Documents,\nQuizzes, Transcript Exports"]
+        end
+
+        CLIApp --> CacheDB
+        CLIApp --> ConfigDB
+        CLIApp --> OAuthTokens
+        CLIApp --> Logs
+        CLIApp --> OutputFiles
+    end
+
+    subgraph Network["Leaves the Machine (only these two calls)"]
+        YouTubePlatform["YouTube\n(video metadata, captions/transcript)"]
+        ChosenProvider["The one AI provider the user configured\n(transcript text sent for generation)"]
+    end
+
+    CLIApp -- "read-only content requests" --> YouTubePlatform
+    CLIApp -- "generation requests\n(transcript + prompts)" --> ChosenProvider
+
+    NoTelemetry["No telemetry, analytics,\nor cloud backend of any kind"]
+    Machine -.-> NoTelemetry

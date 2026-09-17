@@ -1,0 +1,31 @@
+flowchart TB
+    ModelSelection["Configured model identifier\n(provider-prefixed)"]
+
+    subgraph AbstractionLayer["Provider Abstraction Layer"]
+        UnifiedInterface["Unified Generation Interface\n(single call shape regardless of provider)"]
+        CredentialResolution["Credential Resolution\n(explicit key, saved config, environment)"]
+        CostEstimation["Cross-Provider Cost Estimation\n(usage accounting normalized to USD)"]
+    end
+
+    subgraph BuiltInProviders["Built-in Providers"]
+        HostedProviders["Hosted model providers\n(commercial API-key based)"]
+        OAuthProviders["Subscription / OAuth device-flow providers"]
+    end
+
+    subgraph CustomProviders["Custom OpenAI-Compatible Endpoints"]
+        Discovery["Endpoint Model Discovery\n(list available models)"]
+        Verification["Live Verification Call\n(confirm endpoint + model work)"]
+        PricingDiscovery["Optional Pricing Discovery\n(endpoint-advertised per-token cost)"]
+        SavedProfile["Saved Endpoint Profile\n(name, base URL, credential, pricing)"]
+    end
+
+    ModelSelection --> UnifiedInterface
+    UnifiedInterface --> CredentialResolution
+    CredentialResolution --> BuiltInProviders
+    CredentialResolution --> CustomProviders
+    Discovery --> Verification --> PricingDiscovery --> SavedProfile
+    SavedProfile --> UnifiedInterface
+    BuiltInProviders --> CostEstimation
+    CustomProviders --> CostEstimation
+    CostEstimation -- "known catalog pricing" --> KnownPricing["Provider catalog lookup"]
+    CostEstimation -- "unknown / gateway model" --> SavedPricing["Fall back to saved endpoint pricing, else treat as zero-cost estimate"]

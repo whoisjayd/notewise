@@ -1,0 +1,39 @@
+flowchart TB
+    Transcript["Full Video Transcript"]
+    HasChapters{"Video has\npublisher chapter markers?"}
+
+    subgraph SinglePass["Single-Pass Path"]
+        FitsWindow{"Fits in one\ngeneration call?"}
+        DirectGen["Single generation call\n(whole transcript)"]
+        ChunkSplit["Transcript Chunking\n(sentence/boundary aware, with overlap)"]
+        PerChunkGen["Per-chunk generation\n(sequential, in order)"]
+        Stitching["Boundary Stitching\n(merge chunk edges into one coherent document)"]
+    end
+
+    subgraph ChapterPath["Chapter-Aware Path"]
+        ChapterSplit["Split transcript by chapter boundaries"]
+        ConcurrentChapters["Concurrent per-chapter generation\n(bounded parallelism)"]
+        ChapterChunking["Per-chapter chunking + stitching\n(for oversized chapters)"]
+        Bundle["Bundle chapter notes into one document\nor per-chapter files"]
+    end
+
+    FinalNotes["Final Study Notes Document"]
+
+    subgraph QuizPath["Quiz Generation (parallel concern)"]
+        QuizFits{"Fits in one\ngeneration call?"}
+        QuizDirect["Single quiz generation call"]
+        QuizChunks["Per-chunk partial quiz generation"]
+        QuizCombine["Combine partial quizzes into one quiz"]
+    end
+
+    Transcript --> HasChapters
+    HasChapters -- "No" --> FitsWindow
+    FitsWindow -- "Yes" --> DirectGen --> FinalNotes
+    FitsWindow -- "No" --> ChunkSplit --> PerChunkGen --> Stitching --> FinalNotes
+
+    HasChapters -- "Yes" --> ChapterSplit --> ConcurrentChapters
+    ConcurrentChapters --> ChapterChunking --> Bundle --> FinalNotes
+
+    Transcript -. "when quiz requested" .-> QuizFits
+    QuizFits -- "Yes" --> QuizDirect
+    QuizFits -- "No" --> QuizChunks --> QuizCombine

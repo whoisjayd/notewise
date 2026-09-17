@@ -1,0 +1,33 @@
+sequenceDiagram
+    actor User
+    participant CLI as Command-Line Interface
+    participant Pipeline as Processing Orchestrator
+    participant Cache as Local Cache Database
+    participant YouTube as YouTube Extraction Layer
+    participant Generator as Study Material Generator
+    participant Provider as AI Provider Abstraction
+    participant Disk as Output Artifacts
+
+    User->>CLI: notewise process <URL>
+    CLI->>Pipeline: submit video identifier(s)
+    Pipeline->>Cache: check for existing cached result
+    alt Already processed and artifacts complete
+        Cache-->>Pipeline: cached match found
+        Pipeline-->>User: skip video, reuse existing output
+    else Not cached or forced reprocessing
+        Pipeline->>YouTube: fetch video metadata and chapters
+        YouTube-->>Pipeline: title, duration, chapter markers
+        Pipeline->>YouTube: fetch transcript
+        YouTube-->>Pipeline: transcript text and language
+        Pipeline->>Generator: generate study notes from transcript
+        Generator->>Generator: chunk transcript if too long
+        loop for each chunk or chapter
+            Generator->>Provider: request generation
+            Provider-->>Generator: generated text and usage
+        end
+        Generator->>Generator: stitch chunk outputs into final document
+        Generator-->>Pipeline: completed notes (and quiz, if requested)
+        Pipeline->>Disk: render and write requested formats
+        Pipeline->>Cache: persist transcript, tokens, cost, timings
+        Pipeline-->>User: report success, cost, and output paths
+    end
