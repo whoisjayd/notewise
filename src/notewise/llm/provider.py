@@ -168,6 +168,11 @@ class LLMProvider:
         self.model = model
         self.api_base = api_base
         self.api_key = api_key
+        # Pricing is invariant for the life of this instance (self.model is
+        # fixed), so it's looked up from config.db at most once instead of
+        # on every generation call.
+        self._custom_endpoint_pricing_looked_up = False
+        self._custom_endpoint_pricing_cache: tuple[float, float] | None = None
         self._validate_config()
 
     @staticmethod
@@ -538,8 +543,15 @@ class LLMProvider:
 
         Pricing was captured at discovery time (see
         notewise.llm.custom_endpoint.discover_openai_compatible_model_pricing)
-        and saved alongside the endpoint profile.
+        and saved alongside the endpoint profile. Cached on this instance
+        after the first lookup: self.model is fixed for the instance's
+        lifetime, so the result can't change, and this avoids a fresh
+        config.db connection on every generation call.
         """
+        if self._custom_endpoint_pricing_looked_up:
+            return self._custom_endpoint_pricing_cache
+
+        self._custom_endpoint_pricing_looked_up = True
         endpoint_name, separator, model_id = self.model.partition("/")
         if not separator or not model_id:
             return None
@@ -553,7 +565,8 @@ class LLMProvider:
         profile = next((p for p in profiles if p.name == endpoint_name), None)
         if profile is None:
             return None
-        return profile.model_pricing.get(model_id)
+        self._custom_endpoint_pricing_cache = profile.model_pricing.get(model_id)
+        return self._custom_endpoint_pricing_cache
 
     def _custom_endpoint_saved_cost(
         self, usage_payload: dict[str, int], call_type: str

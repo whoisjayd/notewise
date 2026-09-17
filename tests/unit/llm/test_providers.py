@@ -704,6 +704,28 @@ class TestLLMProvider:
         ):
             assert provider._extract_cost(response) == 0.0
 
+    def test_custom_endpoint_saved_pricing_is_looked_up_once_and_cached(self):
+        """Pricing lookup must hit config.db at most once per provider instance."""
+        from notewise.llm.custom_endpoint import CustomEndpointProfile
+
+        provider = LLMProvider("myendpoint/model-a")
+        profile = CustomEndpointProfile(
+            name="myendpoint",
+            base_url="https://example.com/v1",
+            api_key="secret",
+            model_pricing={"model-a": (0.000001, 0.000002)},
+        )
+        with patch(
+            "notewise.storage.config_store.list_custom_endpoints",
+            return_value=(profile,),
+        ) as list_endpoints:
+            first = provider._custom_endpoint_saved_pricing()
+            second = provider._custom_endpoint_saved_pricing()
+
+        assert first == (0.000001, 0.000002)
+        assert second == (0.000001, 0.000002)
+        list_endpoints.assert_called_once()
+
     def test_validate_config_logs_debug_for_unknown_provider(self):
         """Unmapped models should log a debug hint instead of requiring a known key."""
         with (
