@@ -24,6 +24,27 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 # PlaylistError is imported from notewise.errors
 
 
+_client_cache: dict[str | None, AsyncYouTubeExtractorClient] = {}
+
+
+def _client(cookie_file: str | None = None) -> AsyncYouTubeExtractorClient:
+    """Return a cached extractor client for this cookie file.
+
+    Building a client re-parses the cookie file and builds a fresh HTTP
+    opener; an instance is safe to reuse across many concurrent requests
+    (see AsyncYouTubeExtractorClient's docstring), and cookie_file is
+    invariant for a pipeline run, so this avoids repeating that setup on
+    every retry attempt.
+    """
+    client = _client_cache.get(cookie_file)
+    if client is None:
+        client = AsyncYouTubeExtractorClient(
+            YouTubeExtractorConfig(cookie_file=cookie_file)
+        )
+        _client_cache[cookie_file] = client
+    return client
+
+
 async def extract_playlist_videos(
     playlist_id: str,
     cookie_file: str | None = None,
@@ -89,9 +110,7 @@ async def _extract_async(
 ) -> list[str]:
     """Async helper to extract playlist videos with the async extractor."""
     playlist_url = YOUTUBE_PLAYLIST_URL.format(playlist_id=playlist_id)
-    client = AsyncYouTubeExtractorClient(
-        YouTubeExtractorConfig(cookie_file=cookie_file)
-    )
+    client = _client(cookie_file)
 
     try:
         payload = await client.playlist(playlist_url)

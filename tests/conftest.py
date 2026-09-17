@@ -43,16 +43,33 @@ def deterministic_console_color(monkeypatch):
     monkeypatch.delenv("TTY_COMPATIBLE", raising=False)
 
 
+def _clear_extractor_client_caches() -> None:
+    """Reset the per-module cached-client dicts youtube/{metadata,playlist,
+    transcript}.py memoize by cookie_file.
+
+    Without this, a cached client (real or from `mock_extractor_client`)
+    from one test would leak into the next test that reuses the same
+    cookie_file key (most commonly `None`).
+    """
+    from notewise.youtube import metadata, playlist, transcript
+
+    metadata._client_cache.clear()
+    playlist._client_cache.clear()
+    transcript._client_cache.clear()
+
+
 @pytest.fixture(autouse=True)
 def isolate_state_dir(tmp_path, monkeypatch):
     """Redirect ~/.notewise to a tmp dir so tests never touch real state."""
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
+    _clear_extractor_client_caches()
     gc.collect()
     monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
     yield
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
+    _clear_extractor_client_caches()
     gc.collect()
 
 

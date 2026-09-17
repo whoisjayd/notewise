@@ -49,6 +49,27 @@ def _extract_error_reason(error: Exception) -> str:
     return "video is unavailable"
 
 
+_client_cache: dict[str | None, AsyncYouTubeExtractorClient] = {}
+
+
+def _client(cookie_file: str | None = None) -> AsyncYouTubeExtractorClient:
+    """Return a cached extractor client for this cookie file.
+
+    Building a client re-parses the cookie file and builds a fresh HTTP
+    opener; an instance is safe to reuse across many concurrent requests
+    (see AsyncYouTubeExtractorClient's docstring), and cookie_file is
+    invariant for a pipeline run, so this avoids repeating that setup for
+    every video's transcript fetch.
+    """
+    client = _client_cache.get(cookie_file)
+    if client is None:
+        client = AsyncYouTubeExtractorClient(
+            YouTubeExtractorConfig(cookie_file=cookie_file)
+        )
+        _client_cache[cookie_file] = client
+    return client
+
+
 async def fetch_transcript(
     video_id: str,
     languages: list[str] | None = None,
@@ -61,9 +82,7 @@ async def fetch_transcript(
         languages = list(DEFAULT_LANGUAGES)
 
     retries = TRANSCRIPT_MAX_RETRIES
-    client = AsyncYouTubeExtractorClient(
-        YouTubeExtractorConfig(cookie_file=cookie_file)
-    )
+    client = _client(cookie_file)
     for attempt in range(retries):
         try:
             if on_request is not None:

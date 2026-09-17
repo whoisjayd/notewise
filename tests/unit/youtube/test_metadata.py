@@ -239,6 +239,28 @@ class TestPlaylistMetadata:
         assert result == {"title": "Video"}
         client.metadata.assert_awaited_once_with("https://youtube.com/watch?v=abc")
 
+    async def test_client_is_reused_across_calls_for_the_same_cookie_file(
+        self, mock_extractor_client
+    ):
+        """Calls sharing a cookie_file must not rebuild the extractor client."""
+        client_cls = mock_extractor_client["metadata"]
+
+        await get_source_metadata("https://youtube.com/watch?v=abc", "cookies.txt")
+        await get_source_metadata("https://youtube.com/watch?v=def", "cookies.txt")
+
+        client_cls.assert_called_once()
+
+    async def test_client_is_rebuilt_for_a_different_cookie_file(
+        self, mock_extractor_client
+    ):
+        """A different cookie_file must get its own cached client instance."""
+        client_cls = mock_extractor_client["metadata"]
+
+        await get_source_metadata("https://youtube.com/watch?v=abc", "cookies-a.txt")
+        await get_source_metadata("https://youtube.com/watch?v=abc", "cookies-b.txt")
+
+        assert client_cls.call_count == 2
+
 
 class TestMetadataAccessHelpers:
     def test_coerce_raw_chapters_filters_invalid_items(self):
