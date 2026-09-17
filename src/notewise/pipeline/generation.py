@@ -421,25 +421,36 @@ class StudyMaterialGenerator:
 
                     # Build overlap from tail of current chunk
                     overlap_chunk: list[str] = []
+                    overlap_token_counts: list[int] = []
                     overlap_tokens = 0
 
                     for prev_sent in reversed(current_chunk):
                         prev_tokens = self._count_tokens(prev_sent)
                         if overlap_tokens + prev_tokens <= config.chunk_overlap:
                             overlap_chunk.insert(0, prev_sent)
+                            overlap_token_counts.insert(0, prev_tokens)
                             overlap_tokens += prev_tokens
                         else:
                             break
 
-                    current_chunk = [*overlap_chunk, sentence]
-                    while (
-                        overlap_chunk
-                        and self._count_tokens(" ".join(current_chunk))
-                        > config.chunk_size
-                    ):
+                    # Tracks the joined chunk's token count incrementally
+                    # (per-sentence counts plus one separator per join, same
+                    # approximation already used above) instead of
+                    # re-tokenizing the whole joined string on every pop.
+                    running_tokens = overlap_tokens + term_tokens
+                    if overlap_chunk:
+                        running_tokens += TRANSCRIPT_CHUNK_SEPARATOR_TOKENS * len(
+                            overlap_chunk
+                        )
+                    while overlap_chunk and running_tokens > config.chunk_size:
+                        popped_tokens = overlap_token_counts.pop(0)
                         overlap_chunk.pop(0)
-                        current_chunk = [*overlap_chunk, sentence]
-                    current_tokens = self._count_tokens(" ".join(current_chunk))
+                        running_tokens -= (
+                            popped_tokens + TRANSCRIPT_CHUNK_SEPARATOR_TOKENS
+                        )
+
+                    current_chunk = [*overlap_chunk, sentence]
+                    current_tokens = running_tokens
                 else:
                     # Should be unreachable due to check above, but safe fallback
                     current_chunk.append(sentence)
