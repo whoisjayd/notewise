@@ -122,8 +122,8 @@ class TestConfig:
         assert cfg.deepseek_api_key == "ds_key"
 
     def test_temperature_out_of_range(self, monkeypatch):
-        """Temperature > 1.0 raises ValidationError."""
-        monkeypatch.setenv("TEMPERATURE", "1.5")
+        """Temperature above the provider ceiling raises ValidationError."""
+        monkeypatch.setenv("TEMPERATURE", "2.1")
         with pytest.raises(ValidationError):
             Config()
 
