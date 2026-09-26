@@ -621,10 +621,21 @@ def process(
         )
         if base_url is not None:
             from notewise.errors import CustomEndpointError
-            from notewise.llm.custom_endpoint import versioned_openai_base_url
+            from notewise.llm.custom_endpoint import (
+                same_openai_base_url,
+                versioned_openai_base_url,
+            )
 
             try:
-                selected_api_base = versioned_openai_base_url(base_url)
+                # An override naming the saved endpoint's own base must reuse
+                # it verbatim: versioning it again would point the run at a URL
+                # that endpoint never answered.
+                selected_api_base = (
+                    configured_endpoint[0]
+                    if configured_endpoint is not None
+                    and same_openai_base_url(base_url, configured_endpoint[0])
+                    else versioned_openai_base_url(base_url)
+                )
             except CustomEndpointError as error:
                 raise typer.BadParameter(str(error), param_hint="--base-url") from error
         elif configured_endpoint is not None:

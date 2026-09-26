@@ -86,6 +86,43 @@ def test_process_transports_normalized_endpoint_options(mocker, tmp_path: Path) 
     assert captured["selected_api_key"] == "run-key"
 
 
+def test_process_reuses_the_saved_base_url_when_the_override_names_it(
+    mocker, tmp_path: Path
+) -> None:
+    """An override naming the saved endpoint must not be versioned a second time.
+
+    Discovery can save a path-only base such as `https://host/openai`; adding
+    `/v1` to it again would point the run at a URL the endpoint never answered.
+    """
+    captured, settings = _capture_process_runner(mocker, tmp_path)
+    settings.get_custom_endpoint_for_model.return_value = (
+        "https://stored.example/openai",
+        "stored-key",
+    )
+    versioned = mocker.patch(
+        "notewise.llm.custom_endpoint.versioned_openai_base_url",
+        return_value="https://stored.example/openai/v1",
+    )
+
+    result = runner.invoke(
+        cli_app.app,
+        [
+            "process",
+            "https://youtube.com/watch?v=video",
+            "--model",
+            "gateway/selected-model",
+            "--base-url",
+            "https://stored.example/openai",
+            "--api-key",
+            "run-key",
+        ],
+    )
+
+    assert result.exit_code == 0
+    versioned.assert_not_called()
+    assert captured["selected_api_base"] == "https://stored.example/openai"
+
+
 def test_process_refuses_to_reuse_key_for_different_endpoint_origin(
     mocker,
     tmp_path: Path,
