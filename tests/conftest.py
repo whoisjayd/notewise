@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from notewise.config import settings
 from notewise.pipeline import clear_youtube_limiters
 from notewise.storage import DatabaseRepository
 
@@ -66,7 +67,13 @@ def isolate_state_dir(tmp_path, monkeypatch):
     _clear_extractor_client_caches()
     gc.collect()
     monkeypatch.setenv("NOTEWISE_HOME", str(tmp_path / ".notewise"))
+    # ``settings`` is a lazy singleton: whichever test first touched it cached a
+    # real AppSettings, built from the developer's own config.db, and every
+    # later test inherited it despite NOTEWISE_HOME. Rebuild it per test so no
+    # suite result depends on the machine it runs on.
+    settings.reload()
     yield
+    settings.reload()
     DatabaseRepository.close_all_instances()
     clear_youtube_limiters()
     _clear_extractor_client_caches()
