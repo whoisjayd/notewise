@@ -1046,17 +1046,18 @@ class TestInteractiveFlow:
             key = get_api_key("openai", existing_key="old-key")
             assert key == "old-key"
 
-    def test_get_api_key_retry(self):
-        """Test retry on invalid key."""
-        # First return invalid (short), then valid
-        inputs = ["short", "sk-valid-length-key-12345"]
+    def test_get_api_key_reprompts_only_for_a_blank_key(self):
+        """A blank key re-prompts; a short local key is accepted as-is."""
+        inputs = ["   ", "local-key"]
 
         with (
             patch("rich.prompt.Confirm.ask", return_value=False),
-            patch("rich.prompt.Prompt.ask", side_effect=inputs),
+            patch("rich.prompt.Prompt.ask", side_effect=inputs) as ask,
         ):
             key = get_api_key("openai")
-            assert key == "sk-valid-length-key-12345"
+
+        assert key == "local-key"
+        assert ask.call_count == 2
 
     def test_get_api_key_masks_existing_key_with_mask_secret(self):
         """Existing key prompt should use the shared mask_secret helper."""

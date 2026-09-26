@@ -1077,7 +1077,7 @@ def get_api_key(
 
     while True:
         api_key = Prompt.ask("Enter your API key", password=True)
-        if api_key and len(api_key) > 10:
+        if api_key.strip():
             return api_key
         active_console.print("[red]Invalid API key. Please try again.[/red]")
 
