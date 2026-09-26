@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import re
 from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
@@ -69,7 +70,10 @@ def truncate_for_path(parent: Path, name: str, *, keep_prefix: str = "") -> str:
     hold the prefix plus an extension and at least one character, the name is
     returned unchanged so the real OSError surfaces instead of a colliding name.
     """
-    resolved = str(Path(parent).resolve())
+    # abspath, not resolve: resolve() follows symlinks, and on macOS it turns
+    # /var/folders/... into /private/var/folders/..., budgeting against a path
+    # ~8 characters longer than the one we actually write to.
+    resolved = os.path.abspath(parent)  # noqa: PTH100 - must not follow symlinks
     budget = MAX_PATH_LENGTH - _windows_path_length(resolved) - 1
     if _windows_path_length(name) <= budget:
         return name
