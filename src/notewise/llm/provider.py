@@ -566,15 +566,9 @@ class LLMProvider:
         if profile is None:
             return None
         if self.api_base is not None:
-            from notewise.errors import CustomEndpointError
-            from notewise.llm.custom_endpoint import normalize_openai_base_url
+            from notewise.llm.custom_endpoint import same_openai_base_url
 
-            try:
-                api_base_matches = normalize_openai_base_url(
-                    self.api_base
-                ) == normalize_openai_base_url(profile.base_url)
-            except CustomEndpointError:
-                return None
+            api_base_matches = same_openai_base_url(self.api_base, profile.base_url)
             if not api_base_matches:
                 return None
         self._custom_endpoint_pricing_cache = profile.model_pricing.get(model_id)

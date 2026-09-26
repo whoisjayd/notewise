@@ -47,8 +47,13 @@ Adding an endpoint appends it to the registry. Adding a name that normalizes to 
 existing name replaces only that endpoint after discovery and verification succeed;
 other saved endpoints remain unchanged. Names are unique after normalization and
 cannot use LiteLLM provider prefixes. Base URLs must be absolute HTTPS URLs, except
-explicit loopback endpoints may use HTTP. Setup accepts a URL with or without `/v1`
-and stores it with the `/v1` suffix.
+explicit loopback endpoints may use HTTP. Setup works out the API base URL itself:
+it uses the URL exactly as you enter it when the endpoint answers on it, and retries
+once with `/v1` appended when it does not, then saves whichever URL worked. A bare
+origin always gains the `/v1` segment, a path that already names a version (`v1`,
+`v1beta`, `v2`) is left alone, and a pasted request path such as `/chat/completions`
+or `/models` is trimmed back to the base. If no form answers, the error names every
+URL that was tried and why each one failed.
 
 The registry is stored as one row per endpoint (`name`, `base_url`, `api_key`) in a
 dedicated table in `~/.notewise/config.db`, managed with `notewise inference

@@ -9,7 +9,7 @@ import re
 from dataclasses import dataclass, field
 from functools import cache
 from typing import TYPE_CHECKING
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.parse import urlsplit, urlunsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
@@ -18,9 +18,12 @@ import structlog
 from notewise._constants import (
     CUSTOM_ENDPOINT_DISCOVERY_ACCEPT_HEADER,
     CUSTOM_ENDPOINT_HTTP_TIMEOUT_SECONDS,
+    CUSTOM_ENDPOINT_OPERATION_PATH_SUFFIXES,
     CUSTOM_ENDPOINT_VERIFICATION_INSTRUCTIONS,
     CUSTOM_ENDPOINT_VERIFICATION_MAX_OUTPUT_TOKENS,
     CUSTOM_ENDPOINT_VERIFICATION_PROMPT,
+    CUSTOM_ENDPOINT_VERSION_PATH,
+    CUSTOM_ENDPOINT_VERSION_SEGMENT_PATTERN,
     CUSTOM_LLM_NAME_PATTERN,
     LLM_IDENTIFYING_HEADERS,
 )
@@ -186,8 +189,8 @@ def _is_loopback_hostname(hostname: str) -> bool:
         return False
 
 
-def normalize_openai_base_url(value: str) -> str:
-    """Return an absolute OpenAI-compatible base URL ending in ``/v1``.
+def _validated_base_url_parts(value: str) -> tuple[str, str, str]:
+    """Validate an endpoint URL and return its `(scheme, netloc, path)`.
 
     The custom endpoint contract deliberately limits URLs to a direct HTTP(S)
     origin and path. Userinfo, query strings, and fragments are not useful for
@@ -232,11 +235,112 @@ def normalize_openai_base_url(value: str) -> str:
             "Custom endpoint URL must use HTTPS unless its host is loopback."
         )
 
-    path = parsed.path.rstrip("/")
-    if not path.endswith("/v1"):
-        path = f"{path}/v1"
+    return parsed.scheme.lower(), parsed.netloc.lower(), parsed.path
 
-    return urlunsplit((parsed.scheme.lower(), parsed.netloc, path, "", ""))
+
+def _tidy_base_path(path: str) -> str:
+    """Return the API-root path of a user-supplied endpoint path.
+
+    Empty segments (duplicate and trailing slashes) are dropped, as is any
+    pasted request path such as `/chat/completions` or `/models` -- those are
+    endpoints a client calls, not the base to point a client at. The path is
+    never emptied: a base URL with nothing left in it is not a base URL.
+    """
+    segments = [segment for segment in path.split("/") if segment]
+    while len(segments) > 1:
+        lowered = "/".join(segment.lower() for segment in segments)
+        suffix = next(
+            (
+                candidate
+                for candidate in CUSTOM_ENDPOINT_OPERATION_PATH_SUFFIXES
+                if lowered == candidate or lowered.endswith(f"/{candidate}")
+            ),
+            None,
+        )
+        if suffix is None:
+            break
+        segments = segments[: -suffix.count("/") - 1]
+    return "/".join(segments)
+
+
+def clean_openai_base_url(value: str) -> str:
+    """Return an absolute, tidied endpoint URL that keeps its own path.
+
+    Applies the same validation and path cleanup as `normalize_openai_base_url`
+    but never adds or removes a version segment. A base URL that has already
+    been discovered, verified, or saved must survive a round trip through the
+    config unchanged, so every caller downstream of resolution uses this.
+    """
+    scheme, netloc, path = _validated_base_url_parts(value)
+    return urlunsplit((scheme, netloc, _tidy_base_path(path), "", ""))
+
+
+def normalize_openai_base_url(value: str) -> str:
+    """Return the base URL form a saved endpoint is configured with.
+
+    A bare origin is never a usable OpenAI-compatible API base, so it gains
+    the version segment. Every URL that already carries a path is kept
+    exactly as written: discovery resolves a path that works as typed, and
+    rewriting it here would silently repoint a working endpoint on the very
+    next config read.
+    """
+    scheme, netloc, path = _validated_base_url_parts(value)
+    tidied = _tidy_base_path(path)
+    if tidied:
+        return urlunsplit((scheme, netloc, tidied, "", ""))
+    return urlunsplit((scheme, netloc, CUSTOM_ENDPOINT_VERSION_PATH, "", ""))
+
+
+def versioned_openai_base_url(value: str) -> str:
+    """Return the base URL with an explicit version segment appended.
+
+    Unlike `normalize_openai_base_url` this also appends the segment to a path
+    that lacks one (`https://host/api` -> `https://host/api/v1`). Use it when
+    there is no discovery step to fall back on -- a single run's `--base-url`
+    override -- and never to build a saved profile. A path already ending in a
+    version segment (`v1`, `v1beta`, `v2`, in any case) is left as written.
+    """
+    scheme, netloc, path = _validated_base_url_parts(value)
+    tidied = _tidy_base_path(path)
+    final_segment = tidied.rsplit("/", 1)[-1]
+    if tidied and re.fullmatch(
+        CUSTOM_ENDPOINT_VERSION_SEGMENT_PATTERN, final_segment, re.IGNORECASE
+    ):
+        return urlunsplit((scheme, netloc, tidied, "", ""))
+    return urlunsplit(
+        (scheme, netloc, f"{tidied}{CUSTOM_ENDPOINT_VERSION_PATH}", "", "")
+    )
+
+
+def same_openai_base_url(left: str, right: str) -> bool:
+    """Return whether two endpoint URLs address the same API base.
+
+    Accepts a match whether either side spelled the version segment out
+    (`https://host/v1`) or left it implicit (`https://host`), so a saved base
+    URL still matches a caller that passes the origin it was derived from.
+    """
+    try:
+        return clean_openai_base_url(left) == clean_openai_base_url(
+            right
+        ) or normalize_openai_base_url(left) == normalize_openai_base_url(right)
+    except CustomEndpointError:
+        return False
+
+
+def _base_url_candidates(value: str) -> tuple[str, ...]:
+    """Return the base URLs to try, in order.
+
+    A bare origin has exactly one candidate -- the versioned form every
+    OpenAI-compatible API uses -- so a resolved URL can never be saved in a
+    shape that config parsing would rewrite. A URL with a path is tried
+    exactly as typed first and only falls back to the versioned form when the
+    endpoint rejects it.
+    """
+    as_typed = clean_openai_base_url(value)
+    if not urlsplit(as_typed).path:
+        return (normalize_openai_base_url(value),)
+    versioned = versioned_openai_base_url(value)
+    return (as_typed,) if as_typed == versioned else (as_typed, versioned)
 
 
 def normalize_custom_model_prefix(value: str) -> str:
@@ -258,18 +362,18 @@ def normalize_custom_model_prefix(value: str) -> str:
 
 
 def _fetch_model_list_payload(base_url: str, api_key: str) -> list[dict[str, object]]:
-    """Fetch and validate the raw `/v1/models` `data` array.
+    """Fetch the raw `/models` `data` array, or fail with a short reason.
 
-    Shared by model-ID discovery and pricing discovery so both parse the
-    exact same response instead of issuing two requests.
-
-    Redirects are refused so the bearer token is never forwarded to another
-    origin. Failures intentionally omit upstream response bodies and secrets.
+    The base URL is used exactly as given: resolution is the caller's job, so
+    a saved or already-discovered base is never rewritten here. Redirects are
+    refused so the bearer token is never forwarded to another origin, and
+    failures carry no upstream response body or secret -- the returned reason
+    is a fragment the caller completes into one user-facing sentence.
     """
-    normalized_base_url = normalize_openai_base_url(base_url)
+    cleaned_base_url = clean_openai_base_url(base_url)
     _validate_api_key(api_key)
     request = Request(
-        f"{normalized_base_url}/models",
+        f"{cleaned_base_url}/models",
         headers={
             "Accept": CUSTOM_ENDPOINT_DISCOVERY_ACCEPT_HEADER,
             "Authorization": f"Bearer {api_key}",
@@ -292,50 +396,60 @@ def _fetch_model_list_payload(base_url: str, api_key: str) -> list[dict[str, obj
         )
         if 300 <= error.code < 400:
             raise CustomEndpointError(
-                "Custom endpoint redirected model discovery. "
-                "Use the final endpoint URL."
+                f"redirected to another origin (HTTP {error.code})"
             ) from None
-        raise CustomEndpointError(
-            f"Custom endpoint model discovery failed with HTTP {error.code}."
-        ) from None
-    except (URLError, TimeoutError, OSError) as error:
-        logger.warning(
-            "Custom endpoint model discovery failed",
-            error_type=type(error).__name__,
-            error=_summarize_error(error),
-        )
-        raise CustomEndpointError(
-            "Could not reach the custom endpoint while discovering models."
-        ) from None
+        raise CustomEndpointError(f"HTTP {error.code}") from None
     except Exception as error:
         logger.warning(
             "Custom endpoint model discovery failed",
             error_type=type(error).__name__,
             error=_summarize_error(error),
         )
-        raise CustomEndpointError(
-            "Could not reach the custom endpoint while discovering models."
-        ) from None
+        raise CustomEndpointError("unreachable") from None
 
     try:
         payload = json.loads(raw_payload.decode("utf-8"))
     except (AttributeError, TypeError, UnicodeDecodeError, json.JSONDecodeError):
-        raise CustomEndpointError(
-            "Custom endpoint model discovery returned invalid JSON."
-        ) from None
+        raise CustomEndpointError("returned invalid JSON") from None
 
     if not isinstance(payload, dict) or not isinstance(payload.get("data"), list):
-        raise CustomEndpointError(
-            "Custom endpoint model discovery returned an invalid model list."
-        )
+        raise CustomEndpointError("returned an invalid model list")
 
     for model in payload["data"]:
         if not isinstance(model, dict):
-            raise CustomEndpointError(
-                "Custom endpoint model discovery returned an invalid model list."
-            )
+            raise CustomEndpointError("returned an invalid model list")
 
     return payload["data"]
+
+
+def _discover_model_list(base_url: str, api_key: str) -> list[dict[str, object]]:
+    """Fetch the model list for one known-good base URL."""
+    try:
+        return _fetch_model_list_payload(base_url, api_key)
+    except CustomEndpointError as reason:
+        raise CustomEndpointError(
+            f"Custom endpoint model discovery failed: {reason}."
+        ) from None
+
+
+def _resolve_model_list(
+    value: str, api_key: str
+) -> tuple[str, list[dict[str, object]]]:
+    """Return the base URL that answered `/models` and the payload it returned.
+
+    Candidates are tried in `base_url_candidates` order and the first that
+    answers wins, so the winning URL can be saved and reused verbatim. When
+    none answers, the error names every URL tried with the reason each failed.
+    """
+    attempts: list[str] = []
+    for candidate in _base_url_candidates(value):
+        try:
+            return candidate, _fetch_model_list_payload(candidate, api_key)
+        except CustomEndpointError as reason:
+            attempts.append(f"{candidate} -> {reason}")
+    raise CustomEndpointError(
+        f"Custom endpoint model discovery failed. Tried {', '.join(attempts)}."
+    )
 
 
 def _extract_model_ids(models: list[dict[str, object]]) -> list[str]:
@@ -352,9 +466,11 @@ def _extract_model_ids(models: list[dict[str, object]]) -> list[str]:
     return model_ids
 
 
-def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
-    """Fetch sorted, unique model IDs from an OpenAI-compatible endpoint."""
-    models = _fetch_model_list_payload(base_url, api_key)
+def discover_openai_compatible_models(
+    value: str, api_key: str
+) -> tuple[str, list[str]]:
+    """Resolve an endpoint base URL and return its sorted, unique model IDs."""
+    resolved_base_url, models = _resolve_model_list(value, api_key)
     model_ids = _extract_model_ids(models)
 
     if not model_ids:
@@ -362,7 +478,7 @@ def discover_openai_compatible_models(base_url: str, api_key: str) -> list[str]:
             "Custom endpoint model discovery returned no usable models."
         )
 
-    return sorted(set(model_ids))
+    return resolved_base_url, sorted(set(model_ids))
 
 
 # Known field-name pairs for per-token USD pricing nested under a model
@@ -444,7 +560,7 @@ def discover_openai_compatible_model_pricing(
     See `_extract_all_pricing` for the conventions tried and fallback
     behavior when an endpoint doesn't advertise pricing at all.
     """
-    return _extract_all_pricing(_fetch_model_list_payload(base_url, api_key))
+    return _extract_all_pricing(_discover_model_list(base_url, api_key))
 
 
 async def verify_openai_compatible_model(
@@ -453,7 +569,7 @@ async def verify_openai_compatible_model(
     model_id: str,
 ) -> None:
     """Verify one selected model with a tiny, explicitly scoped LiteLLM call."""
-    normalized_base_url = normalize_openai_base_url(base_url)
+    cleaned_base_url = clean_openai_base_url(base_url)
     _validate_api_key(api_key)
     validated_model_id = _validate_model_id(model_id)
 
@@ -471,7 +587,7 @@ async def verify_openai_compatible_model(
             ],
             max_tokens=CUSTOM_ENDPOINT_VERIFICATION_MAX_OUTPUT_TOKENS,
             num_retries=0,
-            api_base=normalized_base_url,
+            api_base=cleaned_base_url,
             api_key=api_key,
             extra_headers=dict(LLM_IDENTIFYING_HEADERS),
         )
@@ -488,22 +604,22 @@ async def verify_openai_compatible_model(
 
 
 def discover_and_verify_model(
-    base_url: str,
+    value: str,
     api_key: str,
     model: str,
     *,
     endpoint_name: str | None = None,
-) -> dict[str, tuple[float, float]]:
-    """Confirm `model` is discoverable, verify it live, and return pricing.
+) -> tuple[str, dict[str, tuple[float, float]]]:
+    """Resolve the base URL, confirm `model` is discoverable, verify it live.
 
     Shared by `notewise inference add|update` and the interactive config
     editor's custom-endpoint manager so all three apply the exact same
-    safety check before a profile is ever saved. The returned pricing map
-    (often empty -- see `_extract_all_pricing`) comes from the same single
-    `/v1/models` request used to confirm `model` exists, so callers get it
-    for free and can attach it to the saved profile.
+    safety check before a profile is ever saved. Returns the base URL that
+    answered together with the pricing map captured from that same request
+    (often empty -- see `_extract_all_pricing`), so callers save a profile
+    whose base URL is known to work without paying for a second lookup.
     """
-    models = _fetch_model_list_payload(base_url, api_key)
+    resolved_base_url, models = _resolve_model_list(value, api_key)
     model_ids = _extract_model_ids(models)
     if not model_ids:
         raise CustomEndpointError(
@@ -515,8 +631,8 @@ def discover_and_verify_model(
 
     import asyncio
 
-    asyncio.run(verify_openai_compatible_model(base_url, api_key, model))
-    return _extract_all_pricing(models)
+    asyncio.run(verify_openai_compatible_model(resolved_base_url, api_key, model))
+    return resolved_base_url, _extract_all_pricing(models)
 
 
 def default_model_endpoint_match(
@@ -575,10 +691,13 @@ def _validate_model_id(value: object) -> str:
 
 __all__ = [
     "CustomEndpointProfile",
+    "clean_openai_base_url",
     "discover_openai_compatible_models",
     "normalize_custom_model_prefix",
     "normalize_openai_base_url",
     "parse_custom_endpoint_profiles",
+    "same_openai_base_url",
     "serialize_custom_endpoint_profiles",
     "verify_openai_compatible_model",
+    "versioned_openai_base_url",
 ]

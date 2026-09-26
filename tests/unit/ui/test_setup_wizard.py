@@ -1176,13 +1176,9 @@ class TestWizardOrchestration:
             "notewise.llm.custom_endpoint.normalize_custom_model_prefix",
             return_value="internal-endpoint",
         )
-        mocker.patch(
-            "notewise.llm.custom_endpoint.normalize_openai_base_url",
-            return_value="https://endpoint.example/v1",
-        )
         discover_models = mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://endpoint.example/v1", ["vendor/model-id"]),
         )
         mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
 
@@ -1207,7 +1203,7 @@ class TestWizardOrchestration:
         result = run_setup_wizard(force=True)
 
         discover_models.assert_called_once_with(
-            "https://endpoint.example/v1",
+            "https://endpoint.example",
             "endpoint-secret",
         )
         assert select_model.call_args.args == (
@@ -1256,7 +1252,7 @@ class TestWizardOrchestration:
         )
         discover_models = mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://office.example/v1", ["vendor/model-id"]),
         )
         verify_model = mocker.patch(
             "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -1355,12 +1351,8 @@ class TestWizardOrchestration:
             return_value="internal-endpoint",
         )
         mocker.patch(
-            "notewise.llm.custom_endpoint.normalize_openai_base_url",
-            return_value="https://endpoint.example/v1",
-        )
-        mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://endpoint.example/v1", ["vendor/model-id"]),
         )
         mocker.patch(
             "notewise.ui.setup_wizard.select_model",

@@ -58,8 +58,8 @@ def test_process_transports_normalized_endpoint_options(mocker, tmp_path: Path) 
         "https://stored.example/v1",
         "stored-key",
     )
-    normalize = mocker.patch(
-        "notewise.llm.custom_endpoint.normalize_openai_base_url",
+    versioned = mocker.patch(
+        "notewise.llm.custom_endpoint.versioned_openai_base_url",
         return_value="https://gateway.example/v1",
     )
 
@@ -78,7 +78,7 @@ def test_process_transports_normalized_endpoint_options(mocker, tmp_path: Path) 
     )
 
     assert result.exit_code == 0
-    normalize.assert_called_once_with("https://gateway.example")
+    versioned.assert_called_once_with("https://gateway.example")
     settings.get_custom_endpoint_for_model.assert_called_once_with(
         "gateway/selected-model"
     )
@@ -97,7 +97,7 @@ def test_process_refuses_to_reuse_key_for_different_endpoint_origin(
         "stored-key",
     )
     mocker.patch(
-        "notewise.llm.custom_endpoint.normalize_openai_base_url",
+        "notewise.llm.custom_endpoint.versioned_openai_base_url",
         return_value="https://replacement.example/v1",
     )
 
