@@ -30,6 +30,14 @@ from notewise.ui.setup_wizard import (
 from notewise.utils import strip_wrapped_quotes
 
 
+@pytest.fixture(autouse=True)
+def _reset_raw_key_reader():
+    """Keep the process-wide readchar import cache out of other tests' way."""
+    _readchar_module.cache_clear()
+    yield
+    _readchar_module.cache_clear()
+
+
 class TestConfigIO:
     """Test configuration loading and saving against the config.db backend."""
 
@@ -1542,13 +1550,6 @@ class TestWizardOrchestration:
 
 class TestPromptWithPageKeys:
     """Tests for the raw-key reader behind select_model's arrow-key paging."""
-
-    @pytest.fixture(autouse=True)
-    def _reset_raw_key_reader(self):
-        """Keep the cached readchar import from leaking between tests."""
-        _readchar_module.cache_clear()
-        yield
-        _readchar_module.cache_clear()
 
     @staticmethod
     def _break_readchar_import():
