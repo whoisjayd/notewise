@@ -144,6 +144,9 @@ def _get_text(v: Any) -> str | None:
         text_value = v.get("text")
         if isinstance(text_value, str):
             return text_value
+        content_value = v.get("content")
+        if isinstance(content_value, str):
+            return content_value
     return None
 
 
@@ -190,6 +193,13 @@ def _parse_count(text: str | None) -> int | None:
 
 
 def _find_key(node: Any, key: str) -> list[dict[str, Any]]:
+    """Return every dict containing ``key``, in document order.
+
+    Callers rely on that order: playlist entries and video chapters must keep
+    the sequence YouTube laid out, and the first continuation token found must
+    be the one for the next page.  Children are pushed in reverse so the LIFO
+    stack still walks the tree front to back.
+    """
     out: list[dict[str, Any]] = []
     stack = [node]
     while stack:
@@ -197,9 +207,9 @@ def _find_key(node: Any, key: str) -> list[dict[str, Any]]:
         if isinstance(cur, dict):
             if key in cur:
                 out.append(cur)
-            stack.extend(cur.values())
+            stack.extend(reversed(cur.values()))
         elif isinstance(cur, list):
-            stack.extend(cur)
+            stack.extend(reversed(cur))
     return out
 
 

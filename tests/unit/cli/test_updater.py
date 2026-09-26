@@ -142,8 +142,8 @@ def test_update_command_prints_detected_source_and_matching_command(mocker) -> N
         cli_app,
         "check_for_updates",
         return_value=updater.UpdateStatus(
-            current_version="1.7.1",
-            latest_version="1.7.1",
+            current_version="1.7.2",
+            latest_version="1.7.2",
             available=True,
             install_source="Standalone Binary",
             release_url="https://example.com/release",

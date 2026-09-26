@@ -6,6 +6,13 @@ from __future__ import annotations
 # ── URL templates ─────────────────────────────────────────────────────────────
 YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v={video_id}"
 YOUTUBE_PLAYLIST_URL = "https://www.youtube.com/playlist?list={playlist_id}"
+
+# ── Playlist entry layout ─────────────────────────────────────────────────────
+# Playlist pages render entries as ``lockupViewModel`` instead of the legacy
+# ``playlistVideoRenderer``; only this content type is a playlist item.
+LOCKUP_CONTENT_TYPE_VIDEO = "LOCKUP_CONTENT_TYPE_VIDEO"
+LOCKUP_VIEW_MODEL = "lockupViewModel"
+LOCKUP_METADATA = "lockupMetadataViewModel"
 YOUTUBE_CHANNEL_URL = "https://www.youtube.com/channel/{channel_id}"
 
 # ── Innertube API ─────────────────────────────────────────────────────────────
@@ -35,3 +42,11 @@ ANDROID_USER_AGENT = (
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/65.0.3325.181 "
     "Mobile Safari/537.36"
 )
+
+# The web client stops issuing playlist continuation tokens at roughly 200
+# entries; this client keeps paginating and answers with playlistVideoRenderer.
+ANDROID_CLIENT_OVERRIDE = {
+    "clientName": ANDROID_CLIENT_NAME,
+    "clientVersion": ANDROID_CLIENT_VERSION,
+    "userAgent": ANDROID_USER_AGENT,
+}

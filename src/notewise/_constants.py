@@ -758,6 +758,12 @@ HTTP_BACKOFF_BASE = 1.0
 
 # ── Output ────────────────────────────────────────────────────────────────────
 MAX_FILENAME_LENGTH = 100
+# Windows caps a full path at 260 characters including the NUL terminator, so
+# 259 is the longest writable path. Chapter output stacks a directory name and
+# a file name, so budget the assembled path, not the leaf. Keep this at the
+# platform limit: a lower cap would rename files that already write fine and
+# break the chapter manifest on upgrade.
+MAX_PATH_LENGTH = 259
 LITELLM_MODELS_SNAPSHOT_FILENAME = "litellm_models_snapshot.json"
 LITELLM_MODEL_METADATA_SOURCE_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/"

@@ -74,6 +74,60 @@ async def test_prepare_source_wraps_playlist_errors(tmp_path, mocker) -> None:
         await prepare_source(context, TEST_PLAYLIST_URL)
 
 
+async def test_prepare_source_warns_when_playlist_comes_up_short(tmp_path, mocker):
+    """A short playlist must be stated to the user, not silently trimmed."""
+    mock_extract = mocker.AsyncMock(return_value=["v1", "v2"])
+    mock_info = mocker.AsyncMock(return_value=("Big", 245))
+    console = mocker.MagicMock()
+
+    context = SimpleNamespace(
+        parse_youtube_url=lambda _url: SimpleNamespace(
+            url_type="playlist",
+            playlist_id=TEST_PLAYLIST_ID,
+            video_id=None,
+        ),
+        extract_playlist_videos=mock_extract,
+        get_playlist_info=mock_info,
+        selected_cookie_file=None,
+        selected_output=tmp_path,
+        console=console,
+    )
+
+    resolved = await prepare_source(context, TEST_PLAYLIST_URL)
+
+    assert resolved.video_ids == ["v1", "v2"]
+    console.print.assert_called_once()
+    message = console.print.call_args[0][0]
+    assert "245" in message
+    assert "2" in message
+    assert "Big" in message
+    assert TEST_PLAYLIST_ID not in message
+
+
+async def test_prepare_source_stays_quiet_when_playlist_is_complete(tmp_path, mocker):
+    """No warning when every declared video was extracted."""
+    mock_extract = mocker.AsyncMock(return_value=["v1", "v2", "v3"])
+    mock_info = mocker.AsyncMock(return_value=("Full", 3))
+    console = mocker.MagicMock()
+
+    context = SimpleNamespace(
+        parse_youtube_url=lambda _url: SimpleNamespace(
+            url_type="playlist",
+            playlist_id=TEST_PLAYLIST_ID,
+            video_id=None,
+        ),
+        extract_playlist_videos=mock_extract,
+        get_playlist_info=mock_info,
+        selected_cookie_file=None,
+        selected_output=tmp_path,
+        console=console,
+    )
+
+    await prepare_source(context, TEST_PLAYLIST_URL)
+
+    console.print.assert_not_called()
+
+
 async def test_prepare_source_wraps_playlist_metadata_errors(tmp_path, mocker) -> None:
     """Playlist metadata failures should stay user-visible in batch preflight."""
 

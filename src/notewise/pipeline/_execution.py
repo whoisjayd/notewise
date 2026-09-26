@@ -36,7 +36,10 @@ from notewise.logging import make_log_safe_text
 from notewise.pipeline._artifacts import generate_and_write_quiz
 from notewise.pipeline._chapter_outputs import generate_chapter_outputs
 from notewise.pipeline._documents import get_output_extension
-from notewise.pipeline._helpers import coerce_usage_totals
+from notewise.pipeline._helpers import (
+    coerce_usage_totals,
+    suffix_output_target,
+)
 from notewise.pipeline._output_rendering import render_notes_with_warning
 from notewise.pipeline._state import dedupe_video_ids
 from notewise.utils import sanitize_filename
@@ -91,6 +94,22 @@ def _cached_video_has_requested_artifacts(
     video_id: str,
     title: str,
 ) -> bool:
+    """Report whether this video's artifacts are already on disk.
+
+    The writer resolves a colliding title through ``_reserve_output_target``,
+    which appends the video id, so a video's notes can live at either the plain
+    name or at its own suffixed name.  Both count as this video's, so a rerun
+    does not regenerate a video whose notes were written under the suffixed
+    name.
+
+    Note the limit: a flat notes file carries no owner metadata, so an unsuffixed
+    file left behind by a *different* video with the same title still reads as a
+    hit.  Only chapter directories record their owning video id.
+    """
+
+    def owned(candidate: Path, exists) -> bool:
+        return exists(candidate) or exists(suffix_output_target(candidate, video_id))
+
     safe_title = sanitize_filename(title or video_id)
     output_dir = pipeline.output_dir
     transcript_dir = output_dir
@@ -115,7 +134,10 @@ def _cached_video_has_requested_artifacts(
             continue
         output_extension = get_output_extension(output_format)
         artifact = output_dir / f"{safe_title}{output_extension}"
-        if not _notes_artifact_exists(artifact, output_format):
+        if not owned(
+            artifact,
+            lambda path, fmt=output_format: _notes_artifact_exists(path, fmt),
+        ):
             return False
 
     if pipeline.export_transcript_format:
@@ -127,15 +149,16 @@ def _cached_video_has_requested_artifacts(
         transcript_artifact = transcript_dir / (
             f"{safe_title}_transcript.{transcript_extension}"
         )
-        if not transcript_artifact.exists():
+        if not owned(transcript_artifact, Path.exists):
             return False
 
     if pipeline.quiz:
         quiz_dir = transcript_dir if pipeline.chapter_directory_output else output_dir
         quiz_name = quiz_dir.name if pipeline.chapter_directory_output else safe_title
-        if not (
+        quiz_artifact = (
             quiz_dir / f"{sanitize_filename(quiz_name)}{QUIZ_MARKDOWN_FILE_SUFFIX}"
-        ).exists():
+        )
+        if not owned(quiz_artifact, Path.exists):
             return False
 
     return True

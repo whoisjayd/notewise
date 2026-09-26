@@ -64,7 +64,7 @@ async def prepare_source(
             parsed.playlist_id,
             cookie_file=context.selected_cookie_file,
         )
-        playlist_name, _ = await context.get_playlist_info(
+        playlist_name, declared_count = await context.get_playlist_info(
             parsed.playlist_id,
             context.selected_cookie_file,
         )
@@ -74,6 +74,14 @@ async def prepare_source(
             [(parsed.playlist_id, str(error))],
         ) from error
     deduped_video_ids = dedupe_video_ids(video_ids)
+    if declared_count > 0 and len(deduped_video_ids) < declared_count:
+        # Name the playlist, not the raw id: get_playlist_info always returns a
+        # non-empty label. One atomic line, since sources resolve concurrently.
+        context.console.print(
+            f"[yellow]Playlist '{playlist_name}' lists {declared_count} videos "
+            f"but only {len(deduped_video_ids)} could be extracted. Processing "
+            f"the {len(deduped_video_ids)} that were found.[/yellow]"
+        )
     output_dir = context.selected_output / sanitize_filename(playlist_name)
 
     return ResolvedSource(

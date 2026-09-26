@@ -24,7 +24,7 @@ from notewise.errors import PartialChapterGenerationError
 from notewise.pipeline._artifacts import prefix_chapter_heading_with_timestamp
 from notewise.pipeline._documents import build_chapter_bundle, get_output_extension
 from notewise.pipeline._output_rendering import render_notes_with_warning
-from notewise.utils import sanitize_filename
+from notewise.utils import sanitize_filename, truncate_for_path
 
 
 if TYPE_CHECKING:
@@ -233,13 +233,15 @@ def build_chapter_generation_plan(
         chapter_file: Path | None = None
         safe_chapter = sanitize_filename(chap_title)
         if chapter_directory_output and output_target is not None:
-            chapter_file = output_target / (
-                f"{i:02d}_{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
-            )
+            leaf = f"{i:02d}_{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            chapter_file = output_target / truncate_for_path(output_target, leaf)
         elif temporary_chapter_dir is not None:
-            chapter_file = temporary_chapter_dir / (
+            leaf = (
                 f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}"
                 f"{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            )
+            chapter_file = temporary_chapter_dir / truncate_for_path(
+                temporary_chapter_dir, leaf
             )
 
         if chapter_file is not None:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
 from notewise._constants import (
@@ -13,6 +14,7 @@ from notewise._constants import (
     MASKED_SECRET_SUFFIX_LENGTH,
     MASKED_SECRET_UNMASKABLE_MARGIN,
     MAX_FILENAME_LENGTH,
+    MAX_PATH_LENGTH,
     RESERVED_WINDOWS_FILENAME_PATTERN,
     SANITIZED_FILENAME_FALLBACK,
     WHITESPACE_PATTERN,
@@ -21,7 +23,6 @@ from notewise._constants import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from pathlib import Path
 
 
 _RESERVED = re.compile(RESERVED_WINDOWS_FILENAME_PATTERN, re.IGNORECASE)
@@ -47,6 +48,30 @@ def sanitize_filename(name: str) -> str:
 def safe_output_path(base_dir: Path, filename: str) -> Path:
     """Return a Path using a sanitized filename inside base_dir."""
     return base_dir / sanitize_filename(filename)
+
+
+def truncate_for_path(parent: Path, name: str) -> str:
+    """Shorten ``name`` so ``parent / name`` fits the platform path cap.
+
+    ``sanitize_filename`` bounds a single component, but chapter output stacks a
+    directory name and a file name, and Windows rejects a full path longer than
+    ``MAX_PATH_LENGTH``. Only the middle of the name is shortened, so a leading
+    index prefix and the extension always survive.
+
+    Not a guarantee: when the parent directory is itself already past the cap no
+    leaf can rescue it, and the name is returned unchanged so the real OSError
+    surfaces instead of a meaningless stub.
+    """
+    budget = MAX_PATH_LENGTH - len(str(parent)) - 1
+    if len(name) <= budget:
+        return name
+    suffix = Path(name).suffix
+    stem = name[: len(name) - len(suffix)] if suffix else name
+    keep = budget - len(suffix)
+    if keep < 1:
+        return name
+    trimmed = stem[:keep].rstrip(" .")
+    return f"{trimmed}{suffix}" if trimmed else name
 
 
 def dedupe_ordered(items: list[T]) -> list[T]:

@@ -6,6 +6,7 @@ import http.cookiejar
 
 import pytest
 import requests
+from structlog.testing import capture_logs
 
 from notewise.errors import ExtractionError as ExtractorError
 from notewise.youtube.extractor._helpers import (
@@ -218,6 +219,80 @@ class TestPlaylistAndParsingHelpers:
         assert set(by_id.keys()) == {"id1", "id2"}
         assert by_id["id1"]["duration"] == 83
         assert by_id["id1"]["uploader"] == "Uploader"
+
+    def test_extract_playlist_entries_reads_lockup_view_models_in_order(self):
+        client = ExtractorClient()
+        data = {
+            "contents": [
+                {
+                    "lockupViewModel": {
+                        "contentId": "vid1",
+                        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                        "metadata": {
+                            "lockupMetadataViewModel": {
+                                "title": {"content": "First Video"},
+                            }
+                        },
+                    }
+                },
+                {
+                    "lockupViewModel": {
+                        "contentId": "vid1",
+                        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                        "metadata": {
+                            "lockupMetadataViewModel": {
+                                "title": {"content": "Duplicate"},
+                            }
+                        },
+                    }
+                },
+                {
+                    "lockupViewModel": {
+                        "contentId": "vid2",
+                        "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                        "metadata": {
+                            "lockupMetadataViewModel": {
+                                "title": {"content": "Second Video"},
+                            }
+                        },
+                    }
+                },
+            ]
+        }
+
+        entries = client._extract_playlist_entries(data, seen=set())
+
+        assert [entry["id"] for entry in entries] == ["vid1", "vid2"]
+        assert entries[0]["title"] == "First Video"
+        assert entries[0]["url"] == "https://www.youtube.com/watch?v=vid1"
+
+    def test_extract_playlist_entries_ignores_non_video_lockups(self):
+        client = ExtractorClient()
+        data = {
+            "lockupViewModel": {
+                "contentId": "PL123",
+                "contentType": "LOCKUP_CONTENT_TYPE_PLAYLIST",
+            }
+        }
+
+        assert client._extract_playlist_entries(data, seen=set()) == []
+
+    def test_find_key_returns_matches_in_document_order(self):
+        node = {
+            "items": [
+                {"playlistVideoRenderer": {"videoId": "a"}},
+                {"playlistVideoRenderer": {"videoId": "b"}},
+                {"playlistVideoRenderer": {"videoId": "c"}},
+            ]
+        }
+
+        found = _find_key(node, "playlistVideoRenderer")
+
+        assert [hit["playlistVideoRenderer"]["videoId"] for hit in found] == [
+            "a",
+            "b",
+            "c",
+        ]
 
     def test_extract_continuation_token_checks_supported_shapes(self):
         client = ExtractorClient()
@@ -661,6 +736,113 @@ class TestDeeperExtractorBranches:
 
         assert {entry["id"] for entry in entries} == {"id1", "id2"}
 
+    def test_extract_playlist_entries_paginated_reads_lockups_across_pages(
+        self, monkeypatch
+    ):
+        client = ExtractorClient()
+
+        def lockup(vid, title):
+            return {
+                "lockupViewModel": {
+                    "contentId": vid,
+                    "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+                    "metadata": {
+                        "lockupMetadataViewModel": {"title": {"content": title}}
+                    },
+                }
+            }
+
+        first_page = {
+            "continuationCommand": {"token": "tok1"},
+            **lockup("id1", "First"),
+        }
+        second_page = {
+            "continuationCommand": {"token": "tok2"},
+            **lockup("id2", "Second"),
+        }
+        pages = [second_page, {}]
+
+        def fake_call(**_kwargs):
+            return pages.pop(0)
+
+        monkeypatch.setattr(client, "_call_innertube", fake_call)
+
+        entries = client._extract_playlist_entries_paginated(
+            first_page, api_key="k", ytcfg={}, expected_count=2
+        )
+
+        assert [entry["id"] for entry in entries] == ["id1", "id2"]
+        assert [entry["title"] for entry in entries] == ["First", "Second"]
+
+    def test_pagination_resumes_with_android_client_when_web_chain_stops(
+        self, monkeypatch
+    ):
+        """The web client stops issuing tokens at ~200; Android keeps going."""
+        client = ExtractorClient()
+        first_page = {
+            "continuationCommand": {"token": "tok1"},
+            "lockupViewModel": {
+                "contentId": "id1",
+                "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            },
+        }
+        seen_overrides = []
+
+        def fake_call(**kwargs):
+            override = kwargs.get("client_override")
+            seen_overrides.append(override)
+            if override is None:
+                # Web client: one more entry, then the server issues no token.
+                return {
+                    "playlistVideoRenderer": {
+                        "videoId": "id2",
+                        "title": {"simpleText": "T2"},
+                    }
+                }
+            return {
+                "continuationCommand": {"token": "atok1"},
+                "playlistVideoRenderer": {
+                    "videoId": "id3",
+                    "title": {"simpleText": "T3"},
+                },
+            }
+
+        monkeypatch.setattr(client, "_call_innertube", fake_call)
+
+        entries = client._extract_playlist_entries_paginated(
+            first_page, api_key="k", ytcfg={}
+        )
+
+        assert [entry["id"] for entry in entries] == ["id1", "id2", "id3"]
+        assert any(o is not None for o in seen_overrides)
+
+    def test_pagination_skips_android_fallback_when_all_entries_found(
+        self, monkeypatch
+    ):
+        """No extra client round-trips once the declared count is satisfied."""
+        client = ExtractorClient()
+        first_page = {
+            "continuationCommand": {"token": "tok1"},
+            "lockupViewModel": {
+                "contentId": "id1",
+                "contentType": "LOCKUP_CONTENT_TYPE_VIDEO",
+            },
+        }
+        overrides = []
+
+        def fake_call(**kwargs):
+            overrides.append(kwargs.get("client_override"))
+            return {"playlistVideoRenderer": {"videoId": "id2"}}
+
+        monkeypatch.setattr(client, "_call_innertube", fake_call)
+
+        entries = client._extract_playlist_entries_paginated(
+            first_page, api_key="k", ytcfg={}, expected_count=2
+        )
+
+        assert [entry["id"] for entry in entries] == ["id1", "id2"]
+        assert overrides == [None]
+
     def test_build_subtitles_splits_manual_and_asr(self):
         client = ExtractorClient()
         subtitles, automatic = client._build_subtitles(
@@ -988,7 +1170,7 @@ class TestDeeperExtractorBranches:
         monkeypatch.setattr(
             client,
             "_extract_playlist_entries_paginated",
-            lambda _data, api_key, ytcfg: (
+            lambda _data, api_key, ytcfg, **_kwargs: (
                 ytcfg,
                 [{"id": "v1"}, {"id": "v2"}] if api_key is None else [],
             )[1],
@@ -1001,6 +1183,47 @@ class TestDeeperExtractorBranches:
         assert result["view_count"] == 1234
         assert result["availability"] == "public"
         assert result["entries"][0]["id"] == "v1"
+
+    def test_extract_playlist_warns_when_entries_fall_short_of_declared_count(
+        self, monkeypatch
+    ):
+        """A short playlist must be stated, never silently returned as complete."""
+        client = ExtractorClient()
+        data = {
+            "playlistMetadataRenderer": {"title": "Big", "description": ""},
+            "playlistSidebarPrimaryInfoRenderer": {
+                "stats": [{"simpleText": "245 videos"}]
+            },
+        }
+        monkeypatch.setattr(
+            "notewise.youtube.extractor._playlist._extract_playlist_id",
+            lambda _target: "pl1",
+        )
+        monkeypatch.setattr(client, "_fetch_text", lambda _url: "<html></html>")
+        monkeypatch.setattr(client, "_extract_ytcfg", lambda _html: {})
+        monkeypatch.setattr(
+            client, "_extract_innertube_api_key", lambda _html, _ytcfg: "k"
+        )
+        monkeypatch.setattr(client, "_extract_initial_data", lambda _html: data)
+        monkeypatch.setattr(
+            client,
+            "_extract_playlist_entries_paginated",
+            lambda *_args, **_kwargs: [{"id": "v1"}, {"id": "v2"}],
+        )
+
+        with capture_logs() as logs:
+            result = client._extract_playlist("pl1", include_entries=True)
+
+        shortfall = [
+            entry
+            for entry in logs
+            if entry["event"] == "playlist.extracted_fewer_than_declared"
+        ]
+        assert len(result["entries"]) == 2
+        assert result["playlist_count"] == 245
+        assert len(shortfall) == 1
+        assert shortfall[0]["extracted"] == 2
+        assert shortfall[0]["declared"] == 245
 
     def test_extract_playlist_private_alert_marks_private(self, monkeypatch):
         client = ExtractorClient()
