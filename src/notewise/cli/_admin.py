@@ -572,9 +572,12 @@ def render_logs(
     from rich.table import Table
 
     log_dir = get_log_dir(get_state_dir())
+    # Skip empty files: the current session's log is created before it has
+    # anything to write, so a first-run `notewise logs` would otherwise list a
+    # 0 B file instead of reporting that there are no logs yet.
     log_files = (
         sorted(
-            log_dir.glob("*.log"),
+            (path for path in log_dir.glob("*.log") if path.stat().st_size),
             key=lambda path: path.stat().st_mtime,
             reverse=True,
         )
