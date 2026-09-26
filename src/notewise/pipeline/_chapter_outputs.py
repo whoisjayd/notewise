@@ -232,16 +232,17 @@ def build_chapter_generation_plan(
     for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
         chapter_file: Path | None = None
         safe_chapter = sanitize_filename(chap_title)
+        index_prefix = f"{i:02d}_"
         if chapter_directory_output and output_target is not None:
-            leaf = f"{i:02d}_{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
-            chapter_file = output_target / truncate_for_path(output_target, leaf)
-        elif temporary_chapter_dir is not None:
-            leaf = (
-                f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}"
-                f"{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            leaf = f"{index_prefix}{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            chapter_file = output_target / truncate_for_path(
+                output_target, leaf, keep_prefix=index_prefix
             )
+        elif temporary_chapter_dir is not None:
+            lead = f"{sanitize_filename(title)}_chapter_{index_prefix}"
+            leaf = f"{lead}{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
             chapter_file = temporary_chapter_dir / truncate_for_path(
-                temporary_chapter_dir, leaf
+                temporary_chapter_dir, leaf, keep_prefix=lead
             )
 
         if chapter_file is not None:

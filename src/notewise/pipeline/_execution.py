@@ -115,16 +115,25 @@ def _cached_video_has_requested_artifacts(
     transcript_dir = output_dir
 
     if pipeline.chapter_directory_output:
-        chapter_dir = output_dir / safe_title
-        if not pipeline._is_reusable_directory_output(chapter_dir, video_id):
+        # A colliding title sends this video's chapter directory to the
+        # suffixed name, exactly as flat artifacts do, so check both candidates
+        # and reuse whichever actually belongs to this video.
+        base_dir = output_dir / safe_title
+        candidates = [base_dir, suffix_output_target(base_dir, video_id)]
+        reusable = next(
+            (
+                candidate
+                for candidate in candidates
+                if pipeline._is_reusable_directory_output(candidate, video_id)
+                and _chapter_directory_has_complete_manifest(
+                    pipeline, candidate, video_id
+                )
+            ),
+            None,
+        )
+        if reusable is None:
             return False
-        if not _chapter_directory_has_complete_manifest(
-            pipeline,
-            chapter_dir,
-            video_id,
-        ):
-            return False
-        transcript_dir = chapter_dir
+        transcript_dir = reusable
 
     for output_format in pipeline.output_formats:
         if (

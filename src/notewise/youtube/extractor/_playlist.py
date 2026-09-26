@@ -120,18 +120,20 @@ def _fetch_continuation_pages(
     out: list[dict[str, Any]],
     seen: set[str],
     client_override: dict[str, Any] | None = None,
-) -> bool:
+) -> tuple[bool, bool]:
     """Follow a continuation chain, appending new entries to ``out``.
 
-    Returns True when the chain ended because the server stopped issuing tokens
-    (rather than because the page budget ran out).
+    Returns ``(server_stopped, last_page_added)``: whether the chain ended
+    because the server stopped issuing tokens rather than the page budget
+    running out, and whether the final page actually yielded new entries.
     """
     seen_tokens: set[str] = set()
+    last_page_added = False
     for _ in range(MAX_PLAYLIST_PAGES):
         if not token:
-            return True
+            return True, last_page_added
         if token in seen_tokens:
-            return False
+            return False, last_page_added
         seen_tokens.add(token)
         try:
             page = client._call_innertube(
@@ -145,9 +147,11 @@ def _fetch_continuation_pages(
             raise ExtractionError(
                 f"Failed to fetch playlist continuation page: {error}"
             ) from error
+        before = len(out)
         out.extend(client._extract_playlist_entries(page, seen))
+        last_page_added = len(out) > before
         token = client._extract_continuation_token(page)
-    return False
+    return False, last_page_added
 
 
 def _extract_playlist_entries_paginated(
@@ -176,10 +180,16 @@ def _extract_playlist_entries_paginated(
         return expected_count is not None and len(out) >= expected_count
 
     first_token = client._extract_continuation_token(data)
-    server_stopped = _fetch_continuation_pages(
+    server_stopped, last_page_added = _fetch_continuation_pages(
         client, api_key, ytcfg, first_token, out, seen
     )
     if not server_stopped or complete():
+        return out
+    # The ~200 ceiling looks like the chain dying while it was still yielding
+    # entries. A chain that ended on an empty page has nothing left to fetch,
+    # so replaying it under the Android client only costs round-trips - unless
+    # a declared count says we are genuinely short.
+    if expected_count is None and not last_page_added:
         return out
 
     logger.debug(

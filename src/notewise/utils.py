@@ -50,25 +50,33 @@ def safe_output_path(base_dir: Path, filename: str) -> Path:
     return base_dir / sanitize_filename(filename)
 
 
-def truncate_for_path(parent: Path, name: str) -> str:
+def _windows_path_length(value: str) -> int:
+    """Length as Windows counts it: UTF-16 code units, not Python characters."""
+    return len(value.encode("utf-16-le")) // 2
+
+
+def truncate_for_path(parent: Path, name: str, *, keep_prefix: str = "") -> str:
     """Shorten ``name`` so ``parent / name`` fits the platform path cap.
 
     ``sanitize_filename`` bounds a single component, but chapter output stacks a
     directory name and a file name, and Windows rejects a full path longer than
-    ``MAX_PATH_LENGTH``. Only the middle of the name is shortened, so a leading
-    index prefix and the extension always survive.
+    ``MAX_PATH_LENGTH``. The parent is resolved and measured in UTF-16 code units
+    because that is what Windows counts, so a relative output directory or an
+    emoji-bearing title cannot slip past the budget.
 
-    Not a guarantee: when the parent directory is itself already past the cap no
-    leaf can rescue it, and the name is returned unchanged so the real OSError
-    surfaces instead of a meaningless stub.
+    ``keep_prefix`` must survive truncation: it carries the chapter index, and
+    losing it would collapse two chapters onto one file. When the budget cannot
+    hold the prefix plus an extension and at least one character, the name is
+    returned unchanged so the real OSError surfaces instead of a colliding name.
     """
-    budget = MAX_PATH_LENGTH - len(str(parent)) - 1
-    if len(name) <= budget:
+    resolved = str(Path(parent).resolve())
+    budget = MAX_PATH_LENGTH - _windows_path_length(resolved) - 1
+    if _windows_path_length(name) <= budget:
         return name
     suffix = Path(name).suffix
     stem = name[: len(name) - len(suffix)] if suffix else name
-    keep = budget - len(suffix)
-    if keep < 1:
+    keep = budget - _windows_path_length(suffix)
+    if keep < _windows_path_length(keep_prefix) + 1:
         return name
     trimmed = stem[:keep].rstrip(" .")
     return f"{trimmed}{suffix}" if trimmed else name
