@@ -18,6 +18,11 @@ from notewise.pipeline.generation import (
 )
 
 
+# The chunking gate compares token_count against config.chunk_size, so a fixed
+# sentinel rots as soon as that limit changes. Derive "oversized" from it.
+OVERSIZED_TOKEN_COUNT = config.chunk_size + 1
+
+
 class TestStudyMaterialGenerator:
     """Test generation logic including chunking."""
 
@@ -411,7 +416,10 @@ class TestStudyMaterialGenerator:
         two_chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             await generator.generate_single_chapter_notes("Ch1", "very long text")
         # 2 chunk calls + 1 combine call = 3
@@ -432,7 +440,10 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             result = await generator.generate_single_chapter_notes("Ch1", "very long")
 
@@ -493,7 +504,10 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=two_chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -511,7 +525,10 @@ class TestStudyMaterialGenerator:
         """When chunker returns exactly 1 chunk, no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             await generator.generate_single_chapter_notes("Ch1", "big text")
         # 1 chunk call only — combine is skipped when there is a single chunk
@@ -695,7 +712,10 @@ class TestStudyMaterialGenerator:
         chunks = ["chunk A", "chunk B"]
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             result = await generator.generate_quiz("very long transcript")
 
@@ -718,7 +738,10 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=["A", "B"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             await generator.generate_quiz("very long transcript")
 
@@ -735,7 +758,10 @@ class TestStudyMaterialGenerator:
 
         with (
             patch.object(generator, "_chunk_transcript", return_value=chunks),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             on_chunk = MagicMock()
             on_combine = MagicMock()
@@ -752,7 +778,10 @@ class TestStudyMaterialGenerator:
         """When the chunker returns exactly one chunk no combine call is made."""
         with (
             patch.object(generator, "_chunk_transcript", return_value=["one chunk"]),
-            patch("notewise.pipeline.generation.token_counter", return_value=99999),
+            patch(
+                "notewise.pipeline.generation.token_counter",
+                return_value=OVERSIZED_TOKEN_COUNT,
+            ),
         ):
             result = await generator.generate_quiz("big transcript")
 

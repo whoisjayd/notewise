@@ -15,9 +15,7 @@ import structlog
 from notewise._constants import HTTP_BACKOFF_BASE, HTTP_MAX_RETRIES
 from notewise.errors import ExtractionError
 from notewise.youtube._constants import (
-    ANDROID_CLIENT_NAME,
-    ANDROID_CLIENT_VERSION,
-    ANDROID_USER_AGENT,
+    ANDROID_CLIENT_OVERRIDE,
     DEFAULT_ACCEPT_LANGUAGE,
     INNERTUBE_BASE_URL,
     INNERTUBE_CLIENT_NAME,
@@ -164,11 +162,7 @@ def _transcript_via_innertube_player(
         return None
     contexts = [
         None,
-        {
-            "clientName": ANDROID_CLIENT_NAME,
-            "clientVersion": ANDROID_CLIENT_VERSION,
-            "userAgent": ANDROID_USER_AGENT,
-        },
+        ANDROID_CLIENT_OVERRIDE,
     ]
     for override in contexts:
         try:

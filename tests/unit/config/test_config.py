@@ -122,8 +122,8 @@ class TestConfig:
         assert cfg.deepseek_api_key == "ds_key"
 
     def test_temperature_out_of_range(self, monkeypatch):
-        """Temperature > 1.0 raises ValidationError."""
-        monkeypatch.setenv("TEMPERATURE", "1.5")
+        """Temperature above the provider ceiling raises ValidationError."""
+        monkeypatch.setenv("TEMPERATURE", "2.1")
         with pytest.raises(ValidationError):
             Config()
 
@@ -205,12 +205,54 @@ class TestConfig:
         assert cfg.chunk_size == 6000
         assert cfg.chunk_overlap == 300
 
-    def test_chunk_overlap_must_be_smaller_than_chunk_size(self, monkeypatch):
-        """An overlap at or past chunk_size would stall the chunker."""
-        monkeypatch.setenv("CHUNK_SIZE", "1000")
-        monkeypatch.setenv("CHUNK_OVERLAP", "1000")
+    def test_temperature_allows_the_full_provider_range(self, monkeypatch):
+        """1.5 and 2.0 are ordinary provider values; only typos are rejected."""
+        monkeypatch.setenv("TEMPERATURE", "1.5")
+        assert Config().temperature == 1.5
+        monkeypatch.setenv("TEMPERATURE", "2.0")
+        assert Config().temperature == 2.0
+        monkeypatch.setenv("TEMPERATURE", "0.0")
+        assert Config().temperature == 0.0
+
+    def test_temperature_rejects_values_outside_the_provider_range(self, monkeypatch):
+        """A value no provider accepts should fail as config, not mid-request."""
+        monkeypatch.setenv("TEMPERATURE", "2.1")
         with pytest.raises(ValidationError):
             Config()
+        monkeypatch.setenv("TEMPERATURE", "-0.5")
+        with pytest.raises(ValidationError):
+            Config()
+
+    def test_chunk_overlap_at_or_past_chunk_size_is_clamped(self, monkeypatch):
+        """An overlap that would stall the chunker is clamped, not rejected."""
+        monkeypatch.setenv("CHUNK_SIZE", "1000")
+        monkeypatch.setenv("CHUNK_OVERLAP", "1000")
+        cfg = Config()
+        assert cfg.chunk_size == 1000
+        assert cfg.chunk_overlap == 999
+
+    def test_tiny_chunk_size_keeps_a_positive_advance(self, monkeypatch):
+        """CHUNK_SIZE=1 must not clamp an overlap back onto itself."""
+        monkeypatch.setenv("CHUNK_SIZE", "1")
+        monkeypatch.setenv("CHUNK_OVERLAP", "1500")
+        cfg = Config()
+        assert cfg.chunk_overlap < cfg.chunk_size
+        assert cfg.chunk_size - cfg.chunk_overlap >= 1
+
+    def test_small_chunk_size_derives_a_fitting_overlap(self, monkeypatch):
+        """A small CHUNK_SIZE stays usable instead of failing at startup."""
+        monkeypatch.setenv("CHUNK_SIZE", "1000")
+        monkeypatch.delenv("CHUNK_OVERLAP", raising=False)
+        cfg = Config()
+        assert cfg.chunk_size == 1000
+        assert cfg.chunk_overlap < cfg.chunk_size
+
+    def test_very_small_chunk_size_still_derives_overlap(self, monkeypatch):
+        """Even a tiny chunk size gets a smaller, usable overlap."""
+        monkeypatch.setenv("CHUNK_SIZE", "100")
+        monkeypatch.delenv("CHUNK_OVERLAP", raising=False)
+        cfg = Config()
+        assert cfg.chunk_overlap < cfg.chunk_size
 
     def test_default_languages_from_json_env(self, monkeypatch):
         """DEFAULT_LANGUAGES accepts a JSON array, matching CUSTOM_LLM_ENDPOINTS."""

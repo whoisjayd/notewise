@@ -613,18 +613,25 @@ class AppSettings(BaseSettings):
 
     @model_validator(mode="after")
     def _validate_chunk_overlap_fits_chunk_size(self) -> AppSettings:
-        """Reject an overlap that would stall or degenerate the chunker.
+        """Keep the chunker advancing, without rejecting either setting.
 
         generation.py advances by ``chunk_size - chunk_overlap`` tokens per
-        chunk; an overlap at or past the chunk size stops that advance (or
-        reverses it), so this must be caught here rather than left to fail
-        confusingly mid-run.
+        chunk, so an overlap at or past the chunk size would stall it. Both
+        CHUNK_SIZE and CHUNK_OVERLAP belong to the user, so clamp the overlap
+        to leave at least one token of advance instead of refusing to start:
+        any positive chunk size, and any overlap, stays usable.
         """
         if self.chunk_overlap >= self.chunk_size:
-            raise ValueError(
-                f"CHUNK_OVERLAP ({self.chunk_overlap}) must be smaller than "
-                f"CHUNK_SIZE ({self.chunk_size})."
+            applied = max(0, self.chunk_size - 1)
+            # Never adjust a configured value silently: the user asked for this
+            # overlap, so say what was requested and what will actually be used.
+            logger.warning(
+                "config.chunk_overlap_adjusted",
+                chunk_size=self.chunk_size,
+                requested=self.chunk_overlap,
+                applied=applied,
             )
+            object.__setattr__(self, "chunk_overlap", applied)
         return self
 
     @classmethod

@@ -665,7 +665,9 @@ DEFAULT_TARGET_LANGUAGE = "English"
 DEFAULT_RENDERED_HTML_LANG = "en"
 DEFAULT_TEMPERATURE = 0.7
 MIN_TEMPERATURE = 0.0
-MAX_TEMPERATURE = 1.0
+# Most providers (OpenAI, Anthropic, Google) accept up to 2.0; 1.0 needlessly
+# blocked a legitimate choice.
+MAX_TEMPERATURE = 2.0
 DEFAULT_MAX_CONCURRENT_VIDEOS = 5
 MIN_VIDEO_WORKER_COUNT = 1
 DEFAULT_YOUTUBE_REQUESTS_PER_MINUTE = 10
@@ -758,6 +760,12 @@ HTTP_BACKOFF_BASE = 1.0
 
 # ── Output ────────────────────────────────────────────────────────────────────
 MAX_FILENAME_LENGTH = 100
+# Windows caps a full path at 260 characters including the NUL terminator, so
+# 259 is the longest writable path. Chapter output stacks a directory name and
+# a file name, so budget the assembled path, not the leaf. Keep this at the
+# platform limit: a lower cap would rename files that already write fine and
+# break the chapter manifest on upgrade.
+MAX_PATH_LENGTH = 259
 LITELLM_MODELS_SNAPSHOT_FILENAME = "litellm_models_snapshot.json"
 LITELLM_MODEL_METADATA_SOURCE_URL = (
     "https://raw.githubusercontent.com/BerriAI/litellm/main/"

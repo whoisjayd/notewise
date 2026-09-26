@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import os
 import re
+from pathlib import Path
 from typing import TYPE_CHECKING, TypeVar
 
 from notewise._constants import (
@@ -13,6 +15,7 @@ from notewise._constants import (
     MASKED_SECRET_SUFFIX_LENGTH,
     MASKED_SECRET_UNMASKABLE_MARGIN,
     MAX_FILENAME_LENGTH,
+    MAX_PATH_LENGTH,
     RESERVED_WINDOWS_FILENAME_PATTERN,
     SANITIZED_FILENAME_FALLBACK,
     WHITESPACE_PATTERN,
@@ -21,7 +24,6 @@ from notewise._constants import (
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
-    from pathlib import Path
 
 
 _RESERVED = re.compile(RESERVED_WINDOWS_FILENAME_PATTERN, re.IGNORECASE)
@@ -47,6 +49,41 @@ def sanitize_filename(name: str) -> str:
 def safe_output_path(base_dir: Path, filename: str) -> Path:
     """Return a Path using a sanitized filename inside base_dir."""
     return base_dir / sanitize_filename(filename)
+
+
+def _windows_path_length(value: str) -> int:
+    """Length as Windows counts it: UTF-16 code units, not Python characters."""
+    return len(value.encode("utf-16-le")) // 2
+
+
+def truncate_for_path(parent: Path, name: str, *, keep_prefix: str = "") -> str:
+    """Shorten ``name`` so ``parent / name`` fits the platform path cap.
+
+    ``sanitize_filename`` bounds a single component, but chapter output stacks a
+    directory name and a file name, and Windows rejects a full path longer than
+    ``MAX_PATH_LENGTH``. The parent is resolved and measured in UTF-16 code units
+    because that is what Windows counts, so a relative output directory or an
+    emoji-bearing title cannot slip past the budget.
+
+    ``keep_prefix`` must survive truncation: it carries the chapter index, and
+    losing it would collapse two chapters onto one file. When the budget cannot
+    hold the prefix plus an extension and at least one character, the name is
+    returned unchanged so the real OSError surfaces instead of a colliding name.
+    """
+    # abspath, not resolve: resolve() follows symlinks, and on macOS it turns
+    # /var/folders/... into /private/var/folders/..., budgeting against a path
+    # ~8 characters longer than the one we actually write to.
+    resolved = os.path.abspath(parent)  # noqa: PTH100 - must not follow symlinks
+    budget = MAX_PATH_LENGTH - _windows_path_length(resolved) - 1
+    if _windows_path_length(name) <= budget:
+        return name
+    suffix = Path(name).suffix
+    stem = name[: len(name) - len(suffix)] if suffix else name
+    keep = budget - _windows_path_length(suffix)
+    if keep < _windows_path_length(keep_prefix) + 1:
+        return name
+    trimmed = stem[:keep].rstrip(" .")
+    return f"{trimmed}{suffix}" if trimmed else name
 
 
 def dedupe_ordered(items: list[T]) -> list[T]:

@@ -24,7 +24,7 @@ from notewise.errors import PartialChapterGenerationError
 from notewise.pipeline._artifacts import prefix_chapter_heading_with_timestamp
 from notewise.pipeline._documents import build_chapter_bundle, get_output_extension
 from notewise.pipeline._output_rendering import render_notes_with_warning
-from notewise.utils import sanitize_filename
+from notewise.utils import sanitize_filename, truncate_for_path
 
 
 if TYPE_CHECKING:
@@ -232,14 +232,17 @@ def build_chapter_generation_plan(
     for i, (chap_title, chapter_data) in enumerate(ordered_chapters, 1):
         chapter_file: Path | None = None
         safe_chapter = sanitize_filename(chap_title)
+        index_prefix = f"{i:02d}_"
         if chapter_directory_output and output_target is not None:
-            chapter_file = output_target / (
-                f"{i:02d}_{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            leaf = f"{index_prefix}{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            chapter_file = output_target / truncate_for_path(
+                output_target, leaf, keep_prefix=index_prefix
             )
         elif temporary_chapter_dir is not None:
-            chapter_file = temporary_chapter_dir / (
-                f"{sanitize_filename(title)}_chapter_{i:02d}_{safe_chapter}"
-                f"{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            lead = f"{sanitize_filename(title)}_chapter_{index_prefix}"
+            leaf = f"{lead}{safe_chapter}{CHAPTER_MARKDOWN_FILE_EXTENSION}"
+            chapter_file = temporary_chapter_dir / truncate_for_path(
+                temporary_chapter_dir, leaf, keep_prefix=lead
             )
 
         if chapter_file is not None:
