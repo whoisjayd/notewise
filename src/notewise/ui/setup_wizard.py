@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -41,6 +42,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from types import ModuleType
 
     from rich.console import Console
 
@@ -833,6 +835,28 @@ def select_provider(
         return providers_list[int(choice) - 1]
 
 
+@lru_cache(maxsize=1)
+def _readchar_module() -> ModuleType | None:
+    """Return the `readchar` module, or None when raw key input is unusable.
+
+    `readchar` resolves its own version through `importlib.metadata` while
+    importing, so a build that ships the module without its package metadata
+    raises `PackageNotFoundError` on import. Any import failure therefore just
+    means "raw keys unavailable": callers fall back to `Prompt.ask` instead of
+    aborting the wizard. Cached so the warning is logged once per process.
+    """
+    try:
+        import readchar
+    except Exception as error:
+        logger.warning(
+            "setup_wizard.raw_key_input_unavailable",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
+        return None
+    return readchar
+
+
 def _prompt_with_page_keys(console: Console, prompt: str) -> tuple[str, str | None]:
     """Read a line of input, but let Left/Right arrow keys page instantly.
 
@@ -851,7 +875,9 @@ def _prompt_with_page_keys(console: Console, prompt: str) -> tuple[str, str | No
     if not sys.stdin.isatty():
         return Prompt.ask(prompt).strip(), None
 
-    import readchar
+    readchar = _readchar_module()
+    if readchar is None:
+        return Prompt.ask(prompt).strip(), None
 
     console.print(prompt, end=": ")
     buffer: list[str] = []

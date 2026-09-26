@@ -13,6 +13,7 @@ from notewise.llm.custom_endpoint import (
 )
 from notewise.ui.setup_wizard import (
     _prompt_with_page_keys,
+    _readchar_module,
     get_api_key,
     get_available_models,
     get_config_path,
@@ -1548,6 +1549,55 @@ class TestWizardOrchestration:
 
 class TestPromptWithPageKeys:
     """Tests for the raw-key reader behind select_model's arrow-key paging."""
+
+    @pytest.fixture(autouse=True)
+    def _reset_raw_key_reader(self):
+        """Keep the cached readchar import from leaking between tests."""
+        _readchar_module.cache_clear()
+        yield
+        _readchar_module.cache_clear()
+
+    @staticmethod
+    def _break_readchar_import():
+        """Return an `__import__` replacement that fails only for readchar."""
+        import builtins
+        from importlib.metadata import PackageNotFoundError
+
+        real_import = builtins.__import__
+
+        def _import(name, *args, **kwargs):
+            if name == "readchar":
+                raise PackageNotFoundError("readchar")
+            return real_import(name, *args, **kwargs)
+
+        return _import
+
+    def test_falls_back_to_prompt_ask_when_readchar_cannot_be_imported(self, mocker):
+        """A build shipping readchar without its metadata must degrade, not crash."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("builtins.__import__", side_effect=self._break_readchar_import())
+        mock_ask = mocker.patch("rich.prompt.Prompt.ask", return_value=" 7 ")
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("7", None)
+        mock_ask.assert_called_once_with("Prompt")
+
+    def test_unavailable_readchar_warns_once_for_the_whole_session(self, mocker):
+        """The import failure is reported once, not on every prompt."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("builtins.__import__", side_effect=self._break_readchar_import())
+        mocker.patch("rich.prompt.Prompt.ask", return_value="1")
+        mock_logger = mocker.patch("notewise.ui.setup_wizard.logger")
+
+        _prompt_with_page_keys(Console(), "Prompt")
+        _prompt_with_page_keys(Console(), "Prompt")
+
+        assert mock_logger.warning.call_count == 1
 
     def test_falls_back_to_prompt_ask_when_not_a_tty(self, mocker):
         """Piped input / CI (no real terminal) must keep using line input."""
