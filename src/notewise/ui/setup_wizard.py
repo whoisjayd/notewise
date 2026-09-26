@@ -479,6 +479,7 @@ def _select_default_model_interactively(console: Console) -> str | None:
     edit) or when nothing could be selected.
     """
     import sqlite3
+    from dataclasses import replace
 
     from notewise.storage import config_store
 
@@ -508,7 +509,19 @@ def _select_default_model_interactively(console: Console) -> str | None:
     resolved = _discover_and_verify_custom_endpoint(profile, console=console)
     if resolved is None:
         return None
-    _resolved_base_url, model_id = resolved
+    resolved_base_url, model_id = resolved
+    # The model was just verified against the resolved URL, so persist it: a
+    # saved base that only answers once `/v1` is appended would otherwise be
+    # stored pointing somewhere the model was never verified.
+    if resolved_base_url != profile.base_url:
+        try:
+            config_store.upsert_custom_endpoint(
+                db_path, replace(profile, base_url=resolved_base_url)
+            )
+        except sqlite3.Error as error:
+            console.print(
+                f"[yellow]Could not save the resolved endpoint URL: {error}[/yellow]"
+            )
     return f"{profile.name}/{model_id}"
 
 
@@ -1203,6 +1216,8 @@ def run_setup_wizard(
     console: Console | None = None,
 ) -> dict[str, str]:
     """Run interactive setup wizard."""
+    from dataclasses import replace
+
     from rich.panel import Panel
     from rich.prompt import Confirm, Prompt
 
@@ -1286,8 +1301,17 @@ def run_setup_wizard(
         )
         if resolved is None:
             return current_config
-        _resolved_base_url, model_id = resolved
+        resolved_base_url, model_id = resolved
         model = f"{selected_profile.name}/{model_id}"
+        if resolved_base_url != selected_profile.base_url:
+            custom_config[CUSTOM_LLM_ENDPOINTS_ENV_VAR] = (
+                serialize_custom_endpoint_profiles(
+                    _replace_custom_endpoint_profile(
+                        custom_profiles,
+                        replace(selected_profile, base_url=resolved_base_url),
+                    )
+                )
+            )
     else:
         model = select_model(provider_key, available_models, console=active_console)
         provider_info = PROVIDER_CONFIG[provider_key]

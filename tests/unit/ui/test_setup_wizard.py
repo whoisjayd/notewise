@@ -1547,6 +1547,64 @@ class TestWizardOrchestration:
             console=mock_console,
         )
 
+    def test_run_setup_wizard_persists_a_resolved_base_url_for_saved_endpoint(
+        self, mocker
+    ):
+        """Re-running setup must save the base URL discovery actually resolved.
+
+        A saved profile can hold a base that only answers once `/v1` is
+        appended. The wizard verifies the model against the resolved URL, so it
+        has to persist that URL too -- otherwise the model is verified against
+        one endpoint and stored pointing at another.
+        """
+        console = MagicMock()
+        saved_profile = CustomEndpointProfile(
+            name="office",
+            base_url="https://office.example/openai",
+            api_key="office-key",
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={
+                "DEFAULT_MODEL": "gemini/gemini-pro",
+                "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles(
+                    (saved_profile,)
+                ),
+            },
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="office",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            return_value=("https://office.example/openai/v1", ["vendor/model-id"]),
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_model",
+            return_value="vendor/model-id",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+            new=AsyncMock(),
+        )
+        mocker.patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "3"])
+
+        result = run_setup_wizard(force=True, console=console)
+
+        assert result["DEFAULT_MODEL"] == "office/vendor/model-id"
+        assert parse_custom_endpoint_profiles(result["CUSTOM_LLM_ENDPOINTS"]) == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://office.example/openai/v1",
+                api_key="office-key",
+            ),
+        )
+
 
 class TestPromptWithPageKeys:
     """Tests for the raw-key reader behind select_model's arrow-key paging."""
