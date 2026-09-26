@@ -621,10 +621,21 @@ def process(
         )
         if base_url is not None:
             from notewise.errors import CustomEndpointError
-            from notewise.llm.custom_endpoint import normalize_openai_base_url
+            from notewise.llm.custom_endpoint import (
+                same_openai_base_url,
+                versioned_openai_base_url,
+            )
 
             try:
-                selected_api_base = normalize_openai_base_url(base_url)
+                # An override naming the saved endpoint's own base must reuse
+                # it verbatim: versioning it again would point the run at a URL
+                # that endpoint never answered.
+                selected_api_base = (
+                    configured_endpoint[0]
+                    if configured_endpoint is not None
+                    and same_openai_base_url(base_url, configured_endpoint[0])
+                    else versioned_openai_base_url(base_url)
+                )
             except CustomEndpointError as error:
                 raise typer.BadParameter(str(error), param_hint="--base-url") from error
         elif configured_endpoint is not None:
@@ -1519,9 +1530,9 @@ def inference_add(
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
+        clean_openai_base_url,
         discover_and_verify_model,
         normalize_custom_model_prefix,
-        normalize_openai_base_url,
     )
     from notewise.storage import config_store
     from notewise.ui.setup_wizard import _select_or_enter_model
@@ -1540,15 +1551,15 @@ def inference_add(
 
     try:
         normalized_name = normalize_custom_model_prefix(name)
-        normalized_base_url = normalize_openai_base_url(base_url)
+        base_url = clean_openai_base_url(base_url)
         if model is None:
-            model = _select_or_enter_model(console, normalized_base_url, api_key)
-        pricing = discover_and_verify_model(
-            normalized_base_url, api_key, model, endpoint_name=normalized_name
+            model = _select_or_enter_model(console, base_url, api_key)
+        resolved_base_url, pricing = discover_and_verify_model(
+            base_url, api_key, model, endpoint_name=normalized_name
         )
         profile = CustomEndpointProfile(
             name=normalized_name,
-            base_url=normalized_base_url,
+            base_url=resolved_base_url,
             api_key=api_key,
             model_pricing=pricing,
         )
@@ -1606,10 +1617,11 @@ def inference_update(
     from notewise.errors import ConfigurationError, CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
+        clean_openai_base_url,
         default_model_endpoint_match,
         discover_and_verify_model,
         normalize_custom_model_prefix,
-        normalize_openai_base_url,
+        same_openai_base_url,
     )
     from notewise.storage import config_store
     from notewise.ui.setup_wizard import (
@@ -1649,11 +1661,12 @@ def inference_update(
                 )
 
         selected_base_url = (
-            normalize_openai_base_url(base_url)
-            if base_url
-            else existing_profile.base_url
+            clean_openai_base_url(base_url) if base_url else existing_profile.base_url
         )
-        if not api_key and selected_base_url != existing_profile.base_url:
+        base_url_changed = not same_openai_base_url(
+            selected_base_url, existing_profile.base_url
+        )
+        if not api_key and base_url_changed:
             _exit_inference_error(
                 "--api-key is required when the base URL changes for a saved endpoint."
             )
@@ -1675,20 +1688,18 @@ def inference_update(
                     "--model is required unless DEFAULT_MODEL uses this endpoint."
                 )
 
+        resolved_base_url, pricing = discover_and_verify_model(
+            selected_base_url,
+            selected_api_key,
+            selected_model,
+            endpoint_name=normalized_name,
+        )
         profile = CustomEndpointProfile(
             name=normalized_name,
-            base_url=selected_base_url,
+            base_url=resolved_base_url,
             api_key=selected_api_key,
+            model_pricing=pricing,
         )
-        pricing = discover_and_verify_model(
-            profile.base_url,
-            profile.api_key,
-            selected_model,
-            endpoint_name=profile.name,
-        )
-        from dataclasses import replace
-
-        profile = replace(profile, model_pricing=pricing)
         config_store.upsert_custom_endpoint(db_path, profile)
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         _exit_inference_error(str(error))

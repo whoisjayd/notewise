@@ -13,6 +13,7 @@ from notewise.llm.custom_endpoint import (
 )
 from notewise.ui.setup_wizard import (
     _prompt_with_page_keys,
+    _readchar_module,
     get_api_key,
     get_available_models,
     get_config_path,
@@ -27,6 +28,14 @@ from notewise.ui.setup_wizard import (
     show_current_config,
 )
 from notewise.utils import strip_wrapped_quotes
+
+
+@pytest.fixture(autouse=True)
+def _reset_raw_key_reader():
+    """Keep the process-wide readchar import cache out of other tests' way."""
+    _readchar_module.cache_clear()
+    yield
+    _readchar_module.cache_clear()
 
 
 class TestConfigIO:
@@ -1045,17 +1054,18 @@ class TestInteractiveFlow:
             key = get_api_key("openai", existing_key="old-key")
             assert key == "old-key"
 
-    def test_get_api_key_retry(self):
-        """Test retry on invalid key."""
-        # First return invalid (short), then valid
-        inputs = ["short", "sk-valid-length-key-12345"]
+    def test_get_api_key_reprompts_only_for_a_blank_key(self):
+        """A blank key re-prompts; a short local key is accepted as-is."""
+        inputs = ["   ", "local-key"]
 
         with (
             patch("rich.prompt.Confirm.ask", return_value=False),
-            patch("rich.prompt.Prompt.ask", side_effect=inputs),
+            patch("rich.prompt.Prompt.ask", side_effect=inputs) as ask,
         ):
             key = get_api_key("openai")
-            assert key == "sk-valid-length-key-12345"
+
+        assert key == "local-key"
+        assert ask.call_count == 2
 
     def test_get_api_key_masks_existing_key_with_mask_secret(self):
         """Existing key prompt should use the shared mask_secret helper."""
@@ -1174,13 +1184,9 @@ class TestWizardOrchestration:
             "notewise.llm.custom_endpoint.normalize_custom_model_prefix",
             return_value="internal-endpoint",
         )
-        mocker.patch(
-            "notewise.llm.custom_endpoint.normalize_openai_base_url",
-            return_value="https://endpoint.example/v1",
-        )
         discover_models = mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://endpoint.example/v1", ["vendor/model-id"]),
         )
         mock_save = mocker.patch("notewise.ui.setup_wizard.save_config")
 
@@ -1205,7 +1211,7 @@ class TestWizardOrchestration:
         result = run_setup_wizard(force=True)
 
         discover_models.assert_called_once_with(
-            "https://endpoint.example/v1",
+            "https://endpoint.example",
             "endpoint-secret",
         )
         assert select_model.call_args.args == (
@@ -1254,7 +1260,7 @@ class TestWizardOrchestration:
         )
         discover_models = mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://office.example/v1", ["vendor/model-id"]),
         )
         verify_model = mocker.patch(
             "notewise.llm.custom_endpoint.verify_openai_compatible_model",
@@ -1353,12 +1359,8 @@ class TestWizardOrchestration:
             return_value="internal-endpoint",
         )
         mocker.patch(
-            "notewise.llm.custom_endpoint.normalize_openai_base_url",
-            return_value="https://endpoint.example/v1",
-        )
-        mocker.patch(
             "notewise.llm.custom_endpoint.discover_openai_compatible_models",
-            return_value=["vendor/model-id"],
+            return_value=("https://endpoint.example/v1", ["vendor/model-id"]),
         )
         mocker.patch(
             "notewise.ui.setup_wizard.select_model",
@@ -1545,9 +1547,109 @@ class TestWizardOrchestration:
             console=mock_console,
         )
 
+    def test_run_setup_wizard_persists_a_resolved_base_url_for_saved_endpoint(
+        self, mocker
+    ):
+        """Re-running setup must save the base URL discovery actually resolved.
+
+        A saved profile can hold a base that only answers once `/v1` is
+        appended. The wizard verifies the model against the resolved URL, so it
+        has to persist that URL too -- otherwise the model is verified against
+        one endpoint and stored pointing at another.
+        """
+        console = MagicMock()
+        saved_profile = CustomEndpointProfile(
+            name="office",
+            base_url="https://office.example/openai",
+            api_key="office-key",
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.load_config",
+            return_value={
+                "DEFAULT_MODEL": "gemini/gemini-pro",
+                "CUSTOM_LLM_ENDPOINTS": serialize_custom_endpoint_profiles(
+                    (saved_profile,)
+                ),
+            },
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.get_available_models",
+            return_value={"gemini": ["gemini-pro"]},
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_provider",
+            return_value="office",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.discover_openai_compatible_models",
+            return_value=("https://office.example/openai/v1", ["vendor/model-id"]),
+        )
+        mocker.patch(
+            "notewise.ui.setup_wizard.select_model",
+            return_value="vendor/model-id",
+        )
+        mocker.patch(
+            "notewise.llm.custom_endpoint.verify_openai_compatible_model",
+            new=AsyncMock(),
+        )
+        mocker.patch("rich.prompt.Prompt.ask", side_effect=["/custom/out", "3"])
+
+        result = run_setup_wizard(force=True, console=console)
+
+        assert result["DEFAULT_MODEL"] == "office/vendor/model-id"
+        assert parse_custom_endpoint_profiles(result["CUSTOM_LLM_ENDPOINTS"]) == (
+            CustomEndpointProfile(
+                name="office",
+                base_url="https://office.example/openai/v1",
+                api_key="office-key",
+            ),
+        )
+
 
 class TestPromptWithPageKeys:
     """Tests for the raw-key reader behind select_model's arrow-key paging."""
+
+    @staticmethod
+    def _break_readchar_import():
+        """Return an `__import__` replacement that fails only for readchar."""
+        import builtins
+        from importlib.metadata import PackageNotFoundError
+
+        real_import = builtins.__import__
+
+        def _import(name, *args, **kwargs):
+            if name == "readchar":
+                raise PackageNotFoundError("readchar")
+            return real_import(name, *args, **kwargs)
+
+        return _import
+
+    def test_falls_back_to_prompt_ask_when_readchar_cannot_be_imported(self, mocker):
+        """A build shipping readchar without its metadata must degrade, not crash."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("builtins.__import__", side_effect=self._break_readchar_import())
+        mock_ask = mocker.patch("rich.prompt.Prompt.ask", return_value=" 7 ")
+
+        text, signal = _prompt_with_page_keys(Console(), "Prompt")
+
+        assert (text, signal) == ("7", None)
+        mock_ask.assert_called_once_with("Prompt")
+
+    def test_unavailable_readchar_warns_once_for_the_whole_session(self, mocker):
+        """The import failure is reported once, not on every prompt."""
+        from rich.console import Console
+
+        mocker.patch("sys.stdin.isatty", return_value=True)
+        mocker.patch("builtins.__import__", side_effect=self._break_readchar_import())
+        mocker.patch("rich.prompt.Prompt.ask", return_value="1")
+        mock_logger = mocker.patch("notewise.ui.setup_wizard.logger")
+
+        _prompt_with_page_keys(Console(), "Prompt")
+        _prompt_with_page_keys(Console(), "Prompt")
+
+        assert mock_logger.warning.call_count == 1
 
     def test_falls_back_to_prompt_ask_when_not_a_tty(self, mocker):
         """Piped input / CI (no real terminal) must keep using line input."""

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from functools import lru_cache
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
@@ -41,6 +42,7 @@ logger: structlog.stdlib.BoundLogger = structlog.get_logger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from types import ModuleType
 
     from rich.console import Console
 
@@ -185,11 +187,12 @@ def _verify_and_save_endpoint(
     from notewise.llm.custom_endpoint import discover_and_verify_model
 
     try:
-        pricing = discover_and_verify_model(
+        resolved_base_url, pricing = discover_and_verify_model(
             profile.base_url, profile.api_key, model, endpoint_name=profile.name
         )
         config_store.upsert_custom_endpoint(
-            db_path, replace(profile, model_pricing=pricing)
+            db_path,
+            replace(profile, base_url=resolved_base_url, model_pricing=pricing),
         )
     except (ConfigurationError, CustomEndpointError, OSError, sqlite3.Error) as error:
         console.print(f"[red]{error}[/red]")
@@ -231,7 +234,9 @@ def _select_or_enter_model(console: Console, base_url: str, api_key: str) -> str
 
     if Confirm.ask("Select the model from the endpoint's list?", default=True):
         try:
-            models = discover_openai_compatible_models(base_url, api_key)
+            _resolved_base_url, models = discover_openai_compatible_models(
+                base_url, api_key
+            )
         except CustomEndpointError as error:
             console.print(f"[yellow]Could not list models ({error}).[/yellow]")
             models = []
@@ -315,9 +320,10 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
 
     from notewise.errors import CustomEndpointError
     from notewise.llm.custom_endpoint import (
+        clean_openai_base_url,
         default_model_endpoint_match,
         normalize_custom_model_prefix,
-        normalize_openai_base_url,
+        same_openai_base_url,
     )
 
     active_console = _resolve_console(console)
@@ -363,7 +369,7 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
                 )
                 continue
             try:
-                normalized_base_url = normalize_openai_base_url(base_url)
+                cleaned_base_url = clean_openai_base_url(base_url)
                 normalized_name = normalize_custom_model_prefix(name)
             except CustomEndpointError as error:
                 active_console.print(f"[red]{error}[/red]")
@@ -373,7 +379,7 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
                 active_console,
                 db_path,
                 normalized_name,
-                normalized_base_url,
+                cleaned_base_url,
                 api_key,
                 success_verb="Saved",
             )
@@ -397,14 +403,16 @@ def run_custom_endpoint_manager(*, console: Console | None = None) -> None:
             ).strip()
             try:
                 effective_base_url = (
-                    normalize_openai_base_url(new_base_url)
+                    clean_openai_base_url(new_base_url)
                     if new_base_url
                     else existing.base_url
                 )
             except CustomEndpointError as error:
                 active_console.print(f"[red]{error}[/red]")
                 continue
-            if not new_api_key and effective_base_url != existing.base_url:
+            if not new_api_key and not same_openai_base_url(
+                effective_base_url, existing.base_url
+            ):
                 active_console.print(
                     "[red]API key is required when the base URL changes.[/red]"
                 )
@@ -471,6 +479,7 @@ def _select_default_model_interactively(console: Console) -> str | None:
     edit) or when nothing could be selected.
     """
     import sqlite3
+    from dataclasses import replace
 
     from notewise.storage import config_store
 
@@ -497,9 +506,22 @@ def _select_default_model_interactively(console: Console) -> str | None:
     if profile is None:
         return select_model(provider_key, available_models, console=console)
 
-    model_id = _discover_and_verify_custom_endpoint(profile, console=console)
-    if model_id is None:
+    resolved = _discover_and_verify_custom_endpoint(profile, console=console)
+    if resolved is None:
         return None
+    resolved_base_url, model_id = resolved
+    # The model was just verified against the resolved URL, so persist it: a
+    # saved base that only answers once `/v1` is appended would otherwise be
+    # stored pointing somewhere the model was never verified.
+    if resolved_base_url != profile.base_url:
+        try:
+            config_store.upsert_custom_endpoint(
+                db_path, replace(profile, base_url=resolved_base_url)
+            )
+        except sqlite3.Error as error:
+            console.print(
+                f"[yellow]Could not save the resolved endpoint URL: {error}[/yellow]"
+            )
     return f"{profile.name}/{model_id}"
 
 
@@ -833,6 +855,28 @@ def select_provider(
         return providers_list[int(choice) - 1]
 
 
+@lru_cache(maxsize=1)
+def _readchar_module() -> ModuleType | None:
+    """Return the `readchar` module, or None when raw key input is unusable.
+
+    `readchar` resolves its own version through `importlib.metadata` while
+    importing, so a build that ships the module without its package metadata
+    raises `PackageNotFoundError` on import. Any import failure therefore just
+    means "raw keys unavailable": callers fall back to `Prompt.ask` instead of
+    aborting the wizard. Cached so the warning is logged once per process.
+    """
+    try:
+        import readchar
+    except Exception as error:
+        logger.warning(
+            "setup_wizard.raw_key_input_unavailable",
+            error_type=type(error).__name__,
+            exc_info=True,
+        )
+        return None
+    return readchar
+
+
 def _prompt_with_page_keys(console: Console, prompt: str) -> tuple[str, str | None]:
     """Read a line of input, but let Left/Right arrow keys page instantly.
 
@@ -851,7 +895,9 @@ def _prompt_with_page_keys(console: Console, prompt: str) -> tuple[str, str | No
     if not sys.stdin.isatty():
         return Prompt.ask(prompt).strip(), None
 
-    import readchar
+    readchar = _readchar_module()
+    if readchar is None:
+        return Prompt.ask(prompt).strip(), None
 
     console.print(prompt, end=": ")
     buffer: list[str] = []
@@ -1051,17 +1097,22 @@ def get_api_key(
 
     while True:
         api_key = Prompt.ask("Enter your API key", password=True)
-        if api_key and len(api_key) > 10:
+        if api_key.strip():
             return api_key
-        active_console.print("[red]Invalid API key. Please try again.[/red]")
+        active_console.print("[red]An API key is required.[/red]")
 
 
 def _discover_and_verify_custom_endpoint(
     profile: CustomEndpointProfile,
     *,
     console: Console,
-) -> str | None:
-    """Refresh a profile's model list and verify its selected model."""
+) -> tuple[str, str] | None:
+    """Resolve the profile's base URL, pick a model, and verify it live.
+
+    Returns the base URL that answered `/models` alongside the selected model
+    so the caller saves a profile known to work, or None when discovery or
+    verification failed.
+    """
     import asyncio
 
     from notewise.errors import CustomEndpointError
@@ -1072,7 +1123,9 @@ def _discover_and_verify_custom_endpoint(
 
     console.print("\n[cyan]Discovering endpoint models...[/cyan]")
     try:
-        models = discover_openai_compatible_models(profile.base_url, profile.api_key)
+        resolved_base_url, models = discover_openai_compatible_models(
+            profile.base_url, profile.api_key
+        )
     except CustomEndpointError as error:
         console.print(f"[red]{error}[/red]")
         return None
@@ -1085,13 +1138,13 @@ def _discover_and_verify_custom_endpoint(
     console.print("\n[cyan]Verifying selected model...[/cyan]")
     try:
         asyncio.run(
-            verify_openai_compatible_model(profile.base_url, profile.api_key, model_id)
+            verify_openai_compatible_model(resolved_base_url, profile.api_key, model_id)
         )
     except CustomEndpointError as error:
         console.print(f"[red]{error}[/red]")
         return None
 
-    return model_id
+    return resolved_base_url, model_id
 
 
 def _setup_custom_openai_compatible_endpoint(
@@ -1104,8 +1157,8 @@ def _setup_custom_openai_compatible_endpoint(
     from notewise.errors import CustomEndpointError
     from notewise.llm.custom_endpoint import (
         CustomEndpointProfile,
+        clean_openai_base_url,
         normalize_custom_model_prefix,
-        normalize_openai_base_url,
     )
 
     display_name = ""
@@ -1116,11 +1169,11 @@ def _setup_custom_openai_compatible_endpoint(
             custom_model_prefix = normalize_custom_model_prefix(display_name)
         except CustomEndpointError as error:
             console.print(f"[red]{error}[/red]")
-    normalized_base_url = ""
-    while not normalized_base_url:
+    cleaned_base_url = ""
+    while not cleaned_base_url:
         base_url = Prompt.ask("OpenAI-compatible base URL").strip()
         try:
-            normalized_base_url = normalize_openai_base_url(base_url)
+            cleaned_base_url = clean_openai_base_url(base_url)
         except CustomEndpointError as error:
             console.print(f"[red]{error}[/red]")
 
@@ -1132,12 +1185,16 @@ def _setup_custom_openai_compatible_endpoint(
 
     profile = CustomEndpointProfile(
         name=custom_model_prefix,
-        base_url=normalized_base_url,
+        base_url=cleaned_base_url,
         api_key=api_key,
     )
-    model_id = _discover_and_verify_custom_endpoint(profile, console=console)
-    if model_id is None:
+    resolved = _discover_and_verify_custom_endpoint(profile, console=console)
+    if resolved is None:
         return None
+    resolved_base_url, model_id = resolved
+    from dataclasses import replace
+
+    profile = replace(profile, base_url=resolved_base_url)
     return f"{profile.name}/{model_id}", profile
 
 
@@ -1159,6 +1216,8 @@ def run_setup_wizard(
     console: Console | None = None,
 ) -> dict[str, str]:
     """Run interactive setup wizard."""
+    from dataclasses import replace
+
     from rich.panel import Panel
     from rich.prompt import Confirm, Prompt
 
@@ -1236,13 +1295,23 @@ def run_setup_wizard(
             )
         )
     elif selected_profile is not None:
-        model_id = _discover_and_verify_custom_endpoint(
+        resolved = _discover_and_verify_custom_endpoint(
             selected_profile,
             console=active_console,
         )
-        if model_id is None:
+        if resolved is None:
             return current_config
+        resolved_base_url, model_id = resolved
         model = f"{selected_profile.name}/{model_id}"
+        if resolved_base_url != selected_profile.base_url:
+            custom_config[CUSTOM_LLM_ENDPOINTS_ENV_VAR] = (
+                serialize_custom_endpoint_profiles(
+                    _replace_custom_endpoint_profile(
+                        custom_profiles,
+                        replace(selected_profile, base_url=resolved_base_url),
+                    )
+                )
+            )
     else:
         model = select_model(provider_key, available_models, console=active_console)
         provider_info = PROVIDER_CONFIG[provider_key]

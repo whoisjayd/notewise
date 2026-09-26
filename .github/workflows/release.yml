@@ -33,7 +33,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -54,7 +54,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -91,7 +91,7 @@ jobs:
         with:
           ref: ${{ env.RELEASE_REF }}
           persist-credentials: false
-      - uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+      - uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
         with:
           enable-cache: true
           cache-dependency-glob: uv.lock
@@ -101,6 +101,10 @@ jobs:
       - name: Build standalone binary
         shell: pwsh
         run: |
+          # readchar and aiolimiter read their own version via
+          # importlib.metadata at import time, and PyInstaller ships no
+          # dist-info unless asked. Without these, importing either package
+          # in the bundle raises PackageNotFoundError at runtime.
           uv run pyinstaller `
             --noconfirm `
             --clean `
@@ -110,6 +114,8 @@ jobs:
             --collect-all tiktoken `
             --collect-submodules tiktoken_ext `
             --collect-data notewise.ui `
+            --copy-metadata aiolimiter `
+            --copy-metadata readchar `
             --paths src `
             src/notewise/__main__.py
       - name: Archive standalone binary

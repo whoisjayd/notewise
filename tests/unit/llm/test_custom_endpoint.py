@@ -22,6 +22,7 @@ from notewise.llm.custom_endpoint import (
     parse_custom_endpoint_profiles,
     serialize_custom_endpoint_profiles,
     verify_openai_compatible_model,
+    versioned_openai_base_url,
 )
 
 
@@ -47,17 +48,26 @@ class _FakeResponse:
         ("https://models.example.test", "https://models.example.test/v1"),
         ("https://models.example.test/", "https://models.example.test/v1"),
         (
-            "https://models.example.test/openai/",
-            "https://models.example.test/openai/v1",
+            "https://models.example.test/openai",
+            "https://models.example.test/openai",
         ),
         ("https://models.example.test/v1/", "https://models.example.test/v1"),
+        ("https://models.example.test/v1beta", "https://models.example.test/v1beta"),
+        (
+            "https://models.example.test/v1/chat/completions",
+            "https://models.example.test/v1",
+        ),
+        (
+            "https://models.example.test//api//v1//",
+            "https://models.example.test/api/v1",
+        ),
     ],
 )
 def test_normalize_openai_base_url_appends_or_preserves_v1(
     value: str,
     expected: str,
 ) -> None:
-    """Endpoint bases normalize to the LiteLLM-compatible ``/v1`` form."""
+    """A bare origin gains the ``/v1`` segment; a path is kept as written."""
     assert normalize_openai_base_url(value) == expected
 
 
@@ -92,6 +102,36 @@ def test_normalize_openai_base_url_allows_loopback_http(
 ) -> None:
     """Local endpoints may use HTTP without exposing credentials remotely."""
     assert normalize_openai_base_url(value) == expected
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("https://models.example.test", "https://models.example.test/v1"),
+        (
+            "https://models.example.test/api",
+            "https://models.example.test/api/v1",
+        ),
+        (
+            "https://models.example.test/api/v1",
+            "https://models.example.test/api/v1",
+        ),
+        (
+            "https://models.example.test/api/v1beta",
+            "https://models.example.test/api/v1beta",
+        ),
+        (
+            "https://models.example.test/api/V1",
+            "https://models.example.test/api/V1",
+        ),
+    ],
+)
+def test_versioned_openai_base_url_appends_only_when_a_version_is_missing(
+    value: str,
+    expected: str,
+) -> None:
+    """An override with no discovery step still gets the versioned form."""
+    assert versioned_openai_base_url(value) == expected
 
 
 @pytest.mark.parametrize(
@@ -244,11 +284,12 @@ def test_discover_models_sends_bearer_auth_and_returns_sorted_unique_ids(
     )
     mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
 
-    models = discover_openai_compatible_models(
+    resolved_base_url, models = discover_openai_compatible_models(
         "https://models.example.test", "test-api-key"
     )
 
     assert models == ["alpha", "zeta"]
+    assert resolved_base_url == "https://models.example.test/v1"
     request = opener.open.call_args.args[0]
     assert request.full_url == "https://models.example.test/v1/models"
     assert request.get_header("Authorization") == "Bearer test-api-key"
@@ -256,6 +297,85 @@ def test_discover_models_sends_bearer_auth_and_returns_sorted_unique_ids(
     assert (
         opener.open.call_args.kwargs["timeout"] == CUSTOM_ENDPOINT_HTTP_TIMEOUT_SECONDS
     )
+
+
+def test_discover_models_prefers_the_base_url_as_typed(mocker) -> None:
+    """A base URL that already answers /models is used exactly as typed."""
+    opener = MagicMock()
+    opener.open.return_value = _FakeResponse(b'{"data": [{"id": "alpha"}]}')
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    resolved_base_url, models = discover_openai_compatible_models(
+        "https://models.example.test/openai", "test-api-key"
+    )
+
+    assert resolved_base_url == "https://models.example.test/openai"
+    assert models == ["alpha"]
+    assert opener.open.call_args.args[0].full_url == (
+        "https://models.example.test/openai/models"
+    )
+
+
+def test_discover_models_falls_back_to_v1_when_typed_url_fails(mocker) -> None:
+    """A failing typed URL is retried once with the /v1 form appended."""
+    opener = MagicMock()
+    opener.open.side_effect = [
+        HTTPError(
+            "https://models.example.test/openai/models",
+            404,
+            "Not Found",
+            hdrs=None,
+            fp=None,
+        ),
+        _FakeResponse(b'{"data": [{"id": "alpha"}]}'),
+    ]
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    resolved_base_url, models = discover_openai_compatible_models(
+        "https://models.example.test/openai", "test-api-key"
+    )
+
+    assert (resolved_base_url, models) == (
+        "https://models.example.test/openai/v1",
+        ["alpha"],
+    )
+    assert [call.args[0].full_url for call in opener.open.call_args_list] == [
+        "https://models.example.test/openai/models",
+        "https://models.example.test/openai/v1/models",
+    ]
+
+
+def test_discover_models_names_every_base_url_tried_on_total_failure(mocker) -> None:
+    """When no candidate answers, the error names every URL and its status."""
+    opener = MagicMock()
+    opener.open.side_effect = [
+        HTTPError(
+            "https://models.example.test/openai/models",
+            404,
+            "Not Found",
+            hdrs=None,
+            fp=None,
+        ),
+        HTTPError(
+            "https://models.example.test/openai/v1/models",
+            401,
+            "Unauthorized",
+            hdrs=None,
+            fp=None,
+        ),
+    ]
+    mocker.patch("notewise.llm.custom_endpoint.build_opener", return_value=opener)
+
+    with pytest.raises(CustomEndpointError) as raised:
+        discover_openai_compatible_models(
+            "https://models.example.test/openai", "test-api-key"
+        )
+
+    message = str(raised.value)
+    assert "https://models.example.test/openai" in message
+    assert "https://models.example.test/openai/v1" in message
+    assert "404" in message
+    assert "401" in message
 
 
 @pytest.mark.parametrize(
@@ -312,7 +432,7 @@ def test_discover_models_logs_sanitized_failure_context(mocker) -> None:
     warning = mocker.patch("notewise.llm.custom_endpoint.logger.warning")
 
     with pytest.raises(CustomEndpointError):
-        discover_openai_compatible_models("https://models.example.test", "test-key")
+        discover_openai_compatible_models("https://models.example.test/v1", "test-key")
 
     warning.assert_called_once_with(
         "Custom endpoint model discovery failed",
@@ -329,7 +449,7 @@ def test_discover_models_redacts_secrets_from_logged_failure(mocker) -> None:
     warning = mocker.patch("notewise.llm.custom_endpoint.logger.warning")
 
     with pytest.raises(CustomEndpointError):
-        discover_openai_compatible_models("https://models.example.test", "test-key")
+        discover_openai_compatible_models("https://models.example.test/v1", "test-key")
 
     logged_error = warning.call_args.kwargs["error"]
     assert "sk-abcdefghijklmnopqrstuvwx1234567890ABCD" not in logged_error
@@ -341,13 +461,13 @@ async def test_verify_model_forwards_selected_model_base_and_key(mocker) -> None
     completion = mocker.patch("litellm.acompletion", new_callable=mocker.AsyncMock)
 
     await verify_openai_compatible_model(
-        "https://models.example.test", "test-api-key", "provider/model-1"
+        "https://models.example.test/openai", "test-api-key", "provider/model-1"
     )
 
     completion.assert_awaited_once()
     kwargs = completion.call_args.kwargs
     assert kwargs["model"] == "openai/provider/model-1"
-    assert kwargs["api_base"] == "https://models.example.test/v1"
+    assert kwargs["api_base"] == "https://models.example.test/openai"
     assert kwargs["api_key"] == "test-api-key"
     assert kwargs["max_tokens"] == 4
     assert kwargs["num_retries"] == 0

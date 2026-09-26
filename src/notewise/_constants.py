@@ -28,6 +28,13 @@ CUSTOM_ENDPOINT_VERIFICATION_INSTRUCTIONS = (
     "You are validating a custom OpenAI-compatible endpoint for NoteWise."
 )
 CUSTOM_ENDPOINT_VERIFICATION_MAX_OUTPUT_TOKENS = 4
+CUSTOM_ENDPOINT_VERSION_SEGMENT_PATTERN = r"^v\d+[A-Za-z0-9._-]*$"
+CUSTOM_ENDPOINT_VERSION_PATH = "/v1"
+CUSTOM_ENDPOINT_OPERATION_PATH_SUFFIXES = (
+    "chat/completions",
+    "completions",
+    "models",
+)
 SESSION_LOG_PREFIX = "notewise"
 OUTPUT_METADATA_FILENAME = ".notewise-output.json"
 OUTPUT_METADATA_CHAPTER_FILES_KEY = "chapter_files"

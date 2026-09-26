@@ -68,9 +68,12 @@ class _FakeResponse:
 
 
 def test_check_for_updates_reports_available_release(mocker) -> None:
+    # A deliberately unreachable future version: this asserts that a release
+    # newer than the installed one is reported as available, so the fixture
+    # must not drift onto the real version with each release bump.
     payload = b"""
     {
-        "tag_name": "v1.7.1",
+        "tag_name": "v99.0.0",
         "html_url": "https://example.com/release"
     }
     """
@@ -83,7 +86,7 @@ def test_check_for_updates_reports_available_release(mocker) -> None:
     status = updater.check_for_updates()
 
     assert status.available is True
-    assert status.latest_version == "1.7.1"
+    assert status.latest_version == "99.0.0"
     assert status.install_source == "Python Package"
     assert status.update_commands
     assert "notewise" in status.update_commands[0]
@@ -139,8 +142,8 @@ def test_update_command_prints_detected_source_and_matching_command(mocker) -> N
         cli_app,
         "check_for_updates",
         return_value=updater.UpdateStatus(
-            current_version="1.7.0",
-            latest_version="1.7.0",
+            current_version="1.7.1",
+            latest_version="1.7.1",
             available=True,
             install_source="Standalone Binary",
             release_url="https://example.com/release",
