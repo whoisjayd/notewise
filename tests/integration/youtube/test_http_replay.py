@@ -110,7 +110,10 @@ def test_youtube_replay_mode_rejects_uncassetted_requests() -> None:
             filter_headers=["authorization", "cookie", "host", "set-cookie"],
             record_mode="none",
         ),
-        pytest.raises(ExtractionError, match="record_mode 'none'|Can't overwrite existing cassette"),
+        pytest.raises(
+            ExtractionError,
+            match=r"record_mode 'none'|Can't overwrite existing cassette",
+        ),
     ):
         YouTubeExtractorClient()._fetch_text(
             "http://youtube.test/api/timedtext?v=UNCASSETTED&lang=en"
