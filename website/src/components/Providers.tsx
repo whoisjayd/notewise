@@ -44,6 +44,15 @@ const apiKeyProviders: Provider[] = [
   { name: "Weights & Biases", prefix: "wandb/…", key: "WANDB_API_KEY" },
   { name: "Hyperbolic", prefix: "hyperbolic/…", key: "HYPERBOLIC_API_KEY" },
   { name: "Inception", prefix: "inception/…", key: "INCEPTION_API_KEY" },
+  { name: "Lambda", prefix: "lambda_ai/…", key: "LAMBDA_API_KEY" },
+  { name: "OVHcloud", prefix: "ovhcloud/…", key: "OVHCLOUD_API_KEY" },
+  { name: "Nscale", prefix: "nscale/…", key: "NSCALE_API_KEY" },
+  { name: "Volcengine", prefix: "volcengine/…", key: "VOLCENGINE_API_KEY" },
+  { name: "Codestral", prefix: "codestral/…", key: "CODESTRAL_API_KEY" },
+  { name: "Meta Llama API", prefix: "meta_llama/…", key: "LLAMA_API_KEY" },
+  { name: "FriendliAI", prefix: "friendliai/…", key: "FRIENDLIAI_API_KEY" },
+  { name: "v0", prefix: "v0/…", key: "V0_API_KEY" },
+  { name: "Scaleway", prefix: "scaleway/…", key: "SCW_SECRET_KEY" },
 ];
 
 const oauthProviders = [

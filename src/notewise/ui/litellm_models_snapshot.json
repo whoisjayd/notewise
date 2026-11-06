@@ -57,6 +57,10 @@
     "cloudflare/@cf/zai-org/glm-5.2",
     "cloudflare/@hf/thebloke/codellama-7b-instruct-awq"
   ],
+  "codestral": [
+    "codestral/codestral-2405",
+    "codestral/codestral-latest"
+  ],
   "cohere": [
     "c4ai-aya-expanse-32b",
     "command-a-03-2025",
@@ -247,6 +251,19 @@
     "deepseek/deepseek-v3.2",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-pro"
+  ],
+  "volcengine": [
+    "deepseek-v3-2-251201",
+    "glm-4-7-251222",
+    "kimi-k2-thinking-251104",
+    "volcengine/doubao-seed-2-0-code-preview-260215",
+    "volcengine/doubao-seed-2-0-lite-260215",
+    "volcengine/doubao-seed-2-0-mini-260215",
+    "volcengine/doubao-seed-2-0-pro-260215",
+    "volcengine/doubao-seed-2-1-lite-260915",
+    "volcengine/doubao-seed-2-1-pro-260628",
+    "volcengine/doubao-seed-2-1-pro-260915",
+    "volcengine/doubao-seed-2-1-turbo-260628"
   ],
   "fireworks_ai": [
     "fireworks_ai/accounts/fireworks/models/chronos-hermes-13b-v2",
@@ -503,6 +520,15 @@
     "fireworks_ai/qwen3p7-plus",
     "fireworks_ai/qwen3p8-max"
   ],
+  "friendliai": [
+    "friendliai/MiniMaxAI/MiniMax-M2.5",
+    "friendliai/deepseek-ai/DeepSeek-V3.2",
+    "friendliai/google/gemma-4-31B-it",
+    "friendliai/zai-org/GLM-5.1",
+    "friendliai/zai-org/GLM-5.2",
+    "friendliai/zai-org/GLM-5.3",
+    "friendliai/zai-org/GLM-5.3-Flash"
+  ],
   "openai": [
     "chat-latest",
     "daybreak-blue-latest",
@@ -717,6 +743,33 @@
     "inception/mercury-2",
     "inception/mercury-2.5"
   ],
+  "lambda_ai": [
+    "lambda_ai/deepseek-llama3.3-70b",
+    "lambda_ai/deepseek-r1-0528",
+    "lambda_ai/deepseek-r1-671b",
+    "lambda_ai/deepseek-v3-0324",
+    "lambda_ai/hermes3-405b",
+    "lambda_ai/hermes3-70b",
+    "lambda_ai/hermes3-8b",
+    "lambda_ai/lfm-40b",
+    "lambda_ai/lfm-7b",
+    "lambda_ai/llama-4-maverick-17b-128e-instruct-fp8",
+    "lambda_ai/llama-4-scout-17b-16e-instruct",
+    "lambda_ai/llama3.1-405b-instruct-fp8",
+    "lambda_ai/llama3.1-70b-instruct-fp8",
+    "lambda_ai/llama3.1-8b-instruct",
+    "lambda_ai/llama3.1-nemotron-70b-instruct-fp8",
+    "lambda_ai/llama3.2-3b-instruct",
+    "lambda_ai/llama3.3-70b-instruct-fp8",
+    "lambda_ai/qwen25-coder-32b-instruct",
+    "lambda_ai/qwen3-32b-fp8"
+  ],
+  "meta_llama": [
+    "meta_llama/Llama-3.3-70B-Instruct",
+    "meta_llama/Llama-3.3-8B-Instruct",
+    "meta_llama/Llama-4-Maverick-17B-128E-Instruct-FP8",
+    "meta_llama/Llama-4-Scout-17B-16E-Instruct-FP8"
+  ],
   "minimax": [
     "minimax/MiniMax-M2",
     "minimax/MiniMax-M2.1",
@@ -781,6 +834,22 @@
     "moonshot/kimi-k3",
     "moonshot/kimi-k3.1-pro"
   ],
+  "nscale": [
+    "nscale/Qwen/QwQ-32B",
+    "nscale/Qwen/Qwen2.5-Coder-32B-Instruct",
+    "nscale/Qwen/Qwen2.5-Coder-3B-Instruct",
+    "nscale/Qwen/Qwen2.5-Coder-7B-Instruct",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Llama-70B",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Llama-8B",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Qwen-1.5B",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Qwen-32B",
+    "nscale/deepseek-ai/DeepSeek-R1-Distill-Qwen-7B",
+    "nscale/meta-llama/Llama-3.1-8B-Instruct",
+    "nscale/meta-llama/Llama-3.3-70B-Instruct",
+    "nscale/meta-llama/Llama-4-Scout-17B-16E-Instruct",
+    "nscale/mistralai/mixtral-8x22b-instruct-v0.1"
+  ],
   "nebius": [
     "nebius/MiniMaxAI/MiniMax-M2.5",
     "nebius/MiniMaxAI/MiniMax-M3",
@@ -837,6 +906,21 @@
     "nebius/zai-org/GLM-5.2",
     "nebius/zai-org/GLM-5.3",
     "nebius/zai-org/GLM-5.3-Flash"
+  ],
+  "ovhcloud": [
+    "ovhcloud/DeepSeek-R1-Distill-Llama-70B",
+    "ovhcloud/Llama-3.1-8B-Instruct",
+    "ovhcloud/Meta-Llama-3_1-70B-Instruct",
+    "ovhcloud/Meta-Llama-3_3-70B-Instruct",
+    "ovhcloud/Mistral-7B-Instruct-v0.3",
+    "ovhcloud/Mistral-Nemo-Instruct-2407",
+    "ovhcloud/Mistral-Small-3.2-24B-Instruct-2506",
+    "ovhcloud/Mixtral-8x7B-Instruct-v0.1",
+    "ovhcloud/Qwen2.5-Coder-32B-Instruct",
+    "ovhcloud/Qwen3-32B",
+    "ovhcloud/gpt-oss-120b",
+    "ovhcloud/gpt-oss-20b",
+    "ovhcloud/mamba-codestral-7B-v0.1"
   ],
   "perplexity": [
     "perplexity/anthropic/claude-fable-5",
@@ -1021,6 +1105,11 @@
     "together_ai/zai-org/GLM-5.3",
     "together_ai/zai-org/GLM-5.3-Flash"
   ],
+  "v0": [
+    "v0/v0-1.0-md",
+    "v0/v0-1.5-lg",
+    "v0/v0-1.5-md"
+  ],
   "vercel_ai_gateway": [
     "vercel_ai_gateway/alibaba/qwen-3-14b",
     "vercel_ai_gateway/alibaba/qwen-3-235b",
@@ -1200,6 +1289,17 @@
     "zai/glm-5.3",
     "zai/glm-5.3-flash",
     "zai/glm-5v-turbo"
+  ],
+  "scaleway": [
+    "scaleway/deepseek-v4-flash-0731",
+    "scaleway/google/gemma-4-26b-a4b-it",
+    "scaleway/meta/llama-3.3-70b-instruct",
+    "scaleway/mistralai/mistral-medium-3.5-128b",
+    "scaleway/mistralai/mistral-small-3.2-24b-instruct-2506",
+    "scaleway/openai/gpt-oss-120b",
+    "scaleway/qwen/qwen3-235b-a22b-instruct-2507",
+    "scaleway/qwen/qwen3.5-397b-a17b",
+    "scaleway/qwen/qwen3.6-35b-a3b"
   ],
   "novita": [
     "novita/Sao10K/L3-8B-Stheno-v3.2",
