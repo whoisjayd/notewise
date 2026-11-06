@@ -12,7 +12,6 @@ import typer
 from notewise._constants import (
     DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
     DEFAULT_HISTORY_LIMIT,
-    DEFAULT_LANGUAGES,
     DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
@@ -758,7 +757,13 @@ def process(
 
 def _prefers_original_language(language: list[str] | None, settings: Any) -> bool:
     """Use the video's spoken-language track unless a language was chosen."""
-    return not language and list(settings.default_languages) == DEFAULT_LANGUAGES
+    if language:
+        return False
+    fields_set = getattr(settings, "model_fields_set", None)
+    configured = isinstance(fields_set, (set, frozenset)) and (
+        "default_languages" in fields_set
+    )
+    return not configured
 
 
 async def _download_video_transcript(

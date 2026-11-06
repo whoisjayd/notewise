@@ -91,19 +91,31 @@ def _original_track(
 ) -> TrackSelection | None:
     """Return the track in the video's spoken language, if it can be told.
 
-    YouTube only generates automatic captions in the spoken language, so that
-    language is the original; a manual track in it is preferred.
+    YouTube only generates automatic captions in the spoken language, so a
+    single automatic track identifies the original; a manual track in the same
+    language (or a regional variant) is preferred.
     """
-    original = sorted(automatic_captions)[0]
-    for source, by_lang, generated in (
-        ("subtitles", subtitles, False),
-        ("automatic_captions", automatic_captions, True),
+    if len(automatic_captions) != 1:
+        return None  # spoken language is ambiguous; use the requested languages
+    original = next(iter(automatic_captions))
+    base = original.lower().split("-")[0]
+    manual = next(
+        (
+            key
+            for key in sorted(subtitles)
+            if key.lower() == original.lower() or key.lower().split("-")[0] == base
+        ),
+        None,
+    )
+    for source, by_lang, key, generated in (
+        ("subtitles", subtitles, manual, False),
+        ("automatic_captions", automatic_captions, original, True),
     ):
-        best = _pick_best_track(by_lang.get(original, []))
+        best = _pick_best_track(by_lang.get(key, [])) if key else None
         if best:
             return TrackSelection(
                 source=source,
-                language_code=original,
+                language_code=key,
                 is_generated=generated,
                 track=best,
             )
