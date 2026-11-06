@@ -112,7 +112,7 @@ def _original_track(
         ("automatic_captions", automatic_captions, original, True),
     ):
         best = _pick_best_track(by_lang.get(key, [])) if key else None
-        if best:
+        if key and best:
             return TrackSelection(
                 source=source,
                 language_code=key,

@@ -302,7 +302,7 @@ class LLMProvider:
                         content = self._normalize_responses_content(response)
                     else:
                         # LiteLLM's acompletion handles async requests to providers.
-                        response = await acompletion(**kwargs)
+                        response = cast("Any", await acompletion(**kwargs))
                         if response.choices and response.choices[0].message.content:
                             content = self._normalize_content(
                                 response.choices[0].message.content
@@ -421,7 +421,7 @@ class LLMProvider:
         if self._uses_streamed_responses_api():
             kwargs["stream"] = True
             stream = await aresponses(**kwargs)
-            return await self._collect_responses_stream(stream)
+            return await self._collect_responses_stream(cast("Any", stream))
         return await aresponses(**kwargs)
 
     async def _collect_responses_stream(

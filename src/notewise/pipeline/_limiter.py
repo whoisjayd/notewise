@@ -69,7 +69,7 @@ def _evict_on_close(loop: asyncio.AbstractEventLoop) -> None:
         _LOOP_SCOPED_LIMITERS.pop(loop, None)
         original_close()
 
-    loop.close = close_and_evict  # ty: ignore[invalid-assignment]
+    loop.close = close_and_evict
 
 
 def clear_youtube_limiters() -> None:
