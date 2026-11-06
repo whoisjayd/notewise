@@ -51,7 +51,17 @@ def select_track(
     automatic_captions: dict[str, list[dict[str, Any]]],
     languages: list[str] | None,
     include_automatic: bool = True,
+    prefer_original: bool = False,
 ) -> TrackSelection | None:
+    """Pick a caption track.
+
+    With ``prefer_original`` the spoken-language (ASR) track wins over the
+    requested languages, so no translated text is returned by default.
+    """
+    if prefer_original and include_automatic and automatic_captions:
+        original = _original_track(subtitles or {}, automatic_captions)
+        if original is not None:
+            return original
     requested = [lang.strip().lower() for lang in (languages or []) if lang.strip()]
     sources: list[tuple[str, dict[str, list[dict[str, Any]]], bool]] = [
         ("subtitles", subtitles or {}, False)
@@ -72,6 +82,67 @@ def select_track(
             is_generated=is_generated,
             track=best,
         )
+    return None
+
+
+def _scripts(code: str) -> set[str]:
+    """Return the ISO 15924 script subtags (e.g. ``hant``) of a language code."""
+    return {part for part in code.lower().split("-")[1:] if len(part) == 4}
+
+
+def _matching_manual_key(subtitles: dict[str, Any], original: str) -> str | None:
+    """Pick the manual track for ``original``: exact, then closest variant.
+
+    Regional variants (es / es-419) match; different scripts (zh-Hans / zh-Hant)
+    do not.
+    """
+    lowered = original.lower()
+    base = lowered.split("-")[0]
+    best: tuple[int, str] | None = None
+    for key in sorted(subtitles):
+        key_l = key.lower()
+        if key_l.split("-")[0] != base:
+            continue
+        scripts, wanted = _scripts(key_l), _scripts(lowered)
+        if scripts and wanted and scripts != wanted:
+            continue
+        if key_l == lowered:
+            rank = 0
+        elif key_l.startswith(f"{lowered}-") or lowered.startswith(f"{key_l}-"):
+            rank = 1
+        else:
+            rank = 2
+        if best is None or rank < best[0]:
+            best = (rank, key)
+    return best[1] if best else None
+
+
+def _original_track(
+    subtitles: dict[str, list[dict[str, Any]]],
+    automatic_captions: dict[str, list[dict[str, Any]]],
+) -> TrackSelection | None:
+    """Return the track in the video's spoken language, if it can be told.
+
+    YouTube only generates automatic captions in the spoken language, so a
+    single automatic track identifies the original; a manual track in the same
+    language (or a regional variant) is preferred.
+    """
+    if len(automatic_captions) != 1:
+        return None  # spoken language is ambiguous; use the requested languages
+    original = next(iter(automatic_captions))
+    manual = _matching_manual_key(subtitles, original)
+    for source, by_lang, key, generated in (
+        ("subtitles", subtitles, manual, False),
+        ("automatic_captions", automatic_captions, original, True),
+    ):
+        best = _pick_best_track(by_lang.get(key, [])) if key else None
+        if key and best:
+            return TrackSelection(
+                source=source,
+                language_code=key,
+                is_generated=generated,
+                track=best,
+            )
     return None
 
 

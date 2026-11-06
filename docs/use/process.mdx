@@ -30,10 +30,10 @@ notewise process "https://youtu.be/VIDEO_ID"
 
 | Option                       | Default                   | Use it for                                                    |
 | ---------------------------- | ------------------------- | ------------------------------------------------------------- |
-| `--model`, `-m`              | `gemini/gemini-2.5-flash` | Override the LiteLLM model for one run.                       |
+| `--model`, `-m`              | `gemini/gemini-3.5-flash` | Override the LiteLLM model for one run.                       |
 | `--output`, `-o`             | `./output`                | Write files to a specific folder.                             |
 | `--format`, `-r`             | `md`                      | Write `md`, `html`, `pdf`, `docx`, or a comma-separated list. |
-| `--language`, `-l`           | `en`                      | Specifies the transcript language; this option can be repeated. |
+| `--language`, `-l`           | video's spoken language   | Transcript language code; repeat the flag per language (`-l en -l hi`). Without it the original spoken-language track is used; set `DEFAULT_LANGUAGES` to override. |
 | `--target-language`, `-L`    | `English`                 | Generate notes in another language.                           |
 | `--temperature`, `-t`        | `0.7`                     | Change LLM temperature, range `0.0` to `1.0`.                 |
 | `--max-tokens`, `-k`         | provider default          | Cap LLM output tokens.                                        |

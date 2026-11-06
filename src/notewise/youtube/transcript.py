@@ -76,8 +76,13 @@ async def fetch_transcript(
     on_request: Callable[[], Awaitable[None]] | None = None,
     cookie_file: str | None = None,
     video_data: dict[str, Any] | None = None,
+    prefer_original: bool = False,
 ) -> VideoTranscript:
-    """Fetch transcript for a YouTube video with language fallback and retries."""
+    """Fetch transcript for a YouTube video with language fallback and retries.
+
+    ``prefer_original`` uses the video's spoken-language track instead of
+    ``languages`` when it can be identified (no language was requested).
+    """
     if languages is None:
         languages = list(DEFAULT_LANGUAGES)
 
@@ -93,6 +98,7 @@ async def fetch_transcript(
                 video_id,
                 languages,
                 video_data=video_data,
+                prefer_original=prefer_original,
             )
 
             logger.info(log_msg)
@@ -158,6 +164,7 @@ async def _fetch_async(
     video_id: str,
     languages: list[str],
     video_data: dict[str, Any] | None = None,
+    prefer_original: bool = False,
 ) -> tuple[Any, _TranscriptMeta, str]:
     """Async helper to interact with the async extractor client."""
     try:
@@ -166,6 +173,7 @@ async def _fetch_async(
                 video_id,
                 languages=languages,
                 include_automatic=True,
+                prefer_original=prefer_original,
             )
         else:
             payload = await client.transcript_from_video_data(
@@ -173,6 +181,7 @@ async def _fetch_async(
                 video_data,
                 languages=languages,
                 include_automatic=True,
+                prefer_original=prefer_original,
             )
     except ExtractionError as error:
         message = str(error)

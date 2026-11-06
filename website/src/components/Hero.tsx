@@ -143,7 +143,7 @@ export function Hero({ stats }: { stats: RepoStats }) {
                   text: "→ parsing url · fetching transcript · detecting chapters",
                 },
                 { kind: "muted", text: "→ chapters: 7 · chunking 4000 / overlap 200" },
-                { kind: "muted", text: "→ generating with gemini/gemini-2.5-flash" },
+                { kind: "muted", text: "→ generating with gemini/gemini-3.5-flash" },
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need.md" },
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need_quiz.md" },
                 { kind: "ok", text: "✓ wrote attention_is_all_you_need.pdf" },

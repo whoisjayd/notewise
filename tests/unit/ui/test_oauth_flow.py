@@ -38,7 +38,7 @@ def test_run_oauth_login_uses_chat_completion_safe_model_for_copilot(mocker):
     completion.assert_awaited_once()
     assert completion.await_args is not None
     kwargs = completion.await_args.kwargs
-    assert kwargs["model"] == "github_copilot/gpt-5-mini"
+    assert kwargs["model"] == "github_copilot/gpt-5.4-nano"
     assert kwargs["messages"] == [
         {"role": "system", "content": "You are validating OAuth login for notewise."},
         {"role": "user", "content": "Reply with OK."},

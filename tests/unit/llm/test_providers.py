@@ -456,7 +456,7 @@ class TestLLMProvider:
             mock_response.choices[0].message.content = "Generated content"
             mock_acompletion.return_value = mock_response
 
-            provider = LLMProvider("github_copilot/gpt-5-mini")
+            provider = LLMProvider("github_copilot/gpt-5.4-nano")
             await provider.generate("sys", "user", temperature=0.7)
 
         assert mock_acompletion.call_args.kwargs["temperature"] == 1.0
@@ -563,8 +563,8 @@ class TestLLMProvider:
 
         def fake_completion_cost(**kwargs):
             model = kwargs.get("model")
-            assert model != "github_copilot/gpt-5-mini"
-            if model == "gpt-5-mini":
+            assert model != "github_copilot/gpt-5.4-nano"
+            if model == "gpt-5.4-nano":
                 return 0.0042
             return 0.0
 
@@ -582,7 +582,7 @@ class TestLLMProvider:
             mock_response.usage.total_tokens = 150
             mock_acompletion.return_value = mock_response
 
-            provider = LLMProvider("github_copilot/gpt-5-mini")
+            provider = LLMProvider("github_copilot/gpt-5.4-nano")
             with provider.collect_usage() as usage:
                 await provider.generate("sys", "user")
 

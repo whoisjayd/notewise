@@ -8,16 +8,16 @@ keywords: ["litellm", "gemini", "openai", "anthropic", "api keys", "providers"]
 NoteWise sends generation requests through LiteLLM. Use a model string like `provider/model-name` with `--model` or `DEFAULT_MODEL`.
 
 ```bash
-notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-3.5-flash
 ```
 
-The source default is `gemini/gemini-2.5-flash`.
+The source default is `gemini/gemini-3.5-flash`.
 
 ## Common routes
 
 <CardGroup cols={2}>
   <Card title="Default Gemini path">
-    Set `GEMINI_API_KEY` and use `gemini/gemini-2.5-flash`.
+    Set `GEMINI_API_KEY` and use `gemini/gemini-3.5-flash`.
   </Card>
   <Card title="OpenAI or Anthropic">
     Set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, then use a matching LiteLLM
@@ -49,6 +49,23 @@ The source default is `gemini/gemini-2.5-flash`.
 | Cohere            | `COHERE_API_KEY`                                  |
 | DeepSeek          | `DEEPSEEK_API_KEY`                                |
 | OpenRouter        | `OPENROUTER_API_KEY`                              |
+| Z.AI              | `ZAI_API_KEY`                                     |
+| Moonshot AI       | `MOONSHOT_API_KEY`                                |
+| MiniMax           | `MINIMAX_API_KEY`                                 |
+| Nebius            | `NEBIUS_API_KEY`                                  |
+| Baseten           | `BASETEN_API_KEY`                                 |
+| Weights & Biases  | `WANDB_API_KEY`                                   |
+| Hyperbolic        | `HYPERBOLIC_API_KEY`                              |
+| Inception         | `INCEPTION_API_KEY`                               |
+| Lambda            | `LAMBDA_API_KEY`                                  |
+| OVHcloud          | `OVHCLOUD_API_KEY`                                |
+| Nscale            | `NSCALE_API_KEY`                                  |
+| Volcengine        | `VOLCENGINE_API_KEY`                              |
+| Codestral         | `CODESTRAL_API_KEY`                               |
+| Meta Llama API    | `LLAMA_API_KEY`                                   |
+| FriendliAI        | `FRIENDLIAI_API_KEY`                              |
+| v0                | `V0_API_KEY`                                      |
+| Scaleway          | `SCW_SECRET_KEY`                                  |
 | Azure             | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY`         |
 | Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY`                       |
 | Together          | `TOGETHERAI_API_KEY`                              |

@@ -10,7 +10,7 @@ metadata:
 
 # NoteWise Agent Skill
 
-Use this when answering questions about NoteWise `1.7.2`.
+Use this when answering questions about NoteWise `1.8.0`.
 
 Canonical public docs base: `https://notewise.click/docs`.
 
@@ -37,9 +37,9 @@ Canonical public docs base: `https://notewise.click/docs`.
 
 ## Defaults
 
-- Version: `1.7.2`
+- Version: `1.8.0`
 - Python: `>=3.11`
-- Default model: `gemini/gemini-2.5-flash`
+- Default model: `gemini/gemini-3.5-flash`
 - Default output: `./output`
 - Output formats: `md`, `html`, `pdf`, `docx`; default `md`
 - Temperature: `0.7`
@@ -65,7 +65,7 @@ Common keys: `DEFAULT_MODEL`, `CUSTOM_LLM_ENDPOINTS`, `OUTPUT_DIR`, `MAX_CONCURR
 ## OAuth
 
 - `notewise auth login chatgpt`, model `chatgpt/gpt-5.6-luna`
-- `notewise auth login github_copilot`, model `github_copilot/gpt-5-mini`
+- `notewise auth login github_copilot`, model `github_copilot/gpt-5.4-nano`
 - `notewise auth login codex` is a ChatGPT alias
 - Token dirs default under `<state>/oauth/...` unless `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` is set
 

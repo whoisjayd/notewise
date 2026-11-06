@@ -195,6 +195,23 @@ def _build_provider_api_key_env_vars(
 
 
 PROVIDER_API_KEY_ENV_VAR_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "BASETEN_API_KEY": ("baseten",),
+    "CODESTRAL_API_KEY": ("codestral",),
+    "FRIENDLIAI_API_KEY": ("friendliai",),
+    "HYPERBOLIC_API_KEY": ("hyperbolic",),
+    "INCEPTION_API_KEY": ("inception",),
+    "LAMBDA_API_KEY": ("lambda_ai",),
+    "LLAMA_API_KEY": ("meta_llama",),
+    "MINIMAX_API_KEY": ("minimax",),
+    "MOONSHOT_API_KEY": ("moonshot",),
+    "NEBIUS_API_KEY": ("nebius",),
+    "NSCALE_API_KEY": ("nscale",),
+    "OVHCLOUD_API_KEY": ("ovhcloud",),
+    "SCW_SECRET_KEY": ("scaleway",),
+    "V0_API_KEY": ("v0",),
+    "VOLCENGINE_API_KEY": ("volcengine",),
+    "WANDB_API_KEY": ("wandb",),
+    "ZAI_API_KEY": ("zai",),
     "AI21_API_KEY": ("ai21",),
     "ANTHROPIC_API_KEY": ("anthropic",),
     "AZURE_API_KEY": ("azure", "azure_ai", "azure_text"),
@@ -267,7 +284,7 @@ OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
     },
     "github_copilot": {
         "label": "GitHub Copilot",
-        "safe_model": "github_copilot/gpt-5-mini",
+        "safe_model": "github_copilot/gpt-5.4-nano",
         "token_dir_env": "GITHUB_COPILOT_TOKEN_DIR",
         "token_dir_name": "github_copilot",
     },
@@ -338,6 +355,142 @@ PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
         "api_url": "https://platform.deepseek.com/api_keys",
         "keywords": ["deepseek"],
         "litellm_providers": ["deepseek"],
+    },
+    "zai": {
+        "name": "Z.AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "ZAI_API_KEY",
+        "api_url": "https://z.ai/manage-apikey/apikey-list",
+        "keywords": ["zai", "glm"],
+        "litellm_providers": ["zai"],
+    },
+    "moonshot": {
+        "name": "Moonshot AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "MOONSHOT_API_KEY",
+        "api_url": "https://platform.moonshot.ai/console/api-keys",
+        "keywords": ["moonshot", "kimi"],
+        "litellm_providers": ["moonshot"],
+    },
+    "minimax": {
+        "name": "MiniMax",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "MINIMAX_API_KEY",
+        "api_url": "https://platform.minimax.io/user-center/basic-information/interface-key",
+        "keywords": ["minimax"],
+        "litellm_providers": ["minimax"],
+    },
+    "nebius": {
+        "name": "Nebius",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "NEBIUS_API_KEY",
+        "api_url": "https://studio.nebius.com/settings/api-keys",
+        "keywords": ["nebius"],
+        "litellm_providers": ["nebius"],
+    },
+    "baseten": {
+        "name": "Baseten",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "BASETEN_API_KEY",
+        "api_url": "https://app.baseten.co/settings/api_keys",
+        "keywords": ["baseten"],
+        "litellm_providers": ["baseten"],
+    },
+    "wandb": {
+        "name": "Weights & Biases",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "WANDB_API_KEY",
+        "api_url": "https://wandb.ai/authorize",
+        "keywords": ["wandb"],
+        "litellm_providers": ["wandb"],
+    },
+    "hyperbolic": {
+        "name": "Hyperbolic",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "HYPERBOLIC_API_KEY",
+        "api_url": "https://app.hyperbolic.xyz/settings",
+        "keywords": ["hyperbolic"],
+        "litellm_providers": ["hyperbolic"],
+    },
+    "inception": {
+        "name": "Inception",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "INCEPTION_API_KEY",
+        "api_url": "https://platform.inceptionlabs.ai/dashboard/api-keys",
+        "keywords": ["inception", "mercury"],
+        "litellm_providers": ["inception"],
+    },
+    "lambda_ai": {
+        "name": "Lambda",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "LAMBDA_API_KEY",
+        "api_url": "https://cloud.lambda.ai/api-keys",
+        "keywords": ["lambda"],
+        "litellm_providers": ["lambda_ai"],
+    },
+    "ovhcloud": {
+        "name": "OVHcloud",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "OVHCLOUD_API_KEY",
+        "api_url": "https://endpoints.ai.cloud.ovh.net",
+        "keywords": ["ovh"],
+        "litellm_providers": ["ovhcloud"],
+    },
+    "nscale": {
+        "name": "Nscale",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "NSCALE_API_KEY",
+        "api_url": "https://console.nscale.com",
+        "keywords": ["nscale"],
+        "litellm_providers": ["nscale"],
+    },
+    "volcengine": {
+        "name": "Volcengine",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "VOLCENGINE_API_KEY",
+        "api_url": "https://console.volcengine.com/ark",
+        "keywords": ["volcengine", "doubao"],
+        "litellm_providers": ["volcengine"],
+    },
+    "codestral": {
+        "name": "Codestral",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "CODESTRAL_API_KEY",
+        "api_url": "https://console.mistral.ai/codestral",
+        "keywords": ["codestral"],
+        "litellm_providers": ["codestral"],
+    },
+    "meta_llama": {
+        "name": "Meta Llama API",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "LLAMA_API_KEY",
+        "api_url": "https://llama.developer.meta.com",
+        "keywords": ["meta_llama"],
+        "litellm_providers": ["meta_llama"],
+    },
+    "friendliai": {
+        "name": "FriendliAI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "FRIENDLIAI_API_KEY",
+        "api_url": "https://friendli.ai/suite/setting/tokens",
+        "keywords": ["friendli"],
+        "litellm_providers": ["friendliai"],
+    },
+    "v0": {
+        "name": "v0",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "V0_API_KEY",
+        "api_url": "https://v0.app/chat/settings/keys",
+        "keywords": ["v0"],
+        "litellm_providers": ["v0"],
+    },
+    "scaleway": {
+        "name": "Scaleway",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "SCW_SECRET_KEY",
+        "api_url": "https://console.scaleway.com/iam/api-keys",
+        "keywords": ["scaleway"],
+        "litellm_providers": ["scaleway"],
     },
     "openrouter": {
         "name": "OpenRouter",
@@ -597,6 +750,7 @@ GPT5_MODEL_MARKER = "gpt-5"
 GPT5_REQUIRED_TEMPERATURE = 1.0
 LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "audio",
+    "content-safety",
     "computer-use",
     "container",
     "embedding",
@@ -619,6 +773,7 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "transcribe",
     "tts",
     "ui-tars",
+    "voxtral",
     "vision",
     "-vl",
     "vl-",
@@ -629,6 +784,9 @@ LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
     "chatgpt": ("gpt-5.1-codex",),
 }
 ALLOWED_SETUP_MODEL_MODES = frozenset({"chat", "completion", "responses"})
+# Models retiring within this many days are hidden from setup (already-retired
+# ones always are); later deprecation dates stay selectable.
+LITELLM_DEPRECATION_GRACE_DAYS = 30
 STRIP_SAFE_PROVIDER_ALIASES = frozenset(
     {
         "gemini",
@@ -658,7 +816,7 @@ LITELLM_LOG_ENV_VAR = "LITELLM_LOG"
 LITELLM_LOG_DEFAULT_LEVEL = "ERROR"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-DEFAULT_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_MODEL = "gemini/gemini-3.5-flash"
 DEFAULT_OUTPUT_DIR = "./output"
 DEFAULT_LANGUAGES = ["en"]
 DEFAULT_TARGET_LANGUAGE = "English"

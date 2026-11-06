@@ -777,8 +777,9 @@ async def test_run_applies_rate_limiter_to_metadata_and_transcript(pipeline):
         on_request=None,
         cookie_file=None,
         video_data=None,
+        prefer_original=False,
     ):  # pragma: no cover - signature exercise
-        del cookie_file, video_data
+        del cookie_file, video_data, prefer_original
         assert on_request is not None
         await on_request()
         return _make_transcript(video_id=_video_id, text="text")

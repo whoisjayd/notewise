@@ -91,7 +91,7 @@ def test_main_rejects_empty_snapshot_before_replacing_output(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "models.json"
-    original = {"openai": ["gpt-4o-mini"]}
+    original: dict[str, list[str]] = {"openai": []}
     output.write_text(json.dumps(original) + "\n", encoding="utf-8")
     original_contents = output.read_text(encoding="utf-8")
     non_setup_model_metadata = {
@@ -104,7 +104,7 @@ def test_main_rejects_empty_snapshot_before_replacing_output(
     monkeypatch.setattr(
         extractor_module,
         "load_model_cost",
-        lambda: non_setup_model_metadata,
+        lambda _source=None: non_setup_model_metadata,
     )
 
     with pytest.raises(ValueError):
@@ -119,7 +119,7 @@ def test_write_json_preserves_existing_valid_output_when_serialization_fails(
     tmp_path: Path,
 ) -> None:
     output = tmp_path / "models.json"
-    original = {"openai": ["gpt-4o-mini"]}
+    original: dict[str, list[str]] = {"openai": []}
     output.write_text(json.dumps(original) + "\n", encoding="utf-8")
     original_contents = output.read_text(encoding="utf-8")
 
@@ -128,3 +128,42 @@ def test_write_json_preserves_existing_valid_output_when_serialization_fails(
 
     assert output.read_text(encoding="utf-8") == original_contents
     assert json.loads(output.read_text(encoding="utf-8")) == original
+
+
+def test_carry_forward_keeps_providers_missing_from_source(
+    extractor_module: ModuleType,
+):
+    snapshot = {"gemini": ["gemini/a"]}
+    existing = {"gemini": ["gemini/old"], "openrouter": ["openrouter/x"]}
+
+    carried = extractor_module.carry_forward_missing_providers(snapshot, existing)
+
+    assert carried == ["openrouter"]
+    assert snapshot == {"gemini": ["gemini/a"], "openrouter": ["openrouter/x"]}
+
+
+def test_carry_forward_drops_non_text_models(extractor_module: ModuleType):
+    snapshot: dict[str, list[str]] = {}
+    existing = {"openrouter": ["openrouter/a/chat", "openrouter/mistralai/voxtral-x"]}
+
+    extractor_module.carry_forward_missing_providers(snapshot, existing)
+
+    assert snapshot == {"openrouter": ["openrouter/a/chat"]}
+
+
+def test_main_reports_unreadable_source(
+    extractor_module: ModuleType,
+    tmp_path: Path,
+    capsys: pytest.CaptureFixture[str],
+):
+    exit_code = extractor_module.main(
+        [
+            "--source",
+            str(tmp_path / "missing.json"),
+            "--output",
+            str(tmp_path / "o.json"),
+        ]
+    )
+
+    assert exit_code == 1
+    assert "Could not load model metadata" in capsys.readouterr().err

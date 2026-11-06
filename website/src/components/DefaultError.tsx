@@ -1,8 +1,9 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { FineIcon } from "@/ui/FineIcon";
 
-export function DefaultError({ error, reset }: { error: Error; reset: () => void }) {
+export function DefaultError({ error, reset }: { error: unknown; reset: () => void }) {
   const router = useRouter();
+  const message = error instanceof Error ? error.message : "";
 
   return (
     <main
@@ -15,9 +16,9 @@ export function DefaultError({ error, reset }: { error: Error; reset: () => void
         </span>
         <h1 className="mt-6 t-h2 text-[clamp(30px,4vw,40px)]">Something broke.</h1>
         <p className="mt-3 t-body">Not you, us. Reloading usually fixes it.</p>
-        {import.meta.env.DEV && error.message && (
+        {import.meta.env.DEV && message && (
           <pre className="mt-4 max-h-40 overflow-auto rounded-md border border-[var(--rule)] bg-muted p-3 text-left font-mono text-xs text-thread">
-            {error.message}
+            {message}
           </pre>
         )}
         <div className="mt-7 flex items-center justify-center gap-3">

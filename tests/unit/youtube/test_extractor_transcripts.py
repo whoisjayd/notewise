@@ -86,6 +86,103 @@ class TestSelectTrack:
             )
         ]
 
+    def test_prefer_original_uses_spoken_language_over_requested(self):
+        subtitles = {"en": [{"ext": "json3", "url": "https://x/en"}]}
+        automatic = {"es": [{"ext": "json3", "url": "https://x/es"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.language_code == "es"
+        assert selection.is_generated is True
+        assert selection.track["url"] == "https://x/es"
+
+    def test_prefer_original_uses_manual_track_in_spoken_language(self):
+        subtitles = {"es": [{"ext": "json3", "url": "https://x/es-manual"}]}
+        automatic = {"es": [{"ext": "json3", "url": "https://x/es-auto"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.source == "subtitles"
+        assert selection.language_code == "es"
+        assert selection.track["url"] == "https://x/es-manual"
+
+    def test_prefer_original_matches_regional_manual_variant(self):
+        subtitles = {"es-419": [{"ext": "json3", "url": "https://x/es-419"}]}
+        automatic = {"es": [{"ext": "json3", "url": "https://x/es-auto"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.source == "subtitles"
+        assert selection.track["url"] == "https://x/es-419"
+
+    def test_prefer_original_matches_manual_for_regional_automatic(self):
+        subtitles = {"es": [{"ext": "json3", "url": "https://x/es"}]}
+        automatic = {"es-419": [{"ext": "json3", "url": "https://x/auto"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.source == "subtitles"
+        assert selection.track["url"] == "https://x/es"
+
+    def test_prefer_original_keeps_the_same_script(self):
+        subtitles = {
+            "zh-Hans": [{"ext": "json3", "url": "https://x/hans"}],
+            "zh-Hant": [{"ext": "json3", "url": "https://x/hant"}],
+        }
+        automatic = {"zh-Hant": [{"ext": "json3", "url": "https://x/auto"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.language_code == "zh-Hant"
+        assert selection.track["url"] == "https://x/hant"
+
+    def test_prefer_original_skips_manual_track_in_another_script(self):
+        subtitles = {"zh-Hans": [{"ext": "json3", "url": "https://x/hans"}]}
+        automatic = {"zh-Hant": [{"ext": "json3", "url": "https://x/auto"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.is_generated is True
+        assert selection.track["url"] == "https://x/auto"
+
+    def test_prefer_original_ambiguous_automatic_uses_requested(self):
+        automatic = {
+            "es": [{"ext": "json3", "url": "https://x/es"}],
+            "en": [{"ext": "json3", "url": "https://x/en"}],
+        }
+
+        selection = tx.select_track({}, automatic, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.track["url"] == "https://x/en"
+
+    def test_prefer_original_without_automatic_falls_back_to_requested(self):
+        subtitles = {
+            "en": [{"ext": "json3", "url": "https://x/en"}],
+            "fr": [{"ext": "json3", "url": "https://x/fr"}],
+        }
+
+        selection = tx.select_track(subtitles, {}, ["en"], prefer_original=True)
+
+        assert selection is not None
+        assert selection.language_code == "en"
+        assert selection.track["url"] == "https://x/en"
+
+    def test_explicit_language_wins_without_prefer_original(self):
+        automatic = {"es": [{"ext": "json3", "url": "https://x/es"}]}
+        subtitles = {"en": [{"ext": "json3", "url": "https://x/en"}]}
+
+        selection = tx.select_track(subtitles, automatic, ["en"])
+
+        assert selection is not None
+        assert selection.language_code == "en"
+
 
 class TestParsePayload:
     def test_parse_transcript_payload_json3(self):
