@@ -12,6 +12,7 @@ import typer
 from notewise._constants import (
     DEFAULT_CACHE_PRUNE_OLDER_THAN_DAYS,
     DEFAULT_HISTORY_LIMIT,
+    DEFAULT_LANGUAGES,
     DEFAULT_LOGS_CLEAN_OLDER_THAN_DAYS,
     DEFAULT_NOTES_OUTPUT_FORMAT,
     DEFAULT_TARGET_LANGUAGE,
@@ -417,7 +418,11 @@ def process(
         typer.Option(
             "--language",
             "-l",
-            help=("Transcript languages, e.g. [green]en[/green], [green]hi[/green]."),
+            help=(
+                "Transcript language code; repeat per language, e.g. "
+                "[green]-l en -l hi[/green]. Default: the video's original "
+                "spoken language."
+            ),
             rich_help_panel="Common",
         ),
     ] = None,
@@ -703,6 +708,7 @@ def process(
             ),
             selected_api_base=selected_api_base,
             selected_api_key=selected_api_key,
+            prefer_original_language=_prefers_original_language(language, settings),
         )
 
         had_failures = asyncio.run(
@@ -750,10 +756,16 @@ def process(
         raise typer.Exit(code=1) from None
 
 
+def _prefers_original_language(language: list[str] | None, settings: Any) -> bool:
+    """Use the video's spoken-language track unless a language was chosen."""
+    return not language and list(settings.default_languages) == DEFAULT_LANGUAGES
+
+
 async def _download_video_transcript(
     video_id: str,
     languages: list[str],
     cookie_file: str | None,
+    prefer_original: bool = False,
 ) -> tuple[str, VideoTranscript]:
     """Fetch metadata title plus transcript, reusing video_data when available."""
     from notewise.youtube.metadata import video_metadata_from_details
@@ -768,7 +780,12 @@ async def _download_video_transcript(
     transcript_kwargs: dict[str, Any] = {"cookie_file": cookie_file}
     if video_data is not None:
         transcript_kwargs["video_data"] = video_data
-    transcript = await fetch_transcript(video_id, languages, **transcript_kwargs)
+    transcript = await fetch_transcript(
+        video_id,
+        languages,
+        prefer_original=prefer_original,
+        **transcript_kwargs,
+    )
     return title, transcript
 
 
@@ -864,7 +881,11 @@ def transcript(
         typer.Option(
             "--language",
             "-l",
-            help=("Transcript languages, e.g. [green]en[/green], [green]hi[/green]."),
+            help=(
+                "Transcript language code; repeat per language, e.g. "
+                "[green]-l en -l hi[/green]. Default: the video's original "
+                "spoken language."
+            ),
             rich_help_panel="Common",
         ),
     ] = None,
@@ -935,6 +956,7 @@ def transcript(
                     parsed.video_id,
                     selected_languages,
                     selected_cookie_file,
+                    _prefers_original_language(language, settings),
                 )
             )
 

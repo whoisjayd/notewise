@@ -51,7 +51,17 @@ def select_track(
     automatic_captions: dict[str, list[dict[str, Any]]],
     languages: list[str] | None,
     include_automatic: bool = True,
+    prefer_original: bool = False,
 ) -> TrackSelection | None:
+    """Pick a caption track.
+
+    With ``prefer_original`` the spoken-language (ASR) track wins over the
+    requested languages, so no translated text is returned by default.
+    """
+    if prefer_original and include_automatic and automatic_captions:
+        original = _original_track(subtitles or {}, automatic_captions)
+        if original is not None:
+            return original
     requested = [lang.strip().lower() for lang in (languages or []) if lang.strip()]
     sources: list[tuple[str, dict[str, list[dict[str, Any]]], bool]] = [
         ("subtitles", subtitles or {}, False)
@@ -72,6 +82,31 @@ def select_track(
             is_generated=is_generated,
             track=best,
         )
+    return None
+
+
+def _original_track(
+    subtitles: dict[str, list[dict[str, Any]]],
+    automatic_captions: dict[str, list[dict[str, Any]]],
+) -> TrackSelection | None:
+    """Return the track in the video's spoken language, if it can be told.
+
+    YouTube only generates automatic captions in the spoken language, so that
+    language is the original; a manual track in it is preferred.
+    """
+    original = sorted(automatic_captions)[0]
+    for source, by_lang, generated in (
+        ("subtitles", subtitles, False),
+        ("automatic_captions", automatic_captions, True),
+    ):
+        best = _pick_best_track(by_lang.get(original, []))
+        if best:
+            return TrackSelection(
+                source=source,
+                language_code=original,
+                is_generated=generated,
+                track=best,
+            )
     return None
 
 

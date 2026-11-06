@@ -157,6 +157,7 @@ def _transcript_via_innertube_player(
     ytcfg: dict[str, Any] | None,
     languages: list[str],
     include_automatic: bool,
+    prefer_original: bool = False,
 ) -> dict[str, Any] | None:
     if not api_key:
         return None
@@ -190,6 +191,7 @@ def _transcript_via_innertube_player(
             automatic_captions=automatic,
             languages=languages,
             include_automatic=include_automatic,
+            prefer_original=prefer_original,
         )
         if not selection or not selection.track.get("url"):
             continue
@@ -348,6 +350,7 @@ class _TransportMixin:
         ytcfg: dict[str, Any] | None,
         languages: list[str],
         include_automatic: bool,
+        prefer_original: bool = False,
     ) -> dict[str, Any] | None:
         return _transcript_via_innertube_player(
             self,
@@ -356,6 +359,7 @@ class _TransportMixin:
             ytcfg,
             languages,
             include_automatic,
+            prefer_original,
         )
 
     def _player_response_from_innertube(

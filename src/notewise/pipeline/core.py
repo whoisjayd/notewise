@@ -120,6 +120,7 @@ class CorePipeline:
         shared_state: PipelineSharedState | None = None,
         api_base: str | None = None,
         api_key: str | None = None,
+        prefer_original_language: bool = False,
     ):
         self.model = model
         self.output_dir = output_dir or config.default_output_dir
@@ -129,6 +130,7 @@ class CorePipeline:
         self.output_formats = normalize_output_formats(requested_formats)
         self.output_format = self.output_formats[0]
         self.languages = languages or config.default_languages
+        self.prefer_original_language = prefer_original_language
         self.target_language = target_language.strip() or DEFAULT_TARGET_LANGUAGE
         self.temperature = (
             temperature if temperature is not None else config.temperature
