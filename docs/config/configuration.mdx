@@ -31,7 +31,7 @@ Set `NOTEWISE_HOME` to move this state root.
 For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.db` is used unless `--output` is passed. Other settings use environment variables, then `config.db`, then code defaults.
 
 ```bash
-notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-3.5-flash --output ./notes
 ```
 
 ## Custom OpenAI-compatible endpoints
@@ -76,7 +76,7 @@ copies its credentials into ambient environment variables.
 
 | Key                           | Default                   | Meaning                             |
 | ----------------------------- | ------------------------- | ----------------------------------- |
-| `DEFAULT_MODEL`               | `gemini/gemini-2.5-flash` | LiteLLM model string.               |
+| `DEFAULT_MODEL`               | `gemini/gemini-3.5-flash` | LiteLLM model string.               |
 | `CUSTOM_LLM_ENDPOINTS`        | unset                     | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR`                  | `./output`                | Default output directory.           |
 | `MAX_CONCURRENT_VIDEOS`       | `5`                       | Batch/playlist video workers.       |
@@ -101,7 +101,7 @@ notewise setup --force
 notewise config
 notewise config keys
 notewise config get DEFAULT_MODEL
-notewise config set DEFAULT_MODEL gemini/gemini-2.5-flash
+notewise config set DEFAULT_MODEL gemini/gemini-3.5-flash
 notewise config unset MAX_TOKENS
 notewise config edit
 notewise config-path

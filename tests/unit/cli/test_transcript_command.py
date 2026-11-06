@@ -98,6 +98,7 @@ def test_transcript_writes_txt_file_by_default(mocker, tmp_path, fake_transcript
     cli_app.fetch_transcript.assert_awaited_once_with(
         VIDEO_ID,
         ["en"],
+        prefer_original=True,
         cookie_file=None,
         video_data={"id": VIDEO_ID, "title": VIDEO_TITLE},
     )

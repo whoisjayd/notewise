@@ -30,7 +30,9 @@ from notewise._constants import (  # noqa: E402
 from notewise.model_catalog import (  # noqa: E402
     classify_provider,
     is_setup_safe_model,
+    is_text_model_name,
     normalize_available_models,
+    parse_model_snapshot,
 )
 
 
@@ -63,6 +65,28 @@ def build_snapshot(model_cost: dict[str, Any]) -> dict[str, list[str]]:
     return normalize_available_models(provider_models)
 
 
+def carry_forward_missing_providers(
+    snapshot: dict[str, list[str]],
+    existing: dict[str, list[str]],
+) -> list[str]:
+    """Keep previously bundled providers the source no longer lists at all.
+
+    Upstream sometimes stops shipping a provider's models (e.g. OpenRouter moved
+    to dynamic discovery); dropping it would silently remove it from setup.
+    Returns the providers that were carried forward.
+    """
+    carried = [
+        provider
+        for provider, models in existing.items()
+        if models and not snapshot.get(provider)
+    ]
+    for provider in carried:
+        snapshot[provider] = [
+            model for model in existing[provider] if is_text_model_name(model)
+        ]
+    return carried
+
+
 def build_metadata_snapshot(model_cost: dict[str, Any]) -> dict[str, dict[str, Any]]:
     """Build a compact text-model metadata snapshot for future context logic."""
     models = build_snapshot(model_cost)
@@ -84,15 +108,23 @@ def build_metadata_snapshot(model_cost: dict[str, Any]) -> dict[str, dict[str, A
     return metadata_snapshot
 
 
+def _read_json(source: str) -> Any:
+    """Read JSON from an http(s) URL or a local file path."""
+    if source.lower().startswith(("https://", "http://", "file://")):
+        with urlopen(
+            source,
+            timeout=LITELLM_MODEL_METADATA_FETCH_TIMEOUT_SECONDS,
+        ) as response:
+            return json.load(response)
+    with Path(source).open(encoding="utf-8") as source_file:
+        return json.load(source_file)
+
+
 def load_model_cost(
     source: str = LITELLM_MODEL_METADATA_SOURCE_URL,
 ) -> dict[str, Any]:
-    """Load validated LiteLLM model metadata from the upstream source URL."""
-    with urlopen(
-        source,
-        timeout=LITELLM_MODEL_METADATA_FETCH_TIMEOUT_SECONDS,
-    ) as response:
-        loaded = json.load(response)
+    """Load validated LiteLLM model metadata (fetched live from upstream by default)."""
+    loaded = _read_json(source)
 
     if not isinstance(loaded, dict):
         raise ValueError(f"Expected a JSON object from {source}")
@@ -138,6 +170,12 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         description="Extract notewise's LiteLLM setup model snapshot."
     )
     parser.add_argument(
+        "--source",
+        default=LITELLM_MODEL_METADATA_SOURCE_URL,
+        help="LiteLLM model metadata JSON: http(s) URL or local file "
+        "(default: BerriAI/litellm main, fetched live).",
+    )
+    parser.add_argument(
         "--output",
         type=Path,
         default=DEFAULT_OUTPUT_PATH,
@@ -155,8 +193,24 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
 def main(argv: Sequence[str] | None = None) -> int:
     """Run the snapshot extraction CLI."""
     args = parse_args(argv)
-    model_cost = load_model_cost()
+    try:
+        model_cost = load_model_cost(args.source)
+    except (OSError, ValueError) as error:  # URLError/JSON errors subclass these
+        print(
+            f"Could not load model metadata from {args.source}: {error}",
+            file=sys.stderr,
+        )
+        return 1
     snapshot = build_snapshot(model_cost)
+    try:
+        existing = parse_model_snapshot(_read_json(str(args.output)))
+    except (OSError, ValueError):
+        existing = {}
+    for provider in carry_forward_missing_providers(snapshot, existing):
+        print(
+            f"Source lists no models for {provider}; kept the existing entries.",
+            file=sys.stderr,
+        )
     _validate_snapshot(snapshot)
     write_json(args.output, snapshot)
 

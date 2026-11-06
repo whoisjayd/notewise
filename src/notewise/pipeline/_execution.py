@@ -230,6 +230,7 @@ async def _fetch_video_inputs(
     transcript = await fetch_transcript(
         video_id,
         pipeline.languages,
+        prefer_original=pipeline.prefer_original_language,
         **transcript_kwargs,
     )
     transcript_text = transcript.to_text()

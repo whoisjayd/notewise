@@ -25,7 +25,7 @@ Canonical routes:
 
 Source truth:
 
-- Default model: `gemini/gemini-2.5-flash`
+- Default model: `gemini/gemini-3.5-flash`
 - Default output directory: `./output`
 - Default output format: `md`; supported formats: `md`, `html`, `pdf`, `docx`
 - Temperature: `0.7`
@@ -85,7 +85,7 @@ Provider truth:
 OAuth truth:
 
 - ChatGPT login: `notewise auth login chatgpt`, safe model `chatgpt/gpt-5.6-luna`
-- GitHub Copilot login: `notewise auth login github_copilot`, safe model `github_copilot/gpt-5-mini`
+- GitHub Copilot login: `notewise auth login github_copilot`, safe model `github_copilot/gpt-5.4-nano`
 - `codex` is a CLI alias for ChatGPT login.
 - Token dirs default under `<state>/oauth/...` unless `CHATGPT_TOKEN_DIR` or `GITHUB_COPILOT_TOKEN_DIR` is set.
 

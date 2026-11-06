@@ -36,13 +36,30 @@ const apiKeyProviders: Provider[] = [
   { name: "Voyage AI", prefix: "voyage/…", key: "VOYAGE_API_KEY" },
   { name: "watsonx", prefix: "watsonx/…", key: "WATSONX_API_KEY" },
   { name: "xAI Grok", prefix: "xai/…", key: "XAI_API_KEY" },
+  { name: "Z.AI", prefix: "zai/…", key: "ZAI_API_KEY" },
+  { name: "Moonshot AI", prefix: "moonshot/…", key: "MOONSHOT_API_KEY" },
+  { name: "MiniMax", prefix: "minimax/…", key: "MINIMAX_API_KEY" },
+  { name: "Nebius", prefix: "nebius/…", key: "NEBIUS_API_KEY" },
+  { name: "Baseten", prefix: "baseten/…", key: "BASETEN_API_KEY" },
+  { name: "Weights & Biases", prefix: "wandb/…", key: "WANDB_API_KEY" },
+  { name: "Hyperbolic", prefix: "hyperbolic/…", key: "HYPERBOLIC_API_KEY" },
+  { name: "Inception", prefix: "inception/…", key: "INCEPTION_API_KEY" },
+  { name: "Lambda", prefix: "lambda_ai/…", key: "LAMBDA_API_KEY" },
+  { name: "OVHcloud", prefix: "ovhcloud/…", key: "OVHCLOUD_API_KEY" },
+  { name: "Nscale", prefix: "nscale/…", key: "NSCALE_API_KEY" },
+  { name: "Volcengine", prefix: "volcengine/…", key: "VOLCENGINE_API_KEY" },
+  { name: "Codestral", prefix: "codestral/…", key: "CODESTRAL_API_KEY" },
+  { name: "Meta Llama API", prefix: "meta_llama/…", key: "LLAMA_API_KEY" },
+  { name: "FriendliAI", prefix: "friendliai/…", key: "FRIENDLIAI_API_KEY" },
+  { name: "v0", prefix: "v0/…", key: "V0_API_KEY" },
+  { name: "Scaleway", prefix: "scaleway/…", key: "SCW_SECRET_KEY" },
 ];
 
 const oauthProviders = [
   { name: "ChatGPT (OAuth)", model: "chatgpt/gpt-5.6-luna", cmd: "notewise auth login chatgpt" },
   {
     name: "GitHub Copilot (OAuth)",
-    model: "github_copilot/gpt-5-mini",
+    model: "github_copilot/gpt-5.4-nano",
     cmd: "notewise auth login github_copilot",
   },
 ];

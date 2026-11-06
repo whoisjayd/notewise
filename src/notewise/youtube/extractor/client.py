@@ -139,6 +139,7 @@ class YouTubeExtractorClient(
         target: str,
         languages: Iterable[str] | None = None,
         include_automatic: bool = True,
+        prefer_original: bool = False,
     ) -> dict[str, Any]:
         video = self._extract_video(target)
         return self.transcript_from_video_data(
@@ -146,6 +147,7 @@ class YouTubeExtractorClient(
             video,
             languages,
             include_automatic,
+            prefer_original,
         )
 
     def transcript_from_video_data(
@@ -154,6 +156,7 @@ class YouTubeExtractorClient(
         video: dict[str, Any],
         languages: Iterable[str] | None = None,
         include_automatic: bool = True,
+        prefer_original: bool = False,
     ) -> dict[str, Any]:
         language_list = [lang for lang in (languages or DEFAULT_LANGUAGES) if lang]
         selection = select_track(
@@ -161,6 +164,7 @@ class YouTubeExtractorClient(
             automatic_captions=video["automatic_captions"],
             languages=language_list,
             include_automatic=include_automatic,
+            prefer_original=prefer_original,
         )
         native_error: Exception | None = None
         segments: list[dict[str, Any]] = []
@@ -201,6 +205,7 @@ class YouTubeExtractorClient(
                 ytcfg=video.get("_ytcfg"),
                 languages=language_list,
                 include_automatic=include_automatic,
+                prefer_original=prefer_original,
             )
             if fallback:
                 segments = fallback["segments"]

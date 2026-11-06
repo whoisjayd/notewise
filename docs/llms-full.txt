@@ -44,7 +44,7 @@ What NoteWise produces:
 Source-backed defaults:
 
 - Python: `>=3.11`
-- Default model: `gemini/gemini-2.5-flash`
+- Default model: `gemini/gemini-3.5-flash`
 - Default output directory: `./output`
 - Default output format: `md`
 - Supported formats: `md`, `html`, `pdf`, `docx`
@@ -130,7 +130,7 @@ Process one public YouTube video:
 notewise process "https://youtu.be/VIDEO_ID"
 ```
 
-By default, NoteWise uses `gemini/gemini-2.5-flash`, requests English transcripts, and writes Markdown into `./output`.
+By default, NoteWise uses `gemini/gemini-3.5-flash`, uses the video's original-language transcript, and writes Markdown into `./output`.
 
 Check the result:
 
@@ -172,7 +172,7 @@ Common process options:
 
 | Option | Default | Use it for |
 | --- | --- | --- |
-| `--model`, `-m` | `gemini/gemini-2.5-flash` | Override the LiteLLM model for one run. |
+| `--model`, `-m` | `gemini/gemini-3.5-flash` | Override the LiteLLM model for one run. |
 | `--output`, `-o` | `./output` | Write files to a specific folder. |
 | `--format` | `md` | Write `md`, `html`, `pdf`, `docx`, or a comma-separated list. |
 | `--language`, `-l` | `en` | Specify transcript language; this option can be repeated. |
@@ -314,14 +314,14 @@ Set `NOTEWISE_HOME` to move the state root.
 For a command run, command-line flags win. For `OUTPUT_DIR`, the value in `config.db` is used unless `--output` is passed. Other settings use environment variables, then `config.db`, then code defaults.
 
 ```bash
-notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash --output ./notes
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-3.5-flash --output ./notes
 ```
 
 Common config keys:
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `DEFAULT_MODEL` | `gemini/gemini-2.5-flash` | LiteLLM model string. |
+| `DEFAULT_MODEL` | `gemini/gemini-3.5-flash` | LiteLLM model string. |
 | `CUSTOM_LLM_ENDPOINTS` | unset | Secret-bearing compact JSON registry of named custom endpoints. |
 | `OUTPUT_DIR` | `./output` | Default output directory. |
 | `MAX_CONCURRENT_VIDEOS` | `5` | Batch/playlist video workers. |
@@ -364,14 +364,14 @@ list|add|update|delete`, not a raw-JSON editor.
 NoteWise sends generation requests through LiteLLM. Use a model string like `provider/model-name` with `--model` or `DEFAULT_MODEL`.
 
 ```bash
-notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-2.5-flash
+notewise process "https://youtu.be/VIDEO_ID" --model gemini/gemini-3.5-flash
 ```
 
-The source default is `gemini/gemini-2.5-flash`.
+The source default is `gemini/gemini-3.5-flash`.
 
 Common provider routes:
 
-- Gemini: set `GEMINI_API_KEY` and use `gemini/gemini-2.5-flash`.
+- Gemini: set `GEMINI_API_KEY` and use `gemini/gemini-3.5-flash`.
 - OpenAI or Anthropic: set `OPENAI_API_KEY` or `ANTHROPIC_API_KEY`, then use a matching LiteLLM model string.
 - Hosted routing: use OpenRouter, Vercel AI Gateway, Azure, Bedrock, Databricks, Cloudflare, Together, Fireworks, Perplexity, or Groq.
 - Subscription login: use ChatGPT or GitHub Copilot OAuth instead of static API keys.
@@ -389,6 +389,23 @@ Credential map:
 | Cohere | `COHERE_API_KEY` |
 | DeepSeek | `DEEPSEEK_API_KEY` |
 | OpenRouter | `OPENROUTER_API_KEY` |
+| Z.AI | `ZAI_API_KEY` |
+| Moonshot AI | `MOONSHOT_API_KEY` |
+| MiniMax | `MINIMAX_API_KEY` |
+| Nebius | `NEBIUS_API_KEY` |
+| Baseten | `BASETEN_API_KEY` |
+| Weights & Biases | `WANDB_API_KEY` |
+| Hyperbolic | `HYPERBOLIC_API_KEY` |
+| Inception | `INCEPTION_API_KEY` |
+| Lambda | `LAMBDA_API_KEY` |
+| OVHcloud | `OVHCLOUD_API_KEY` |
+| Nscale | `NSCALE_API_KEY` |
+| Volcengine | `VOLCENGINE_API_KEY` |
+| Codestral | `CODESTRAL_API_KEY` |
+| Meta Llama API | `LLAMA_API_KEY` |
+| FriendliAI | `FRIENDLIAI_API_KEY` |
+| v0 | `V0_API_KEY` |
+| Scaleway | `SCW_SECRET_KEY` |
 | Azure | `AZURE_API_KEY` or `AZURE_OPENAI_API_KEY` |
 | Vercel AI Gateway | `VERCEL_AI_GATEWAY_API_KEY` |
 | Together | `TOGETHERAI_API_KEY` |
@@ -432,7 +449,7 @@ Safe test models:
 | Provider | Safe model used by login checks |
 | --- | --- |
 | ChatGPT | `chatgpt/gpt-5.6-luna` |
-| GitHub Copilot | `github_copilot/gpt-5-mini` |
+| GitHub Copilot | `github_copilot/gpt-5.4-nano` |
 
 Default token directories:
 
@@ -447,7 +464,7 @@ Use after login:
 
 ```bash
 notewise process "https://youtu.be/VIDEO_ID" --model chatgpt/gpt-5.6-luna
-notewise process "https://youtu.be/VIDEO_ID" --model github_copilot/gpt-5-mini
+notewise process "https://youtu.be/VIDEO_ID" --model github_copilot/gpt-5.4-nano
 ```
 
 ## CLI commands
@@ -541,7 +558,7 @@ History and stats commands:
 ```bash
 notewise history
 notewise stats
-notewise stats --model gemini/gemini-2.5-flash
+notewise stats --model gemini/gemini-3.5-flash
 ```
 
 `history` shows recent cached videos and run details. `stats` summarizes totals, tokens, costs, and model breakdowns from the cache database.

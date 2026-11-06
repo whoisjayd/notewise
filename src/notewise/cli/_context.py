@@ -52,6 +52,7 @@ class CliProcessContext:
     selected_api_base: str | None = None
     selected_api_key: str | None = None
     api_key_checked: bool | None = None
+    prefer_original_language: bool = False
 
     def print_failure_panel(
         self,
@@ -176,6 +177,7 @@ class CliProcessContext:
             "output_dir": output_dir,
             "output_formats": self.selected_output_formats,
             "languages": self.selected_languages,
+            "prefer_original_language": self.prefer_original_language,
             "target_language": self.selected_target_language,
             "temperature": self.selected_temperature,
             "max_tokens": self.selected_max_tokens,
