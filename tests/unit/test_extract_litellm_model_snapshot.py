@@ -134,12 +134,28 @@ def test_carry_forward_keeps_providers_missing_from_source(
     extractor_module: ModuleType,
 ):
     snapshot = {"gemini": ["gemini/a"]}
-    existing = {"gemini": ["gemini/old"], "openrouter": ["openrouter/x"]}
+    existing = {
+        "gemini": ["gemini/old"],
+        "openrouter": ["openrouter/x"],
+        "removed_provider": ["removed_provider/y"],
+    }
 
     carried = extractor_module.carry_forward_missing_providers(snapshot, existing)
 
     assert carried == ["openrouter"]
     assert snapshot == {"gemini": ["gemini/a"], "openrouter": ["openrouter/x"]}
+
+
+def test_carry_forward_skips_provider_present_upstream(extractor_module: ModuleType):
+    snapshot: dict[str, list[str]] = {}
+    existing = {"openrouter": ["openrouter/x"]}
+
+    carried = extractor_module.carry_forward_missing_providers(
+        snapshot, existing, frozenset({"openrouter"})
+    )
+
+    assert carried == []
+    assert snapshot == {}
 
 
 def test_carry_forward_drops_non_text_models(extractor_module: ModuleType):

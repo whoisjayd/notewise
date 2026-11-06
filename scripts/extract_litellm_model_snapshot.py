@@ -65,20 +65,30 @@ def build_snapshot(model_cost: dict[str, Any]) -> dict[str, list[str]]:
     return normalize_available_models(provider_models)
 
 
+# Providers LiteLLM serves through dynamic model discovery, so their models are
+# legitimately absent from the static metadata file.
+DYNAMIC_DISCOVERY_PROVIDERS = frozenset({"openrouter"})
+
+
 def carry_forward_missing_providers(
     snapshot: dict[str, list[str]],
     existing: dict[str, list[str]],
+    upstream_providers: frozenset[str] = frozenset(),
 ) -> list[str]:
-    """Keep previously bundled providers the source no longer lists at all.
+    """Keep previously bundled dynamic-discovery providers the source omits.
 
-    Upstream sometimes stops shipping a provider's models (e.g. OpenRouter moved
-    to dynamic discovery); dropping it would silently remove it from setup.
+    Only providers in ``DYNAMIC_DISCOVERY_PROVIDERS`` that the upstream metadata
+    does not mention at all are carried forward; a provider whose models were all
+    filtered out (retired or unsafe) is dropped, as is one LiteLLM removed.
     Returns the providers that were carried forward.
     """
     carried = [
         provider
         for provider, models in existing.items()
-        if models and not snapshot.get(provider)
+        if provider in DYNAMIC_DISCOVERY_PROVIDERS
+        and models
+        and not snapshot.get(provider)
+        and provider not in upstream_providers
     ]
     for provider in carried:
         snapshot[provider] = [
@@ -206,7 +216,15 @@ def main(argv: Sequence[str] | None = None) -> int:
         existing = parse_model_snapshot(_read_json(str(args.output)))
     except (OSError, ValueError):
         existing = {}
-    for provider in carry_forward_missing_providers(snapshot, existing):
+    upstream_providers = frozenset(
+        provider
+        for metadata in model_cost.values()
+        if isinstance(metadata, dict)
+        and (provider := classify_provider(metadata)) is not None
+    )
+    for provider in carry_forward_missing_providers(
+        snapshot, existing, upstream_providers
+    ):
         print(
             f"Source lists no models for {provider}; kept the existing entries.",
             file=sys.stderr,
