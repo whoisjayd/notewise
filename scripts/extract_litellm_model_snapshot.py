@@ -30,6 +30,7 @@ from notewise._constants import (  # noqa: E402
 from notewise.model_catalog import (  # noqa: E402
     classify_provider,
     is_setup_safe_model,
+    is_text_model_name,
     normalize_available_models,
     parse_model_snapshot,
 )
@@ -80,7 +81,9 @@ def carry_forward_missing_providers(
         if models and not snapshot.get(provider)
     ]
     for provider in carried:
-        snapshot[provider] = list(existing[provider])
+        snapshot[provider] = [
+            model for model in existing[provider] if is_text_model_name(model)
+        ]
     return carried
 
 

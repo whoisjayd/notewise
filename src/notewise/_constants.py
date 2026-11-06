@@ -195,6 +195,23 @@ def _build_provider_api_key_env_vars(
 
 
 PROVIDER_API_KEY_ENV_VAR_PROVIDERS: dict[str, tuple[str, ...]] = {
+    "BASETEN_API_KEY": ("baseten",),
+    "CODESTRAL_API_KEY": ("codestral",),
+    "FRIENDLIAI_API_KEY": ("friendliai",),
+    "HYPERBOLIC_API_KEY": ("hyperbolic",),
+    "INCEPTION_API_KEY": ("inception",),
+    "LAMBDA_API_KEY": ("lambda_ai",),
+    "LLAMA_API_KEY": ("meta_llama",),
+    "MINIMAX_API_KEY": ("minimax",),
+    "MOONSHOT_API_KEY": ("moonshot",),
+    "NEBIUS_API_KEY": ("nebius",),
+    "NSCALE_API_KEY": ("nscale",),
+    "OVHCLOUD_API_KEY": ("ovhcloud",),
+    "SCW_SECRET_KEY": ("scaleway",),
+    "V0_API_KEY": ("v0",),
+    "VOLCENGINE_API_KEY": ("volcengine",),
+    "WANDB_API_KEY": ("wandb",),
+    "ZAI_API_KEY": ("zai",),
     "AI21_API_KEY": ("ai21",),
     "ANTHROPIC_API_KEY": ("anthropic",),
     "AZURE_API_KEY": ("azure", "azure_ai", "azure_text"),
@@ -733,6 +750,7 @@ GPT5_MODEL_MARKER = "gpt-5"
 GPT5_REQUIRED_TEMPERATURE = 1.0
 LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "audio",
+    "content-safety",
     "computer-use",
     "container",
     "embedding",
@@ -755,6 +773,7 @@ LITELLM_TEXT_MODEL_EXCLUDED_MARKERS = (
     "transcribe",
     "tts",
     "ui-tars",
+    "voxtral",
     "vision",
     "-vl",
     "vl-",

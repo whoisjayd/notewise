@@ -116,6 +116,14 @@ def classify_provider(metadata: dict[str, Any]) -> str | None:
     return None
 
 
+def is_text_model_name(model: str) -> bool:
+    """Return False for model names that belong to non-text families."""
+    model_lower = model.lower()
+    return not any(
+        marker in model_lower for marker in LITELLM_TEXT_MODEL_EXCLUDED_MARKERS
+    )
+
+
 def _is_retiring(deprecation_date: object, today: date | None = None) -> bool:
     """Return True when a model is retired or retires within the grace window."""
     if not deprecation_date:
@@ -140,7 +148,7 @@ def is_setup_safe_model(
         return False
 
     model_lower = model.lower()
-    if any(marker in model_lower for marker in LITELLM_TEXT_MODEL_EXCLUDED_MARKERS):
+    if not is_text_model_name(model):
         return False
 
     provider_prefix, separator, _ = model_lower.partition("/")

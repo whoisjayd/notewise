@@ -183,6 +183,14 @@ class TestDeprecationFilter:
             "gemini/soon", self._meta("2026-12-01"), self.TODAY
         )
 
+    def test_model_retiring_on_cutoff_is_hidden(self):
+        assert not is_setup_safe_model(
+            "gemini/cutoff", self._meta("2026-12-06"), self.TODAY
+        )
+
+    def test_model_retiring_after_cutoff_stays_selectable(self):
+        assert is_setup_safe_model("gemini/after", self._meta("2026-12-07"), self.TODAY)
+
     def test_model_retiring_later_stays_selectable(self):
         assert is_setup_safe_model("gemini/later", self._meta("2027-06-01"), self.TODAY)
 

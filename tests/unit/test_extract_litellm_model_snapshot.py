@@ -142,6 +142,15 @@ def test_carry_forward_keeps_providers_missing_from_source(
     assert snapshot == {"gemini": ["gemini/a"], "openrouter": ["openrouter/x"]}
 
 
+def test_carry_forward_drops_non_text_models(extractor_module: ModuleType):
+    snapshot: dict[str, list[str]] = {}
+    existing = {"openrouter": ["openrouter/a/chat", "openrouter/mistralai/voxtral-x"]}
+
+    extractor_module.carry_forward_missing_providers(snapshot, existing)
+
+    assert snapshot == {"openrouter": ["openrouter/a/chat"]}
+
+
 def test_main_reports_unreadable_source(
     extractor_module: ModuleType,
     tmp_path: Path,

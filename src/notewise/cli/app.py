@@ -419,8 +419,8 @@ def process(
             "-l",
             help=(
                 "Transcript language code; repeat per language, e.g. "
-                "[green]-l en -l hi[/green]. Default: the video's original "
-                "spoken language."
+                "[green]-l en -l hi[/green]. Default: DEFAULT_LANGUAGES if "
+                "configured; otherwise the video's spoken language."
             ),
             rich_help_panel="Common",
         ),

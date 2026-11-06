@@ -85,6 +85,38 @@ def select_track(
     return None
 
 
+def _scripts(code: str) -> set[str]:
+    """Return the ISO 15924 script subtags (e.g. ``hant``) of a language code."""
+    return {part for part in code.lower().split("-")[1:] if len(part) == 4}
+
+
+def _matching_manual_key(subtitles: dict[str, Any], original: str) -> str | None:
+    """Pick the manual track for ``original``: exact, then closest variant.
+
+    Regional variants (es / es-419) match; different scripts (zh-Hans / zh-Hant)
+    do not.
+    """
+    lowered = original.lower()
+    base = lowered.split("-")[0]
+    best: tuple[int, str] | None = None
+    for key in sorted(subtitles):
+        key_l = key.lower()
+        if key_l.split("-")[0] != base:
+            continue
+        scripts, wanted = _scripts(key_l), _scripts(lowered)
+        if scripts and wanted and scripts != wanted:
+            continue
+        if key_l == lowered:
+            rank = 0
+        elif key_l.startswith(f"{lowered}-") or lowered.startswith(f"{key_l}-"):
+            rank = 1
+        else:
+            rank = 2
+        if best is None or rank < best[0]:
+            best = (rank, key)
+    return best[1] if best else None
+
+
 def _original_track(
     subtitles: dict[str, list[dict[str, Any]]],
     automatic_captions: dict[str, list[dict[str, Any]]],
@@ -98,15 +130,7 @@ def _original_track(
     if len(automatic_captions) != 1:
         return None  # spoken language is ambiguous; use the requested languages
     original = next(iter(automatic_captions))
-    base = original.lower().split("-")[0]
-    manual = next(
-        (
-            key
-            for key in sorted(subtitles)
-            if key.lower() == original.lower() or key.lower().split("-")[0] == base
-        ),
-        None,
-    )
+    manual = _matching_manual_key(subtitles, original)
     for source, by_lang, key, generated in (
         ("subtitles", subtitles, manual, False),
         ("automatic_captions", automatic_captions, original, True),
