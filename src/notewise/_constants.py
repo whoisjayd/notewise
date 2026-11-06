@@ -267,7 +267,7 @@ OAUTH_PROVIDER_CONFIGS: dict[str, dict[str, str]] = {
     },
     "github_copilot": {
         "label": "GitHub Copilot",
-        "safe_model": "github_copilot/gpt-5-mini",
+        "safe_model": "github_copilot/gpt-5.4-nano",
         "token_dir_env": "GITHUB_COPILOT_TOKEN_DIR",
         "token_dir_name": "github_copilot",
     },
@@ -338,6 +338,70 @@ PROVIDER_CONFIG: dict[str, dict[str, Any]] = {
         "api_url": "https://platform.deepseek.com/api_keys",
         "keywords": ["deepseek"],
         "litellm_providers": ["deepseek"],
+    },
+    "zai": {
+        "name": "Z.AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "ZAI_API_KEY",
+        "api_url": "https://z.ai/manage-apikey/apikey-list",
+        "keywords": ["zai", "glm"],
+        "litellm_providers": ["zai"],
+    },
+    "moonshot": {
+        "name": "Moonshot AI",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "MOONSHOT_API_KEY",
+        "api_url": "https://platform.moonshot.ai/console/api-keys",
+        "keywords": ["moonshot", "kimi"],
+        "litellm_providers": ["moonshot"],
+    },
+    "minimax": {
+        "name": "MiniMax",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "MINIMAX_API_KEY",
+        "api_url": "https://platform.minimax.io/user-center/basic-information/interface-key",
+        "keywords": ["minimax"],
+        "litellm_providers": ["minimax"],
+    },
+    "nebius": {
+        "name": "Nebius",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "NEBIUS_API_KEY",
+        "api_url": "https://studio.nebius.com/settings/api-keys",
+        "keywords": ["nebius"],
+        "litellm_providers": ["nebius"],
+    },
+    "baseten": {
+        "name": "Baseten",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "BASETEN_API_KEY",
+        "api_url": "https://app.baseten.co/settings/api_keys",
+        "keywords": ["baseten"],
+        "litellm_providers": ["baseten"],
+    },
+    "wandb": {
+        "name": "Weights & Biases",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "WANDB_API_KEY",
+        "api_url": "https://wandb.ai/authorize",
+        "keywords": ["wandb"],
+        "litellm_providers": ["wandb"],
+    },
+    "hyperbolic": {
+        "name": "Hyperbolic",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "HYPERBOLIC_API_KEY",
+        "api_url": "https://app.hyperbolic.xyz/settings",
+        "keywords": ["hyperbolic"],
+        "litellm_providers": ["hyperbolic"],
+    },
+    "inception": {
+        "name": "Inception",
+        "auth_type": AUTH_TYPE_API_KEY,
+        "env_var": "INCEPTION_API_KEY",
+        "api_url": "https://platform.inceptionlabs.ai/dashboard/api-keys",
+        "keywords": ["inception", "mercury"],
+        "litellm_providers": ["inception"],
     },
     "openrouter": {
         "name": "OpenRouter",
@@ -629,6 +693,9 @@ LITELLM_PROVIDER_TEXT_MODEL_EXCLUDED_MARKERS = {
     "chatgpt": ("gpt-5.1-codex",),
 }
 ALLOWED_SETUP_MODEL_MODES = frozenset({"chat", "completion", "responses"})
+# Models retiring within this many days are hidden from setup (already-retired
+# ones always are); later deprecation dates stay selectable.
+LITELLM_DEPRECATION_GRACE_DAYS = 30
 STRIP_SAFE_PROVIDER_ALIASES = frozenset(
     {
         "gemini",
@@ -658,7 +725,7 @@ LITELLM_LOG_ENV_VAR = "LITELLM_LOG"
 LITELLM_LOG_DEFAULT_LEVEL = "ERROR"
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-DEFAULT_MODEL = "gemini/gemini-2.5-flash"
+DEFAULT_MODEL = "gemini/gemini-3.5-flash"
 DEFAULT_OUTPUT_DIR = "./output"
 DEFAULT_LANGUAGES = ["en"]
 DEFAULT_TARGET_LANGUAGE = "English"

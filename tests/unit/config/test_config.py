@@ -21,7 +21,7 @@ class TestConfig:
         monkeypatch.delenv("OUTPUT_DIR", raising=False)
         monkeypatch.delenv("MAX_CONCURRENT_VIDEOS", raising=False)
         cfg = Config()
-        assert cfg.default_model == "gemini/gemini-2.5-flash"
+        assert cfg.default_model == "gemini/gemini-3.5-flash"
         assert cfg.max_concurrent_videos == 5
         assert cfg.youtube_requests_per_minute == 10
 
@@ -301,7 +301,7 @@ class TestConfig:
         monkeypatch.delenv("DEFAULT_MODEL", raising=False)
         # No config.env file → no crash, just defaults
         cfg = Config()
-        assert cfg.default_model == "gemini/gemini-2.5-flash"
+        assert cfg.default_model == "gemini/gemini-3.5-flash"
 
     def test_sync_env_vars_copies_supported_api_keys(self, monkeypatch):
         """API keys are synced back to os.environ after init."""
@@ -436,7 +436,7 @@ class TestConfig:
         config_dir.mkdir()
         config_path = config_dir / "config.env"
         config_path.write_text(
-            "DEFAULT_MODEL=gemini/gemini-2.5-flash",
+            "DEFAULT_MODEL=gemini/gemini-3.5-flash",
             encoding="utf-8",
         )
 
@@ -524,7 +524,7 @@ class TestGetApiKeyNameForModel:
 
     def test_gemini_model_returns_gemini_key(self):
         assert (
-            self.cfg.get_api_key_name_for_model("gemini/gemini-2.5-flash")
+            self.cfg.get_api_key_name_for_model("gemini/gemini-3.5-flash")
             == "GEMINI_API_KEY"
         )
 
@@ -706,7 +706,7 @@ class TestGetApiKeyNameForModel:
         mocker.patch.object(
             config_module,
             "_load_bundled_model_snapshot",
-            return_value={"gemini": ("gemini/gemini-2.5-flash",)},
+            return_value={"gemini": ("gemini/gemini-3.5-flash",)},
         )
 
         message = self.cfg.get_unsupported_model_message("gemini/unknown-model")

@@ -78,7 +78,7 @@ const recipes = [
         ),
       },
     ],
-    caption: "tokens stored under ~/.notewise/oauth/ · also: github_copilot/gpt-5-mini",
+    caption: "tokens stored under ~/.notewise/oauth/ · also: github_copilot/gpt-5.4-nano",
   },
 ];
 

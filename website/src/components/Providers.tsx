@@ -36,13 +36,21 @@ const apiKeyProviders: Provider[] = [
   { name: "Voyage AI", prefix: "voyage/…", key: "VOYAGE_API_KEY" },
   { name: "watsonx", prefix: "watsonx/…", key: "WATSONX_API_KEY" },
   { name: "xAI Grok", prefix: "xai/…", key: "XAI_API_KEY" },
+  { name: "Z.AI", prefix: "zai/…", key: "ZAI_API_KEY" },
+  { name: "Moonshot AI", prefix: "moonshot/…", key: "MOONSHOT_API_KEY" },
+  { name: "MiniMax", prefix: "minimax/…", key: "MINIMAX_API_KEY" },
+  { name: "Nebius", prefix: "nebius/…", key: "NEBIUS_API_KEY" },
+  { name: "Baseten", prefix: "baseten/…", key: "BASETEN_API_KEY" },
+  { name: "Weights & Biases", prefix: "wandb/…", key: "WANDB_API_KEY" },
+  { name: "Hyperbolic", prefix: "hyperbolic/…", key: "HYPERBOLIC_API_KEY" },
+  { name: "Inception", prefix: "inception/…", key: "INCEPTION_API_KEY" },
 ];
 
 const oauthProviders = [
   { name: "ChatGPT (OAuth)", model: "chatgpt/gpt-5.6-luna", cmd: "notewise auth login chatgpt" },
   {
     name: "GitHub Copilot (OAuth)",
-    model: "github_copilot/gpt-5-mini",
+    model: "github_copilot/gpt-5.4-nano",
     cmd: "notewise auth login github_copilot",
   },
 ];

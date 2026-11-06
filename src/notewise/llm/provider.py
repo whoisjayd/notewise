@@ -155,7 +155,7 @@ class LLMProvider:
         Initialize LLM provider.
 
         Args:
-            model: LiteLLM-compatible model string (e.g., 'gemini/gemini-2.5-flash').
+            model: LiteLLM-compatible model string (e.g., 'gemini/gemini-3.5-flash').
             api_base: Optional endpoint URL for this provider instance.
             api_key: Optional API key for this provider instance.
         """

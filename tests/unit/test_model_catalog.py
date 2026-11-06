@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from datetime import date
 
 from notewise.model_catalog import (
     classify_provider,
@@ -158,3 +159,35 @@ def test_is_setup_safe_model_does_not_trust_gateway_prefix_for_exclusions():
             "supported_output_modalities": ["text"],
         },
     )
+
+
+class TestDeprecationFilter:
+    """Date-aware deprecation handling for setup-safe models."""
+
+    TODAY = date(2026, 11, 6)
+
+    def _meta(self, deprecation_date):
+        return {
+            "litellm_provider": "gemini",
+            "mode": "chat",
+            "deprecation_date": deprecation_date,
+        }
+
+    def test_retired_model_is_hidden(self):
+        assert not is_setup_safe_model(
+            "gemini/old", self._meta("2026-01-01"), self.TODAY
+        )
+
+    def test_model_retiring_within_grace_is_hidden(self):
+        assert not is_setup_safe_model(
+            "gemini/soon", self._meta("2026-12-01"), self.TODAY
+        )
+
+    def test_model_retiring_later_stays_selectable(self):
+        assert is_setup_safe_model("gemini/later", self._meta("2027-06-01"), self.TODAY)
+
+    def test_unreadable_date_is_hidden(self):
+        assert not is_setup_safe_model("gemini/odd", self._meta("soonish"), self.TODAY)
+
+    def test_no_date_stays_selectable(self):
+        assert is_setup_safe_model("gemini/new", self._meta(None), self.TODAY)
