@@ -38,3 +38,31 @@ def test_help_command_matches_root_help_output() -> None:
 
     assert help_result.exit_code == 0
     assert help_result.output == flag_result.output
+
+
+class TestPrefersOriginalLanguage:
+    """The spoken-language default only applies when no language was chosen."""
+
+    def test_explicit_language_flag_wins(self):
+        from types import SimpleNamespace
+
+        from notewise.cli import app as cli_app
+
+        settings = SimpleNamespace(model_fields_set=set())
+        assert cli_app._prefers_original_language(["en"], settings) is False
+
+    def test_configured_default_languages_win(self):
+        from types import SimpleNamespace
+
+        from notewise.cli import app as cli_app
+
+        settings = SimpleNamespace(model_fields_set={"default_languages"})
+        assert cli_app._prefers_original_language(None, settings) is False
+
+    def test_unconfigured_default_prefers_original(self):
+        from types import SimpleNamespace
+
+        from notewise.cli import app as cli_app
+
+        settings = SimpleNamespace(model_fields_set=set())
+        assert cli_app._prefers_original_language(None, settings) is True
