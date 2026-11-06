@@ -516,6 +516,27 @@ class TestConfig:
         assert (config_dir / "config.env").is_symlink()
 
 
+@pytest.mark.parametrize(
+    ("model", "key_name"),
+    [
+        ("zai/glm-5", "ZAI_API_KEY"),
+        ("moonshot/kimi-k2.7-code", "MOONSHOT_API_KEY"),
+        ("minimax/MiniMax-M2.1", "MINIMAX_API_KEY"),
+        ("nebius/deepseek-ai/DeepSeek-R1", "NEBIUS_API_KEY"),
+        ("baseten/openai/gpt-oss-120b", "BASETEN_API_KEY"),
+        ("wandb/openai/gpt-oss-120b", "WANDB_API_KEY"),
+        ("hyperbolic/NousResearch/Hermes-3-Llama-3.1-70B", "HYPERBOLIC_API_KEY"),
+        ("inception/mercury-2", "INCEPTION_API_KEY"),
+        ("lambda_ai/deepseek-llama3.3-70b", "LAMBDA_API_KEY"),
+        ("meta_llama/Llama-3.3-70B-Instruct", "LLAMA_API_KEY"),
+        ("scaleway/qwen/qwen3.5-397b-a17b", "SCW_SECRET_KEY"),
+    ],
+)
+def test_new_provider_models_route_to_their_api_key(model, key_name):
+    """Setup-wizard providers added in 1.8.0 resolve to their credential key."""
+    assert Config().get_api_key_name_for_model(model) == key_name
+
+
 class TestGetApiKeyNameForModel:
     """Test get_api_key_name_for_model."""
 

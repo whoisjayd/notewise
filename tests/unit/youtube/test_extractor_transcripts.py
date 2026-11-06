@@ -98,7 +98,10 @@ class TestSelectTrack:
         assert selection.track["url"] == "https://x/es"
 
     def test_prefer_original_uses_manual_track_in_spoken_language(self):
-        subtitles = {"es": [{"ext": "json3", "url": "https://x/es-manual"}]}
+        subtitles = {
+            "es": [{"ext": "json3", "url": "https://x/es-manual"}],
+            "en": [{"ext": "json3", "url": "https://x/en-manual"}],
+        }
         automatic = {"es": [{"ext": "json3", "url": "https://x/es-auto"}]}
 
         selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
@@ -109,7 +112,10 @@ class TestSelectTrack:
         assert selection.track["url"] == "https://x/es-manual"
 
     def test_prefer_original_matches_regional_manual_variant(self):
-        subtitles = {"es-419": [{"ext": "json3", "url": "https://x/es-419"}]}
+        subtitles = {
+            "es-419": [{"ext": "json3", "url": "https://x/es-419"}],
+            "en": [{"ext": "json3", "url": "https://x/en-manual"}],
+        }
         automatic = {"es": [{"ext": "json3", "url": "https://x/es-auto"}]}
 
         selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)
@@ -119,7 +125,10 @@ class TestSelectTrack:
         assert selection.track["url"] == "https://x/es-419"
 
     def test_prefer_original_matches_manual_for_regional_automatic(self):
-        subtitles = {"es": [{"ext": "json3", "url": "https://x/es"}]}
+        subtitles = {
+            "es": [{"ext": "json3", "url": "https://x/es"}],
+            "en": [{"ext": "json3", "url": "https://x/en-manual"}],
+        }
         automatic = {"es-419": [{"ext": "json3", "url": "https://x/auto"}]}
 
         selection = tx.select_track(subtitles, automatic, ["en"], prefer_original=True)

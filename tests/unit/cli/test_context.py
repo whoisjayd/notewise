@@ -39,6 +39,7 @@ def test_build_pipeline_passes_target_language(tmp_path: Path) -> None:
         timestamps=False,
         chapter_directory_output=False,
         selected_cookie_file=None,
+        prefer_original_language=True,
     )
 
     context.build_pipeline(output_dir)
@@ -48,7 +49,7 @@ def test_build_pipeline_passes_target_language(tmp_path: Path) -> None:
         output_dir=output_dir,
         output_formats=["md"],
         languages=["en"],
-        prefer_original_language=False,
+        prefer_original_language=True,
         target_language="Hindi",
         temperature=0.4,
         max_tokens=1000,
